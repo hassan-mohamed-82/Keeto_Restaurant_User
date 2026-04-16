@@ -1,0 +1,10 @@
+import { Router } from "express";
+import {assignFoodToBranch,getBranchMenu,updateBranchMenuItem,deleteBranchMenuItem,getRestaurantSelectData} from "../../controllers/admin/branchemenu";
+import { catchAsync } from "../../utils/catchAsync";
+const router = Router();
+router.post("/", catchAsync(assignFoodToBranch));
+router.get("/", catchAsync(getBranchMenu));
+router.put("/:id", catchAsync(updateBranchMenuItem));
+router.delete("/:id", catchAsync(deleteBranchMenuItem));
+router.get("/select-data", catchAsync(getRestaurantSelectData));
+export default router;

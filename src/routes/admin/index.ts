@@ -13,6 +13,7 @@ import walletsRouter from "./restaurant_wallets"
 import restaurantsettingRouter from "./restaurantsetting";
 import payment_methodsRouter from "./payment_methods";
 import branchesRouter from "./branches";
+import branchemenuRouter from "./branchemenu";
 import OrderRouter from "./order"
 import restaurantZoneDeliveryFeesRouter from "./restaurantZoneDeliveryFees";
 import user_walletsRouter from "./userWallets";
@@ -32,6 +33,7 @@ router.use("/subcategories", SubcategoryRouter);
 router.use("/order", OrderRouter);
 router.use("/adonescategory", AdonecategoryRouter);
 router.use("/addons", AddonRouter);
+router.use("/branchemenu", branchemenuRouter);
 router.use("/food", FoodRouter);
 router.use("/wallets", walletsRouter);
 router.use("/restaurantsetting", restaurantsettingRouter);
