@@ -12,6 +12,7 @@ import FoodRouter from "./food";
 import walletsRouter from "./restaurant_wallets"
 import restaurantsettingRouter from "./restaurantsetting";
 import payment_methodsRouter from "./payment_methods";
+import branchesRouter from "./branches";
 import OrderRouter from "./order"
 import restaurantZoneDeliveryFeesRouter from "./restaurantZoneDeliveryFees";
 import user_walletsRouter from "./userWallets";
@@ -37,5 +38,6 @@ router.use("/restaurantsetting", restaurantsettingRouter);
 router.use("/payment-methods", payment_methodsRouter);
 router.use("/restaurant-zone-delivery-fees", restaurantZoneDeliveryFeesRouter);
 router.use("/user-wallets", user_walletsRouter);
+router.use("/branches", branchesRouter);
 
 export default router;
