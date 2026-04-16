@@ -22,7 +22,7 @@ import { authorizeRoles } from "../../middlewares/authorized";
 const router = Router();
 
 router.use("/auth", authRouter);
-router.use(authenticated, authorizeRoles("superadmin", "admin"));
+router.use(authenticated, authorizeRoles("restaurantadmin", "subadmin"));
 
 router.use("/admin", AdmiRouter);
 router.use("/roles", RolesRouter);

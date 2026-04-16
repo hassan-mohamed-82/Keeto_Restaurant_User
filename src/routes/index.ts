@@ -4,7 +4,7 @@ import userRouter from './user/index';
 
 const route = Router();
 
-route.use('/superadmin', adminRouter);
+route.use('/restaurant', adminRouter);
 route.use('/user', userRouter);
 
 
