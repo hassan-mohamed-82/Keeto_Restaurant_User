@@ -8,14 +8,13 @@ import { BadRequest } from "../../Errors/BadRequest";
 import { v4 as uuidv4 } from "uuid";
 
 export const createAddon = async (req: Request, res: Response) => {
-    const { name, price, stock_type, adonescategoryid, restaurantid } = req.body;
+    const restaurantId = req.user?.id;
+    if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
+    const { name, price, stock_type, adonescategoryid } = req.body;
 
-    // Required fields validation
-    if (!name || !price || !stock_type || !adonescategoryid || !restaurantid) {
-        throw new BadRequest("Missing required fields: name, price, stock_type, adonescategoryid, restaurantid");
+    if (!name || !price || !stock_type || !adonescategoryid) {
+        throw new BadRequest("Missing required fields: name, price, stock_type, adonescategoryid");
     }
-
-    // Validate adonescategory exists
     const existingAdonesCategory = await db
         .select()
         .from(adonescategory)
@@ -26,11 +25,10 @@ export const createAddon = async (req: Request, res: Response) => {
         throw new BadRequest("Adones category not found");
     }
 
-    // Validate restaurant exists
     const existingRestaurant = await db
         .select()
         .from(restaurants)
-        .where(eq(restaurants.id, restaurantid))
+        .where(eq(restaurants.id, restaurantId))
         .limit(1);
 
     if (!existingRestaurant[0]) {
@@ -45,13 +43,15 @@ export const createAddon = async (req: Request, res: Response) => {
         price,
         stock_type,
         adonescategoryid,
-        restaurantid,
+        restaurantid: restaurantId,
     });
 
     return SuccessResponse(res, { message: "Create addon success", data: { id } }, 201);
 };
 
 export const getAllAddons = async (req: Request, res: Response) => {
+    const restaurantId = req.user?.id;
+    if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
     const allAddons = await db
         .select({
             id: addons.id,
@@ -59,26 +59,23 @@ export const getAllAddons = async (req: Request, res: Response) => {
             price: addons.price,
             stock_type: addons.stock_type,
             adonescategoryid: addons.adonescategoryid,
-            restaurantid: addons.restaurantid,
             createdAt: addons.createdAt,
             updatedAt: addons.updatedAt,
             adonescategory: {
                 id: adonescategory.id,
                 name: adonescategory.name,
             },
-            restaurant: {
-                id: restaurants.id,
-                name: restaurants.name,
-            },
         })
         .from(addons)
         .leftJoin(adonescategory, eq(addons.adonescategoryid, adonescategory.id))
-        .leftJoin(restaurants, eq(addons.restaurantid, restaurants.id));
+        .where(eq(addons.restaurantid, restaurantId));
 
     return SuccessResponse(res, { message: "Get all addons success", data: allAddons });
 };
 
 export const getAddonById = async (req: Request, res: Response) => {
+    const restaurantId = req.user?.id;
+    if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
     const { id } = req.params;
 
     const addon = await db
@@ -87,8 +84,7 @@ export const getAddonById = async (req: Request, res: Response) => {
             name: addons.name,
             price: addons.price,
             stock_type: addons.stock_type,
-                adonescategoryid: addons.adonescategoryid,
-            restaurantid: addons.restaurantid,
+            adonescategoryid: addons.adonescategoryid,
             createdAt: addons.createdAt,
             updatedAt: addons.updatedAt,
             adonescategory: {

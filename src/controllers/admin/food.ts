@@ -9,7 +9,8 @@ import {
     subcategories,
     addons,
 } from "../../models/schema";
-import { eq, inArray } from "drizzle-orm";
+// ✅ تم إضافة and هنا عشان نصلح مشكلة الشروط المتعددة
+import { eq, inArray, and } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { NotFound } from "../../Errors/NotFound";
 import { BadRequest } from "../../Errors/BadRequest";
@@ -19,9 +20,12 @@ import { v4 as uuidv4 } from "uuid";
 // CREATE Food
 // =============================================
 export const createFood = async (req: Request, res: Response) => {
+    const restaurantId = req.user?.id;
+    if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
+
     const {
         name, description, image,
-        restaurantid, categoryid, subcategoryid,
+        categoryid, subcategoryid,
         foodtype, Nutrition, allergen_ingredients, is_Halal,
         addonsId, startTime, endTime, search_tags,
         price, discount_type, discount_value, Maximum_Purchase, stock_type,
@@ -33,18 +37,16 @@ export const createFood = async (req: Request, res: Response) => {
         throw new BadRequest("Missing required fields");
     }
 
-    const existingRestaurant = await db.select().from(restaurants).where(eq(restaurants.id, restaurantid)).limit(1);
-    if (!existingRestaurant[0]) throw new BadRequest("Restaurant not found");
+    // ✅ تأمين: نتأكد إن القسم ده تبع المطعم الحالي (لو الأقسام مشتركة شيل شرط المطعم)
+    const existingCategory = await db.select().from(categories).where(and(eq(categories.id, categoryid))).limit(1);
+    if (!existingCategory[0]) throw new BadRequest("Category not found or does not belong to your restaurant");
 
-    const existingCategory = await db.select().from(categories).where(eq(categories.id, categoryid)).limit(1);
-    if (!existingCategory[0]) throw new BadRequest("Category not found");
-
-    const existingSub = await db.select().from(subcategories).where(eq(subcategories.id, subcategoryid)).limit(1);
-    if (!existingSub[0]) throw new BadRequest("Subcategory not found");
+    const existingSub = await db.select().from(subcategories).where(and(eq(subcategories.id, subcategoryid))).limit(1);
+    if (!existingSub[0]) throw new BadRequest("Subcategory not found or does not belong to your restaurant");
 
     if (addonsId) {
-        const existingAddon = await db.select().from(addons).where(eq(addons.id, addonsId)).limit(1);
-        if (!existingAddon[0]) throw new BadRequest("Addon not found");
+        const existingAddon = await db.select().from(addons).where(and(eq(addons.id, addonsId), eq(addons.restaurantid, restaurantId))).limit(1);
+        if (!existingAddon[0]) throw new BadRequest("Addon not found or does not belong to your restaurant");
     }
 
     const foodId = uuidv4();
@@ -54,7 +56,7 @@ export const createFood = async (req: Request, res: Response) => {
         name,
         description,
         image,
-        restaurantid,
+        restaurantid: restaurantId,
         categoryid,
         subcategoryid,
         foodtype: foodtype || "veg",
@@ -93,7 +95,6 @@ export const createFood = async (req: Request, res: Response) => {
                     await db.insert(variationOptions).values({
                         variationId,
                         optionName: option.optionName,
-                        // ✅ FIX: decimal لازم string
                         additionalPrice: option.additionalPrice?.toString() || "0",
                     });
                 }
@@ -105,11 +106,13 @@ export const createFood = async (req: Request, res: Response) => {
 };
 
 // =============================================
-// GET ALL Foods (Optimized)
+// GET ALL Foods (Optimized & Secured)
 // =============================================
 export const getAllFoods = async (req: Request, res: Response) => {
+    const restaurantId = req.user?.id;
+    if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
+
     const rawFoods = await db.select({
-        // ✅ Food fields
         id: food.id,
         name: food.name,
         description: food.description,
@@ -133,45 +136,30 @@ export const getAllFoods = async (req: Request, res: Response) => {
         status: food.status,
         createdAt: food.createdAt,
         updatedAt: food.updatedAt,
-
-        // ✅ Restaurant (alias مهم)
         restaurant_id: restaurants.id,
         restaurant_name: restaurants.name,
-
-        // ✅ Category
         category_name: categories.name,
-
-        // ✅ Subcategory
         subcategory_name: subcategories.name,
     })
         .from(food)
-        .leftJoin(restaurants, eq(food.restaurantid, restaurants.id))
+        .leftJoin(restaurants, eq(food.restaurantid, restaurants.id)) 
         .leftJoin(categories, eq(food.categoryid, categories.id))
-        .leftJoin(subcategories, eq(food.subcategoryid, subcategories.id));
+        .leftJoin(subcategories, eq(food.subcategoryid, subcategories.id))
+        .where(eq(food.restaurantid, restaurantId));
 
     if (rawFoods.length === 0) {
         return SuccessResponse(res, { message: "Get all foods success", data: [] });
     }
 
-    // ✅ إعادة بناء الشكل
     const allFoods = rawFoods.map(f => ({
         id: f.id,
         name: f.name,
         description: f.description,
         image: f.image,
         price: f.price,
-
-        restaurant: f.restaurant_id
-            ? { id: f.restaurant_id, name: f.restaurant_name }
-            : null,
-
-        category: f.category_name
-            ? { name: f.category_name }
-            : null,
-
-        subcategory: f.subcategory_name
-            ? { name: f.subcategory_name }
-            : null,
+        restaurant: f.restaurant_id ? { id: f.restaurant_id, name: f.restaurant_name } : null,
+        category: f.category_name ? { name: f.category_name } : null,
+        subcategory: f.subcategory_name ? { name: f.subcategory_name } : null,
     }));
 
     return SuccessResponse(res, {
@@ -181,10 +169,12 @@ export const getAllFoods = async (req: Request, res: Response) => {
 };
 
 // =============================================
-// GET Food By ID (FIXED SELECT)
+// GET Food By ID
 // =============================================
 export const getFoodById = async (req: Request, res: Response) => {
     const { id } = req.params;
+    const restaurantId = req.user?.id;
+    if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
 
     const foodItem = await db.select({
         id: food.id,
@@ -224,10 +214,11 @@ export const getFoodById = async (req: Request, res: Response) => {
         },
     })
         .from(food)
+        // ✅ تم تعديل الربط والفلترة
         .leftJoin(restaurants, eq(food.restaurantid, restaurants.id))
         .leftJoin(categories, eq(food.categoryid, categories.id))
         .leftJoin(subcategories, eq(food.subcategoryid, subcategories.id))
-        .where(eq(food.id, id))
+        .where(and(eq(food.id, id), eq(food.restaurantid, restaurantId))) // ✅ يجب أن تكون الأكلة تخص المطعم
         .limit(1);
 
     if (!foodItem[0]) throw new NotFound("Food not found");
@@ -256,9 +247,12 @@ export const getFoodById = async (req: Request, res: Response) => {
 export const updateFood = async (req: Request, res: Response) => {
     const { id } = req.params;
     const data = req.body;
+    const restaurantId = req.user?.id;
+    if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
 
-    const existingFood = await db.select().from(food).where(eq(food.id, id)).limit(1);
-    if (!existingFood[0]) throw new NotFound("Food not found");
+    // ✅ استخدام and لتنفيذ الشرطين معاً بشكل صحيح
+    const existingFood = await db.select().from(food).where(and(eq(food.id, id), eq(food.restaurantid, restaurantId))).limit(1);
+    if (!existingFood[0]) throw new NotFound("Food not found or you don't have permission to edit it");
 
     const updateData: any = { updatedAt: new Date() };
 
@@ -310,9 +304,12 @@ export const updateFood = async (req: Request, res: Response) => {
 // =============================================
 export const deleteFood = async (req: Request, res: Response) => {
     const { id } = req.params;
+    const restaurantId = req.user?.id;
+    if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
 
-    const existingFood = await db.select().from(food).where(eq(food.id, id)).limit(1);
-    if (!existingFood[0]) throw new NotFound("Food not found");
+    // ✅ استخدام and هنا أيضاً للحماية
+    const existingFood = await db.select().from(food).where(and(eq(food.id, id), eq(food.restaurantid, restaurantId))).limit(1);
+    if (!existingFood[0]) throw new NotFound("Food not found or you don't have permission to delete it");
 
     const vars = await db.select().from(foodVariations).where(eq(foodVariations.foodId, id));
 
@@ -327,87 +324,43 @@ export const deleteFood = async (req: Request, res: Response) => {
 };
 
 
-export const getFoodsByRestaurantId = async (req: Request, res: Response) => {
-    const { id: restaurantId } = req.params;
 
-    const foods = await db.select({
-        foodObj: food,
-        restaurantObj: restaurants,
-        categoryObj: categories,
-        subcategoryObj: subcategories,
-    })
-        .from(food)
-        .leftJoin(restaurants, eq(food.restaurantid, restaurants.id))
-        .leftJoin(categories, eq(food.categoryid, categories.id))
-        .leftJoin(subcategories, eq(food.subcategoryid, subcategories.id))
-        .where(eq(food.restaurantid, restaurantId));
-
-    if (foods.length === 0) {
-        return SuccessResponse(res, { message: "No foods found", data: [] });
-    }
-
-    const formatted = foods.map(row => ({
-        ...row.foodObj,
-        restaurant: row.restaurantObj ? { id: row.restaurantObj.id, name: row.restaurantObj.name } : null,
-        category: row.categoryObj ? { id: row.categoryObj.id, name: row.categoryObj.name } : null,
-        subcategory: row.subcategoryObj ? { id: row.subcategoryObj.id, name: row.subcategoryObj.name } : null,
-    }));
-
-    const foodIds = formatted.map(f => f.id);
-
-    const vars = await db.select().from(foodVariations).where(inArray(foodVariations.foodId, foodIds));
-    const varIds = vars.map(v => v.id);
-
-    const opts = varIds.length
-        ? await db.select().from(variationOptions).where(inArray(variationOptions.variationId, varIds))
-        : [];
-
-    const result = formatted.map(f => {
-        const foodVars = vars
-            .filter(v => v.foodId === f.id)
-            .map(v => ({
-                ...v,
-                options: opts.filter(o => o.variationId === v.id)
-            }));
-        return { ...f, variations: foodVars };
-    });
-
-    return SuccessResponse(res, { message: "Get foods by restaurant id success", data: result });
-};
-
-
+// =============================================
+// GET Food Select Data (For Dropdowns)
+// =============================================
 export const getFoodSelectData = async (req: Request, res: Response) => {
-    const allRestaurants = await db
-        .select({ id: restaurants.id, name: restaurants.name })
-        .from(restaurants)
-        .where(eq(restaurants.status, "active"));
+    const restaurantId = req.user?.id;
+    if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
 
-    const allCategories = await db
+  
+    // ✅ جلب الأقسام الخاصة بالمطعم فقط (بافتراض إن الجدول يحتوي على restaurantid)
+    const myCategories = await db
         .select({ id: categories.id, name: categories.name })
         .from(categories)
-        .where(eq(categories.status, "active"));
+        .where(and(eq(categories.status, "active")));
 
-    const allSubcategories = await db
+    // ✅ جلب الأقسام الفرعية الخاصة بالمطعم فقط
+    const mySubcategories = await db
         .select({
             id: subcategories.id,
             name: subcategories.name,
             categoryId: subcategories.categoryId
         })
         .from(subcategories)
-        .where(eq(subcategories.status, "active"));
+        .where(and(eq(subcategories.status, "active")));
 
-    const allAddons = await db
+    // ✅ جلب الإضافات الخاصة بالمطعم فقط
+    const myAddons = await db
         .select({ id: addons.id, name: addons.name })
         .from(addons)
-        .where(eq(addons.status, "active"));
+        .where(and(eq(addons.status, "active"), eq(addons.restaurantid, restaurantId)));
 
     return SuccessResponse(res, {
         message: "Get food select data success",
         data: {
-            allRestaurants,
-            allCategories,
-            allSubcategories,
-            allAddons
+            categories: myCategories,
+            subcategories: mySubcategories,
+            addons: myAddons
         }
     });
 };

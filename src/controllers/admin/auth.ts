@@ -35,7 +35,6 @@ export async function login(req: Request, res: Response) {
         id: admin[0].id,
         name: admin[0].name,
         role: (role && role[0] ? role[0].name : "admin") as Role,
-        // permissions: admin[0].permissions,
     };
 
     const token = generateAdminToken(tokenPayload);

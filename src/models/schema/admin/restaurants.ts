@@ -58,7 +58,7 @@ export const restaurants = mysqlTable("restaurants", {
     password: varchar("password", { length: 255 }).notNull(),
     // 💡 ملاحظة: حقل Confirm Password مش بيتسجل في الداتابيز، ده بيكون Validation في الـ Controller بس
      
-    type: mysqlEnum("type", ["restaurantadmin", "supadmin"]).default("restaurantadmin"),
+    type: mysqlEnum("type", ["restaurantadmin", "subadmin"]).default("restaurantadmin"),
     // Status & Timestamps
     // ==========================================
     status: mysqlEnum("status", ["active", "inactive"]).default("active"),

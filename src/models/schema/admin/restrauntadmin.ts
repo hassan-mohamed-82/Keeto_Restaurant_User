@@ -7,7 +7,7 @@ export const restrauntadmin = mysqlTable("admins", {
     id: char("id", { length: 255 }).primaryKey().notNull().default(sql`(uuid())`),
     name: varchar("name", { length: 255 }).notNull(),
     email: varchar("email", { length: 255 }).notNull(),
-    type: mysqlEnum("type", ["restaurantadmin", "supadmin"]).notNull().default("supadmin"),
+    type: mysqlEnum("type", ["restaurantadmin", "subadmin"]).notNull().default("subadmin"),
     phoneNumber: varchar("phone_number", { length: 255 }).notNull(),
     password: varchar("password", { length: 255 }).notNull(),
     roleId: char("role_id", { length: 36 }).references(() => rolesadmin.id),
