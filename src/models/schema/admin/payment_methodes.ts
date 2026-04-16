@@ -15,7 +15,7 @@ export const paymentMethods = mysqlTable("payment_methods", {
   name: varchar("name", { length: 100 }).notNull(),
   image: varchar("image", { length: 255 }).notNull(),
   description: varchar("description", { length: 255 }).notNull(),
-  type: mysqlEnum("type", ["manual", "automatic"]).notNull(),
+  type: mysqlEnum("type", ["wallet", "cash", "visa"]).notNull(),
   isActive: boolean("is_active").default(true),
 
   createdAt: timestamp("created_at").defaultNow(),

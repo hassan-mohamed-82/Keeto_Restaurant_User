@@ -4,14 +4,13 @@ import { restaurants } from "./restaurants";
 import { food } from "./food";
 import { users } from "../user/Users";
 import { paymentMethods } from "./payment_methodes";
+import { branches } from "../../schema";
 
 export const orders = mysqlTable("orders", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
-
     orderNumber: varchar("order_number", { length: 20 }).notNull().unique(),
-
     idempotencyKey: varchar("idempotency_key", { length: 100 }).unique(),
-
+    
     userId: char("user_id", { length: 36 })
         .references(() => users.id)
         .notNull(),
@@ -20,9 +19,13 @@ export const orders = mysqlTable("orders", {
         .references(() => restaurants.id)
         .notNull(),
 
+    // 👇 ده الحقل اللي كان ناقص وعامل المشكلة
+    branchId: char("branch_id", { length: 36 })
+        .references(() => branches.id)
+        .notNull(), 
+
     orderSource: mysqlEnum("order_source", ["online_order", "food_aggregator"]).notNull(),
 
-    // 🔥 بدل enum
     paymentMethodId: char("payment_method_id", { length: 36 })
         .references(() => paymentMethods.id)
         .notNull(),
@@ -30,23 +33,24 @@ export const orders = mysqlTable("orders", {
     orderType: mysqlEnum("order_type", ["delivery", "takeaway", "dine_in"]).default("delivery"),
 
     subtotal: decimal("subtotal", { precision: 10, scale: 2 }).notNull(),
-
     deliveryFee: decimal("delivery_fee", { precision: 10, scale: 2 }).default("0.00"),
-
     serviceFee: decimal("service_fee", { precision: 10, scale: 2 }).default("0.00"),
-
     appCommission: decimal("app_commission", { precision: 10, scale: 2 }).default("0.00"),
-
     totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull(),
 
+    // 👇 ضفنا حالة rejected هنا
     status: mysqlEnum("status", [
         "pending",
         "accepted",
         "preparing",
         "out_for_delivery",
         "delivered",
-        "cancelled"
+        "cancelled",
+        "rejected"
     ]).default("pending"),
+
+    // 👇 وده حقل سبب الإلغاء عشان المطعم يكتبه
+    cancelReason: text("cancel_reason"), 
 
     createdAt: timestamp("created_at").defaultNow(),
 });
