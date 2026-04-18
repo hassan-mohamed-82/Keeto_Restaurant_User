@@ -1,485 +1,196 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { restaurants, cuisines, zones, restaurantWallets, restrauntadmin, rolesadmin } from "../../models/schema";
-import { eq, sql } from "drizzle-orm";
+import { restrauntadmin, rolesadmin, branches } from "../../models/schema";
+import { eq, and } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { NotFound } from "../../Errors/NotFound";
 import { BadRequest } from "../../Errors/BadRequest";
 import bcrypt from "bcrypt";
 import { v4 as uuidv4 } from "uuid";
 
-// Helper: increment total_restaurants on a cuisine
-const incrementCuisineCount = async (cuisineId: string) => {
-    const cuisine = await db
-        .select({ total_restaurants: cuisines.total_restaurants })
-        .from(cuisines)
-        .where(eq(cuisines.id, cuisineId))
-        .limit(1);
+// ==========================================
+// 1. إضافة موظف جديد
+// ==========================================
+export const createStaff = async (req: Request, res: Response) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id; 
+    if (!restaurantId) throw new BadRequest("Restaurant context missing");
 
-    if (cuisine[0]) {
-        const current = parseInt(cuisine[0].total_restaurants || "0", 10);
-        await db
-            .update(cuisines)
-            .set({ total_restaurants: String(current + 1) })
-            .where(eq(cuisines.id, cuisineId));
-    }
-};
+    const { name, email, password, phoneNumber, branchId, type, roleId, permissions } = req.body;
 
-// Helper: decrement total_restaurants on a cuisine
-const decrementCuisineCount = async (cuisineId: string) => {
-    const cuisine = await db
-        .select({ total_restaurants: cuisines.total_restaurants })
-        .from(cuisines)
-        .where(eq(cuisines.id, cuisineId))
-        .limit(1);
-
-    if (cuisine[0]) {
-        const current = parseInt(cuisine[0].total_restaurants || "0", 10);
-        await db
-            .update(cuisines)
-            .set({ total_restaurants: String(Math.max(0, current - 1)) })
-            .where(eq(cuisines.id, cuisineId));
-    }
-};
-export const createRestaurant = async (req: Request, res: Response) => {
-    const clean = (v: any) =>
-        typeof v === "string" ? v.trim() : v;
-
-    const {
-        name,
-        address,
-        cuisineId,
-        zoneId,
-        logo,
-        cover,
-        minDeliveryTime,
-        maxDeliveryTime,
-        deliveryTimeUnit,
-        ownerFirstName,
-        ownerLastName,
-        ownerPhone,
-        tags,
-        taxNumber,
-        taxExpireDate,
-        taxCertificate,
-        email,
-        password,
-        status
-    } = req.body;
-
-    if (!name || !address || !zoneId || !logo || !ownerFirstName || !ownerLastName || !ownerPhone || !email || !password) {
+    if (!name || !email || !password || !phoneNumber) {
         throw new BadRequest("Missing required fields");
     }
 
-    const existing = await db
-        .select()
-        .from(restaurants)
-        .where(eq(restaurants.email, email))
-        .limit(1);
+    // التأكد إن الإيميل مش متكرر
+    const existingAdmin = await db.select().from(restrauntadmin).where(eq(restrauntadmin.email, email)).limit(1);
+    if (existingAdmin[0]) throw new BadRequest("Email already exists");
 
-    if (existing[0]) {
-        throw new BadRequest("Email already exists");
+    // لو الموظف هيتربط بفرع معين، نتأكد إن الفرع ده تبع المطعم
+    if (branchId) {
+        const branchExists = await db.select().from(branches)
+            .where(and(eq(branches.id, branchId), eq(branches.restaurantId, restaurantId))).limit(1);
+        if (!branchExists[0]) throw new BadRequest("Branch not found or doesn't belong to your restaurant");
+    }
+
+    // لو تم إرسال Role ID نتأكد إنه موجود
+    if (roleId) {
+        const roleExists = await db.select().from(rolesadmin).where(eq(rolesadmin.id, roleId)).limit(1);
+        if (!roleExists[0]) throw new BadRequest("Role not found");
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const id = uuidv4();
 
-    let parsedTags: string[] = [];
-    if (tags) {
-        parsedTags = typeof tags === "string" ? JSON.parse(tags) : tags;
-    }
-
-    await db.transaction(async (tx) => {
-        await tx.insert(restaurants).values({
-            id,
-
-            name: clean(name),
-            address: clean(address),
-
-            cuisineId: cuisineId || null,
-            zoneId: clean(zoneId),
-
-            logo: clean(logo),
-            cover: cover ? clean(cover) : null,
-
-            minDeliveryTime: minDeliveryTime ? clean(minDeliveryTime) : null,
-            maxDeliveryTime: maxDeliveryTime ? clean(maxDeliveryTime) : null,
-            deliveryTimeUnit: deliveryTimeUnit || "Minutes",
-
-            ownerFirstName: clean(ownerFirstName),
-            ownerLastName: clean(ownerLastName),
-            ownerPhone: clean(ownerPhone),
-
-            tags: parsedTags,
-
-            taxNumber: taxNumber ? clean(taxNumber) : null,
-            taxExpireDate: taxExpireDate || null,
-            taxCertificate: taxCertificate ? clean(taxCertificate) : null,
-
-            email: clean(email),
-            password: hashedPassword,
-
-            status: "active",
-        });
-
-        await tx.insert(restaurantWallets).values({
-            id: uuidv4(),
-            restaurantId: id,
-            balance: "0.00",
-            collectedCash: "0.00",
-            pendingWithdraw: "0.00",
-            totalWithdrawn: "0.00",
-            totalEarning: "0.00",
-        });
+    await db.insert(restrauntadmin).values({
+        id,
+        restaurantId,
+        branchId: branchId || null,
+        name,
+        email,
+        password: hashedPassword,
+        phoneNumber,
+        type: type || "branch_manager",
+        roleId: roleId || null,
+        permissions: permissions || [], // في حالة لو هتديله Custom permissions غير الـ Role
+        status: "active"
     });
 
-    return SuccessResponse(res, {
-        message: "Restaurant created successfully",
-        data: { id }
-    }, 201);
-};
-export const getAllRestaurants = async (req: Request, res: Response) => {
-    const raw = await db.select({
-        id: restaurants.id,
-        name: restaurants.name,
-        address: restaurants.address,
-        logo: restaurants.logo,
-        cover: restaurants.cover,
-        status: restaurants.status,
-        cuisine_id: cuisines.id,
-        cuisine_name: cuisines.name,
-
-        zone_id: zones.id,
-        zone_name: zones.name,
-    })
-    .from(restaurants)
-    .leftJoin(cuisines, eq(restaurants.cuisineId, cuisines.id))
-    .leftJoin(zones, eq(restaurants.zoneId, zones.id));
-
-    const formatted = raw.map(r => ({
-        id: r.id,
-        name: r.name,
-        address: r.address,
-        logo: r.logo,
-        cover: r.cover,
-        status: r.status,
-
-        cuisine: r.cuisine_id
-            ? { id: r.cuisine_id, name: r.cuisine_name }
-            : null,
-
-        zone: r.zone_id
-            ? { id: r.zone_id, name: r.zone_name }
-            : null,
-    }));
-
-    return SuccessResponse(res, {
-        message: "Get all restaurants success",
-        data: formatted
-    });
+    return SuccessResponse(res, { message: "Staff created successfully", data: { id } }, 201);
 };
 
-// =============================================
-// GET Restaurant By ID (مُصلح: فصل الكائنات لتجنب خطأ 500)
-// =============================================
-export const getRestaurantById = async (req: Request, res: Response) => {
-    const { id } = req.params;
+// ==========================================
+// 2. جلب كل الموظفين (الخاصين بهذا المطعم فقط)
+// ==========================================
+export const getAllStaff = async (req: Request, res: Response) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId) throw new BadRequest("Restaurant context missing");
 
-    const rawRestaurants = await db
-        .select({
-            restaurantObj: restaurants,
-            cuisineObj: cuisines,
-            zoneObj: zones,
-        })
-        .from(restaurants)
-        .leftJoin(cuisines, eq(restaurants.cuisineId, cuisines.id))
-        .leftJoin(zones, eq(restaurants.zoneId, zones.id))
-        .where(eq(restaurants.id, id))
-        .limit(1);
-
-    if (!rawRestaurants[0]) {
-        throw new NotFound("Restaurant not found");
-    }
-
-    // استخراج الصف الأول وتهيئته
-    const row = rawRestaurants[0];
-    const formattedRestaurant = {
-        ...row.restaurantObj,
-        cuisine: row.cuisineObj ? { id: row.cuisineObj.id, name: row.cuisineObj.name } : null,
-        zone: row.zoneObj ? { id: row.zoneObj.id, name: row.zoneObj.name } : null,
-    };
-
-    return SuccessResponse(res, { 
-        message: "Get restaurant by id success", 
-        data: formattedRestaurant 
-    });
-};
-
-export const updateRestaurant = async (req: Request, res: Response) => {
-    const { id } = req.params;
-    const {
-        name, address, cuisineId, zoneId, lat, lng, logo, cover,
-        minDeliveryTime, maxDeliveryTime, deliveryTimeUnit,
-        ownerFirstName, ownerLastName, ownerPhone, tags,
-        taxNumber, taxExpireDate, taxCertificate,
-        email, password, confirmPassword, status
-    } = req.body;
-
-    const existingRestaurant = await db
-        .select()
-        .from(restaurants)
-        .where(eq(restaurants.id, id))
-        .limit(1);
-
-    if (!existingRestaurant[0]) {
-        throw new NotFound("Restaurant not found");
-    }
-
-    // Validate zone if provided
-    if (zoneId) {
-        const existingZone = await db
-            .select()
-            .from(zones)
-            .where(eq(zones.id, zoneId))
-            .limit(1);
-
-        if (!existingZone[0]) {
-            throw new BadRequest("Zone not found");
-        }
-    }
-
-    // Validate cuisine if provided
-    if (cuisineId) {
-        const existingCuisine = await db
-            .select()
-            .from(cuisines)
-            .where(eq(cuisines.id, cuisineId))
-            .limit(1);
-
-        if (!existingCuisine[0]) {
-            throw new BadRequest("Cuisine not found");
-        }
-    }
-
-    // Validate email uniqueness if changed
-    if (email && email !== existingRestaurant[0].email) {
-        const emailExists = await db
-            .select()
-            .from(restaurants)
-            .where(eq(restaurants.email, email))
-            .limit(1);
-
-        if (emailExists[0]) {
-            throw new BadRequest("Email already exists");
-        }
-    }
-
-    // Password validation
-    if (password) {
-        if (password !== confirmPassword) {
-            throw new BadRequest("Password and confirm password do not match");
-        }
-    }
-
-    const updateData: any = {
-        updatedAt: new Date(),
-    };
-
-    if (name) updateData.name = name;
-    if (address) updateData.address = address;
-    if (cuisineId !== undefined) updateData.cuisineId = cuisineId || null;
-    if (zoneId) updateData.zoneId = zoneId;
-    if (lat !== undefined) updateData.lat = lat;
-    if (lng !== undefined) updateData.lng = lng;
-    if (logo) updateData.logo = logo;
-    if (cover !== undefined) updateData.cover = cover;
-    if (minDeliveryTime !== undefined) updateData.minDeliveryTime = minDeliveryTime;
-    if (maxDeliveryTime !== undefined) updateData.maxDeliveryTime = maxDeliveryTime;
-    if (deliveryTimeUnit) updateData.deliveryTimeUnit = deliveryTimeUnit;
-    if (ownerFirstName) updateData.ownerFirstName = ownerFirstName;
-    if (ownerLastName) updateData.ownerLastName = ownerLastName;
-    if (ownerPhone) updateData.ownerPhone = ownerPhone;
-    if (tags !== undefined) updateData.tags = tags;
-    if (taxNumber !== undefined) updateData.taxNumber = taxNumber;
-    if (taxExpireDate !== undefined) updateData.taxExpireDate = taxExpireDate;
-    if (taxCertificate !== undefined) updateData.taxCertificate = taxCertificate;
-    if (email) updateData.email = email;
-    if (password) updateData.password = await bcrypt.hash(password, 10);
-    if (status) updateData.status = status;
-
-    if (Object.keys(updateData).length === 1) {
-        throw new BadRequest("No data to update");
-    }
-
-    await db.update(restaurants).set(updateData).where(eq(restaurants.id, id));
-
-    // Handle cuisine count if cuisineId changed
-    if (cuisineId !== undefined && cuisineId !== existingRestaurant[0].cuisineId) {
-        // Decrement old cuisine count
-        if (existingRestaurant[0].cuisineId) {
-            await decrementCuisineCount(existingRestaurant[0].cuisineId);
-        }
-        // Increment new cuisine count
-        if (cuisineId) {
-            await incrementCuisineCount(cuisineId);
-        }
-    }
-
-    return SuccessResponse(res, { message: "Update restaurant success" });
-};
-
-export const deleteRestaurant = async (req: Request, res: Response) => {
-    const { id } = req.params;
-
-    const existingRestaurant = await db
-        .select()
-        .from(restaurants)
-        .where(eq(restaurants.id, id))
-        .limit(1);
-
-    if (!existingRestaurant[0]) {
-        throw new NotFound("Restaurant not found");
-    }
-
-    // Decrement cuisine count before deleting
-    if (existingRestaurant[0].cuisineId) {
-        await decrementCuisineCount(existingRestaurant[0].cuisineId);
-    }
-
-    await db.delete(restaurants).where(eq(restaurants.id, id));
-
-    return SuccessResponse(res, { message: "Delete restaurant success" });
-};
-
-export const getallcousinesandzones = async (req: Request, res: Response) => {
-    const allCuisines = await db.select({
-        id: cuisines.id,
-        name: cuisines.name,
-    }).from(cuisines)
-      .where(eq(cuisines.status, "active"));
-    const allZones = await db.select({
-        id: zones.id,
-        name: zones.name,
-    }).from(zones)
-      .where(eq(zones.status, "active"));
-    return SuccessResponse(res, { message: "Get all cuisines and zones success", data: { allCuisines, allZones } });
-}
-
-
-export const getAdminById = async (req: Request, res: Response) => {
-    const { id } = req.params;
-
-    const admin = await db
+    const staffList = await db
         .select({
             id: restrauntadmin.id,
             name: restrauntadmin.name,
             email: restrauntadmin.email,
             phoneNumber: restrauntadmin.phoneNumber,
+            type: restrauntadmin.type,
             status: restrauntadmin.status,
             createdAt: restrauntadmin.createdAt,
-            // بيانات الـ Role
+            branch: {
+                id: branches.id,
+                name: branches.name,
+            },
             role: {
                 id: rolesadmin.id,
                 name: rolesadmin.name,
-                permissions: rolesadmin.permissions,
-                status: rolesadmin.status,
             },
         })
         .from(restrauntadmin)
+        .leftJoin(branches, eq(restrauntadmin.branchId, branches.id))
         .leftJoin(rolesadmin, eq(restrauntadmin.roleId, rolesadmin.id))
-        .where(eq(restrauntadmin.id, id));
+        .where(eq(restrauntadmin.restaurantId, restaurantId)); // 🛡️ حماية: موظفين المطعم ده بس
 
-    if (admin.length === 0) {
-        throw new NotFound("admin not found");
-    }
-
-    return SuccessResponse(res, { 
-        message: "get admin by id success", 
-        data: admin[0] 
-    });
+    return SuccessResponse(res, { message: "Get all staff success", data: staffList });
 };
 
-
-export const updateAdmin = async (req: Request, res: Response) => {
+// ==========================================
+// 3. جلب موظف معين بالـ ID
+// ==========================================
+export const getStaffById = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, email, phoneNumber, roleId } = req.body;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
 
-    const existingAdmin = await db
-        .select()
+    const staffItem = await db
+        .select({
+            id: restrauntadmin.id,
+            name: restrauntadmin.name,
+            email: restrauntadmin.email,
+            phoneNumber: restrauntadmin.phoneNumber,
+            type: restrauntadmin.type,
+            permissions: restrauntadmin.permissions,
+            status: restrauntadmin.status,
+            branchId: restrauntadmin.branchId,
+            roleId: restrauntadmin.roleId,
+        })
         .from(restrauntadmin)
-        .where(eq(restrauntadmin.id, id));
+        .where(and(
+            eq(restrauntadmin.id, id),
+            eq(restrauntadmin.restaurantId, restaurantId) // 🛡️ حماية
+        )).limit(1);
 
-    if (existingAdmin.length === 0) {
-        throw new NotFound("admin not found");
-    }
+    if (!staffItem[0]) throw new NotFound("Staff member not found");
 
-    const updateData: any = {
-        updatedAt: new Date()
-    };
+    return SuccessResponse(res, { message: "Get staff by id success", data: staffItem[0] });
+};
 
+// ==========================================
+// 4. تعديل بيانات موظف
+// ==========================================
+export const updateStaff = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    const { name, email, phoneNumber, branchId, type, roleId, permissions } = req.body;
+
+    const existingStaff = await db.select().from(restrauntadmin)
+        .where(and(eq(restrauntadmin.id, id), eq(restrauntadmin.restaurantId, restaurantId))).limit(1);
+
+    if (!existingStaff[0]) throw new NotFound("Staff member not found");
+
+    const updateData: any = {};
     if (name) updateData.name = name;
-    if (email) updateData.email = email;
     if (phoneNumber) updateData.phoneNumber = phoneNumber;
-    if (roleId) updateData.roleId = roleId;
+    if (type) updateData.type = type;
+    if (branchId !== undefined) updateData.branchId = branchId || null;
+    if (roleId !== undefined) updateData.roleId = roleId || null;
+    if (permissions) updateData.permissions = permissions;
 
-    if (Object.keys(updateData).length === 1) {
-        throw new BadRequest("no data to update");
+    // لو بيغير الإيميل، لازم نتأكد إنه مش مستخدم
+    if (email && email !== existingStaff[0].email) {
+        const emailExists = await db.select().from(restrauntadmin).where(eq(restrauntadmin.email, email)).limit(1);
+        if (emailExists[0]) throw new BadRequest("Email already in use");
+        updateData.email = email;
     }
 
-    await db
-        .update(restrauntadmin)
-        .set(updateData)
-        .where(eq(restrauntadmin.id, id));
+    if (Object.keys(updateData).length === 0) throw new BadRequest("No data to update");
 
-    return SuccessResponse(res, { message: "update admin success" });
+    await db.update(restrauntadmin).set(updateData).where(eq(restrauntadmin.id, id));
+
+    return SuccessResponse(res, { message: "Staff updated successfully" });
 };
 
-export const deleteAdmin = async (req: Request, res: Response) => {
+// ==========================================
+// 5. تفعيل / إيقاف موظف (Status Toggle)
+// ==========================================
+export const toggleStaffStatus = async (req: Request, res: Response) => {
     const { id } = req.params;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
 
-    const admin = await db
-        .select()
+    const existingStaff = await db.select({ status: restrauntadmin.status })
         .from(restrauntadmin)
+        .where(and(eq(restrauntadmin.id, id), eq(restrauntadmin.restaurantId, restaurantId))).limit(1);
+
+    if (!existingStaff[0]) throw new NotFound("Staff member not found");
+
+    const newStatus = existingStaff[0].status === "active" ? "inactive" : "active";
+
+    await db.update(restrauntadmin)
+        .set({ status: newStatus })
         .where(eq(restrauntadmin.id, id));
 
-    if (admin.length === 0) {
-        throw new NotFound("admin not found");
-    }
+    return SuccessResponse(res, { message: `Staff status changed to ${newStatus}` });
+};
+
+// ==========================================
+// 6. حذف موظف نهائياً
+// ==========================================
+export const deleteStaff = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+
+    const existingStaff = await db.select().from(restrauntadmin)
+        .where(and(eq(restrauntadmin.id, id), eq(restrauntadmin.restaurantId, restaurantId))).limit(1);
+
+    if (!existingStaff[0]) throw new NotFound("Staff member not found");
 
     await db.delete(restrauntadmin).where(eq(restrauntadmin.id, id));
 
-    return SuccessResponse(res, { message: "delete admin success" });
+    return SuccessResponse(res, { message: "Staff deleted successfully" });
 };
-
-
-export const togglerestrauntadmintatus = async (req: Request, res: Response) => {
-    const { id } = req.params;
-
-    const admin = await db
-        .select()
-        .from(restrauntadmin)
-        .where(eq(restrauntadmin.id, id));
-
-    if (admin.length === 0) {
-        throw new NotFound("admin not found");
-    }
-
-    const newStatus = admin[0].status === "active" ? "inactive" : "active";
-
-    await db
-        .update(restrauntadmin)
-        .set({
-            status: newStatus,
-        })
-        .where(eq(restrauntadmin.id, id));
-
-    return SuccessResponse(res, { message: `toggle admin status success` });
-};
-
-
-export const select=async(req:Request,res:Response)=>{
- 
-    const allroles= await db.select().from(rolesadmin);
-    
-    return SuccessResponse(res,{message:"get all roles success",data:allroles});
-}

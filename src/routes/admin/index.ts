@@ -24,7 +24,7 @@ const router = Router();
 router.use("/auth", authRouter);
 router.use(authenticated, authorizeRoles("restaurantadmin", "subadmin"));
 
-router.use("/admin", AdmiRouter);
+router.use("/restaurant", AdmiRouter);
 router.use("/roles", RolesRouter);
 router.use("/countries", CountryRouter);
 router.use("/cities", CityRouter);
