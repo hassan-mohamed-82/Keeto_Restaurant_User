@@ -24,22 +24,16 @@ const router = Router();
 router.use("/auth", authRouter);
 router.use(authenticated, authorizeRoles("restaurantadmin", "subadmin"));
 
-router.use("/restaurant", AdmiRouter);
+router.use("/restaurantadmin", AdmiRouter);
 router.use("/roles", RolesRouter);
-router.use("/countries", CountryRouter);
-router.use("/cities", CityRouter);
-router.use("/zones", ZoneRouter);
 router.use("/subcategories", SubcategoryRouter);
 router.use("/order", OrderRouter);
-router.use("/adonescategory", AdonecategoryRouter);
 router.use("/addons", AddonRouter);
 router.use("/branchemenu", branchemenuRouter);
 router.use("/food", FoodRouter);
 router.use("/wallets", walletsRouter);
 router.use("/restaurantsetting", restaurantsettingRouter);
-router.use("/payment-methods", payment_methodsRouter);
 router.use("/restaurant-zone-delivery-fees", restaurantZoneDeliveryFeesRouter);
-router.use("/user-wallets", user_walletsRouter);
 router.use("/branches", branchesRouter);
 
 export default router;

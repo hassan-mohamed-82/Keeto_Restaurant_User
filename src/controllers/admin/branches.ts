@@ -180,3 +180,10 @@ export const updateBranchStatus = async (req: Request, res: Response) => {
 
     return SuccessResponse(res, { message: "Branch status updated successfully" });
 };
+
+
+
+export const getallzones = async (req: Request, res: Response) => {
+    const zone = await db.select().from(zones).where(eq(zones.status, "active"));
+    return SuccessResponse(res, { message: "Get zones success", data: zone });
+};

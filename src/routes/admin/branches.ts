@@ -1,7 +1,8 @@
 import { Router } from "express";
- import{createBranch,getMyBranches,getBranchById,updateBranch,deleteBranch,updateBranchStatus} from "../../controllers/admin/branches";
+ import{createBranch,getMyBranches,getBranchById,updateBranch,deleteBranch,updateBranchStatus, getallzones} from "../../controllers/admin/branches";
  import { catchAsync } from "../../utils/catchAsync";
  const router = Router();
+ router.get("/zone", catchAsync(getallzones));
  router.post("/", catchAsync(createBranch));
  router.get("/", catchAsync(getMyBranches));
  router.get("/:id", catchAsync(getBranchById));

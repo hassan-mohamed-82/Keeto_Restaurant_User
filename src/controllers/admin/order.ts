@@ -1,36 +1,182 @@
-import { eq, desc, and } from "drizzle-orm";
-import { orders, users } from "../../models/schema";
-import { SuccessResponse } from "../../utils/response";
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-export const getOrdersByRestaurant = async (req: Request, res: Response) => {
-    const { restaurantId } = req.params; // الأيدي بتاع المطعم اللي باعتينه في اللينك
-    const { status } = req.query; // لو عايز تفلتر بـ Pending أو Delivered مثلاً
+import { 
+    orders, orderItems, food, users, paymentMethods, 
+    userWallets, userWalletTransactions 
+} from "../../models/schema";
+import { eq, and, desc } from "drizzle-orm";
+import { SuccessResponse } from "../../utils/response";
+import { BadRequest } from "../../Errors/BadRequest";
+import { NotFound } from "../../Errors/NotFound";
+import { v4 as uuidv4 } from "uuid";
 
-    // بناء الكويري بشكل ديناميكي
-    const baseQuery = db
-        .select({
-            orderId: orders.orderNumber, // الرقم العشوائي (ORD-123)
-            internalId: orders.id,
-            orderDate: orders.createdAt,
-            totalAmount: orders.totalAmount,
-            orderStatus: orders.status,
-            customerName: users.name, // اسم العميل من جدول اليوزرز
-            customerPhone: users.phone
-        })
-        .from(orders)
-        .leftJoin(users, eq(orders.userId, users.id)); // ربطنا الأوردر باليوزر
+// ==========================================
+// 1. جلب كل الأوردرات الخاصة بالمطعم/الفرع
+// ==========================================
+export const getRestaurantOrders = async (req: Request, res: Response) => {
+    const adminRestaurantId = req.user?.restaurantId || req.user?.id;
+    const adminBranchId = req.user?.branchId; // لو Null يبقى ده المالك
 
-    // لو الأدمن داس على تابة معينة (مثلاً Pending فقط)
-    let condition = eq(orders.restaurantId, restaurantId);
-    if (status) {
-        condition = and(eq(orders.restaurantId, restaurantId), eq(orders.status, status as any)) as any;
+    if (!adminRestaurantId) throw new BadRequest("Unauthorized");
+
+    // بناء الـ Query الأساسي
+    let queryConditions = eq(orders.restaurantId, adminRestaurantId);
+
+    // لو ده مدير فرع، نفلتر الأوردرات لفرعه هو بس
+    if (adminBranchId) {
+        queryConditions = and(queryConditions, eq(orders.branchId, adminBranchId)) as any;
     }
 
-    const result = await baseQuery.where(condition).orderBy(desc(orders.createdAt));
+    const restaurantOrders = await db.select({
+        id: orders.id,
+        orderNumber: orders.orderNumber,
+        customerName: users.name,
+        customerPhone: users.phone,
+        orderType: orders.orderType,
+        totalAmount: orders.totalAmount,
+        status: orders.status,
+        createdAt: orders.createdAt,
+    })
+    .from(orders)
+    .leftJoin(users, eq(orders.userId, users.id))
+    .where(queryConditions)
+    .orderBy(desc(orders.createdAt)); // ترتيب من الأحدث للأقدم
+
+    return SuccessResponse(res, { message: "Get orders success", data: restaurantOrders });
+};
+
+// ==========================================
+// 2. جلب تفاصيل أوردر معين (بالـ ID)
+// ==========================================
+export const getRestaurantOrderById = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const adminRestaurantId = req.user?.restaurantId || req.user?.id;
+    const adminBranchId = req.user?.branchId;
+
+    // 1. جلب البيانات الأساسية للأوردر
+    const [orderDetail] = await db.select({
+        order: orders,
+        customer: {
+            name: users.name,
+            phone: users.phone,
+            email: users.email,
+        },
+        paymentMethod: {
+            name: paymentMethods.name,
+            type: paymentMethods.type,
+        }
+    })
+    .from(orders)
+    .leftJoin(users, eq(orders.userId, users.id))
+    .leftJoin(paymentMethods, eq(orders.paymentMethodId, paymentMethods.id))
+    .where(eq(orders.id, id))
+    .limit(1);
+
+    if (!orderDetail) throw new NotFound("Order not found");
+
+    // 🛡️ حماية الصلاحيات
+    if (orderDetail.order.restaurantId !== adminRestaurantId) {
+        throw new BadRequest("Unauthorized: Order does not belong to your restaurant");
+    }
+    if (adminBranchId && orderDetail.order.branchId !== adminBranchId) {
+        throw new BadRequest("Unauthorized: Order does not belong to your branch");
+    }
+
+    // 2. جلب أصناف الأكل اللي جوه الأوردر ده (Order Items)
+    const items = await db.select({
+        id: orderItems.id,
+        quantity: orderItems.quantity,
+        basePrice: orderItems.basePrice,
+        variationsPrice: orderItems.variationsPrice,
+        totalPrice: orderItems.totalPrice,
+        foodName: food.name,
+        foodImage: food.image,
+    })
+    .from(orderItems)
+    .leftJoin(food, eq(orderItems.foodId, food.id))
+    .where(eq(orderItems.orderId, id));
 
     return SuccessResponse(res, { 
-        message: "تم جلب طلبات المطعم بنجاح", 
-        data: result 
+        message: "Get order details success", 
+        data: { 
+            ...orderDetail.order,
+            customer: orderDetail.customer,
+            paymentMethod: orderDetail.paymentMethod,
+            items 
+        } 
     });
+};
+
+// ==========================================
+// 3. تحديث حالة الأوردر (مع إرجاع الفلوس لو اترفض)
+// ==========================================
+export const updateOrderStatus = async (req: Request, res: Response) => {
+    const { orderId } = req.params;
+    const { status, cancelReason } = req.body;
+    
+    const adminRestaurantId = req.user?.restaurantId || req.user?.id;
+    const adminBranchId = req.user?.branchId; 
+
+    if (!status) throw new BadRequest("Status is required");
+
+    // إجبار الموظف يكتب سبب لو كنسل الأوردر
+    if ((status === "rejected" || status === "cancelled") && !cancelReason) {
+        throw new BadRequest("Cancel reason is required when rejecting or cancelling an order");
+    }
+
+    const [existingOrder] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+    if (!existingOrder) throw new NotFound("Order not found");
+    
+    // 🛡️ حماية
+    if (existingOrder.restaurantId !== adminRestaurantId) throw new BadRequest("Unauthorized");
+    if (adminBranchId && existingOrder.branchId !== adminBranchId) throw new BadRequest("Unauthorized");
+
+    // Transaction لتحديث الحالة وإرجاع فلوس المحفظة لو لزم الأمر
+    await db.transaction(async (tx) => {
+        // تحديث الحالة
+        await tx.update(orders)
+            .set({ 
+                status, 
+                cancelReason: (status === "rejected" || status === "cancelled") ? cancelReason : null,
+                updatedAt: new Date()
+            })
+            .where(eq(orders.id, orderId));
+
+        // الـ Refund (ترجيع الفلوس) لو الأوردر اتلغى وكان مدفوع بالمحفظة
+        if (status === "rejected" || status === "cancelled") {
+            const [paymentMethod] = await tx.select().from(paymentMethods)
+                .where(eq(paymentMethods.id, existingOrder.paymentMethodId)).limit(1);
+
+            if (paymentMethod && paymentMethod.type === "wallet") {
+                const [userWallet] = await tx.select().from(userWallets)
+                    .where(eq(userWallets.userId, existingOrder.userId)).limit(1);
+
+                if (userWallet) {
+                    const balanceBefore = parseFloat(userWallet.balance as string);
+                    const amountToRefund = parseFloat(existingOrder.totalAmount as string);
+                    const newBalance = balanceBefore + amountToRefund;
+
+                    // إرجاع الفلوس
+                    await tx.update(userWallets)
+                        .set({ balance: newBalance.toString(), updatedAt: new Date() })
+                        .where(eq(userWallets.id, userWallet.id));
+
+                    // تسجيل الحركة كـ Credit
+                    await tx.insert(userWalletTransactions).values({
+                        id: uuidv4(),
+                        userId: existingOrder.userId,
+                        paymentMethodId: existingOrder.paymentMethodId,
+                        type: "credit",
+                        transactionType: "refund", 
+                        amount: amountToRefund.toString(),
+                        balanceBefore: balanceBefore.toString(),
+                        reference: existingOrder.orderNumber, 
+                        status: "approved"
+                    });
+                }
+            }
+        }
+    });
+
+    return SuccessResponse(res, { message: `Order status successfully updated to ${status}` });
 };

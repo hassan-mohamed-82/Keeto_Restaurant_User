@@ -4,7 +4,7 @@ import { updateSettings, getSettingsByRestaurantId } from "../../controllers/adm
 
 const router = Router();
 
-router.get("/:restaurantId", catchAsync(getSettingsByRestaurantId));
-router.put("/:restaurantId", catchAsync(updateSettings));
+router.get("/", catchAsync(getSettingsByRestaurantId));
+router.put("/", catchAsync(updateSettings));
 
 export default router;

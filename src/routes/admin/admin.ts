@@ -1,12 +1,12 @@
 import { Router } from "express";
-import { createAdmin, deleteAdmin, getAllAdmins, getAdminById, updateAdmin } from "../../controllers/admin/restrauntadmin";
+import { createStaff, deleteStaff, getAllStaff, getStaffById, updateStaff } from "../../controllers/admin/restrauntadmin";
 import { catchAsync } from "../../utils/catchAsync";
 const router = Router();
 
-router.post("/", catchAsync(createAdmin));
-router.get("/", catchAsync(getAllAdmins));
-router.get("/:id", catchAsync(getAdminById));
-router.put("/:id", catchAsync(updateAdmin));
-router.delete("/:id", catchAsync(deleteAdmin));
+router.post("/", catchAsync(createStaff));
+router.get("/", catchAsync(getAllStaff));
+router.get("/:id", catchAsync(getStaffById));
+router.put("/:id", catchAsync(updateStaff));
+router.delete("/:id", catchAsync(deleteStaff));
 
 export default router;

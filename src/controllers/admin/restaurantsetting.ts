@@ -4,7 +4,7 @@ import { restaurantSettings, restaurantSchedules } from '../../models/schema';
 import { eq } from 'drizzle-orm';
 
 export const updateSettings = async (req: Request, res: Response): Promise<void> => {
-    const restaurantId = req.params.restaurantId;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     const { settings, schedules } = req.body;
 
     if (!restaurantId) {
@@ -67,7 +67,7 @@ export const updateSettings = async (req: Request, res: Response): Promise<void>
   }
 
 export const getSettingsByRestaurantId = async (req: Request, res: Response): Promise<void> => {
-    const restaurantId = req.params.restaurantId;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
   
     if (!restaurantId) {
       res.status(400).json({ success: false, message: "Restaurant id is required" });
