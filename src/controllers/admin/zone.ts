@@ -8,7 +8,7 @@ import { BadRequest } from "../../Errors/BadRequest";
 import { v4 as uuidv4 } from "uuid";
 
 export const createZone = async (req: Request, res: Response) => {
-    const { name, displayName, cityId,lat,lng } = req.body;
+    const { name, displayName, cityId,lat,lng, nameAr, nameFr, displayNameAr, displayNameFr } = req.body;
 
     if (!name || !displayName || !cityId || !lat || !lng) {
         throw new BadRequest("Name, displayName, cityId, lat, and lng are required");
@@ -39,7 +39,11 @@ export const createZone = async (req: Request, res: Response) => {
     await db.insert(zones).values({
         id,
         name,
+        nameAr,
+        nameFr,
         displayName,
+        displayNameAr,
+        displayNameFr,
         lat,
         lng,
         status: "active",
@@ -107,7 +111,7 @@ export const getZoneById = async (req: Request, res: Response) => {
 
 export const updateZone = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, displayName, status, cityId, lat, lng } = req.body;
+    const { name, displayName, status, cityId, lat, lng, nameAr, nameFr, displayNameAr, displayNameFr } = req.body;
 
     // 1. التحقق المبكر: هل يوجد بيانات للتحديث أصلاً؟
     if (!name && !displayName && !status && !cityId) {
@@ -138,7 +142,11 @@ export const updateZone = async (req: Request, res: Response) => {
     };
 
     if (name !== undefined) updateData.name = name;
+    if (nameAr !== undefined) updateData.nameAr = nameAr;
+    if (nameFr !== undefined) updateData.nameFr = nameFr;
     if (displayName !== undefined) updateData.displayName = displayName;
+    if (displayNameAr !== undefined) updateData.displayNameAr = displayNameAr;
+    if (displayNameFr !== undefined) updateData.displayNameFr = displayNameFr;
     if (status !== undefined) updateData.status = status;
     if (cityId !== undefined) updateData.cityId = cityId;
     if (lat !== undefined) updateData.lat = lat;

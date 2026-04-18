@@ -8,7 +8,7 @@ import { BadRequest } from "../../Errors/BadRequest";
 import { v4 as uuidv4 } from "uuid";
 
 export const createSubcategory = async (req: Request, res: Response) => {
-    const { name, categoryId, priority, status } = req.body;
+    const { name, categoryId, priority, status, nameAr, nameFr } = req.body;
 
     if (!name || !categoryId) {
         throw new BadRequest("Subcategory name and category ID are required");
@@ -41,6 +41,8 @@ export const createSubcategory = async (req: Request, res: Response) => {
     await db.insert(subcategories).values({
         id,
         name,
+        nameAr,
+        nameFr,
         categoryId,
         priority: priority || "low",
         status: status || "active",
@@ -103,7 +105,7 @@ export const getSubcategoryById = async (req: Request, res: Response) => {
 
 export const updateSubcategory = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, categoryId, priority, status } = req.body;
+    const { name, categoryId, priority, status, nameAr, nameFr } = req.body;
 
     const existingSubcategory = await db
         .select()
@@ -133,6 +135,8 @@ export const updateSubcategory = async (req: Request, res: Response) => {
     };
 
     if (name) updateData.name = name;
+    if (nameAr !== undefined) updateData.nameAr = nameAr;
+    if (nameFr !== undefined) updateData.nameFr = nameFr;
     if (categoryId) updateData.categoryId = categoryId;
     if (priority) updateData.priority = priority;
     if (status) updateData.status = status;

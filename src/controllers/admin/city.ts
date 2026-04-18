@@ -8,7 +8,7 @@ import { BadRequest } from "../../Errors/BadRequest";
 import { v4 as uuidv4 } from "uuid";
 
 export const createCity = async (req: Request, res: Response) => {
-    const { name, countryId } = req.body;
+    const { name, countryId, nameAr, nameFr } = req.body;
 
     if (!name || !countryId) {
         throw new BadRequest("City name and country ID are required");
@@ -41,6 +41,8 @@ export const createCity = async (req: Request, res: Response) => {
     await db.insert(cities).values({
         id,
         name,
+        nameAr,
+        nameFr,
         countryId,
     });
 
@@ -99,7 +101,7 @@ export const getCityById = async (req: Request, res: Response) => {
 
 export const updateCity = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, status, countryId } = req.body;
+    const { name, status, countryId, nameAr, nameFr } = req.body;
 
     const existingCity = await db
         .select()
@@ -129,6 +131,8 @@ export const updateCity = async (req: Request, res: Response) => {
     };
 
     if (name) updateData.name = name;
+    if (nameAr !== undefined) updateData.nameAr = nameAr;
+    if (nameFr !== undefined) updateData.nameFr = nameFr;
     if (status) updateData.status = status;
     if (countryId) updateData.countryId = countryId;
 

@@ -12,9 +12,13 @@ import { sql } from "drizzle-orm";
 export const categories = mysqlTable("categories", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
     name: varchar("name", { length: 255 }).notNull(),
+    nameAr: varchar("name_ar", { length: 255 }),
+    nameFr: varchar("name_fr", { length: 255 }),
     Image: varchar("image", { length: 255 }).notNull(),
     meta_image: varchar("meta_image", { length: 255 }),
     title: text("title"),
+    titleAr: text("title_ar"),
+    titleFr: text("title_fr"),
     meta_title: text("meta_title"),
     priority: mysqlEnum("priority", ["low", "medium", "high"]).default("low"),
     status: mysqlEnum("status", ["active", "inactive"]).default("active"),

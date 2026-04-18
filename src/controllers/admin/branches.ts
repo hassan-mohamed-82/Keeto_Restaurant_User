@@ -14,7 +14,7 @@ export const createBranch = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id; 
     if (!restaurantId) throw new BadRequest("Restaurant ID missing");
 
-    const { name, address, phoneNumber, zoneId } = req.body;
+    const { name, address, phoneNumber, zoneId, nameAr, nameFr, addressAr, addressFr } = req.body;
 
     if (!name || !address || !zoneId) {
         throw new BadRequest("Missing required fields (name, address, zoneId)");
@@ -30,7 +30,11 @@ export const createBranch = async (req: Request, res: Response) => {
         id,
         restaurantId,
         name,
+        nameAr,
+        nameFr,
         address,
+        addressAr,
+        addressFr,
         phoneNumber: phoneNumber || null,
         zoneId,
         status: "active"
@@ -94,7 +98,7 @@ export const getBranchById = async (req: Request, res: Response) => {
 
 export const updateBranch = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, address, phoneNumber, zoneId, status } = req.body;
+    const { name, address, phoneNumber, zoneId, status, nameAr, nameFr, addressAr, addressFr } = req.body;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Restaurant ID missing");
 
@@ -113,7 +117,11 @@ export const updateBranch = async (req: Request, res: Response) => {
 
     const updateData: any = {};
     if (name) updateData.name = name;
+    if (nameAr !== undefined) updateData.nameAr = nameAr;
+    if (nameFr !== undefined) updateData.nameFr = nameFr;
     if (address) updateData.address = address;
+    if (addressAr !== undefined) updateData.addressAr = addressAr;
+    if (addressFr !== undefined) updateData.addressFr = addressFr;
     if (phoneNumber) updateData.phoneNumber = phoneNumber;
     if (zoneId) {
         const zoneExists = await db.select().from(zones).where(eq(zones.id, zoneId)).limit(1);

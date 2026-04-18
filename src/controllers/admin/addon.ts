@@ -10,7 +10,7 @@ import { v4 as uuidv4 } from "uuid";
 export const createAddon = async (req: Request, res: Response) => {
     const restaurantId = req.user?.id;
     if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
-    const { name, price, stock_type, adonescategoryid } = req.body;
+    const { name, price, stock_type, adonescategoryid, nameAr, nameFr } = req.body;
 
     if (!name || !price || !stock_type || !adonescategoryid) {
         throw new BadRequest("Missing required fields: name, price, stock_type, adonescategoryid");
@@ -40,6 +40,8 @@ export const createAddon = async (req: Request, res: Response) => {
     await db.insert(addons).values({
         id,
         name,
+        nameAr,
+        nameFr,
         price,
         stock_type,
         adonescategoryid,
@@ -111,7 +113,7 @@ export const getAddonById = async (req: Request, res: Response) => {
 
 export const updateAddon = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, price, stock_type, stock, adonescategoryid, restaurantid } = req.body;
+    const { name, price, stock_type, stock, adonescategoryid, restaurantid, nameAr, nameFr } = req.body;
 
     // Validate addon exists
     const existingAddon = await db
@@ -154,6 +156,8 @@ export const updateAddon = async (req: Request, res: Response) => {
         .update(addons)
         .set({
             name: name || existingAddon[0].name,
+            nameAr: nameAr !== undefined ? nameAr : existingAddon[0].nameAr,
+            nameFr: nameFr !== undefined ? nameFr : existingAddon[0].nameFr,
             price: price || existingAddon[0].price,
             stock_type: stock_type || existingAddon[0].stock_type,
             adonescategoryid: adonescategoryid || existingAddon[0].adonescategoryid,

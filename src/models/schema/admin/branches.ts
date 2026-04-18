@@ -17,7 +17,11 @@ export const branches = mysqlTable("branches", {
     restaurantId: char("restaurant_id", { length: 36 }).references(() => restaurants.id).notNull(),
     
     name: varchar("name", { length: 255 }).notNull(), // فرع مدينة نصر مثلاً
+    nameAr: varchar("name_ar", { length: 255 }),
+    nameFr: varchar("name_fr", { length: 255 }),
     address: text("address").notNull(),
+    addressAr: text("address_ar"),
+    addressFr: text("address_fr"),
     phoneNumber: varchar("phone_number", { length: 50 }),
     zoneId: char("zone_id", { length: 36 }).references(() => zones.id).notNull(), // عشان منطقة توصيل الفرع ده
     

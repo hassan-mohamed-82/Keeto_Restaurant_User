@@ -31,6 +31,7 @@ export const createFood = async (req: Request, res: Response) => {
         price, discount_type, discount_value, Maximum_Purchase, stock_type,
         status,
         variations,
+        nameAr, nameFr, descriptionAr, descriptionFr
     } = req.body;
 
     if (!name || !description || !image || !categoryid || !subcategoryid || !startTime || !endTime || !price) {
@@ -54,7 +55,11 @@ export const createFood = async (req: Request, res: Response) => {
     await db.insert(food).values({
         id: foodId,
         name,
+        nameAr,
+        nameFr,
         description,
+        descriptionAr,
+        descriptionFr,
         image,
         restaurantid: restaurantId,
         categoryid,
@@ -84,6 +89,8 @@ export const createFood = async (req: Request, res: Response) => {
                 id: variationId,
                 foodId,
                 name: variation.name,
+                nameAr: variation.nameAr,
+                nameFr: variation.nameFr,
                 isRequired: variation.isRequired || false,
                 selectionType: variation.selectionType || "single",
                 min: variation.min || null,
@@ -95,6 +102,8 @@ export const createFood = async (req: Request, res: Response) => {
                     await db.insert(variationOptions).values({
                         variationId,
                         optionName: option.optionName,
+                        optionNameAr: option.optionNameAr,
+                        optionNameFr: option.optionNameFr,
                         additionalPrice: option.additionalPrice?.toString() || "0",
                     });
                 }
@@ -278,6 +287,8 @@ export const updateFood = async (req: Request, res: Response) => {
                 id: variationId,
                 foodId: id,
                 name: variation.name,
+                nameAr: variation.nameAr,
+                nameFr: variation.nameFr,
                 isRequired: variation.isRequired || false,
                 selectionType: variation.selectionType || "single",
                 min: variation.min || null,
@@ -289,6 +300,8 @@ export const updateFood = async (req: Request, res: Response) => {
                     await db.insert(variationOptions).values({
                         variationId,
                         optionName: option.optionName,
+                        optionNameAr: option.optionNameAr,
+                        optionNameFr: option.optionNameFr,
                         additionalPrice: option.additionalPrice?.toString() || "0",
                     });
                 }
