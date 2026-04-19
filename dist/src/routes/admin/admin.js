@@ -1,0 +1,12 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const restrauntadmin_1 = require("../../controllers/admin/restrauntadmin");
+const catchAsync_1 = require("../../utils/catchAsync");
+const router = (0, express_1.Router)();
+router.post("/", (0, catchAsync_1.catchAsync)(restrauntadmin_1.createStaff));
+router.get("/", (0, catchAsync_1.catchAsync)(restrauntadmin_1.getAllStaff));
+router.get("/:id", (0, catchAsync_1.catchAsync)(restrauntadmin_1.getStaffById));
+router.put("/:id", (0, catchAsync_1.catchAsync)(restrauntadmin_1.updateStaff));
+router.delete("/:id", (0, catchAsync_1.catchAsync)(restrauntadmin_1.deleteStaff));
+exports.default = router;

@@ -6,7 +6,6 @@ import CountryRouter from "./country";
 import CityRouter from "./city";
 import ZoneRouter from "./zone";
 import SubcategoryRouter from "./subcategory";
-import AdonecategoryRouter from "./adonescategory";
 import AddonRouter from "./addon";
 import FoodRouter from "./food";
 import walletsRouter from "./restaurant_wallets"

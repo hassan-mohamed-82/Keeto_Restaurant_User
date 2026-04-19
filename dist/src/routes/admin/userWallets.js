@@ -1,0 +1,9 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const user_wallet_1 = require("../../controllers/admin/user_wallet");
+const catchAsync_1 = require("../../utils/catchAsync");
+const router = (0, express_1.Router)();
+router.put("/approve/:transactionId", (0, catchAsync_1.catchAsync)(user_wallet_1.approveWalletTransaction));
+router.put("/reject/:transactionId", (0, catchAsync_1.catchAsync)(user_wallet_1.rejectWalletTransaction));
+exports.default = router;

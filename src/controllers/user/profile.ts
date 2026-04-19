@@ -15,7 +15,6 @@ export const getProfile = async (req: Request | any, res: Response) => {
             email: users.email,
             phone: users.phone,
             photo: users.photo,
-            address: users.address,
             isVerified: users.isVerified,
             createdAt: users.createdAt,
 
@@ -25,9 +24,6 @@ export const getProfile = async (req: Request | any, res: Response) => {
             zoneName: zones.name,
         })
         .from(users)
-        .leftJoin(countries, eq(users.countryId, countries.id))
-        .leftJoin(cities, eq(users.cityId, cities.id))
-        .leftJoin(zones, eq(users.zoneId, zones.id))
         .where(eq(users.id, userId))
         .limit(1);
 
@@ -48,13 +44,7 @@ export const getProfile = async (req: Request | any, res: Response) => {
                 phone: userInfo.phone,
                 photo: userInfo.photo,
 
-                location: {
-                    country: userInfo.countryName,
-                    city: userInfo.cityName,
-                    zone: userInfo.zoneName,
-                    address: userInfo.address,
-                },
-
+            
                 isVerified: userInfo.isVerified,
                 createdAt: userInfo.createdAt,
             },

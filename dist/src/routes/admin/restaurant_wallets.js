@@ -1,0 +1,9 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const restaurant_wallets_1 = require("../../controllers/admin/restaurant_wallets");
+const catchAsync_1 = require("../../utils/catchAsync");
+const router = (0, express_1.Router)();
+router.get("/", (0, catchAsync_1.catchAsync)(restaurant_wallets_1.getMyWallet));
+router.get("/transactions", (0, catchAsync_1.catchAsync)(restaurant_wallets_1.getMyWalletTransactions));
+exports.default = router;

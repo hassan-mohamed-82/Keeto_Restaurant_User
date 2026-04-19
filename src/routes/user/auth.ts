@@ -6,7 +6,7 @@ import {
     login,
     forgotPassword,
     verifyResetCode,
-    resetPassword,getActiveLocations
+    resetPassword
 } from "../../controllers/user/auth";
 
 const router = Router();
@@ -17,6 +17,5 @@ router.post("/login", catchAsync(login));
 router.post("/forgot-password", catchAsync(forgotPassword));
 router.post("/verify-reset-code", catchAsync(verifyResetCode));
 router.post("/reset-password", catchAsync(resetPassword));
-router.get("/active-locations", catchAsync(getActiveLocations));
 
 export default router;

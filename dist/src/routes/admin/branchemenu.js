@@ -1,0 +1,12 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const branchemenu_1 = require("../../controllers/admin/branchemenu");
+const catchAsync_1 = require("../../utils/catchAsync");
+const router = (0, express_1.Router)();
+router.post("/", (0, catchAsync_1.catchAsync)(branchemenu_1.assignFoodToBranch));
+router.get("/", (0, catchAsync_1.catchAsync)(branchemenu_1.getBranchMenu));
+router.put("/:id", (0, catchAsync_1.catchAsync)(branchemenu_1.updateBranchMenuItem));
+router.delete("/:id", (0, catchAsync_1.catchAsync)(branchemenu_1.deleteBranchMenuItem));
+router.get("/select-data", (0, catchAsync_1.catchAsync)(branchemenu_1.getRestaurantSelectData));
+exports.default = router;

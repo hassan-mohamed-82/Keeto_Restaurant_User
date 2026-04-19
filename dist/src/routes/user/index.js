@@ -1,0 +1,24 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const auth_1 = __importDefault(require("./auth"));
+const order_1 = __importDefault(require("./order"));
+const home_1 = __importDefault(require("./home"));
+const profile_1 = __importDefault(require("./profile"));
+const cart_1 = __importDefault(require("./cart"));
+const user_wallets_1 = __importDefault(require("./user_wallets"));
+const authenticated_1 = require("../../middlewares/authenticated");
+const authorized_1 = require("../../middlewares/authorized");
+// import walletRouter from "./userWallets";
+const router = (0, express_1.Router)();
+router.use("/home", home_1.default);
+router.use("/auth", auth_1.default);
+router.use(authenticated_1.authenticated, (0, authorized_1.authorizeRoles)("user"));
+router.use("/profile", profile_1.default);
+router.use("/order", order_1.default);
+router.use("/cart", cart_1.default);
+router.use("/wallet", user_wallets_1.default);
+exports.default = router;

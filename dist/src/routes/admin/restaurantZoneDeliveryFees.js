@@ -1,0 +1,13 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const restaurantZoneDeliveryFees_1 = require("../../controllers/admin/restaurantZoneDeliveryFees");
+const catchAsync_1 = require("../../utils/catchAsync");
+const router = (0, express_1.Router)();
+router.get("/select", (0, catchAsync_1.catchAsync)(restaurantZoneDeliveryFees_1.select));
+router.post("/", (0, catchAsync_1.catchAsync)(restaurantZoneDeliveryFees_1.createDeliveryFee));
+router.get("/", (0, catchAsync_1.catchAsync)(restaurantZoneDeliveryFees_1.getDeliveryFees));
+router.get("/:id", (0, catchAsync_1.catchAsync)(restaurantZoneDeliveryFees_1.getDeliveryFeeById));
+router.put("/:id", (0, catchAsync_1.catchAsync)(restaurantZoneDeliveryFees_1.updateDeliveryFee));
+router.delete("/:id", (0, catchAsync_1.catchAsync)(restaurantZoneDeliveryFees_1.deleteDeliveryFee));
+exports.default = router;

@@ -1,0 +1,13 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const catchAsync_1 = require("../../utils/catchAsync");
+const zone_1 = require("../../controllers/admin/zone");
+const router = (0, express_1.Router)();
+router.post("/", (0, catchAsync_1.catchAsync)(zone_1.createZone));
+router.get("/", (0, catchAsync_1.catchAsync)(zone_1.getAllZones));
+router.get("/:id", (0, catchAsync_1.catchAsync)(zone_1.getZoneById));
+router.put("/:id", (0, catchAsync_1.catchAsync)(zone_1.updateZone));
+router.delete("/:id", (0, catchAsync_1.catchAsync)(zone_1.deleteZone));
+router.get("/cities/active", (0, catchAsync_1.catchAsync)(zone_1.getallcities));
+exports.default = router;

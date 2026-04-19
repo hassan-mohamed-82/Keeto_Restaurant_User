@@ -23,9 +23,9 @@ const generateOTP = (length: number = 6): string => {
 // 1. Signup
 // ===================================
 export const signup = async (req: Request, res: Response) => {
-    const { name, email, phone, password, countryId, cityId, zoneId, address ,photo} = req.body;
+    const { name, email, phone, password ,photo} = req.body;
 
-    if (!name || !email || !phone || !password || !countryId || !cityId || !zoneId) {
+    if (!name || !email || !phone || !password ) {
         throw new BadRequest("Please provide all required fields");
     }
 
@@ -54,11 +54,8 @@ const verifyLink = `${baseUrl}/api/user/auth/verify-email?token=${token}`;
                 name,
                 phone,
                 password: hashedPassword,
-                countryId,
-                cityId,
                 photo,
-                zoneId,
-                address
+             
             }).where(eq(users.id, userId));
 
             // delete old tokens
@@ -76,10 +73,7 @@ const verifyLink = `${baseUrl}/api/user/auth/verify-email?token=${token}`;
                 email,
                 phone,
                 password: hashedPassword,
-                countryId,
-                cityId,
-                zoneId,
-                address,
+                photo,
                 isVerified: false
             });
         }
@@ -324,43 +318,3 @@ export const resetPassword = async (req: Request, res: Response) => {
 };
 
 
-
-
-
-export const getActiveLocations = async (req: Request, res: Response) => {
-    // جلب جميع الدول والمدن والمناطق النشطة في نفس الوقت (Concurrent Fetching)
-    const [activeCountries, activeCities, activeZones] = await Promise.all([
-        db.select({
-            id: countries.id,
-            name: countries.name,
-        })
-        .from(countries)
-        .where(eq(countries.status, "active")),
-
-        db.select({
-            id: cities.id,
-            name: cities.name,
-            countryId: cities.countryId, // مهم عشان الـ Frontend يربط المدينة بالدولة
-        })
-        .from(cities)
-        .where(eq(cities.status, "active")),
-
-        db.select({
-            id: zones.id,
-            name: zones.name,
-            displayName: zones.displayName,
-            cityId: zones.cityId, // مهم عشان الـ Frontend يربط المنطقة بالمدينة
-        })
-        .from(zones)
-        .where(eq(zones.status, "active"))
-    ]);
-
-    return SuccessResponse(res, {
-        message: "Get active locations success",
-        data: {
-            countries: activeCountries,
-            cities: activeCities,
-            zones: activeZones
-        }
-    });
-};

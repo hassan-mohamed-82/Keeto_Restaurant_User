@@ -25,4 +25,5 @@ export * from "./schema/admin/order";
 export * from "./schema/user/Users";
 export * from "./schema/user/emailverfication";
 export * from "./schema/user/cart";
+export * from "./schema/user/favouriteliste";
 

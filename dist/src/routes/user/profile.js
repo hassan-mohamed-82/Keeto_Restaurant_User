@@ -1,0 +1,10 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const profile_1 = require("../../controllers/user/profile");
+const authenticated_1 = require("../../middlewares/authenticated");
+const catchAsync_1 = require("../../utils/catchAsync");
+const router = (0, express_1.Router)();
+router.get("/", authenticated_1.authenticated, (0, catchAsync_1.catchAsync)(profile_1.getProfile));
+router.put("/", authenticated_1.authenticated, (0, catchAsync_1.catchAsync)(profile_1.updateProfile));
+exports.default = router;

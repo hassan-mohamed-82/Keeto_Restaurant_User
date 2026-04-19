@@ -1,0 +1,11 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const catchAsync_1 = require("../../utils/catchAsync");
+const order_1 = require("../../controllers/user/order");
+const router = (0, express_1.Router)();
+router.post("/checkout", (0, catchAsync_1.catchAsync)(order_1.checkout));
+router.get("/active", (0, catchAsync_1.catchAsync)(order_1.getActiveOrders));
+router.get("/history", (0, catchAsync_1.catchAsync)(order_1.getOrderHistory));
+router.get("/:orderId", (0, catchAsync_1.catchAsync)(order_1.getOrderDetails));
+exports.default = router;
