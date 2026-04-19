@@ -19,6 +19,8 @@ export const cuisines = mysqlTable("cuisines", {
     descriptionAr: text("description_ar"),
     descriptionFr: text("description_fr"),
     meta_description: text("meta_description"),
+    meta_descriptionAr: text("meta_description_ar").notNull(),
+    meta_descriptionFr: text("meta_description_fr").notNull(),
     status: mysqlEnum("status", ["active", "inactive"]).default("active"),
     total_restaurants: varchar("total_restaurants", { length: 255 }).default("0"),
     createdAt: timestamp("created_at").defaultNow(),

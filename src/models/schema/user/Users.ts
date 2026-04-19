@@ -9,10 +9,7 @@ export const users = mysqlTable("users", {
     photo: varchar("photo", { length: 255 }),
     email: varchar("email", { length: 255 }).notNull().unique(),
     phone: varchar("phone", { length: 20 }).notNull(),
-    countryId: char("country_id", { length: 36 }).notNull().references(() => countries.id),
-    cityId: char("city_id", { length: 36 }).notNull().references(() => cities.id),
-    zoneId: char("zone_id", { length: 36 }).notNull().references(() => zones.id),
-    address: text("address"), // عنوان العميل
+    fcmToken: text("fcm_token"),
     password: varchar("password", { length: 255 }).notNull(),
     isVerified: boolean("is_verified").default(false),
     createdAt: timestamp("created_at").defaultNow(),

@@ -20,6 +20,8 @@ export const categories = mysqlTable("categories", {
     titleAr: text("title_ar"),
     titleFr: text("title_fr"),
     meta_title: text("meta_title"),
+    meta_titleAr: text("meta_title_ar"),
+    meta_titleFr: text("meta_title_fr"),
     priority: mysqlEnum("priority", ["low", "medium", "high"]).default("low"),
     status: mysqlEnum("status", ["active", "inactive"]).default("active"),
     createdAt: timestamp("created_at").defaultNow(),

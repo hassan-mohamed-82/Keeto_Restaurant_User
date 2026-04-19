@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { restaurants,restrauntadmin, rolesadmin } from "../../models/schema";
+import { restaurants, restrauntadmin, rolesadmin } from "../../models/schema";
 import { eq } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
@@ -15,40 +15,93 @@ export async function login(req: Request, res: Response) {
     if (!email || !password) {
         throw new BadRequest("Email and password are required");
     }
-    const admin = await db.select().from(restrauntadmin).where(eq(restrauntadmin.email, email));
-    if (admin.length === 0) {
-        throw new UnauthorizedError("Invalid Credentials");
-    }
-    const isPasswordValid = await bcrypt.compare(password, admin[0].password);
-    if (!isPasswordValid) {
-        throw new UnauthorizedError("Invalid Credentials");
-    }
-    if (admin[0].status === "inactive") {
-        throw new UnauthorizedError("Admin is inactive");
+
+    // ====================================================
+    // 1. أولاً: البحث في جدول المطاعم (حساب المالك - Owner)
+    // ====================================================
+    const restaurantOwner = await db.select().from(restaurants).where(eq(restaurants.email, email)).limit(1);
+
+    if (restaurantOwner.length > 0) {
+        const owner = restaurantOwner[0];
+        const isPasswordValid = await bcrypt.compare(password, owner.password);
+        
+        if (!isPasswordValid) throw new UnauthorizedError("Invalid Credentials");
+        if (owner.status === "inactive") throw new UnauthorizedError("Restaurant account is inactive");
+
+        // 💡 التوكن الخاص بمالك المطعم (معهوش branchId لأنه بيشوف كل الفروع)
+        const tokenPayload = {
+            id: owner.id, 
+            restaurantId: owner.id, // 👈 مهم عشان باقي الكنترولرز بتدور على req.user.restaurantId
+            name: owner.name,
+            role: "restaurantadmin" as Role, 
+        };
+
+        const token = generateAdminToken(tokenPayload);
+
+        return SuccessResponse(res, {
+            message: "Restaurant Owner logged in successfully", 
+            token, 
+            admin: {
+                name: owner.name,
+                email: owner.email,
+                phoneNumber: owner.ownerPhone,
+                roleId: null, // المالك ملوش Role محدد لأنه الـ Super بتاع مطعمه
+                permissions: [], // ممكن تخلي الفرانتد يفهم إن الـ permissions الفاضية للمالك تعني "كل الصلاحيات"
+                status: owner.status,
+                type: "restaurantadmin",
+                restaurantId: owner.id
+            }
+        }, 200);
     }
 
-    let role = null;
-    if (admin[0].roleId) {
-        role = await db.select().from(rolesadmin).where(eq(rolesadmin.id, admin[0].roleId));
-    }
-    const tokenPayload = {
-        id: admin[0].id,
-        name: admin[0].name,
-        role: (role && role[0] ? role[0].name : "admin") as Role,
-    };
+    // ====================================================
+    // 2. ثانياً: البحث في جدول الموظفين (Staff / Branch Managers)
+    // ====================================================
+    const staff = await db.select().from(restrauntadmin).where(eq(restrauntadmin.email, email)).limit(1);
 
-    const token = generateAdminToken(tokenPayload);
+    if (staff.length > 0) {
+        const admin = staff[0];
+        const isPasswordValid = await bcrypt.compare(password, admin.password);
+        
+        if (!isPasswordValid) throw new UnauthorizedError("Invalid Credentials");
+        if (admin.status === "inactive") throw new UnauthorizedError("Admin is inactive");
 
-
-    return SuccessResponse(res, {
-        message: "Admin logged in successfully", token, admin: {
-            name: admin[0].name,
-            email: admin[0].email,
-            phoneNumber: admin[0].phoneNumber,
-            roleId: admin[0].roleId,
-            permissions: admin[0].permissions,
-            status: admin[0].status,
-            type: admin[0].type
+        let role = null;
+        if (admin.roleId) {
+            const roleResult = await db.select().from(rolesadmin).where(eq(rolesadmin.id, admin.roleId)).limit(1);
+            role = roleResult[0];
         }
-    }, 200);
+
+        // 💡 التوكن الخاص بالموظف (معاه restaurantId وممكن branchId)
+        const tokenPayload = {
+            id: admin.id,
+            restaurantId: admin.restaurantId, // 👈 بيتربط بمطعم معين
+            branchId: admin.branchId, // 👈 بيتربط بفرع معين (لو مدير فرع)
+            name: admin.name,
+            role: (role ? role.name : admin.type) as Role,
+        };
+
+        const token = generateAdminToken(tokenPayload);
+
+        return SuccessResponse(res, {
+            message: "Staff logged in successfully", 
+            token, 
+            admin: {
+                name: admin.name,
+                email: admin.email,
+                phoneNumber: admin.phoneNumber,
+                roleId: admin.roleId,
+                permissions: admin.permissions,
+                status: admin.status,
+                type: admin.type,
+                restaurantId: admin.restaurantId,
+                branchId: admin.branchId
+            }
+        }, 200);
+    }
+
+    // ====================================================
+    // 3. لو ملقاهوش لا هنا ولا هنا
+    // ====================================================
+    throw new UnauthorizedError("Invalid Credentials");
 }
