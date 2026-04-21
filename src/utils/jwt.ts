@@ -47,7 +47,7 @@ export const generateAdminToken = (data: {
 export const generateRestaurantAdminToken = (data: {
     id: string;
     name: string;
-    type: "subadmin" | "branch_manager";
+    type: "subadmin" | "branch_manager" | "restaurantadmin";
     restaurantId: string;
     branchId?: string | null;
 }): string => {
