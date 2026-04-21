@@ -33,9 +33,9 @@ async function login(req, res) {
             id: owner.id,
             restaurantId: owner.id, // 👈 مهم عشان باقي الكنترولرز بتدور على req.user.restaurantId
             name: owner.name,
-            role: "restaurantadmin",
+            type: "subadmin", // المالك بيتعامل كـ subadmin (أعلى صلاحية في المطعم)
         };
-        const token = (0, jwt_1.generateAdminToken)(tokenPayload);
+        const token = (0, jwt_1.generateRestaurantAdminToken)(tokenPayload);
         return (0, response_1.SuccessResponse)(res, {
             message: "Restaurant Owner logged in successfully",
             token,
@@ -73,9 +73,9 @@ async function login(req, res) {
             restaurantId: admin.restaurantId, // 👈 بيتربط بمطعم معين
             branchId: admin.branchId, // 👈 بيتربط بفرع معين (لو مدير فرع)
             name: admin.name,
-            role: (role ? role.name : admin.type),
+            type: admin.type, // "subadmin" | "branch_manager"
         };
-        const token = (0, jwt_1.generateAdminToken)(tokenPayload);
+        const token = (0, jwt_1.generateRestaurantAdminToken)(tokenPayload);
         return (0, response_1.SuccessResponse)(res, {
             message: "Staff logged in successfully",
             token,

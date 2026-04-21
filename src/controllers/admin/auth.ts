@@ -8,7 +8,7 @@ import { UnauthorizedError } from "../../Errors";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { Permission, Role } from "../../types/custom";
-import { generateAdminToken } from "../../utils/jwt";
+import { generateRestaurantAdminToken } from "../../utils/jwt";
 
 export async function login(req: Request, res: Response) {
     const { email, password } = req.body;
@@ -33,10 +33,10 @@ export async function login(req: Request, res: Response) {
             id: owner.id, 
             restaurantId: owner.id, // 👈 مهم عشان باقي الكنترولرز بتدور على req.user.restaurantId
             name: owner.name,
-            role: "restaurantadmin" as Role, 
+            type: "subadmin" as const, // المالك بيتعامل كـ subadmin (أعلى صلاحية في المطعم)
         };
 
-        const token = generateAdminToken(tokenPayload);
+        const token = generateRestaurantAdminToken(tokenPayload);
 
         return SuccessResponse(res, {
             message: "Restaurant Owner logged in successfully", 
@@ -78,10 +78,10 @@ export async function login(req: Request, res: Response) {
             restaurantId: admin.restaurantId, // 👈 بيتربط بمطعم معين
             branchId: admin.branchId, // 👈 بيتربط بفرع معين (لو مدير فرع)
             name: admin.name,
-            role: (role ? role.name : admin.type) as Role,
+            type: admin.type, // "subadmin" | "branch_manager"
         };
 
-        const token = generateAdminToken(tokenPayload);
+        const token = generateRestaurantAdminToken(tokenPayload);
 
         return SuccessResponse(res, {
             message: "Staff logged in successfully", 

@@ -222,10 +222,11 @@ export const login = async (req: Request, res: Response) => {
         throw new BadRequest("Please verify your email before logging in");
     }
 
+    if (!user.password) throw new BadRequest("This account uses social login. Please login with Google or Facebook.");
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) throw new BadRequest("Invalid credentials");
 
-    const token = generateUserToken({ id: user.id, name: user.name, email: user.email });
+    const token = generateUserToken({ id: user.id, name: user.name });
 
     return SuccessResponse(res, { message: "Login successful", data: { token, user: { id: user.id, name: user.name, email: user.email } } });
 };

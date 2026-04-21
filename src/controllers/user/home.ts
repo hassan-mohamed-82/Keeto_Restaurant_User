@@ -3,7 +3,7 @@ import { db } from "../../models/connection";
 import { cuisines, categories, restaurants, food, favorites } from "../../models/schema";
 import { eq, and } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
-import { BadRequest } from "../../Errors";
+import { BadRequest, UnauthorizedError } from "../../Errors";
 
 // ==========================================
 // 1. API شاشة الهوم (Home Screen)
@@ -139,32 +139,42 @@ export const getRestaurantDetails = async (req: Request, res: Response) => {
 // 5. إضافة/إزالة المطعم من المفضلة (زرار القلب)
 // ==========================================
 export const toggleFavorite = async (req: Request, res: Response) => {
-    // الفرونت هيبعت: نوع المفضلة، والأيدي بتاع اليوزر، والأيدي بتاع الحاجة اللي فضلها
-    const userId = req.user?.id;
-    const { restaurantId, foodId } = req.body;
+    try {
+        if (!req.user) throw new UnauthorizedError("Unauthenticated");
+        const userId = req.user.id; 
+        const { restaurantId, foodId } = req.body;
 
-    if (restaurantId && !foodId) throw new BadRequest("Restaurant ID is required");
-    if (!restaurantId && foodId) throw new BadRequest("Food ID is required");
+        if (!restaurantId && !foodId) {
+            throw new BadRequest("Restaurant ID or Food ID is required");
+        }
 
-    // بناء الشرط بناءً على النوع
-    const condition = restaurantId 
-        ? and(eq(favorites.userId, userId), eq(favorites.restaurantId, restaurantId))
-        : and(eq(favorites.userId, userId), eq(favorites.foodId, foodId));
+        if (restaurantId && foodId) {
+            throw new BadRequest("Send only one of restaurantId or foodId");
+        }
 
-    const existingFav = await db.select().from(favorites).where(condition).limit(1);
+        // بناء الشرط بناءً على النوع
+        const condition = restaurantId 
+            ? and(eq(favorites.userId, userId), eq(favorites.restaurantId, restaurantId))
+            : and(eq(favorites.userId, userId), eq(favorites.foodId, foodId));
 
-    if (existingFav[0]) {
-        // لو موجودة نمسحها (Un-favorite)
-        await db.delete(favorites).where(eq(favorites.id, existingFav[0].id));
-        return SuccessResponse(res, { message: "تمت الإزالة من المفضلة", isFavorite: false });
-    } else {
-        // لو مش موجودة نضيفها (Favorite)
-        await db.insert(favorites).values({ 
-            userId, 
-            restaurantId: restaurantId ? restaurantId : null,
-            foodId: foodId ? foodId : null 
-        });
-        return SuccessResponse(res, { message: "تمت الإضافة للمفضلة", isFavorite: true });
+        // الخطأ بيحصل في السطر ده 👇
+        const existingFav = await db.select().from(favorites).where(condition).limit(1);
+
+        if (existingFav[0]) {
+            await db.delete(favorites).where(eq(favorites.id, existingFav[0].id));
+            return SuccessResponse(res, { message: "تمت الإزالة من المفضلة", isFavorite: false });
+        } else {
+            await db.insert(favorites).values({ 
+                userId, 
+                restaurantId: restaurantId ? restaurantId : null,
+                foodId: foodId ? foodId : null 
+            });
+            return SuccessResponse(res, { message: "تمت الإضافة للمفضلة", isFavorite: true });
+        }
+    } catch (error) {
+        // السطر ده هيقولنا مين العمود أو الجدول اللي مش موجود
+        console.error("🔥🔥 MYSQL SELECT ERROR: ", error);
+        throw error;
     }
 };
 
@@ -172,8 +182,41 @@ export const toggleFavorite = async (req: Request, res: Response) => {
 // 6. جلب قائمة المفضلة ليوزر معين (Wishlist)
 // ==========================================
 export const getUserFavorites = async (req: Request, res: Response) => {
-     const userId = req.user?.id; // بنجيب اليوزر آيدي من التوكن بعد ما نعمل Middleware للتحقق من التوكن
-    const favorite = await db.select().from(favorites).where(eq(favorites.userId, userId));
+    // 1. التحقق من تسجيل الدخول
+    if (!req.user) throw new UnauthorizedError("Unauthenticated");
+    const userId = req.user.id;
 
-    return SuccessResponse(res, { data: favorite });
+    // 2. جلب البيانات مع عمل Join لجدول المطاعم وجدول الأكلات
+    // ملاحظة: تأكد من استيراد جداول (restaurants) و (foods) في ملفك
+    const favs = await db.select({
+        favoriteId: favorites.id,
+        // بيانات المطعم (ستكون null لو كان السجل يخص أكلة)
+        restaurant: {
+            id: restaurants.id,
+            name: restaurants.name,
+            cover: restaurants.cover,
+            logo: restaurants.logo,
+            address: restaurants.address,
+            
+        },
+        // بيانات الأكلة (ستكون null لو كان السجل يخص مطعم)
+        food: {
+            id: food.id,
+            name: food.name,
+            price: food.price,
+            image: food.image,
+        }
+    })
+    .from(favorites)
+    .leftJoin(restaurants, eq(favorites.restaurantId, restaurants.id))
+    .leftJoin(food, eq(favorites.foodId, food.id))
+    .where(eq(favorites.userId, userId));
+
+    // 3. تنسيق البيانات (اختياري): لفصل المطاعم عن الأكلات في الـ Response
+    const result = {
+        restaurants: favs.filter(f => f.restaurant?.id !== null).map(f => f.restaurant),
+        foods: favs.filter(f => f.food?.id !== null).map(f => f.food)
+    };
+
+    return SuccessResponse(res, { data: result });
 };

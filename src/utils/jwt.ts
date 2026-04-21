@@ -1,34 +1,73 @@
 import jwt from "jsonwebtoken";
-import { UnauthorizedError } from "../Errors";
-import { TokenPayload, Role, Permission } from "../types/custom";
-import "dotenv/config";
+import { TokenPayload, Role } from "../types/custom";
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
 
-
-export const generateAdminToken = (data: {
-    id: string;
-    name: string;
-    role: Role;
-    // permissions: Permission[];
-}): string => {
-    const payload: TokenPayload = {
-        id: data.id,
-        name: data.name,
-        role: data.role,
-        // permissions: data.permissions,
-    };
-    return jwt.sign(payload, JWT_SECRET, { expiresIn: "7d" });
-};
-
+// =======================
+// Generate User Token
+// =======================
 export const generateUserToken = (data: {
     id: string;
     name: string;
-    email: string;
 }): string => {
     return jwt.sign(
-        { id: data.id, name: data.name, email: data.email, role: "user" },
+        {
+            id: data.id,
+            name: data.name,
+            role: "user",
+        },
         JWT_SECRET,
         { expiresIn: "30d" }
     );
+};
+
+// =======================
+// Generate Admin Token
+// =======================
+export const generateAdminToken = (data: {
+    id: string;
+    name: string;
+    type: "super_admin" | "admin";
+}): string => {
+    return jwt.sign(
+        {
+            id: data.id,
+            name: data.name,
+            role: "admin",
+            type: data.type,
+        },
+        JWT_SECRET,
+        { expiresIn: "7d" }
+    );
+};
+
+// =======================
+// Generate Restaurant Admin Token
+// =======================
+export const generateRestaurantAdminToken = (data: {
+    id: string;
+    name: string;
+    type: "subadmin" | "branch_manager";
+    restaurantId: string;
+    branchId?: string | null;
+}): string => {
+    return jwt.sign(
+        {
+            id: data.id,
+            name: data.name,
+            role: "restaurant_admin",
+            type: data.type,
+            restaurantId: data.restaurantId,
+            branchId: data.branchId || null,
+        },
+        JWT_SECRET,
+        { expiresIn: "7d" }
+    );
+};
+
+// =======================
+// Verify Token
+// =======================
+export const verifyToken = (token: string): TokenPayload => {
+    return jwt.verify(token, JWT_SECRET) as TokenPayload;
 };

@@ -6,10 +6,11 @@ import { SuccessResponse } from "../../utils/response";
 import { NotFound } from "../../Errors/NotFound";
 import { BadRequest } from "../../Errors/BadRequest";
 import { v4 as uuidv4 } from "uuid";
+import { UnauthorizedError } from "../../Errors";
 
-export const createAddon = async (req: Request, res: Response) => {
-    const restaurantId = req.user?.id;
-    if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
+export const createAddon = async (req: Request | any, res: Response) => {
+    if (!req.user) throw new UnauthorizedError("Unauthenticated");
+    const restaurantId = req.user.id; 
     const { name, price, stock_type, adonescategoryid, nameAr, nameFr } = req.body;
 
     if (!name || !price || !stock_type || !adonescategoryid) {

@@ -191,10 +191,12 @@ const login = async (req, res) => {
         // ممكن نعيد إرسال الكود هنا لو أردت
         throw new BadRequest_1.BadRequest("Please verify your email before logging in");
     }
+    if (!user.password)
+        throw new BadRequest_1.BadRequest("This account uses social login. Please login with Google or Facebook.");
     const isMatch = await bcrypt_1.default.compare(password, user.password);
     if (!isMatch)
         throw new BadRequest_1.BadRequest("Invalid credentials");
-    const token = (0, jwt_1.generateUserToken)({ id: user.id, name: user.name, email: user.email });
+    const token = (0, jwt_1.generateUserToken)({ id: user.id, name: user.name });
     return (0, response_1.SuccessResponse)(res, { message: "Login successful", data: { token, user: { id: user.id, name: user.name, email: user.email } } });
 };
 exports.login = login;

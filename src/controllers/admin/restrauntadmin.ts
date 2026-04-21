@@ -12,7 +12,7 @@ import { v4 as uuidv4 } from "uuid";
 // 1. إضافة موظف جديد
 // ==========================================
 export const createStaff = async (req: Request, res: Response) => {
-    const restaurantId = req.user?.restaurantId || req.user?.id; 
+    const restaurantId = (req.user?.restaurantId || req.user?.id) as string; 
     if (!restaurantId) throw new BadRequest("Restaurant context missing");
 
     const { name, email, password, phoneNumber, branchId, type, roleId, permissions } = req.body;
@@ -62,7 +62,7 @@ export const createStaff = async (req: Request, res: Response) => {
 // 2. جلب كل الموظفين (الخاصين بهذا المطعم فقط)
 // ==========================================
 export const getAllStaff = async (req: Request, res: Response) => {
-    const restaurantId = req.user?.restaurantId || req.user?.id;
+    const restaurantId = (req.user?.restaurantId || req.user?.id) as string;
     if (!restaurantId) throw new BadRequest("Restaurant context missing");
 
     const staffList = await db
@@ -96,7 +96,7 @@ export const getAllStaff = async (req: Request, res: Response) => {
 // ==========================================
 export const getStaffById = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const restaurantId = req.user?.restaurantId || req.user?.id;
+    const restaurantId = (req.user?.restaurantId || req.user?.id) as string;
 
     const staffItem = await db
         .select({
@@ -126,7 +126,7 @@ export const getStaffById = async (req: Request, res: Response) => {
 // ==========================================
 export const updateStaff = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const restaurantId = req.user?.restaurantId || req.user?.id;
+    const restaurantId = (req.user?.restaurantId || req.user?.id) as string;
     const { name, email, phoneNumber, branchId, type, roleId, permissions } = req.body;
 
     const existingStaff = await db.select().from(restrauntadmin)
@@ -161,7 +161,7 @@ export const updateStaff = async (req: Request, res: Response) => {
 // ==========================================
 export const toggleStaffStatus = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const restaurantId = req.user?.restaurantId || req.user?.id;
+    const restaurantId = (req.user?.restaurantId || req.user?.id) as string;
 
     const existingStaff = await db.select({ status: restrauntadmin.status })
         .from(restrauntadmin)
@@ -183,7 +183,7 @@ export const toggleStaffStatus = async (req: Request, res: Response) => {
 // ==========================================
 export const deleteStaff = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const restaurantId = req.user?.restaurantId || req.user?.id;
+    const restaurantId = (req.user?.restaurantId || req.user?.id) as string;
 
     const existingStaff = await db.select().from(restrauntadmin)
         .where(and(eq(restrauntadmin.id, id), eq(restrauntadmin.restaurantId, restaurantId))).limit(1);

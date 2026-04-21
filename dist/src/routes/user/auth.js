@@ -10,4 +10,6 @@ router.post("/login", (0, catchAsync_1.catchAsync)(auth_1.login));
 router.post("/forgot-password", (0, catchAsync_1.catchAsync)(auth_1.forgotPassword));
 router.post("/verify-reset-code", (0, catchAsync_1.catchAsync)(auth_1.verifyResetCode));
 router.post("/reset-password", (0, catchAsync_1.catchAsync)(auth_1.resetPassword));
+// router.post("/google", verifyGoogleToken);
+// router.post("/facebook", verifyFacebookToken);
 exports.default = router;

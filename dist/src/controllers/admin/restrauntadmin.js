@@ -16,7 +16,7 @@ const uuid_1 = require("uuid");
 // 1. إضافة موظف جديد
 // ==========================================
 const createStaff = async (req, res) => {
-    const restaurantId = req.user?.restaurantId || req.user?.id;
+    const restaurantId = (req.user?.restaurantId || req.user?.id);
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant context missing");
     const { name, email, password, phoneNumber, branchId, type, roleId, permissions } = req.body;
@@ -62,7 +62,7 @@ exports.createStaff = createStaff;
 // 2. جلب كل الموظفين (الخاصين بهذا المطعم فقط)
 // ==========================================
 const getAllStaff = async (req, res) => {
-    const restaurantId = req.user?.restaurantId || req.user?.id;
+    const restaurantId = (req.user?.restaurantId || req.user?.id);
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant context missing");
     const staffList = await connection_1.db
@@ -95,7 +95,7 @@ exports.getAllStaff = getAllStaff;
 // ==========================================
 const getStaffById = async (req, res) => {
     const { id } = req.params;
-    const restaurantId = req.user?.restaurantId || req.user?.id;
+    const restaurantId = (req.user?.restaurantId || req.user?.id);
     const staffItem = await connection_1.db
         .select({
         id: schema_1.restrauntadmin.id,
@@ -121,7 +121,7 @@ exports.getStaffById = getStaffById;
 // ==========================================
 const updateStaff = async (req, res) => {
     const { id } = req.params;
-    const restaurantId = req.user?.restaurantId || req.user?.id;
+    const restaurantId = (req.user?.restaurantId || req.user?.id);
     const { name, email, phoneNumber, branchId, type, roleId, permissions } = req.body;
     const existingStaff = await connection_1.db.select().from(schema_1.restrauntadmin)
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.restrauntadmin.id, id), (0, drizzle_orm_1.eq)(schema_1.restrauntadmin.restaurantId, restaurantId))).limit(1);
@@ -158,7 +158,7 @@ exports.updateStaff = updateStaff;
 // ==========================================
 const toggleStaffStatus = async (req, res) => {
     const { id } = req.params;
-    const restaurantId = req.user?.restaurantId || req.user?.id;
+    const restaurantId = (req.user?.restaurantId || req.user?.id);
     const existingStaff = await connection_1.db.select({ status: schema_1.restrauntadmin.status })
         .from(schema_1.restrauntadmin)
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.restrauntadmin.id, id), (0, drizzle_orm_1.eq)(schema_1.restrauntadmin.restaurantId, restaurantId))).limit(1);
@@ -176,7 +176,7 @@ exports.toggleStaffStatus = toggleStaffStatus;
 // ==========================================
 const deleteStaff = async (req, res) => {
     const { id } = req.params;
-    const restaurantId = req.user?.restaurantId || req.user?.id;
+    const restaurantId = (req.user?.restaurantId || req.user?.id);
     const existingStaff = await connection_1.db.select().from(schema_1.restrauntadmin)
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.restrauntadmin.id, id), (0, drizzle_orm_1.eq)(schema_1.restrauntadmin.restaurantId, restaurantId))).limit(1);
     if (!existingStaff[0])

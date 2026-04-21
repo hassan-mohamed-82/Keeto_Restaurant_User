@@ -8,10 +8,11 @@ const response_1 = require("../../utils/response");
 const NotFound_1 = require("../../Errors/NotFound");
 const BadRequest_1 = require("../../Errors/BadRequest");
 const uuid_1 = require("uuid");
+const Errors_1 = require("../../Errors");
 const createAddon = async (req, res) => {
-    const restaurantId = req.user?.id;
-    if (!restaurantId)
-        throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
+    if (!req.user)
+        throw new Errors_1.UnauthorizedError("Unauthenticated");
+    const restaurantId = req.user.id;
     const { name, price, stock_type, adonescategoryid, nameAr, nameFr } = req.body;
     if (!name || !price || !stock_type || !adonescategoryid) {
         throw new BadRequest_1.BadRequest("Missing required fields: name, price, stock_type, adonescategoryid");

@@ -8,9 +8,11 @@ exports.users = (0, mysql_core_1.mysqlTable)("users", {
     name: (0, mysql_core_1.varchar)("name", { length: 255 }).notNull(),
     photo: (0, mysql_core_1.varchar)("photo", { length: 255 }),
     email: (0, mysql_core_1.varchar)("email", { length: 255 }).notNull().unique(),
-    phone: (0, mysql_core_1.varchar)("phone", { length: 20 }).notNull(),
+    phone: (0, mysql_core_1.varchar)("phone", { length: 20 }),
     fcmToken: (0, mysql_core_1.text)("fcm_token"),
-    password: (0, mysql_core_1.varchar)("password", { length: 255 }).notNull(),
+    password: (0, mysql_core_1.varchar)("password", { length: 255 }),
+    googleId: (0, mysql_core_1.varchar)("google_id", { length: 255 }),
+    facebookId: (0, mysql_core_1.varchar)("facebook_id", { length: 255 }), // ➕ ضفنا ده عشان فيسبوك
     isVerified: (0, mysql_core_1.boolean)("is_verified").default(false),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
 });
