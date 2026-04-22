@@ -114,14 +114,21 @@ const updateOrderStatus = async (req, res) => {
     const [existingOrder] = await connection_1.db.select().from(schema_1.orders).where((0, drizzle_orm_1.eq)(schema_1.orders.id, orderId)).limit(1);
     if (!existingOrder)
         throw new NotFound_1.NotFound("Order not found");
-    // 🛡️ حماية
+    // 🛡️ حماية الصلاحيات
     if (existingOrder.restaurantId !== adminRestaurantId)
         throw new BadRequest_1.BadRequest("Unauthorized");
     if (adminBranchId && existingOrder.branchId !== adminBranchId)
         throw new BadRequest_1.BadRequest("Unauthorized");
-    // Transaction لتحديث الحالة وإرجاع فلوس المحفظة لو لزم الأمر
+    // 🛡️ حماية مالية: منع تكرار العملية لو الطلب متسلم أو ملغي مسبقاً
+    if (existingOrder.status === "delivered" && status === "delivered") {
+        throw new BadRequest_1.BadRequest("Order is already delivered and settled");
+    }
+    if ((existingOrder.status === "cancelled" || existingOrder.status === "rejected") && (status === "cancelled" || status === "rejected")) {
+        throw new BadRequest_1.BadRequest("Order is already cancelled/rejected");
+    }
+    // Transaction لتحديث الحالة وتنفيذ العمليات المالية
     await connection_1.db.transaction(async (tx) => {
-        // تحديث الحالة
+        // 1. تحديث الحالة
         await tx.update(schema_1.orders)
             .set({
             status,
@@ -129,10 +136,13 @@ const updateOrderStatus = async (req, res) => {
             updatedAt: new Date()
         })
             .where((0, drizzle_orm_1.eq)(schema_1.orders.id, orderId));
-        // الـ Refund (ترجيع الفلوس) لو الأوردر اتلغى وكان مدفوع بالمحفظة
+        // جلب وسيلة الدفع لاستخدامها في العمليات المالية
+        const [paymentMethod] = await tx.select().from(schema_1.paymentMethods)
+            .where((0, drizzle_orm_1.eq)(schema_1.paymentMethods.id, existingOrder.paymentMethodId)).limit(1);
+        // ==========================================
+        // 💰 2. الـ Refund (ترجيع الفلوس للعميل) لو الأوردر اتلغى
+        // ==========================================
         if (status === "rejected" || status === "cancelled") {
-            const [paymentMethod] = await tx.select().from(schema_1.paymentMethods)
-                .where((0, drizzle_orm_1.eq)(schema_1.paymentMethods.id, existingOrder.paymentMethodId)).limit(1);
             if (paymentMethod && paymentMethod.type === "wallet") {
                 const [userWallet] = await tx.select().from(schema_1.userWallets)
                     .where((0, drizzle_orm_1.eq)(schema_1.userWallets.userId, existingOrder.userId)).limit(1);
@@ -159,7 +169,56 @@ const updateOrderStatus = async (req, res) => {
                 }
             }
         }
+        // ==========================================
+        // 📈 3. الـ Settlement (إضافة الأرباح للمطعم) لو الأوردر اتسلم
+        // ==========================================
+        if (status === "delivered") {
+            const restaurantId = existingOrder.restaurantId;
+            const totalAmount = parseFloat(existingOrder.totalAmount);
+            const appCommission = parseFloat(existingOrder.appCommission);
+            const netRestaurantEarning = totalAmount - appCommission; // الصافي للمطعم
+            // جلب محفظة المطعم (أو إنشائها لو مش موجودة)
+            let [restWallet] = await tx.select().from(schema_1.restaurantWallets).where((0, drizzle_orm_1.eq)(schema_1.restaurantWallets.restaurantId, restaurantId)).limit(1);
+            if (!restWallet) {
+                await tx.insert(schema_1.restaurantWallets).values({ id: (0, uuid_1.v4)(), restaurantId });
+                [restWallet] = await tx.select().from(schema_1.restaurantWallets).where((0, drizzle_orm_1.eq)(schema_1.restaurantWallets.restaurantId, restaurantId)).limit(1);
+            }
+            const currentBalance = parseFloat(restWallet.balance);
+            const currentCollectedCash = parseFloat(restWallet.collectedCash);
+            const currentTotalEarning = parseFloat(restWallet.totalEarning);
+            let newBalance = currentBalance;
+            let newCollectedCash = currentCollectedCash;
+            // توجيه الأموال بناءً على طريقة الدفع
+            if (paymentMethod && paymentMethod.type === "cash") {
+                newCollectedCash = currentCollectedCash + totalAmount; // كاش في إيد المطعم
+            }
+            else {
+                newBalance = currentBalance + netRestaurantEarning; // أونلاين، نزود رصيد المطعم
+            }
+            // تحديث محفظة المطعم
+            await tx.update(schema_1.restaurantWallets)
+                .set({
+                balance: newBalance.toString(),
+                collectedCash: newCollectedCash.toString(),
+                totalEarning: (currentTotalEarning + netRestaurantEarning).toString(),
+                updatedAt: new Date()
+            })
+                .where((0, drizzle_orm_1.eq)(schema_1.restaurantWallets.restaurantId, restaurantId));
+            // تسجيل ترانزكشن المطعم
+            await tx.insert(schema_1.restaurantWalletTransactions).values({
+                id: (0, uuid_1.v4)(),
+                restaurantId: restaurantId,
+                type: (paymentMethod && paymentMethod.type === "cash") ? "cash_collection" : "order_payment",
+                amount: (paymentMethod && paymentMethod.type === "cash") ? totalAmount.toString() : netRestaurantEarning.toString(),
+                balanceBefore: (paymentMethod && paymentMethod.type === "cash") ? currentCollectedCash.toString() : currentBalance.toString(),
+                balanceAfter: (paymentMethod && paymentMethod.type === "cash") ? newCollectedCash.toString() : newBalance.toString(),
+                method: paymentMethod ? paymentMethod.type : "unknown",
+                reference: existingOrder.orderNumber,
+                note: `Order ${existingOrder.orderNumber} delivered. Commission deducted: ${appCommission}`,
+                createdAt: new Date()
+            });
+        }
     });
-    return (0, response_1.SuccessResponse)(res, { message: `Order status successfully updated to ${status}` });
+    return (0, response_1.SuccessResponse)(res, { message: `Order status successfully updated to ${status} and financials settled` });
 };
 exports.updateOrderStatus = updateOrderStatus;

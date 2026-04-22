@@ -2,7 +2,9 @@ import { Request, Response } from "express";
 import { db } from "../../models/connection";
 import { 
     orders, orderItems, food, users, paymentMethods, 
-    userWallets, userWalletTransactions 
+    userWallets, userWalletTransactions, 
+    restaurantWalletTransactions,
+    restaurantWallets
 } from "../../models/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
@@ -127,13 +129,21 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
     const [existingOrder] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
     if (!existingOrder) throw new NotFound("Order not found");
     
-    // 🛡️ حماية
+    // 🛡️ حماية الصلاحيات
     if (existingOrder.restaurantId !== adminRestaurantId) throw new BadRequest("Unauthorized");
     if (adminBranchId && existingOrder.branchId !== adminBranchId) throw new BadRequest("Unauthorized");
 
-    // Transaction لتحديث الحالة وإرجاع فلوس المحفظة لو لزم الأمر
+    // 🛡️ حماية مالية: منع تكرار العملية لو الطلب متسلم أو ملغي مسبقاً
+    if (existingOrder.status === "delivered" && status === "delivered") {
+        throw new BadRequest("Order is already delivered and settled");
+    }
+    if ((existingOrder.status === "cancelled" || existingOrder.status === "rejected") && (status === "cancelled" || status === "rejected")) {
+        throw new BadRequest("Order is already cancelled/rejected");
+    }
+
+    // Transaction لتحديث الحالة وتنفيذ العمليات المالية
     await db.transaction(async (tx) => {
-        // تحديث الحالة
+        // 1. تحديث الحالة
         await tx.update(orders)
             .set({ 
                 status, 
@@ -142,11 +152,14 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
             })
             .where(eq(orders.id, orderId));
 
-        // الـ Refund (ترجيع الفلوس) لو الأوردر اتلغى وكان مدفوع بالمحفظة
-        if (status === "rejected" || status === "cancelled") {
-            const [paymentMethod] = await tx.select().from(paymentMethods)
-                .where(eq(paymentMethods.id, existingOrder.paymentMethodId)).limit(1);
+        // جلب وسيلة الدفع لاستخدامها في العمليات المالية
+        const [paymentMethod] = await tx.select().from(paymentMethods)
+            .where(eq(paymentMethods.id, existingOrder.paymentMethodId)).limit(1);
 
+        // ==========================================
+        // 💰 2. الـ Refund (ترجيع الفلوس للعميل) لو الأوردر اتلغى
+        // ==========================================
+        if (status === "rejected" || status === "cancelled") {
             if (paymentMethod && paymentMethod.type === "wallet") {
                 const [userWallet] = await tx.select().from(userWallets)
                     .where(eq(userWallets.userId, existingOrder.userId)).limit(1);
@@ -176,7 +189,62 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
                 }
             }
         }
+
+        // ==========================================
+        // 📈 3. الـ Settlement (إضافة الأرباح للمطعم) لو الأوردر اتسلم
+        // ==========================================
+        if (status === "delivered") {
+            const restaurantId = existingOrder.restaurantId;
+            const totalAmount = parseFloat(existingOrder.totalAmount as string);
+            const appCommission = parseFloat(existingOrder.appCommission as string);
+            const netRestaurantEarning = totalAmount - appCommission; // الصافي للمطعم
+
+            // جلب محفظة المطعم (أو إنشائها لو مش موجودة)
+            let [restWallet] = await tx.select().from(restaurantWallets).where(eq(restaurantWallets.restaurantId, restaurantId)).limit(1);
+            if (!restWallet) {
+                await tx.insert(restaurantWallets).values({ id: uuidv4(), restaurantId });
+                [restWallet] = await tx.select().from(restaurantWallets).where(eq(restaurantWallets.restaurantId, restaurantId)).limit(1);
+            }
+
+            const currentBalance = parseFloat(restWallet.balance as string);
+            const currentCollectedCash = parseFloat(restWallet.collectedCash as string);
+            const currentTotalEarning = parseFloat(restWallet.totalEarning as string);
+
+            let newBalance = currentBalance;
+            let newCollectedCash = currentCollectedCash;
+
+            // توجيه الأموال بناءً على طريقة الدفع
+            if (paymentMethod && paymentMethod.type === "cash") {
+                newCollectedCash = currentCollectedCash + totalAmount; // كاش في إيد المطعم
+            } else {
+                newBalance = currentBalance + netRestaurantEarning; // أونلاين، نزود رصيد المطعم
+            }
+
+            // تحديث محفظة المطعم
+            await tx.update(restaurantWallets)
+                .set({
+                    balance: newBalance.toString(),
+                    collectedCash: newCollectedCash.toString(),
+                    totalEarning: (currentTotalEarning + netRestaurantEarning).toString(),
+                    updatedAt: new Date()
+                })
+                .where(eq(restaurantWallets.restaurantId, restaurantId));
+
+            // تسجيل ترانزكشن المطعم
+            await tx.insert(restaurantWalletTransactions).values({
+                id: uuidv4(),
+                restaurantId: restaurantId,
+                type: (paymentMethod && paymentMethod.type === "cash") ? "cash_collection" : "order_payment",
+                amount: (paymentMethod && paymentMethod.type === "cash") ? totalAmount.toString() : netRestaurantEarning.toString(),
+                balanceBefore: (paymentMethod && paymentMethod.type === "cash") ? currentCollectedCash.toString() : currentBalance.toString(),
+                balanceAfter: (paymentMethod && paymentMethod.type === "cash") ? newCollectedCash.toString() : newBalance.toString(),
+                method: paymentMethod ? paymentMethod.type : "unknown",
+                reference: existingOrder.orderNumber,
+                note: `Order ${existingOrder.orderNumber} delivered. Commission deducted: ${appCommission}`,
+                createdAt: new Date()
+            });
+        }
     });
 
-    return SuccessResponse(res, { message: `Order status successfully updated to ${status}` });
+    return SuccessResponse(res, { message: `Order status successfully updated to ${status} and financials settled` });
 };
