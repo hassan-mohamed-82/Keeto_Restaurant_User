@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getRestaurantSelectData = exports.deleteBranchMenuItem = exports.updateBranchMenuItem = exports.getBranchMenu = exports.assignFoodToBranch = void 0;
+exports.updateMasterFoodItem = exports.getRestaurantSelectData = exports.deleteBranchMenuItem = exports.updateBranchMenuItem = exports.getBranchMenu = exports.assignFoodToBranch = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -88,8 +88,7 @@ const getBranchMenu = async (req, res) => {
         .from(schema_1.branchMenuItems)
         .innerJoin(schema_1.food, (0, drizzle_orm_1.eq)(schema_1.branchMenuItems.foodId, schema_1.food.id))
         .leftJoin(schema_1.categories, (0, drizzle_orm_1.eq)(schema_1.food.categoryid, schema_1.categories.id))
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.branchId, branchId), (0, drizzle_orm_1.eq)(schema_1.branchMenuItems.status, "active") // مفيش داعي نعرض للعميل حاجة in_active
-    ));
+        .where((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.branchId, branchId));
     return (0, response_1.SuccessResponse)(res, { message: "Get branch menu success", data: branchMenu });
 };
 exports.getBranchMenu = getBranchMenu;
@@ -188,3 +187,36 @@ const getRestaurantSelectData = async (req, res) => {
     });
 };
 exports.getRestaurantSelectData = getRestaurantSelectData;
+// =============================================
+// تعديل بيانات الأكلة الأساسية في الكتالوج (Master Food)
+// =============================================
+const updateMasterFoodItem = async (req, res) => {
+    const { id } = req.params; // ده الـ foodId
+    const { name, description, image, categoryId } = req.body;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId)
+        throw new BadRequest_1.BadRequest("Restaurant ID missing");
+    // 1. التأكد إن الأكلة دي موجودة وتخص المطعم ده
+    const existingFood = await connection_1.db.select().from(schema_1.food)
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.id, id), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId))).limit(1);
+    if (!existingFood[0]) {
+        throw new NotFound_1.NotFound("Food item not found or you don't have permission to edit it");
+    }
+    // 2. تجهيز البيانات الجديدة للتحديث
+    const updateData = {};
+    if (name !== undefined)
+        updateData.name = name;
+    if (description !== undefined)
+        updateData.description = description;
+    if (image !== undefined)
+        updateData.image = image;
+    if (categoryId !== undefined)
+        updateData.categoryid = categoryId;
+    // updateData.updatedAt = new Date(); // لو عندك حقل updatedAt في جدول الـ food
+    // 3. تحديث الداتابيز
+    await connection_1.db.update(schema_1.food)
+        .set(updateData)
+        .where((0, drizzle_orm_1.eq)(schema_1.food.id, id));
+    return (0, response_1.SuccessResponse)(res, { message: "Master food item updated successfully" });
+};
+exports.updateMasterFoodItem = updateMasterFoodItem;

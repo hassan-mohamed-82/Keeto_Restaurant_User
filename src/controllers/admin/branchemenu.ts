@@ -95,10 +95,7 @@ export const getBranchMenu = async (req: Request, res: Response) => {
     .from(branchMenuItems)
     .innerJoin(food, eq(branchMenuItems.foodId, food.id)) 
     .leftJoin(categories, eq(food.categoryid, categories.id)) 
-    .where(and(
-        eq(branchMenuItems.branchId, branchId),
-        eq(branchMenuItems.status, "active") // مفيش داعي نعرض للعميل حاجة in_active
-    ));
+    .where(eq(branchMenuItems.branchId, branchId));
 
     return SuccessResponse(res, { message: "Get branch menu success", data: branchMenu });
 };
@@ -213,4 +210,43 @@ export const getRestaurantSelectData = async (req: Request, res: Response) => {
             foods: myFoods
         }
     });
+};
+
+
+// =============================================
+// تعديل بيانات الأكلة الأساسية في الكتالوج (Master Food)
+// =============================================
+export const updateMasterFoodItem = async (req: Request, res: Response) => {
+    const { id } = req.params; // ده الـ foodId
+    const { name, description, image, categoryId } = req.body;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+
+    if (!restaurantId) throw new BadRequest("Restaurant ID missing");
+
+    // 1. التأكد إن الأكلة دي موجودة وتخص المطعم ده
+    const existingFood = await db.select().from(food)
+        .where(and(
+            eq(food.id, id), 
+            eq(food.restaurantid, restaurantId)
+        )).limit(1);
+
+    if (!existingFood[0]) {
+        throw new NotFound("Food item not found or you don't have permission to edit it");
+    }
+
+    // 2. تجهيز البيانات الجديدة للتحديث
+    const updateData: any = {};
+    if (name !== undefined) updateData.name = name;
+    if (description !== undefined) updateData.description = description;
+    if (image !== undefined) updateData.image = image;
+    if (categoryId !== undefined) updateData.categoryid = categoryId;
+    
+    // updateData.updatedAt = new Date(); // لو عندك حقل updatedAt في جدول الـ food
+
+    // 3. تحديث الداتابيز
+    await db.update(food)
+        .set(updateData)
+        .where(eq(food.id, id));
+
+    return SuccessResponse(res, { message: "Master food item updated successfully" });
 };
