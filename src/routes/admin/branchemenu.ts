@@ -3,7 +3,7 @@ import {assignFoodToBranch,getBranchMenu,updateBranchMenuItem,deleteBranchMenuIt
 import { catchAsync } from "../../utils/catchAsync";
 const router = Router();
 router.post("/", catchAsync(assignFoodToBranch));
-router.get("/", catchAsync(getBranchMenu));
+router.get("/:branchId", catchAsync(getBranchMenu));
 router.put("/:id", catchAsync(updateBranchMenuItem));
 router.delete("/:id", catchAsync(deleteBranchMenuItem));
 router.get("/select-data", catchAsync(getRestaurantSelectData));
