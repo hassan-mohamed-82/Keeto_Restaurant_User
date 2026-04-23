@@ -29,6 +29,13 @@
       "when": 1776587162294,
       "tag": "0003_daffy_dexter_bennett",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1776938613598,
+      "tag": "0004_salty_lady_deathstrike",
+      "breakpoints": true
     }
   ]
 }

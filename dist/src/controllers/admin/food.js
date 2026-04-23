@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getFoodSelectData = exports.deleteFood = exports.updateFood = exports.getFoodById = exports.getAllFoods = exports.createFood = void 0;
+exports.getFoodRecipe = exports.assignIngredientsToFood = exports.getFoodSelectData = exports.deleteFood = exports.updateFood = exports.getFoodById = exports.getAllFoods = exports.createFood = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 // ✅ تم إضافة and هنا عشان نصلح مشكلة الشروط المتعددة
@@ -330,3 +330,55 @@ const getFoodSelectData = async (req, res) => {
     });
 };
 exports.getFoodSelectData = getFoodSelectData;
+// =========================================================
+// 🍳 إدارة الوصفة (Recipe / Food Ingredients)
+// =========================================================
+const assignIngredientsToFood = async (req, res) => {
+    const { id } = req.params;
+    const { ingredientsList } = req.body;
+    const restaurantId = req.user?.id;
+    if (!restaurantId)
+        throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
+    if (!Array.isArray(ingredientsList))
+        throw new BadRequest_1.BadRequest("ingredientsList must be an array");
+    const existingFood = await connection_1.db.select().from(schema_1.food).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.id, id), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId))).limit(1);
+    if (!existingFood[0])
+        throw new NotFound_1.NotFound("Food not found or does not belong to you");
+    await connection_1.db.transaction(async (tx) => {
+        await tx.delete(schema_1.foodIngredients).where((0, drizzle_orm_1.eq)(schema_1.foodIngredients.foodId, id));
+        if (ingredientsList.length > 0) {
+            const valuesToInsert = ingredientsList.map((item) => ({
+                id: (0, uuid_1.v4)(),
+                foodId: id,
+                ingredientId: item.ingredientId,
+                isRemovable: item.isRemovable || false
+            }));
+            await tx.insert(schema_1.foodIngredients).values(valuesToInsert);
+        }
+    });
+    return (0, response_1.SuccessResponse)(res, { message: "Food recipe saved successfully" });
+};
+exports.assignIngredientsToFood = assignIngredientsToFood;
+const getFoodRecipe = async (req, res) => {
+    const { id } = req.params;
+    const restaurantId = req.user?.id;
+    if (!restaurantId)
+        throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
+    const existingFood = await connection_1.db.select().from(schema_1.food).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.id, id), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId))).limit(1);
+    if (!existingFood[0])
+        throw new NotFound_1.NotFound("Food not found");
+    const recipe = await connection_1.db.select({
+        id: schema_1.foodIngredients.id,
+        ingredientId: schema_1.ingredients.id,
+        name: schema_1.ingredients.name,
+        inStock: schema_1.ingredients.inStock,
+        isRemovable: schema_1.foodIngredients.isRemovable,
+        categoryName: schema_1.ingredientCategories.name
+    })
+        .from(schema_1.foodIngredients)
+        .innerJoin(schema_1.ingredients, (0, drizzle_orm_1.eq)(schema_1.foodIngredients.ingredientId, schema_1.ingredients.id))
+        .leftJoin(schema_1.ingredientCategories, (0, drizzle_orm_1.eq)(schema_1.ingredients.categoryId, schema_1.ingredientCategories.id))
+        .where((0, drizzle_orm_1.eq)(schema_1.foodIngredients.foodId, id));
+    return (0, response_1.SuccessResponse)(res, { message: "Get food recipe success", data: recipe });
+};
+exports.getFoodRecipe = getFoodRecipe;

@@ -1,0 +1,15 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const catchAsync_1 = require("../../utils/catchAsync");
+const express_1 = require("express");
+const ingredients_1 = require("../../controllers/admin/ingredients");
+const router = (0, express_1.Router)();
+router.get("/select", (0, catchAsync_1.catchAsync)(ingredients_1.getallactiveingredientscategory));
+router.post("/", (0, catchAsync_1.catchAsync)(ingredients_1.createIngredient));
+router.get("/", (0, catchAsync_1.catchAsync)(ingredients_1.getIngredients));
+router.get("/:id", (0, catchAsync_1.catchAsync)(ingredients_1.getIngredientById));
+router.get("/foods/:id", (0, catchAsync_1.catchAsync)(ingredients_1.getFoodsByIngredient));
+router.put("/:id", (0, catchAsync_1.catchAsync)(ingredients_1.updateIngredient));
+router.put("/stock/:id", (0, catchAsync_1.catchAsync)(ingredients_1.toggleIngredientStock));
+router.delete("/:id", (0, catchAsync_1.catchAsync)(ingredients_1.deleteIngredient));
+exports.default = router;

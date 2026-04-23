@@ -10,4 +10,6 @@ router.get("/", (0, catchAsync_1.catchAsync)(food_1.getAllFoods));
 router.get("/:id", (0, catchAsync_1.catchAsync)(food_1.getFoodById));
 router.put("/:id", (0, catchAsync_1.catchAsync)(food_1.updateFood));
 router.delete("/:id", (0, catchAsync_1.catchAsync)(food_1.deleteFood));
+router.post("/assign-ingredients/:id", (0, catchAsync_1.catchAsync)(food_1.assignIngredientsToFood));
+router.get("/recipe/:id", (0, catchAsync_1.catchAsync)(food_1.getFoodRecipe));
 exports.default = router;

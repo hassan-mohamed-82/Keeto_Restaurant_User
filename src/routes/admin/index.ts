@@ -14,6 +14,8 @@ import payment_methodsRouter from "./payment_methods";
 import branchesRouter from "./branches";
 import branchemenuRouter from "./branchemenu";
 import OrderRouter from "./order"
+import IngredientsRouter from "./ingredients"
+import IngredientCategoryRouter from "./IngredientCategory";
 import restaurantZoneDeliveryFeesRouter from "./restaurantZoneDeliveryFees";
 import user_walletsRouter from "./userWallets";
 import { authenticated } from "../../middlewares/authenticated";
@@ -34,5 +36,6 @@ router.use("/wallets", walletsRouter);
 router.use("/restaurantsetting", restaurantsettingRouter);
 router.use("/restaurant-zone-delivery-fees", restaurantZoneDeliveryFeesRouter);
 router.use("/branches", branchesRouter);
-
+router.use("/ingredients", IngredientsRouter);
+router.use("/ingredientcategory", IngredientCategoryRouter);
 export default router;

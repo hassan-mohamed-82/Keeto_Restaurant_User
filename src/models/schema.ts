@@ -1,3 +1,5 @@
+import e from "express";
+
 // Admin schema
 export * from "./schema/admin/restrauntadmin";
 export * from "./schema/admin/rolesadmin";
@@ -19,6 +21,7 @@ export * from "./schema/admin/restaurant_wallets";
 export * from "./schema/admin/restaurantsetting";
 export * from "./schema/admin/zoneDeliveryFees";
 export * from "./schema/admin/branches";
+export * from "./schema/admin/ingredients";
 export * from "./schema/user/userWallets";
 export * from "./schema/admin/restaurantZoneDeliveryFees";
 export * from "./schema/admin/order";

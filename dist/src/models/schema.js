@@ -35,6 +35,7 @@ __exportStar(require("./schema/admin/restaurant_wallets"), exports);
 __exportStar(require("./schema/admin/restaurantsetting"), exports);
 __exportStar(require("./schema/admin/zoneDeliveryFees"), exports);
 __exportStar(require("./schema/admin/branches"), exports);
+__exportStar(require("./schema/admin/ingredients"), exports);
 __exportStar(require("./schema/user/userWallets"), exports);
 __exportStar(require("./schema/admin/restaurantZoneDeliveryFees"), exports);
 __exportStar(require("./schema/admin/order"), exports);

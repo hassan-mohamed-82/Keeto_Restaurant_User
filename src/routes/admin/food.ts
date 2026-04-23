@@ -7,6 +7,8 @@ import {
     updateFood,
     deleteFood,
     getFoodSelectData,
+    assignIngredientsToFood,
+    getFoodRecipe
     
 } from "../../controllers/admin/food";
 
@@ -18,5 +20,7 @@ router.get("/", catchAsync(getAllFoods));
 router.get("/:id", catchAsync(getFoodById));
 router.put("/:id", catchAsync(updateFood));
 router.delete("/:id", catchAsync(deleteFood));
+router.post("/assign-ingredients/:id", catchAsync(assignIngredientsToFood));
+router.get("/recipe/:id", catchAsync(getFoodRecipe));
 
 export default router;
