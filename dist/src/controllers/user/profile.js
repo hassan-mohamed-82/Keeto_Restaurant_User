@@ -5,6 +5,7 @@ const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
 const response_1 = require("../../utils/response");
+const handleImages_1 = require("../../utils/handleImages");
 const getProfile = async (req, res) => {
     const userId = req.user.id;
     const [userInfo] = await connection_1.db
@@ -50,8 +51,16 @@ exports.getProfile = getProfile;
 const updateProfile = async (req, res) => {
     const userId = req.user.id;
     const { name, phone, photo } = req.body;
+    const existingUser = await connection_1.db.select({ photo: schema_1.users.photo }).from(schema_1.users).where((0, drizzle_orm_1.eq)(schema_1.users.id, userId)).limit(1);
+    let updatedPhoto = existingUser[0]?.photo ?? null;
+    if (photo && photo.startsWith("data:image")) {
+        updatedPhoto = (await (0, handleImages_1.handleImageUpdate)(req, existingUser[0]?.photo, photo, "users")) ?? null;
+    }
+    else if (photo !== undefined) {
+        updatedPhoto = photo ?? null;
+    }
     await connection_1.db.update(schema_1.users)
-        .set({ name, phone, photo })
+        .set({ name, phone, photo: updatedPhoto ?? null })
         .where((0, drizzle_orm_1.eq)(schema_1.users.id, userId));
     return (0, response_1.SuccessResponse)(res, { message: "Profile updated successfully" });
 };

@@ -9,7 +9,7 @@ exports.paymentMethods = (0, mysql_core_1.mysqlTable)("payment_methods", {
     name: (0, mysql_core_1.varchar)("name", { length: 100 }).notNull(),
     nameAr: (0, mysql_core_1.varchar)("name_ar", { length: 100 }),
     nameFr: (0, mysql_core_1.varchar)("name_fr", { length: 100 }),
-    image: (0, mysql_core_1.varchar)("image", { length: 255 }).notNull(),
+    image: (0, mysql_core_1.varchar)("image", { length: 500 }).notNull(),
     description: (0, mysql_core_1.varchar)("description", { length: 255 }).notNull(),
     descriptionAr: (0, mysql_core_1.varchar)("description_ar", { length: 255 }),
     descriptionFr: (0, mysql_core_1.varchar)("description_fr", { length: 255 }),

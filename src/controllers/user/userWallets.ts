@@ -6,6 +6,7 @@ import { eq, and, desc } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { v4 as uuidv4 } from "uuid";
+import { saveBase64Image } from "../../utils/handleImages";
 
 // =====================================================
 // 1. شحن المحفظة (Add Fund to Wallet)
@@ -28,7 +29,12 @@ export const addFundToWallet = async (req: Request, res: Response) => {
 
     if (!method) throw new BadRequest("Invalid payment method");
 
-    const isManual = !!receiptImage;
+    let finalReceiptImage = receiptImage;
+    if (receiptImage && receiptImage.startsWith("data:image")) {
+        finalReceiptImage = await saveBase64Image(receiptImage, req, "receipts");
+    }
+
+    const isManual = !!finalReceiptImage;
 
     await db.transaction(async (tx) => {
 
@@ -65,7 +71,7 @@ export const addFundToWallet = async (req: Request, res: Response) => {
                 transactionType: "manual_deposit",
                 amount: depositAmount.toString(),
                 balanceBefore: before.toString(),
-                receiptImage,
+                receiptImage: finalReceiptImage,
                 status: "pending",
                 reference: "Waiting Admin Approval"
             });

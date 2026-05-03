@@ -7,6 +7,7 @@ const drizzle_orm_1 = require("drizzle-orm");
 const response_1 = require("../../utils/response");
 const BadRequest_1 = require("../../Errors/BadRequest");
 const uuid_1 = require("uuid");
+const handleImages_1 = require("../../utils/handleImages");
 // =====================================================
 // 1. شحن المحفظة (Add Fund to Wallet)
 // =====================================================
@@ -21,7 +22,11 @@ const addFundToWallet = async (req, res) => {
         .limit(1);
     if (!method)
         throw new BadRequest_1.BadRequest("Invalid payment method");
-    const isManual = !!receiptImage;
+    let finalReceiptImage = receiptImage;
+    if (receiptImage && receiptImage.startsWith("data:image")) {
+        finalReceiptImage = await (0, handleImages_1.saveBase64Image)(receiptImage, req, "receipts");
+    }
+    const isManual = !!finalReceiptImage;
     await connection_1.db.transaction(async (tx) => {
         let [wallet] = await tx
             .select()
@@ -52,7 +57,7 @@ const addFundToWallet = async (req, res) => {
                 transactionType: "manual_deposit",
                 amount: depositAmount.toString(),
                 balanceBefore: before.toString(),
-                receiptImage,
+                receiptImage: finalReceiptImage,
                 status: "pending",
                 reference: "Waiting Admin Approval"
             });

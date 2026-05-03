@@ -20,7 +20,7 @@ export const food = mysqlTable("food", {
     description: text("description").notNull(),
     descriptionAr: text("description_ar"),
     descriptionFr: text("description_fr"),
-    image: varchar("image", { length: 255 }).notNull(),
+    image: varchar("image", { length: 500 }).notNull(),
     restaurantid: char("restaurantid", { length: 36 }).references(() => restaurants.id).notNull(),
     categoryid: char("categoryid", { length: 36 }).references(() => categories.id).notNull(),
     subcategoryid: char("subcategoryid", { length: 36 }).references(() => subcategories.id).notNull(),

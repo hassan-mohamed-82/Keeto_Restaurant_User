@@ -6,16 +6,21 @@ const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
 const response_1 = require("../../utils/response");
 const Errors_1 = require("../../Errors");
+const handleImages_1 = require("../../utils/handleImages");
 const createPaymentMethod = async (req, res) => {
     const { name, image, description, type, isActive, nameAr, nameFr, descriptionAr, descriptionFr } = req.body;
     if (!name || !description || !type) {
         throw new Errors_1.BadRequest("Missing required fields");
     }
+    let savedImage = image;
+    if (image && image.startsWith("data:image")) {
+        savedImage = await (0, handleImages_1.saveBase64Image)(image, req, "payment_methods");
+    }
     const [paymentMethod] = await connection_1.db.insert(schema_1.paymentMethods).values({
         name,
         nameAr,
         nameFr,
-        image,
+        image: savedImage,
         description,
         descriptionAr,
         descriptionFr,
@@ -28,14 +33,19 @@ exports.createPaymentMethod = createPaymentMethod;
 const updatePaymentMethod = async (req, res) => {
     const { id, name, image, description, type, isActive, nameAr, nameFr, descriptionAr, descriptionFr } = req.body;
     const updateData = {};
+    const existing = await connection_1.db.select().from(schema_1.paymentMethods).where((0, drizzle_orm_1.eq)(schema_1.paymentMethods.id, id)).limit(1);
     if (name !== undefined)
         updateData.name = name;
     if (nameAr !== undefined)
         updateData.nameAr = nameAr;
     if (nameFr !== undefined)
         updateData.nameFr = nameFr;
-    if (image !== undefined)
+    if (image && image.startsWith("data:image")) {
+        updateData.image = await (0, handleImages_1.handleImageUpdate)(req, existing[0]?.image, image, "payment_methods");
+    }
+    else if (image !== undefined) {
         updateData.image = image;
+    }
     if (description !== undefined)
         updateData.description = description;
     if (descriptionAr !== undefined)

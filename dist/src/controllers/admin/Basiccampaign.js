@@ -8,17 +8,22 @@ const response_1 = require("../../utils/response");
 const NotFound_1 = require("../../Errors/NotFound");
 const BadRequest_1 = require("../../Errors/BadRequest");
 const uuid_1 = require("uuid");
+const handleImages_1 = require("../../utils/handleImages");
 const createBasiccampaign = async (req, res) => {
     const { Title, description, image, status, startDate, endDate, dailystarttime, dailyendtime } = req.body;
     if (!Title || !startDate || !endDate || !dailystarttime || !dailyendtime) {
         throw new BadRequest_1.BadRequest("Title, startDate, endDate, dailystarttime, and dailyendtime are required");
     }
     const id = (0, uuid_1.v4)();
+    let savedImage = image;
+    if (image && image.startsWith("data:image")) {
+        savedImage = await (0, handleImages_1.saveBase64Image)(image, req, "campaigns");
+    }
     await connection_1.db.insert(schema_1.basiccampaign).values({
         id,
         Title,
         description: description || null,
-        image: image || null,
+        image: savedImage || null,
         status: status || "active",
         startDate: new Date(startDate),
         endDate: new Date(endDate),
@@ -90,8 +95,12 @@ const updateBasiccampaign = async (req, res) => {
         updateData.Title = Title;
     if (description !== undefined)
         updateData.description = description;
-    if (image !== undefined)
+    if (image && image.startsWith("data:image")) {
+        updateData.image = await (0, handleImages_1.handleImageUpdate)(req, existingCampaign[0]?.image, image, "campaigns");
+    }
+    else if (image !== undefined) {
         updateData.image = image;
+    }
     if (status)
         updateData.status = status;
     if (startDate)

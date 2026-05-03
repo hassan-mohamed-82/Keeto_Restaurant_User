@@ -9,6 +9,7 @@ const response_1 = require("../../utils/response");
 const NotFound_1 = require("../../Errors/NotFound");
 const BadRequest_1 = require("../../Errors/BadRequest");
 const uuid_1 = require("uuid");
+const handleImages_1 = require("../../utils/handleImages");
 // =============================================
 // CREATE Food
 // =============================================
@@ -32,6 +33,10 @@ const createFood = async (req, res) => {
         if (!existingAddon[0])
             throw new BadRequest_1.BadRequest("Addon not found or does not belong to your restaurant");
     }
+    let imageUrl = image;
+    if (image && image.startsWith("data:image")) {
+        imageUrl = await (0, handleImages_1.saveBase64Image)(image, req, "foods");
+    }
     const foodId = (0, uuid_1.v4)();
     await connection_1.db.insert(schema_1.food).values({
         id: foodId,
@@ -41,7 +46,7 @@ const createFood = async (req, res) => {
         description,
         descriptionAr,
         descriptionFr,
-        image,
+        image: imageUrl,
         restaurantid: restaurantId,
         categoryid,
         subcategoryid,
@@ -234,9 +239,14 @@ const updateFood = async (req, res) => {
     if (!existingFood[0])
         throw new NotFound_1.NotFound("Food not found or you don't have permission to edit it");
     const updateData = { updatedAt: new Date() };
-    Object.keys(data).forEach(key => {
-        updateData[key] = data[key];
-    });
+    for (const key of Object.keys(data)) {
+        if (key === "image" && data[key] && data[key].startsWith("data:image")) {
+            updateData[key] = await (0, handleImages_1.handleImageUpdate)(req, existingFood[0].image, data[key], "foods");
+        }
+        else {
+            updateData[key] = data[key];
+        }
+    }
     await connection_1.db.update(schema_1.food).set(updateData).where((0, drizzle_orm_1.eq)(schema_1.food.id, id));
     if (data.variations && Array.isArray(data.variations)) {
         const oldVars = await connection_1.db.select().from(schema_1.foodVariations).where((0, drizzle_orm_1.eq)(schema_1.foodVariations.foodId, id));

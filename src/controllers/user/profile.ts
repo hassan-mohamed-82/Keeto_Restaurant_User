@@ -4,6 +4,7 @@ import { db } from "../../models/connection";
 import { cities, countries, users, userWallets, zones, } from "../../models/schema";
 import { eq } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
+import { handleImageUpdate } from "../../utils/handleImages";
 
 export const getProfile = async (req: Request | any, res: Response) => {
     const userId = req.user.id;
@@ -56,8 +57,17 @@ export const updateProfile = async (req: Request | any, res: Response) => {
     const userId = req.user.id;
     const { name, phone, photo } = req.body;
 
+    const existingUser = await db.select({ photo: users.photo }).from(users).where(eq(users.id, userId)).limit(1);
+
+    let updatedPhoto: string | null = existingUser[0]?.photo ?? null;
+    if (photo && photo.startsWith("data:image")) {
+        updatedPhoto = (await handleImageUpdate(req, existingUser[0]?.photo, photo, "users")) ?? null;
+    } else if (photo !== undefined) {
+        updatedPhoto = photo ?? null;
+    }
+
     await db.update(users)
-        .set({ name, phone, photo })
+        .set({ name, phone, photo: updatedPhoto ?? null })
         .where(eq(users.id, userId));
 
     return SuccessResponse(res, { message: "Profile updated successfully" });

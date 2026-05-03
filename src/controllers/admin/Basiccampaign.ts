@@ -6,6 +6,7 @@ import { SuccessResponse } from "../../utils/response";
 import { NotFound } from "../../Errors/NotFound";
 import { BadRequest } from "../../Errors/BadRequest";
 import { v4 as uuidv4 } from "uuid";
+import { saveBase64Image, handleImageUpdate } from "../../utils/handleImages";
 
 export const createBasiccampaign = async (req: Request, res: Response) => {
     const { Title, description, image, status, startDate, endDate, dailystarttime, dailyendtime } = req.body;
@@ -16,11 +17,16 @@ export const createBasiccampaign = async (req: Request, res: Response) => {
 
     const id = uuidv4();
 
+    let savedImage = image;
+    if (image && image.startsWith("data:image")) {
+        savedImage = await saveBase64Image(image, req, "campaigns");
+    }
+
     await db.insert(basiccampaign).values({
         id,
         Title,
         description: description || null,
-        image: image || null,
+        image: savedImage || null,
         status: status || "active",
         startDate: new Date(startDate),
         endDate: new Date(endDate),
@@ -99,7 +105,13 @@ export const updateBasiccampaign = async (req: Request, res: Response) => {
 
     if (Title) updateData.Title = Title;
     if (description !== undefined) updateData.description = description;
-    if (image !== undefined) updateData.image = image;
+    
+    if (image && image.startsWith("data:image")) {
+        updateData.image = await handleImageUpdate(req, existingCampaign[0]?.image, image, "campaigns");
+    } else if (image !== undefined) {
+        updateData.image = image;
+    }
+
     if (status) updateData.status = status;
     if (startDate) updateData.startDate = new Date(startDate);
     if (endDate) updateData.endDate = new Date(endDate);

@@ -15,7 +15,7 @@ export const paymentMethods = mysqlTable("payment_methods", {
   name: varchar("name", { length: 100 }).notNull(),
   nameAr: varchar("name_ar", { length: 100 }),
   nameFr: varchar("name_fr", { length: 100 }),
-  image: varchar("image", { length: 255 }).notNull(),
+  image: varchar("image", { length: 500 }).notNull(),
   description: varchar("description", { length: 255 }).notNull(),
   descriptionAr: varchar("description_ar", { length: 255 }),
   descriptionFr: varchar("description_fr", { length: 255 }),

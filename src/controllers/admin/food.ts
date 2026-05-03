@@ -18,6 +18,7 @@ import { SuccessResponse } from "../../utils/response";
 import { NotFound } from "../../Errors/NotFound";
 import { BadRequest } from "../../Errors/BadRequest";
 import { v4 as uuidv4 } from "uuid";
+import { saveBase64Image, handleImageUpdate } from "../../utils/handleImages";
 
 // =============================================
 // CREATE Food
@@ -53,7 +54,13 @@ export const createFood = async (req: Request, res: Response) => {
         if (!existingAddon[0]) throw new BadRequest("Addon not found or does not belong to your restaurant");
     }
 
+    let imageUrl = image;
+    if (image && image.startsWith("data:image")) {
+        imageUrl = await saveBase64Image(image, req, "foods");
+    }
+    
     const foodId = uuidv4();
+
 
     await db.insert(food).values({
         id: foodId,
@@ -63,7 +70,7 @@ export const createFood = async (req: Request, res: Response) => {
         description,
         descriptionAr,
         descriptionFr,
-        image,
+        image: imageUrl,
         restaurantid: restaurantId,
         categoryid,
         subcategoryid,
@@ -268,9 +275,13 @@ export const updateFood = async (req: Request, res: Response) => {
 
     const updateData: any = { updatedAt: new Date() };
 
-    Object.keys(data).forEach(key => {
-        updateData[key] = data[key];
-    });
+    for (const key of Object.keys(data)) {
+        if (key === "image" && data[key] && data[key].startsWith("data:image")) {
+            updateData[key] = await handleImageUpdate(req, existingFood[0].image, data[key], "foods");
+        } else {
+            updateData[key] = data[key];
+        }
+    }
 
     await db.update(food).set(updateData).where(eq(food.id, id));
 
