@@ -81,10 +81,16 @@ export const getBranchMenu = async (req: Request, res: Response) => {
         menuItemId: branchMenuItems.id,
         foodId: food.id,
         name: food.name,
+        nameAr: food.nameAr,
+        nameFr: food.nameFr,
         description: food.description,
+        descriptionAr: food.descriptionAr,
+        descriptionFr: food.descriptionFr,
         image: food.image,
         categoryId: food.categoryid,
         categoryName: categories.name,
+        categoryNameAr: categories.nameAr,
+        categoryNameFr: categories.nameFr,
         
         // البيانات اللي بتخص الفرع ده بس:
         price: branchMenuItems.price,

@@ -46,12 +46,18 @@ const getMyBranches = async (req, res) => {
     const myBranches = await connection_1.db.select({
         id: schema_1.branches.id,
         name: schema_1.branches.name,
+        nameAr: schema_1.branches.nameAr,
+        nameFr: schema_1.branches.nameFr,
         address: schema_1.branches.address,
+        addressAr: schema_1.branches.addressAr,
+        addressFr: schema_1.branches.addressFr,
         phoneNumber: schema_1.branches.phoneNumber,
         status: schema_1.branches.status,
         zone: {
             id: schema_1.zones.id,
-            name: schema_1.zones.name
+            name: schema_1.zones.name,
+            nameAr: schema_1.zones.nameAr,
+            nameFr: schema_1.zones.nameFr,
         }
     })
         .from(schema_1.branches)
@@ -68,12 +74,18 @@ const getBranchById = async (req, res) => {
     const branch = await connection_1.db.select({
         id: schema_1.branches.id,
         name: schema_1.branches.name,
+        nameAr: schema_1.branches.nameAr,
+        nameFr: schema_1.branches.nameFr,
         address: schema_1.branches.address,
+        addressAr: schema_1.branches.addressAr,
+        addressFr: schema_1.branches.addressFr,
         phoneNumber: schema_1.branches.phoneNumber,
         status: schema_1.branches.status,
         zone: {
             id: schema_1.zones.id,
-            name: schema_1.zones.name
+            name: schema_1.zones.name,
+            nameAr: schema_1.zones.nameAr,
+            nameFr: schema_1.zones.nameFr,
         }
     })
         .from(schema_1.branches)

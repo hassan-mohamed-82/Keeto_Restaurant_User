@@ -38,7 +38,7 @@ export const createFood = async (req: Request, res: Response) => {
         nameAr, nameFr, descriptionAr, descriptionFr
     } = req.body;
 
-    if (!name || !description || !image || !categoryid || !subcategoryid || !startTime || !endTime || !price) {
+    if (!name || !description || !image || !categoryid || !startTime || !endTime || !price) {
         throw new BadRequest("Missing required fields");
     }
 
@@ -46,8 +46,10 @@ export const createFood = async (req: Request, res: Response) => {
     const existingCategory = await db.select().from(categories).where(and(eq(categories.id, categoryid))).limit(1);
     if (!existingCategory[0]) throw new BadRequest("Category not found or does not belong to your restaurant");
 
-    const existingSub = await db.select().from(subcategories).where(and(eq(subcategories.id, subcategoryid))).limit(1);
-    if (!existingSub[0]) throw new BadRequest("Subcategory not found or does not belong to your restaurant");
+    if (subcategoryid) {
+        const existingSub = await db.select().from(subcategories).where(and(eq(subcategories.id, subcategoryid))).limit(1);
+        if (!existingSub[0]) throw new BadRequest("Subcategory not found or does not belong to your restaurant");
+    }
 
     if (addonsId) {
         const existingAddon = await db.select().from(addons).where(and(eq(addons.id, addonsId), eq(addons.restaurantid, restaurantId))).limit(1);
@@ -73,7 +75,7 @@ export const createFood = async (req: Request, res: Response) => {
         image: imageUrl,
         restaurantid: restaurantId,
         categoryid,
-        subcategoryid,
+        subcategoryid: subcategoryid || null,
         foodtype: foodtype || "veg",
         Nutrition: Nutrition || null,
         allergen_ingredients: allergen_ingredients || null,
@@ -134,7 +136,11 @@ export const getAllFoods = async (req: Request, res: Response) => {
     const rawFoods = await db.select({
         id: food.id,
         name: food.name,
+        nameAr: food.nameAr,
+        nameFr: food.nameFr,
         description: food.description,
+        descriptionAr: food.descriptionAr,
+        descriptionFr: food.descriptionFr,
         image: food.image,
         restaurantid: food.restaurantid,
         categoryid: food.categoryid,
@@ -158,7 +164,11 @@ export const getAllFoods = async (req: Request, res: Response) => {
         restaurant_id: restaurants.id,
         restaurant_name: restaurants.name,
         category_name: categories.name,
+        category_nameAr: categories.nameAr,
+        category_nameFr: categories.nameFr,
         subcategory_name: subcategories.name,
+        subcategory_nameAr: subcategories.nameAr,
+        subcategory_nameFr: subcategories.nameFr,
     })
         .from(food)
         .leftJoin(restaurants, eq(food.restaurantid, restaurants.id)) 
@@ -198,7 +208,11 @@ export const getFoodById = async (req: Request, res: Response) => {
     const foodItem = await db.select({
         id: food.id,
         name: food.name,
+        nameAr: food.nameAr,
+        nameFr: food.nameFr,
         description: food.description,
+        descriptionAr: food.descriptionAr,
+        descriptionFr: food.descriptionFr,
         image: food.image,
         restaurantid: food.restaurantid,
         categoryid: food.categoryid,
@@ -226,10 +240,14 @@ export const getFoodById = async (req: Request, res: Response) => {
         category: {
             id: categories.id,
             name: categories.name,
+            nameAr: categories.nameAr,
+            nameFr: categories.nameFr,
         },
         subcategory: {
             id: subcategories.id,
             name: subcategories.name,
+            nameAr: subcategories.nameAr,
+            nameFr: subcategories.nameFr,
         },
     })
         .from(food)

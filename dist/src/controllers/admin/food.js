@@ -18,16 +18,18 @@ const createFood = async (req, res) => {
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
     const { name, description, image, categoryid, subcategoryid, foodtype, Nutrition, allergen_ingredients, is_Halal, addonsId, startTime, endTime, search_tags, price, discount_type, discount_value, Maximum_Purchase, stock_type, status, variations, nameAr, nameFr, descriptionAr, descriptionFr } = req.body;
-    if (!name || !description || !image || !categoryid || !subcategoryid || !startTime || !endTime || !price) {
+    if (!name || !description || !image || !categoryid || !startTime || !endTime || !price) {
         throw new BadRequest_1.BadRequest("Missing required fields");
     }
     // ✅ تأمين: نتأكد إن القسم ده تبع المطعم الحالي (لو الأقسام مشتركة شيل شرط المطعم)
     const existingCategory = await connection_1.db.select().from(schema_1.categories).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.categories.id, categoryid))).limit(1);
     if (!existingCategory[0])
         throw new BadRequest_1.BadRequest("Category not found or does not belong to your restaurant");
-    const existingSub = await connection_1.db.select().from(schema_1.subcategories).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.id, subcategoryid))).limit(1);
-    if (!existingSub[0])
-        throw new BadRequest_1.BadRequest("Subcategory not found or does not belong to your restaurant");
+    if (subcategoryid) {
+        const existingSub = await connection_1.db.select().from(schema_1.subcategories).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.id, subcategoryid))).limit(1);
+        if (!existingSub[0])
+            throw new BadRequest_1.BadRequest("Subcategory not found or does not belong to your restaurant");
+    }
     if (addonsId) {
         const existingAddon = await connection_1.db.select().from(schema_1.addons).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.addons.id, addonsId), (0, drizzle_orm_1.eq)(schema_1.addons.restaurantid, restaurantId))).limit(1);
         if (!existingAddon[0])
@@ -49,7 +51,7 @@ const createFood = async (req, res) => {
         image: imageUrl,
         restaurantid: restaurantId,
         categoryid,
-        subcategoryid,
+        subcategoryid: subcategoryid || null,
         foodtype: foodtype || "veg",
         Nutrition: Nutrition || null,
         allergen_ingredients: allergen_ingredients || null,
@@ -106,7 +108,11 @@ const getAllFoods = async (req, res) => {
     const rawFoods = await connection_1.db.select({
         id: schema_1.food.id,
         name: schema_1.food.name,
+        nameAr: schema_1.food.nameAr,
+        nameFr: schema_1.food.nameFr,
         description: schema_1.food.description,
+        descriptionAr: schema_1.food.descriptionAr,
+        descriptionFr: schema_1.food.descriptionFr,
         image: schema_1.food.image,
         restaurantid: schema_1.food.restaurantid,
         categoryid: schema_1.food.categoryid,
@@ -130,7 +136,11 @@ const getAllFoods = async (req, res) => {
         restaurant_id: schema_1.restaurants.id,
         restaurant_name: schema_1.restaurants.name,
         category_name: schema_1.categories.name,
+        category_nameAr: schema_1.categories.nameAr,
+        category_nameFr: schema_1.categories.nameFr,
         subcategory_name: schema_1.subcategories.name,
+        subcategory_nameAr: schema_1.subcategories.nameAr,
+        subcategory_nameFr: schema_1.subcategories.nameFr,
     })
         .from(schema_1.food)
         .leftJoin(schema_1.restaurants, (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, schema_1.restaurants.id))
@@ -167,7 +177,11 @@ const getFoodById = async (req, res) => {
     const foodItem = await connection_1.db.select({
         id: schema_1.food.id,
         name: schema_1.food.name,
+        nameAr: schema_1.food.nameAr,
+        nameFr: schema_1.food.nameFr,
         description: schema_1.food.description,
+        descriptionAr: schema_1.food.descriptionAr,
+        descriptionFr: schema_1.food.descriptionFr,
         image: schema_1.food.image,
         restaurantid: schema_1.food.restaurantid,
         categoryid: schema_1.food.categoryid,
@@ -195,10 +209,14 @@ const getFoodById = async (req, res) => {
         category: {
             id: schema_1.categories.id,
             name: schema_1.categories.name,
+            nameAr: schema_1.categories.nameAr,
+            nameFr: schema_1.categories.nameFr,
         },
         subcategory: {
             id: schema_1.subcategories.id,
             name: schema_1.subcategories.name,
+            nameAr: schema_1.subcategories.nameAr,
+            nameFr: schema_1.subcategories.nameFr,
         },
     })
         .from(schema_1.food)

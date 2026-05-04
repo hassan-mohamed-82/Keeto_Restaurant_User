@@ -49,6 +49,8 @@ const getAllSubcategories = async (req, res) => {
         .select({
         id: schema_1.subcategories.id,
         name: schema_1.subcategories.name,
+        nameAr: schema_1.subcategories.nameAr,
+        nameFr: schema_1.subcategories.nameFr,
         categoryId: schema_1.subcategories.categoryId,
         priority: schema_1.subcategories.priority,
         status: schema_1.subcategories.status,
@@ -57,6 +59,8 @@ const getAllSubcategories = async (req, res) => {
         category: {
             id: schema_1.categories.id,
             name: schema_1.categories.name,
+            nameAr: schema_1.categories.nameAr,
+            nameFr: schema_1.categories.nameFr,
             status: schema_1.categories.status,
         },
     })
@@ -71,6 +75,8 @@ const getSubcategoryById = async (req, res) => {
         .select({
         id: schema_1.subcategories.id,
         name: schema_1.subcategories.name,
+        nameAr: schema_1.subcategories.nameAr,
+        nameFr: schema_1.subcategories.nameFr,
         categoryId: schema_1.subcategories.categoryId,
         priority: schema_1.subcategories.priority,
         status: schema_1.subcategories.status,
@@ -79,6 +85,8 @@ const getSubcategoryById = async (req, res) => {
         category: {
             id: schema_1.categories.id,
             name: schema_1.categories.name,
+            nameAr: schema_1.categories.nameAr,
+            nameFr: schema_1.categories.nameFr,
             status: schema_1.categories.status,
         },
     })

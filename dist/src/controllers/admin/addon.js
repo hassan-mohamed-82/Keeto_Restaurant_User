@@ -55,6 +55,8 @@ const getAllAddons = async (req, res) => {
         .select({
         id: schema_1.addons.id,
         name: schema_1.addons.name,
+        nameAr: schema_1.addons.nameAr,
+        nameFr: schema_1.addons.nameFr,
         price: schema_1.addons.price,
         stock_type: schema_1.addons.stock_type,
         adonescategoryid: schema_1.addons.adonescategoryid,
@@ -63,6 +65,8 @@ const getAllAddons = async (req, res) => {
         adonescategory: {
             id: schema_1.adonescategory.id,
             name: schema_1.adonescategory.name,
+            nameAr: schema_1.adonescategory.nameAr,
+            nameFr: schema_1.adonescategory.nameFr,
         },
     })
         .from(schema_1.addons)
@@ -80,6 +84,8 @@ const getAddonById = async (req, res) => {
         .select({
         id: schema_1.addons.id,
         name: schema_1.addons.name,
+        nameAr: schema_1.addons.nameAr,
+        nameFr: schema_1.addons.nameFr,
         price: schema_1.addons.price,
         stock_type: schema_1.addons.stock_type,
         adonescategoryid: schema_1.addons.adonescategoryid,
@@ -88,6 +94,8 @@ const getAddonById = async (req, res) => {
         adonescategory: {
             id: schema_1.adonescategory.id,
             name: schema_1.adonescategory.name,
+            nameAr: schema_1.adonescategory.nameAr,
+            nameFr: schema_1.adonescategory.nameFr,
         },
         restaurant: {
             id: schema_1.restaurants.id,

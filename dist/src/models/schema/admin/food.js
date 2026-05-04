@@ -15,7 +15,7 @@ exports.food = (0, mysql_core_1.mysqlTable)("food", {
     image: (0, mysql_core_1.varchar)("image", { length: 500 }).notNull(),
     restaurantid: (0, mysql_core_1.char)("restaurantid", { length: 36 }).references(() => schema_1.restaurants.id).notNull(),
     categoryid: (0, mysql_core_1.char)("categoryid", { length: 36 }).references(() => schema_1.categories.id).notNull(),
-    subcategoryid: (0, mysql_core_1.char)("subcategoryid", { length: 36 }).references(() => schema_1.subcategories.id).notNull(),
+    subcategoryid: (0, mysql_core_1.char)("subcategoryid", { length: 36 }).references(() => schema_1.subcategories.id),
     foodtype: (0, mysql_core_1.mysqlEnum)("foodtype", ["veg", "non-veg"]).default("veg"),
     Nutrition: (0, mysql_core_1.text)("nutrition"),
     allergen_ingredients: (0, mysql_core_1.text)("allergen_ingredients"),

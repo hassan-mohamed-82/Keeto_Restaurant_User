@@ -54,6 +54,8 @@ export const getAllCities = async (req: Request, res: Response) => {
         .select({
             id: cities.id,
             name: cities.name,
+            nameAr: cities.nameAr,
+            nameFr: cities.nameFr,
             status: cities.status,
             countryId: cities.countryId,
             createdAt: cities.createdAt,
@@ -61,6 +63,8 @@ export const getAllCities = async (req: Request, res: Response) => {
             country: {
                 id: countries.id,
                 name: countries.name,
+                nameAr: countries.nameAr,
+                nameFr: countries.nameFr,
                 status: countries.status,
             },
         })
@@ -77,6 +81,8 @@ export const getCityById = async (req: Request, res: Response) => {
         .select({
             id: cities.id,
             name: cities.name,
+            nameAr: cities.nameAr,
+            nameFr: cities.nameFr,
             status: cities.status,
             countryId: cities.countryId,
             createdAt: cities.createdAt,
@@ -84,6 +90,8 @@ export const getCityById = async (req: Request, res: Response) => {
             country: {
                 id: countries.id,
                 name: countries.name,
+                nameAr: countries.nameAr,
+                nameFr: countries.nameFr,
                 status: countries.status,
             },
         })

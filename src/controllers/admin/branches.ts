@@ -50,12 +50,18 @@ export const getMyBranches = async (req: Request, res: Response) => {
     const myBranches = await db.select({
         id: branches.id,
         name: branches.name,
+        nameAr: branches.nameAr,
+        nameFr: branches.nameFr,
         address: branches.address,
+        addressAr: branches.addressAr,
+        addressFr: branches.addressFr,
         phoneNumber: branches.phoneNumber,
         status: branches.status,
         zone: {
             id: zones.id,
-            name: zones.name
+            name: zones.name,
+            nameAr: zones.nameAr,
+            nameFr: zones.nameFr,
         }
     })
     .from(branches)
@@ -73,12 +79,18 @@ export const getBranchById = async (req: Request, res: Response) => {
     const branch = await db.select({
         id: branches.id,
         name: branches.name,
+        nameAr: branches.nameAr,
+        nameFr: branches.nameFr,
         address: branches.address,
+        addressAr: branches.addressAr,
+        addressFr: branches.addressFr,
         phoneNumber: branches.phoneNumber,
         status: branches.status,
         zone: {
             id: zones.id,
-            name: zones.name
+            name: zones.name,
+            nameAr: zones.nameAr,
+            nameFr: zones.nameFr,
         }
     })
     .from(branches)

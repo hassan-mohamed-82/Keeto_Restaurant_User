@@ -58,7 +58,11 @@ export const getAllZones = async (req: Request, res: Response) => {
         .select({
             id: zones.id,
             name: zones.name,
+            nameAr: zones.nameAr,
+            nameFr: zones.nameFr,
             displayName: zones.displayName,
+            displayNameAr: zones.displayNameAr,
+            displayNameFr: zones.displayNameFr,
             status: zones.status,
             lat: zones.lat,
             lng: zones.lng,
@@ -68,6 +72,8 @@ export const getAllZones = async (req: Request, res: Response) => {
             city: {
                 id: cities.id,
                 name: cities.name,
+                nameAr: cities.nameAr,
+                nameFr: cities.nameFr,
                 status: cities.status,
             },
         })
@@ -84,7 +90,11 @@ export const getZoneById = async (req: Request, res: Response) => {
         .select({
             id: zones.id,
             name: zones.name,
+            nameAr: zones.nameAr,
+            nameFr: zones.nameFr,
             displayName: zones.displayName,
+            displayNameAr: zones.displayNameAr,
+            displayNameFr: zones.displayNameFr,
             status: zones.status,
             lat: zones.lat,
             lng: zones.lng,
@@ -94,6 +104,8 @@ export const getZoneById = async (req: Request, res: Response) => {
             city: {
                 id: cities.id,
                 name: cities.name,
+                nameAr: cities.nameAr,
+                nameFr: cities.nameFr,
                 status: cities.status,
             },
         })

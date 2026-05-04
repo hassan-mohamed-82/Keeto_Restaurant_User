@@ -59,6 +59,8 @@ export const getAllAddons = async (req: Request, res: Response) => {
         .select({
             id: addons.id,
             name: addons.name,
+            nameAr: addons.nameAr,
+            nameFr: addons.nameFr,
             price: addons.price,
             stock_type: addons.stock_type,
             adonescategoryid: addons.adonescategoryid,
@@ -67,6 +69,8 @@ export const getAllAddons = async (req: Request, res: Response) => {
             adonescategory: {
                 id: adonescategory.id,
                 name: adonescategory.name,
+                nameAr: adonescategory.nameAr,
+                nameFr: adonescategory.nameFr,
             },
         })
         .from(addons)
@@ -85,6 +89,8 @@ export const getAddonById = async (req: Request, res: Response) => {
         .select({
             id: addons.id,
             name: addons.name,
+            nameAr: addons.nameAr,
+            nameFr: addons.nameFr,
             price: addons.price,
             stock_type: addons.stock_type,
             adonescategoryid: addons.adonescategoryid,
@@ -93,6 +99,8 @@ export const getAddonById = async (req: Request, res: Response) => {
             adonescategory: {
                 id: adonescategory.id,
                 name: adonescategory.name,
+                nameAr: adonescategory.nameAr,
+                nameFr: adonescategory.nameFr,
             },
             restaurant: {
                 id: restaurants.id,

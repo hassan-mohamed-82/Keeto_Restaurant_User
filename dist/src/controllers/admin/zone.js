@@ -51,7 +51,11 @@ const getAllZones = async (req, res) => {
         .select({
         id: schema_1.zones.id,
         name: schema_1.zones.name,
+        nameAr: schema_1.zones.nameAr,
+        nameFr: schema_1.zones.nameFr,
         displayName: schema_1.zones.displayName,
+        displayNameAr: schema_1.zones.displayNameAr,
+        displayNameFr: schema_1.zones.displayNameFr,
         status: schema_1.zones.status,
         lat: schema_1.zones.lat,
         lng: schema_1.zones.lng,
@@ -61,6 +65,8 @@ const getAllZones = async (req, res) => {
         city: {
             id: schema_1.cities.id,
             name: schema_1.cities.name,
+            nameAr: schema_1.cities.nameAr,
+            nameFr: schema_1.cities.nameFr,
             status: schema_1.cities.status,
         },
     })
@@ -75,7 +81,11 @@ const getZoneById = async (req, res) => {
         .select({
         id: schema_1.zones.id,
         name: schema_1.zones.name,
+        nameAr: schema_1.zones.nameAr,
+        nameFr: schema_1.zones.nameFr,
         displayName: schema_1.zones.displayName,
+        displayNameAr: schema_1.zones.displayNameAr,
+        displayNameFr: schema_1.zones.displayNameFr,
         status: schema_1.zones.status,
         lat: schema_1.zones.lat,
         lng: schema_1.zones.lng,
@@ -85,6 +95,8 @@ const getZoneById = async (req, res) => {
         city: {
             id: schema_1.cities.id,
             name: schema_1.cities.name,
+            nameAr: schema_1.cities.nameAr,
+            nameFr: schema_1.cities.nameFr,
             status: schema_1.cities.status,
         },
     })

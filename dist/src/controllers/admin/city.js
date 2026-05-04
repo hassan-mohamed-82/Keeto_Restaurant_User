@@ -47,6 +47,8 @@ const getAllCities = async (req, res) => {
         .select({
         id: schema_1.cities.id,
         name: schema_1.cities.name,
+        nameAr: schema_1.cities.nameAr,
+        nameFr: schema_1.cities.nameFr,
         status: schema_1.cities.status,
         countryId: schema_1.cities.countryId,
         createdAt: schema_1.cities.createdAt,
@@ -54,6 +56,8 @@ const getAllCities = async (req, res) => {
         country: {
             id: schema_1.countries.id,
             name: schema_1.countries.name,
+            nameAr: schema_1.countries.nameAr,
+            nameFr: schema_1.countries.nameFr,
             status: schema_1.countries.status,
         },
     })
@@ -68,6 +72,8 @@ const getCityById = async (req, res) => {
         .select({
         id: schema_1.cities.id,
         name: schema_1.cities.name,
+        nameAr: schema_1.cities.nameAr,
+        nameFr: schema_1.cities.nameFr,
         status: schema_1.cities.status,
         countryId: schema_1.cities.countryId,
         createdAt: schema_1.cities.createdAt,
@@ -75,6 +81,8 @@ const getCityById = async (req, res) => {
         country: {
             id: schema_1.countries.id,
             name: schema_1.countries.name,
+            nameAr: schema_1.countries.nameAr,
+            nameFr: schema_1.countries.nameFr,
             status: schema_1.countries.status,
         },
     })
