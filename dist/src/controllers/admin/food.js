@@ -150,15 +150,21 @@ const getAllFoods = async (req, res) => {
     if (rawFoods.length === 0) {
         return (0, response_1.SuccessResponse)(res, { message: "Get all foods success", data: [] });
     }
+    // 👇 التعديل كله حصل في الجزء ده 👇
     const allFoods = rawFoods.map(f => ({
         id: f.id,
         name: f.name,
+        nameAr: f.nameAr, // ✅ تم الإضافة
+        nameFr: f.nameFr, // ✅ تم الإضافة
         description: f.description,
+        descriptionAr: f.descriptionAr, // ✅ تم الإضافة
+        descriptionFr: f.descriptionFr, // ✅ تم الإضافة
         image: f.image,
         price: f.price,
+        status: f.status, // ✅ تم الإضافة عشان لو حبيت تعرض حالة الأكلة في الجدول
         restaurant: f.restaurant_id ? { id: f.restaurant_id, name: f.restaurant_name } : null,
-        category: f.category_name ? { name: f.category_name } : null,
-        subcategory: f.subcategory_name ? { name: f.subcategory_name } : null,
+        category: f.category_name ? { name: f.category_name, nameAr: f.category_nameAr, nameFr: f.category_nameFr } : null,
+        subcategory: f.subcategory_name ? { name: f.subcategory_name, nameAr: f.subcategory_nameAr, nameFr: f.subcategory_nameFr } : null,
     }));
     return (0, response_1.SuccessResponse)(res, {
         message: "Get all foods success",

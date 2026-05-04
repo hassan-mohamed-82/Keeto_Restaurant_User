@@ -130,73 +130,78 @@ export const createFood = async (req: Request, res: Response) => {
 // GET ALL Foods (Optimized & Secured)
 // =============================================
 export const getAllFoods = async (req: Request, res: Response) => {
-    const restaurantId = req.user?.id;
-    if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
+    const restaurantId = req.user?.id;
+    if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
 
-    const rawFoods = await db.select({
-        id: food.id,
-        name: food.name,
-        nameAr: food.nameAr,
-        nameFr: food.nameFr,
-        description: food.description,
-        descriptionAr: food.descriptionAr,
-        descriptionFr: food.descriptionFr,
-        image: food.image,
-        restaurantid: food.restaurantid,
-        categoryid: food.categoryid,
-        subcategoryid: food.subcategoryid,
-        foodtype: food.foodtype,
-        Nutrition: food.Nutrition,
-        allergen_ingredients: food.allergen_ingredients,
-        is_Halal: food.is_Halal,
-        addonsId: food.addonsId,
-        startTime: food.startTime,
-        endTime: food.endTime,
-        search_tags: food.search_tags,
-        price: food.price,
-        discount_type: food.discount_type,
-        discount_value: food.discount_value,
-        Maximum_Purchase: food.Maximum_Purchase,
-        stock_type: food.stock_type,
-        status: food.status,
-        createdAt: food.createdAt,
-        updatedAt: food.updatedAt,
-        restaurant_id: restaurants.id,
-        restaurant_name: restaurants.name,
-        category_name: categories.name,
-        category_nameAr: categories.nameAr,
-        category_nameFr: categories.nameFr,
-        subcategory_name: subcategories.name,
-        subcategory_nameAr: subcategories.nameAr,
-        subcategory_nameFr: subcategories.nameFr,
-    })
-        .from(food)
-        .leftJoin(restaurants, eq(food.restaurantid, restaurants.id)) 
-        .leftJoin(categories, eq(food.categoryid, categories.id))
-        .leftJoin(subcategories, eq(food.subcategoryid, subcategories.id))
-        .where(eq(food.restaurantid, restaurantId));
+    const rawFoods = await db.select({
+        id: food.id,
+        name: food.name,
+        nameAr: food.nameAr,
+        nameFr: food.nameFr,
+        description: food.description,
+        descriptionAr: food.descriptionAr,
+        descriptionFr: food.descriptionFr,
+        image: food.image,
+        restaurantid: food.restaurantid,
+        categoryid: food.categoryid,
+        subcategoryid: food.subcategoryid,
+        foodtype: food.foodtype,
+        Nutrition: food.Nutrition,
+        allergen_ingredients: food.allergen_ingredients,
+        is_Halal: food.is_Halal,
+        addonsId: food.addonsId,
+        startTime: food.startTime,
+        endTime: food.endTime,
+        search_tags: food.search_tags,
+        price: food.price,
+        discount_type: food.discount_type,
+        discount_value: food.discount_value,
+        Maximum_Purchase: food.Maximum_Purchase,
+        stock_type: food.stock_type,
+        status: food.status,
+        createdAt: food.createdAt,
+        updatedAt: food.updatedAt,
+        restaurant_id: restaurants.id,
+        restaurant_name: restaurants.name,
+        category_name: categories.name,
+        category_nameAr: categories.nameAr,
+        category_nameFr: categories.nameFr,
+        subcategory_name: subcategories.name,
+        subcategory_nameAr: subcategories.nameAr,
+        subcategory_nameFr: subcategories.nameFr,
+    })
+        .from(food)
+        .leftJoin(restaurants, eq(food.restaurantid, restaurants.id)) 
+        .leftJoin(categories, eq(food.categoryid, categories.id))
+        .leftJoin(subcategories, eq(food.subcategoryid, subcategories.id))
+        .where(eq(food.restaurantid, restaurantId));
 
-    if (rawFoods.length === 0) {
-        return SuccessResponse(res, { message: "Get all foods success", data: [] });
-    }
+    if (rawFoods.length === 0) {
+        return SuccessResponse(res, { message: "Get all foods success", data: [] });
+    }
 
-    const allFoods = rawFoods.map(f => ({
-        id: f.id,
-        name: f.name,
-        description: f.description,
-        image: f.image,
-        price: f.price,
-        restaurant: f.restaurant_id ? { id: f.restaurant_id, name: f.restaurant_name } : null,
-        category: f.category_name ? { name: f.category_name } : null,
-        subcategory: f.subcategory_name ? { name: f.subcategory_name } : null,
-    }));
+    // 👇 التعديل كله حصل في الجزء ده 👇
+    const allFoods = rawFoods.map(f => ({
+        id: f.id,
+        name: f.name,
+        nameAr: f.nameAr,               // ✅ تم الإضافة
+        nameFr: f.nameFr,               // ✅ تم الإضافة
+        description: f.description,
+        descriptionAr: f.descriptionAr, // ✅ تم الإضافة
+        descriptionFr: f.descriptionFr, // ✅ تم الإضافة
+        image: f.image,
+        price: f.price,
+        status: f.status,               // ✅ تم الإضافة عشان لو حبيت تعرض حالة الأكلة في الجدول
+        restaurant: f.restaurant_id ? { id: f.restaurant_id, name: f.restaurant_name } : null,
+        category: f.category_name ? { name: f.category_name, nameAr: f.category_nameAr, nameFr: f.category_nameFr } : null,
+        subcategory: f.subcategory_name ? { name: f.subcategory_name, nameAr: f.subcategory_nameAr, nameFr: f.subcategory_nameFr } : null,
+    }));
 
-    return SuccessResponse(res, {
-        message: "Get all foods success",
-        data: allFoods
-    });
+    return SuccessResponse(res, {
+        message: "Get all foods success",
+        data: allFoods
+    });
 };
-
 // =============================================
 // GET Food By ID
 // =============================================
