@@ -4,9 +4,13 @@ import {
     orders, orderItems, food, users, paymentMethods, 
     userWallets, userWalletTransactions, 
     restaurantWalletTransactions,
-    restaurantWallets
+    restaurantWallets,
+    branches,
+    restaurants,
+    foodVariations,
+    variationOptions
 } from "../../models/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, inArray } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors/NotFound";
@@ -48,29 +52,94 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 2. جلب تفاصيل أوردر معين (بالـ ID)
+// Helper: جلب أوردرات بحالة معينة
+// ==========================================
+const getOrdersByStatus = async (req: Request, res: Response, status: "pending" | "accepted" | "preparing" | "out_for_delivery" | "delivered" | "cancelled" | "rejected" | "refund") => {
+    const adminRestaurantId = req.user?.restaurantId || req.user?.id;
+    const adminBranchId = req.user?.branchId;
+
+    if (!adminRestaurantId) throw new BadRequest("Unauthorized");
+
+    const conditions: any[] = [
+        eq(orders.restaurantId, adminRestaurantId),
+        eq(orders.status, status)
+    ];
+
+    if (adminBranchId) {
+        conditions.push(eq(orders.branchId, adminBranchId));
+    }
+
+    const result = await db.select({
+        id: orders.id,
+        orderNumber: orders.orderNumber,
+        customerName: users.name,
+        customerPhone: users.phone,
+        orderType: orders.orderType,
+        orderSource: orders.orderSource,
+        subtotal: orders.subtotal,
+        deliveryFee: orders.deliveryFee,
+        totalAmount: orders.totalAmount,
+        status: orders.status,
+        branchName: branches.name,
+        createdAt: orders.createdAt,
+    })
+    .from(orders)
+    .leftJoin(users, eq(orders.userId, users.id))
+    .leftJoin(branches, eq(orders.branchId, branches.id))
+    .where(and(...conditions))
+    .orderBy(desc(orders.createdAt));
+
+    return SuccessResponse(res, { message: `Get ${status} orders success`, data: result });
+};
+
+// ==========================================
+// APIs لكل حالة أوردر
+// ==========================================
+export const getPendingOrders = async (req: Request, res: Response) => getOrdersByStatus(req, res, "pending");
+export const getAcceptedOrders = async (req: Request, res: Response) => getOrdersByStatus(req, res, "accepted");
+export const getPreparingOrders = async (req: Request, res: Response) => getOrdersByStatus(req, res, "preparing");
+export const getOutForDeliveryOrders = async (req: Request, res: Response) => getOrdersByStatus(req, res, "out_for_delivery");
+export const getDeliveredOrders = async (req: Request, res: Response) => getOrdersByStatus(req, res, "delivered");
+export const getCancelledOrders = async (req: Request, res: Response) => getOrdersByStatus(req, res, "cancelled");
+export const getRejectedOrders = async (req: Request, res: Response) => getOrdersByStatus(req, res, "rejected");
+export const getRefundOrders = async (req: Request, res: Response) => getOrdersByStatus(req, res, "refund");
+
+// ==========================================
+// 2. جلب تفاصيل أوردر معين بالـ ID (كامل)
 // ==========================================
 export const getRestaurantOrderById = async (req: Request, res: Response) => {
     const { id } = req.params;
     const adminRestaurantId = req.user?.restaurantId || req.user?.id;
     const adminBranchId = req.user?.branchId;
 
-    // 1. جلب البيانات الأساسية للأوردر
+    // 1. جلب البيانات الأساسية للأوردر مع كل التفاصيل
     const [orderDetail] = await db.select({
         order: orders,
         customer: {
+            id: users.id,
             name: users.name,
             phone: users.phone,
             email: users.email,
         },
         paymentMethod: {
+            id: paymentMethods.id,
             name: paymentMethods.name,
             type: paymentMethods.type,
+        },
+        branch: {
+            id: branches.id,
+            name: branches.name,
+        },
+        restaurant: {
+            id: restaurants.id,
+            name: restaurants.name,
         }
     })
     .from(orders)
     .leftJoin(users, eq(orders.userId, users.id))
     .leftJoin(paymentMethods, eq(orders.paymentMethodId, paymentMethods.id))
+    .leftJoin(branches, eq(orders.branchId, branches.id))
+    .leftJoin(restaurants, eq(orders.restaurantId, restaurants.id))
     .where(eq(orders.id, id))
     .limit(1);
 
@@ -84,15 +153,19 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
         throw new BadRequest("Unauthorized: Order does not belong to your branch");
     }
 
-    // 2. جلب أصناف الأكل اللي جوه الأوردر ده (Order Items)
+    // 2. جلب أصناف الأكل اللي جوه الأوردر ده (Order Items) مع تفاصيل كاملة
     const items = await db.select({
         id: orderItems.id,
+        foodId: orderItems.foodId,
         quantity: orderItems.quantity,
         basePrice: orderItems.basePrice,
         variationsPrice: orderItems.variationsPrice,
         totalPrice: orderItems.totalPrice,
         foodName: food.name,
+        foodNameAr: food.nameAr,
+        foodNameFr: food.nameFr,
         foodImage: food.image,
+        foodDescription: food.description,
     })
     .from(orderItems)
     .leftJoin(food, eq(orderItems.foodId, food.id))
@@ -101,9 +174,23 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
     return SuccessResponse(res, { 
         message: "Get order details success", 
         data: { 
-            ...orderDetail.order,
+            id: orderDetail.order.id,
+            orderNumber: orderDetail.order.orderNumber,
+            orderType: orderDetail.order.orderType,
+            orderSource: orderDetail.order.orderSource,
+            status: orderDetail.order.status,
+            cancelReason: orderDetail.order.cancelReason,
+            subtotal: orderDetail.order.subtotal,
+            deliveryFee: orderDetail.order.deliveryFee,
+            serviceFee: orderDetail.order.serviceFee,
+            appCommission: orderDetail.order.appCommission,
+            totalAmount: orderDetail.order.totalAmount,
+            createdAt: orderDetail.order.createdAt,
+            updatedAt: orderDetail.order.updatedAt,
             customer: orderDetail.customer,
             paymentMethod: orderDetail.paymentMethod,
+            branch: orderDetail.branch,
+            restaurant: orderDetail.restaurant,
             items 
         } 
     });
