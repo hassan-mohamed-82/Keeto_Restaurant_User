@@ -180,22 +180,38 @@ export const getAllFoods = async (req: Request, res: Response) => {
         return SuccessResponse(res, { message: "Get all foods success", data: [] });
     }
 
+    // جلب كل التعديلات والخيارات الخاصة بالأكلات في هذا المطعم
+    const foodIds = rawFoods.map(f => f.id);
+    const allVars = await db.select().from(foodVariations).where(inArray(foodVariations.foodId, foodIds));
+    const allVarIds = allVars.map(v => v.id);
+    const allOpts = allVarIds.length > 0 
+        ? await db.select().from(variationOptions).where(inArray(variationOptions.variationId, allVarIds)) 
+        : [];
+
     // 👇 التعديل كله حصل في الجزء ده 👇
-    const allFoods = rawFoods.map(f => ({
-        id: f.id,
-        name: f.name,
-        nameAr: f.nameAr,               // ✅ تم الإضافة
-        nameFr: f.nameFr,               // ✅ تم الإضافة
-        description: f.description,
-        descriptionAr: f.descriptionAr, // ✅ تم الإضافة
-        descriptionFr: f.descriptionFr, // ✅ تم الإضافة
-        image: f.image,
-        price: f.price,
-        status: f.status,               // ✅ تم الإضافة عشان لو حبيت تعرض حالة الأكلة في الجدول
-        restaurant: f.restaurant_id ? { id: f.restaurant_id, name: f.restaurant_name } : null,
-        category: f.category_name ? { name: f.category_name, nameAr: f.category_nameAr, nameFr: f.category_nameFr } : null,
-        subcategory: f.subcategory_name ? { name: f.subcategory_name, nameAr: f.subcategory_nameAr, nameFr: f.subcategory_nameFr } : null,
-    }));
+    const allFoods = rawFoods.map(f => {
+        const foodVars = allVars.filter(v => v.foodId === f.id).map(v => ({
+            ...v,
+            options: allOpts.filter(o => o.variationId === v.id)
+        }));
+
+        return {
+            id: f.id,
+            name: f.name,
+            nameAr: f.nameAr,               // ✅ تم الإضافة
+            nameFr: f.nameFr,               // ✅ تم الإضافة
+            description: f.description,
+            descriptionAr: f.descriptionAr, // ✅ تم الإضافة
+            descriptionFr: f.descriptionFr, // ✅ تم الإضافة
+            image: f.image,
+            price: f.price,
+            status: f.status,               // ✅ تم الإضافة عشان لو حبيت تعرض حالة الأكلة في الجدول
+            variations: foodVars,           // ✅ تم إضافة variations
+            restaurant: f.restaurant_id ? { id: f.restaurant_id, name: f.restaurant_name } : null,
+            category: f.category_name ? { name: f.category_name, nameAr: f.category_nameAr, nameFr: f.category_nameFr } : null,
+            subcategory: f.subcategory_name ? { name: f.subcategory_name, nameAr: f.subcategory_nameAr, nameFr: f.subcategory_nameFr } : null,
+        };
+    });
 
     return SuccessResponse(res, {
         message: "Get all foods success",
@@ -465,13 +481,24 @@ export const getFoodSelectData = async (req: Request, res: Response) => {
         .select({ id: addons.id, name: addons.name })
         .from(addons)
         .where(and(eq(addons.status, "active"), eq(addons.restaurantid, restaurantId)));
-
+   const list = await db.select({
+           id: ingredients.id,
+           name: ingredients.name,
+           inStock: ingredients.inStock,
+           categoryId: ingredients.categoryId,
+           categoryName: ingredientCategories.name
+       })
+       .from(ingredients)
+       .leftJoin(ingredientCategories, eq(ingredients.categoryId, ingredientCategories.id))
+       .where(eq(ingredients.restaurantId, restaurantId));
+    
     return SuccessResponse(res, {
         message: "Get food select data success",
         data: {
             categories: myCategories,
             subcategories: mySubcategories,
-            addons: myAddons
+            addons: myAddons,
+            ingredients: list
         }
     });
 };

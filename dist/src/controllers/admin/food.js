@@ -150,22 +150,36 @@ const getAllFoods = async (req, res) => {
     if (rawFoods.length === 0) {
         return (0, response_1.SuccessResponse)(res, { message: "Get all foods success", data: [] });
     }
+    // جلب كل التعديلات والخيارات الخاصة بالأكلات في هذا المطعم
+    const foodIds = rawFoods.map(f => f.id);
+    const allVars = await connection_1.db.select().from(schema_1.foodVariations).where((0, drizzle_orm_1.inArray)(schema_1.foodVariations.foodId, foodIds));
+    const allVarIds = allVars.map(v => v.id);
+    const allOpts = allVarIds.length > 0
+        ? await connection_1.db.select().from(schema_1.variationOptions).where((0, drizzle_orm_1.inArray)(schema_1.variationOptions.variationId, allVarIds))
+        : [];
     // 👇 التعديل كله حصل في الجزء ده 👇
-    const allFoods = rawFoods.map(f => ({
-        id: f.id,
-        name: f.name,
-        nameAr: f.nameAr, // ✅ تم الإضافة
-        nameFr: f.nameFr, // ✅ تم الإضافة
-        description: f.description,
-        descriptionAr: f.descriptionAr, // ✅ تم الإضافة
-        descriptionFr: f.descriptionFr, // ✅ تم الإضافة
-        image: f.image,
-        price: f.price,
-        status: f.status, // ✅ تم الإضافة عشان لو حبيت تعرض حالة الأكلة في الجدول
-        restaurant: f.restaurant_id ? { id: f.restaurant_id, name: f.restaurant_name } : null,
-        category: f.category_name ? { name: f.category_name, nameAr: f.category_nameAr, nameFr: f.category_nameFr } : null,
-        subcategory: f.subcategory_name ? { name: f.subcategory_name, nameAr: f.subcategory_nameAr, nameFr: f.subcategory_nameFr } : null,
-    }));
+    const allFoods = rawFoods.map(f => {
+        const foodVars = allVars.filter(v => v.foodId === f.id).map(v => ({
+            ...v,
+            options: allOpts.filter(o => o.variationId === v.id)
+        }));
+        return {
+            id: f.id,
+            name: f.name,
+            nameAr: f.nameAr, // ✅ تم الإضافة
+            nameFr: f.nameFr, // ✅ تم الإضافة
+            description: f.description,
+            descriptionAr: f.descriptionAr, // ✅ تم الإضافة
+            descriptionFr: f.descriptionFr, // ✅ تم الإضافة
+            image: f.image,
+            price: f.price,
+            status: f.status, // ✅ تم الإضافة عشان لو حبيت تعرض حالة الأكلة في الجدول
+            variations: foodVars, // ✅ تم إضافة variations
+            restaurant: f.restaurant_id ? { id: f.restaurant_id, name: f.restaurant_name } : null,
+            category: f.category_name ? { name: f.category_name, nameAr: f.category_nameAr, nameFr: f.category_nameFr } : null,
+            subcategory: f.subcategory_name ? { name: f.subcategory_name, nameAr: f.subcategory_nameAr, nameFr: f.subcategory_nameFr } : null,
+        };
+    });
     return (0, response_1.SuccessResponse)(res, {
         message: "Get all foods success",
         data: allFoods
@@ -399,12 +413,23 @@ const getFoodSelectData = async (req, res) => {
         .select({ id: schema_1.addons.id, name: schema_1.addons.name })
         .from(schema_1.addons)
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.addons.status, "active"), (0, drizzle_orm_1.eq)(schema_1.addons.restaurantid, restaurantId)));
+    const list = await connection_1.db.select({
+        id: schema_1.ingredients.id,
+        name: schema_1.ingredients.name,
+        inStock: schema_1.ingredients.inStock,
+        categoryId: schema_1.ingredients.categoryId,
+        categoryName: schema_1.ingredientCategories.name
+    })
+        .from(schema_1.ingredients)
+        .leftJoin(schema_1.ingredientCategories, (0, drizzle_orm_1.eq)(schema_1.ingredients.categoryId, schema_1.ingredientCategories.id))
+        .where((0, drizzle_orm_1.eq)(schema_1.ingredients.restaurantId, restaurantId));
     return (0, response_1.SuccessResponse)(res, {
         message: "Get food select data success",
         data: {
             categories: myCategories,
             subcategories: mySubcategories,
-            addons: myAddons
+            addons: myAddons,
+            ingredients: list
         }
     });
 };

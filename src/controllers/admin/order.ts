@@ -1,8 +1,8 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { 
-    orders, orderItems, food, users, paymentMethods, 
-    userWallets, userWalletTransactions, 
+import {
+    orders, orderItems, food, users, paymentMethods,
+    userWallets, userWalletTransactions,
     restaurantWalletTransactions,
     restaurantWallets,
     branches,
@@ -43,10 +43,10 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
         status: orders.status,
         createdAt: orders.createdAt,
     })
-    .from(orders)
-    .leftJoin(users, eq(orders.userId, users.id))
-    .where(queryConditions)
-    .orderBy(desc(orders.createdAt)); // ترتيب من الأحدث للأقدم
+        .from(orders)
+        .leftJoin(users, eq(orders.userId, users.id))
+        .where(queryConditions)
+        .orderBy(desc(orders.createdAt)); // ترتيب من الأحدث للأقدم
 
     return SuccessResponse(res, { message: "Get orders success", data: restaurantOrders });
 };
@@ -83,11 +83,11 @@ const getOrdersByStatus = async (req: Request, res: Response, status: "pending" 
         branchName: branches.name,
         createdAt: orders.createdAt,
     })
-    .from(orders)
-    .leftJoin(users, eq(orders.userId, users.id))
-    .leftJoin(branches, eq(orders.branchId, branches.id))
-    .where(and(...conditions))
-    .orderBy(desc(orders.createdAt));
+        .from(orders)
+        .leftJoin(users, eq(orders.userId, users.id))
+        .leftJoin(branches, eq(orders.branchId, branches.id))
+        .where(and(...conditions))
+        .orderBy(desc(orders.createdAt));
 
     return SuccessResponse(res, { message: `Get ${status} orders success`, data: result });
 };
@@ -135,13 +135,13 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             name: restaurants.name,
         }
     })
-    .from(orders)
-    .leftJoin(users, eq(orders.userId, users.id))
-    .leftJoin(paymentMethods, eq(orders.paymentMethodId, paymentMethods.id))
-    .leftJoin(branches, eq(orders.branchId, branches.id))
-    .leftJoin(restaurants, eq(orders.restaurantId, restaurants.id))
-    .where(eq(orders.id, id))
-    .limit(1);
+        .from(orders)
+        .leftJoin(users, eq(orders.userId, users.id))
+        .leftJoin(paymentMethods, eq(orders.paymentMethodId, paymentMethods.id))
+        .leftJoin(branches, eq(orders.branchId, branches.id))
+        .leftJoin(restaurants, eq(orders.restaurantId, restaurants.id))
+        .where(eq(orders.id, id))
+        .limit(1);
 
     if (!orderDetail) throw new NotFound("Order not found");
 
@@ -167,13 +167,13 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
         foodImage: food.image,
         foodDescription: food.description,
     })
-    .from(orderItems)
-    .leftJoin(food, eq(orderItems.foodId, food.id))
-    .where(eq(orderItems.orderId, id));
+        .from(orderItems)
+        .leftJoin(food, eq(orderItems.foodId, food.id))
+        .where(eq(orderItems.orderId, id));
 
-    return SuccessResponse(res, { 
-        message: "Get order details success", 
-        data: { 
+    return SuccessResponse(res, {
+        message: "Get order details success",
+        data: {
             id: orderDetail.order.id,
             orderNumber: orderDetail.order.orderNumber,
             orderType: orderDetail.order.orderType,
@@ -191,8 +191,8 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             paymentMethod: orderDetail.paymentMethod,
             branch: orderDetail.branch,
             restaurant: orderDetail.restaurant,
-            items 
-        } 
+            items
+        }
     });
 };
 
@@ -202,9 +202,9 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
 export const updateOrderStatus = async (req: Request, res: Response) => {
     const { orderId } = req.params;
     const { status, cancelReason } = req.body;
-    
+
     const adminRestaurantId = req.user?.restaurantId || req.user?.id;
-    const adminBranchId = req.user?.branchId; 
+    const adminBranchId = req.user?.branchId;
 
     if (!status) throw new BadRequest("Status is required");
 
@@ -215,7 +215,7 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
 
     const [existingOrder] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
     if (!existingOrder) throw new NotFound("Order not found");
-    
+
     // 🛡️ حماية الصلاحيات
     if (existingOrder.restaurantId !== adminRestaurantId) throw new BadRequest("Unauthorized");
     if (adminBranchId && existingOrder.branchId !== adminBranchId) throw new BadRequest("Unauthorized");
@@ -232,8 +232,8 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
     await db.transaction(async (tx) => {
         // 1. تحديث الحالة
         await tx.update(orders)
-            .set({ 
-                status, 
+            .set({
+                status,
                 cancelReason: (status === "rejected" || status === "cancelled") ? cancelReason : null,
                 updatedAt: new Date()
             })
@@ -267,10 +267,10 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
                         userId: existingOrder.userId,
                         paymentMethodId: existingOrder.paymentMethodId,
                         type: "credit",
-                        transactionType: "refund", 
+                        transactionType: "refund",
                         amount: amountToRefund.toString(),
                         balanceBefore: balanceBefore.toString(),
-                        reference: existingOrder.orderNumber, 
+                        reference: existingOrder.orderNumber,
                         status: "approved"
                     });
                 }
