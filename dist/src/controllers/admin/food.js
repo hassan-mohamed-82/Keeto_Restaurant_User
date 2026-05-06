@@ -14,106 +14,125 @@ const handleImages_1 = require("../../utils/handleImages");
 // CREATE Food
 // =============================================
 const createFood = async (req, res) => {
-    const restaurantId = req.user?.id;
-    if (!restaurantId)
-        throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
-    const { name, description, image, categoryid, subcategoryid, foodtype, Nutrition, allergen_ingredients, is_Halal, addonsId, startTime, endTime, search_tags, price, discount_type, discount_value, Maximum_Purchase, stock_type, status, variations, nameAr, nameFr, descriptionAr, descriptionFr } = req.body;
-    // 1. التحقق من الحقول المطلوبة
-    if (!name || !description || !image || !categoryid || !startTime || !endTime || !price) {
-        throw new BadRequest_1.BadRequest("Missing required fields");
-    }
-    // 2. التحقق من وجود العلاقات (القسم، القسم الفرعي، الإضافات)
-    const existingCategory = await connection_1.db.select().from(schema_1.categories)
-        .where((0, drizzle_orm_1.eq)(schema_1.categories.id, categoryid)).limit(1);
-    if (!existingCategory[0]) {
-        throw new BadRequest_1.BadRequest("Category not found");
-    }
-    if (subcategoryid) {
-        const existingSub = await connection_1.db.select().from(schema_1.subcategories)
-            .where((0, drizzle_orm_1.eq)(schema_1.subcategories.id, subcategoryid)).limit(1);
-        if (!existingSub[0]) {
-            throw new BadRequest_1.BadRequest("Subcategory not found");
+    try {
+        const restaurantId = req.user?.id;
+        if (!restaurantId) {
+            throw new Error("Restaurant ID missing or unauthorized"); // يمكنك استخدام BadRequest هنا
         }
-    }
-    if (addonsId) {
-        const existingAddon = await connection_1.db.select().from(schema_1.addons)
-            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.addons.id, addonsId), (0, drizzle_orm_1.eq)(schema_1.addons.restaurantid, restaurantId)))
-            .limit(1);
-        if (!existingAddon[0]) {
-            throw new BadRequest_1.BadRequest("Addon not found");
+        const { name, description, image, categoryid, subcategoryid, foodtype, Nutrition, allergen_ingredients, is_Halal, addonsId, startTime, endTime, search_tags, price, discount_type, discount_value, Maximum_Purchase, stock_type, status, variations, nameAr, nameFr, descriptionAr, descriptionFr } = req.body;
+        // 1. التحقق من الحقول المطلوبة
+        if (!name || !description || !image || !categoryid || !startTime || !endTime || !price) {
+            throw new Error("Missing required fields");
         }
-    }
-    // 3. معالجة وحفظ الصورة (تتم خارج الـ Transaction لتجنب بطء قاعدة البيانات)
-    let imageUrl = image;
-    if (image && image.startsWith("data:image")) {
-        imageUrl = await (0, handleImages_1.saveBase64Image)(image, req, "foods");
-    }
-    const foodId = (0, uuid_1.v4)();
-    // 4. بدء المعاملة (Transaction) - إما أن يتم حفظ كل شيء أو التراجع عن كل شيء
-    await connection_1.db.transaction(async (tx) => {
-        // إدخال بيانات الصنف الرئيسي (ملاحظة: استخدام tx بدلاً من db هنا)
-        await tx.insert(schema_1.food).values({
-            id: foodId,
-            name,
-            nameAr,
-            nameFr,
-            description,
-            descriptionAr,
-            descriptionFr,
-            image: imageUrl,
-            restaurantid: restaurantId,
-            categoryid,
-            subcategoryid: subcategoryid || null,
-            foodtype: foodtype || "veg",
-            Nutrition: Nutrition || null,
-            allergen_ingredients: allergen_ingredients || null,
-            is_Halal: is_Halal ?? false,
-            addonsId: addonsId || null,
-            startTime,
-            endTime,
-            search_tags: search_tags || null,
-            price,
-            discount_type: discount_type || "percentage",
-            discount_value: discount_value || null,
-            Maximum_Purchase: Maximum_Purchase || null,
-            stock_type: stock_type || "unlimited",
-            status: status || "active",
-        });
-        // إدخال الاختلافات (Variations) وخياراتها (Options)
-        if (variations && Array.isArray(variations) && variations.length > 0) {
-            for (const variation of variations) {
-                const variationId = (0, uuid_1.v4)();
-                await tx.insert(schema_1.foodVariations).values({
-                    id: variationId,
-                    foodId,
-                    name: variation.name,
-                    nameAr: variation.nameAr,
-                    nameFr: variation.nameFr,
-                    isRequired: variation.isRequired || false,
-                    selectionType: variation.selectionType || "single",
-                    min: variation.min || null,
-                    max: variation.max || null,
-                });
-                // تجميع خيارات هذا الـ Variation لإدخالها دفعة واحدة (Bulk Insert)
-                if (variation.options && Array.isArray(variation.options)) {
-                    const optionsToInsert = variation.options.map((option) => ({
-                        variationId,
-                        optionName: option.optionName,
-                        optionNameAr: option.optionNameAr,
-                        optionNameFr: option.optionNameFr,
-                        additionalPrice: option.additionalPrice?.toString() || "0",
-                    }));
-                    if (optionsToInsert.length > 0) {
-                        await tx.insert(schema_1.variationOptions).values(optionsToInsert);
+        // 2. التحقق من وجود العلاقات في قاعدة البيانات لمنع أخطاء Foreign Key
+        const existingCategory = await connection_1.db.select().from(schema_1.categories)
+            .where((0, drizzle_orm_1.eq)(schema_1.categories.id, categoryid)).limit(1);
+        if (!existingCategory[0]) {
+            throw new Error("Category not found");
+        }
+        if (subcategoryid) {
+            const existingSub = await connection_1.db.select().from(schema_1.subcategories)
+                .where((0, drizzle_orm_1.eq)(schema_1.subcategories.id, subcategoryid)).limit(1);
+            if (!existingSub[0]) {
+                throw new Error("Subcategory not found");
+            }
+        }
+        if (addonsId) {
+            const existingAddon = await connection_1.db.select().from(schema_1.addons)
+                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.addons.id, addonsId), (0, drizzle_orm_1.eq)(schema_1.addons.restaurantid, restaurantId)))
+                .limit(1);
+            if (!existingAddon[0]) {
+                throw new Error("Addon not found");
+            }
+        }
+        // 3. معالجة الصورة (خارج المعاملة لتجنب بطء قاعدة البيانات)
+        let imageUrl = image;
+        if (image && image.startsWith("data:image")) {
+            imageUrl = await (0, handleImages_1.saveBase64Image)(image, req, "foods");
+        }
+        const foodId = (0, uuid_1.v4)();
+        // 4. بدء المعاملة (Transaction) لحفظ البيانات أو التراجع عنها بالكامل
+        await connection_1.db.transaction(async (tx) => {
+            // إدخال الصنف الرئيسي
+            await tx.insert(schema_1.food).values({
+                id: foodId,
+                name,
+                nameAr,
+                nameFr,
+                description,
+                descriptionAr,
+                descriptionFr,
+                image: imageUrl,
+                restaurantid: restaurantId,
+                categoryid,
+                subcategoryid: subcategoryid || null,
+                foodtype: foodtype || "veg",
+                Nutrition: Nutrition || null,
+                allergen_ingredients: allergen_ingredients || null,
+                is_Halal: is_Halal ?? false,
+                addonsId: addonsId || null,
+                startTime,
+                endTime,
+                search_tags: search_tags || null,
+                price,
+                discount_type: discount_type || "percentage",
+                discount_value: discount_value || null,
+                Maximum_Purchase: Maximum_Purchase || null,
+                stock_type: stock_type || "unlimited",
+                status: status || "active",
+            });
+            // إدخال الخيارات (Variations) إن وجدت
+            if (variations && Array.isArray(variations) && variations.length > 0) {
+                for (const variation of variations) {
+                    const variationId = (0, uuid_1.v4)();
+                    await tx.insert(schema_1.foodVariations).values({
+                        id: variationId,
+                        foodId,
+                        name: variation.name,
+                        nameAr: variation.nameAr,
+                        nameFr: variation.nameFr,
+                        isRequired: variation.isRequired ?? false,
+                        selectionType: variation.selectionType || "single",
+                        min: variation.min || null,
+                        max: variation.max || null,
+                    });
+                    // إدخال التفاصيل الداخلية للخيارات (Options) دفعة واحدة Bulk Insert
+                    if (variation.options && Array.isArray(variation.options)) {
+                        const optionsToInsert = variation.options.map((option) => ({
+                            variationId,
+                            optionName: option.optionName,
+                            optionNameAr: option.optionNameAr,
+                            optionNameFr: option.optionNameFr,
+                            additionalPrice: option.additionalPrice?.toString() || "0",
+                        }));
+                        if (optionsToInsert.length > 0) {
+                            await tx.insert(schema_1.variationOptions).values(optionsToInsert);
+                        }
                     }
                 }
             }
-        }
-    }); // انتهاء الـ Transaction
-    return (0, response_1.SuccessResponse)(res, {
-        message: "Create food success",
-        data: { id: foodId }
-    }, 201);
+        });
+        // إذا نجح كل شيء، نرسل استجابة النجاح
+        // عدّل هذه الدالة لتتناسب مع طريقة إرسالك للـ Response في مشروعك
+        return res.status(201).json({
+            success: true,
+            message: "Create food success",
+            data: { id: foodId }
+        });
+    }
+    catch (error) {
+        // 🔥 هذا السطر هو الأهم: سيطبع سبب رفض قاعدة البيانات الحقيقي في شاشة السيرفر
+        console.error("🔥 DATABASE ERROR DETAILED:", error.sqlMessage || error.message || error);
+        // إرجاع الخطأ الدقيق للـ Postman لسهولة قراءته
+        return res.status(500).json({
+            success: false,
+            error: {
+                code: 500,
+                message: "Failed to create food item",
+                details: error.sqlMessage || error.message || "Unknown Error"
+            }
+        });
+    }
 };
 exports.createFood = createFood;
 // =============================================
