@@ -176,55 +176,55 @@ export const createFood = async (req: Request, res: Response) => {
 // GET ALL Foods (Optimized & Secured)
 // =============================================
 export const getAllFoods = async (req: Request, res: Response) => {
-    const restaurantId = req.user?.id;
-    if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
+ const restaurantId = req.user?.id;
+ if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
 
-    const rawFoods = await db.select({
-        id: food.id,
-        name: food.name,
-        nameAr: food.nameAr,
-        nameFr: food.nameFr,
-        description: food.description,
-        descriptionAr: food.descriptionAr,
-        descriptionFr: food.descriptionFr,
-        image: food.image,
-        restaurantid: food.restaurantid,
-        categoryid: food.categoryid,
-        subcategoryid: food.subcategoryid,
-        foodtype: food.foodtype,
-        Nutrition: food.Nutrition,
-        allergen_ingredients: food.allergen_ingredients,
-        is_Halal: food.is_Halal,
-        addonsId: food.addonsId,
-        startTime: food.startTime,
-        endTime: food.endTime,
-        search_tags: food.search_tags,
-        price: food.price,
-        discount_type: food.discount_type,
-        discount_value: food.discount_value,
-        Maximum_Purchase: food.Maximum_Purchase,
-        stock_type: food.stock_type,
-        status: food.status,
-        createdAt: food.createdAt,
-        updatedAt: food.updatedAt,
-        restaurant_id: restaurants.id,
-        restaurant_name: restaurants.name,
-        category_name: categories.name,
-        category_nameAr: categories.nameAr,
-        category_nameFr: categories.nameFr,
-        subcategory_name: subcategories.name,
-        subcategory_nameAr: subcategories.nameAr,
-        subcategory_nameFr: subcategories.nameFr,
-    })
-        .from(food)
-        .leftJoin(restaurants, eq(food.restaurantid, restaurants.id)) 
-        .leftJoin(categories, eq(food.categoryid, categories.id))
-        .leftJoin(subcategories, eq(food.subcategoryid, subcategories.id))
-        .where(eq(food.restaurantid, restaurantId));
+ const rawFoods = await db.select({
+ id: food.id,
+ name: food.name,
+ nameAr: food.nameAr,
+ nameFr: food.nameFr,
+ description: food.description,
+ descriptionAr: food.descriptionAr,
+ descriptionFr: food.descriptionFr,
+ image: food.image,
+ restaurantid: food.restaurantid,
+ categoryid: food.categoryid,
+ subcategoryid: food.subcategoryid,
+ foodtype: food.foodtype,
+ Nutrition: food.Nutrition,
+        allergen_ingredients: food.allergen_ingredients,
+ is_Halal: food.is_Halal,
+ addonsId: food.addonsId,
+ startTime: food.startTime,
+ endTime: food.endTime,
+ search_tags: food.search_tags,
+ price: food.price,
+ discount_type: food.discount_type,
+ discount_value: food.discount_value,
+ Maximum_Purchase: food.Maximum_Purchase,
+ stock_type: food.stock_type,
+ status: food.status,
+ createdAt: food.createdAt,
+ updatedAt: food.updatedAt,
+ restaurant_id: restaurants.id,
+ restaurant_name: restaurants.name,
+ category_name: categories.name,
+ category_nameAr: categories.nameAr,
+ category_nameFr: categories.nameFr,
+ subcategory_name: subcategories.name,
+ subcategory_nameAr: subcategories.nameAr,
+ subcategory_nameFr: subcategories.nameFr,
+ })
+ .from(food)
+ .leftJoin(restaurants, eq(food.restaurantid, restaurants.id)) 
+ .leftJoin(categories, eq(food.categoryid, categories.id))
+ .leftJoin(subcategories, eq(food.subcategoryid, subcategories.id))
+ .where(eq(food.restaurantid, restaurantId));
 
-    if (rawFoods.length === 0) {
-        return SuccessResponse(res, { message: "Get all foods success", data: [] });
-    }
+ if (rawFoods.length === 0) {
+ return SuccessResponse(res, { message: "Get all foods success", data: [] });
+ }
 
     // جلب كل التعديلات والخيارات الخاصة بالأكلات في هذا المطعم
     const foodIds = rawFoods.map(f => f.id);
@@ -235,7 +235,7 @@ export const getAllFoods = async (req: Request, res: Response) => {
         : [];
 
     // 👇 التعديل كله حصل في الجزء ده 👇
-    const allFoods = rawFoods.map(f => {
+ const allFoods = rawFoods.map(f => {
         const foodVars = allVars.filter(v => v.foodId === f.id).map(v => ({
             ...v,
             options: allOpts.filter(o => o.variationId === v.id)
@@ -259,10 +259,10 @@ export const getAllFoods = async (req: Request, res: Response) => {
         };
     });
 
-    return SuccessResponse(res, {
-        message: "Get all foods success",
-        data: allFoods
-    });
+ return SuccessResponse(res, {
+ message: "Get all foods success",
+ data: allFoods
+ });
 };
 // =============================================
 // GET Food By ID
