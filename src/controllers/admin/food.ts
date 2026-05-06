@@ -42,28 +42,40 @@ export const createFood = async (req: Request, res: Response) => {
         throw new BadRequest("Missing required fields");
     }
 
-    // ✅ تأمين: نتأكد إن القسم ده تبع المطعم الحالي (لو الأقسام مشتركة شيل شرط المطعم)
-    const existingCategory = await db.select().from(categories).where(and(eq(categories.id, categoryid))).limit(1);
-    if (!existingCategory[0]) throw new BadRequest("Category not found or does not belong to your restaurant");
+    const existingCategory = await db.select().from(categories)
+        .where(eq(categories.id, categoryid)).limit(1);
+
+    if (!existingCategory[0]) {
+        throw new BadRequest("Category not found");
+    }
 
     if (subcategoryid) {
-        const existingSub = await db.select().from(subcategories).where(and(eq(subcategories.id, subcategoryid))).limit(1);
-        if (!existingSub[0]) throw new BadRequest("Subcategory not found or does not belong to your restaurant");
+        const existingSub = await db.select().from(subcategories)
+            .where(eq(subcategories.id, subcategoryid)).limit(1);
+
+        if (!existingSub[0]) {
+            throw new BadRequest("Subcategory not found");
+        }
     }
 
     if (addonsId) {
-        const existingAddon = await db.select().from(addons).where(and(eq(addons.id, addonsId), eq(addons.restaurantid, restaurantId))).limit(1);
-        if (!existingAddon[0]) throw new BadRequest("Addon not found or does not belong to your restaurant");
+        const existingAddon = await db.select().from(addons)
+            .where(and(eq(addons.id, addonsId), eq(addons.restaurantid, restaurantId)))
+            .limit(1);
+
+        if (!existingAddon[0]) {
+            throw new BadRequest("Addon not found");
+        }
     }
 
     let imageUrl = image;
     if (image && image.startsWith("data:image")) {
         imageUrl = await saveBase64Image(image, req, "foods");
     }
-    
+
     const foodId = uuidv4();
 
-
+    // ✅ هنا الحل: مفيش variations
     await db.insert(food).values({
         id: foodId,
         name,
@@ -89,10 +101,10 @@ export const createFood = async (req: Request, res: Response) => {
         discount_value: discount_value || null,
         Maximum_Purchase: Maximum_Purchase || null,
         stock_type: stock_type || "unlimited",
-        variations: variations || null,
         status: status || "active",
     });
 
+    // ✅ التعامل مع variations في جدولها فقط
     if (variations && Array.isArray(variations)) {
         for (const variation of variations) {
             const variationId = uuidv4();
@@ -123,7 +135,10 @@ export const createFood = async (req: Request, res: Response) => {
         }
     }
 
-    return SuccessResponse(res, { message: "Create food success", data: { id: foodId } }, 201);
+    return SuccessResponse(res, {
+        message: "Create food success",
+        data: { id: foodId }
+    }, 201);
 };
 
 // =============================================

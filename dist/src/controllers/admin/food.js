@@ -21,25 +21,32 @@ const createFood = async (req, res) => {
     if (!name || !description || !image || !categoryid || !startTime || !endTime || !price) {
         throw new BadRequest_1.BadRequest("Missing required fields");
     }
-    // ✅ تأمين: نتأكد إن القسم ده تبع المطعم الحالي (لو الأقسام مشتركة شيل شرط المطعم)
-    const existingCategory = await connection_1.db.select().from(schema_1.categories).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.categories.id, categoryid))).limit(1);
-    if (!existingCategory[0])
-        throw new BadRequest_1.BadRequest("Category not found or does not belong to your restaurant");
+    const existingCategory = await connection_1.db.select().from(schema_1.categories)
+        .where((0, drizzle_orm_1.eq)(schema_1.categories.id, categoryid)).limit(1);
+    if (!existingCategory[0]) {
+        throw new BadRequest_1.BadRequest("Category not found");
+    }
     if (subcategoryid) {
-        const existingSub = await connection_1.db.select().from(schema_1.subcategories).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.id, subcategoryid))).limit(1);
-        if (!existingSub[0])
-            throw new BadRequest_1.BadRequest("Subcategory not found or does not belong to your restaurant");
+        const existingSub = await connection_1.db.select().from(schema_1.subcategories)
+            .where((0, drizzle_orm_1.eq)(schema_1.subcategories.id, subcategoryid)).limit(1);
+        if (!existingSub[0]) {
+            throw new BadRequest_1.BadRequest("Subcategory not found");
+        }
     }
     if (addonsId) {
-        const existingAddon = await connection_1.db.select().from(schema_1.addons).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.addons.id, addonsId), (0, drizzle_orm_1.eq)(schema_1.addons.restaurantid, restaurantId))).limit(1);
-        if (!existingAddon[0])
-            throw new BadRequest_1.BadRequest("Addon not found or does not belong to your restaurant");
+        const existingAddon = await connection_1.db.select().from(schema_1.addons)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.addons.id, addonsId), (0, drizzle_orm_1.eq)(schema_1.addons.restaurantid, restaurantId)))
+            .limit(1);
+        if (!existingAddon[0]) {
+            throw new BadRequest_1.BadRequest("Addon not found");
+        }
     }
     let imageUrl = image;
     if (image && image.startsWith("data:image")) {
         imageUrl = await (0, handleImages_1.saveBase64Image)(image, req, "foods");
     }
     const foodId = (0, uuid_1.v4)();
+    // ✅ هنا الحل: مفيش variations
     await connection_1.db.insert(schema_1.food).values({
         id: foodId,
         name,
@@ -65,9 +72,9 @@ const createFood = async (req, res) => {
         discount_value: discount_value || null,
         Maximum_Purchase: Maximum_Purchase || null,
         stock_type: stock_type || "unlimited",
-        variations: variations || null,
         status: status || "active",
     });
+    // ✅ التعامل مع variations في جدولها فقط
     if (variations && Array.isArray(variations)) {
         for (const variation of variations) {
             const variationId = (0, uuid_1.v4)();
@@ -95,7 +102,10 @@ const createFood = async (req, res) => {
             }
         }
     }
-    return (0, response_1.SuccessResponse)(res, { message: "Create food success", data: { id: foodId } }, 201);
+    return (0, response_1.SuccessResponse)(res, {
+        message: "Create food success",
+        data: { id: foodId }
+    }, 201);
 };
 exports.createFood = createFood;
 // =============================================
