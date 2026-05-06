@@ -38,10 +38,12 @@ export const createFood = async (req: Request, res: Response) => {
         nameAr, nameFr, descriptionAr, descriptionFr
     } = req.body;
 
+    // 1. التحقق من الحقول المطلوبة
     if (!name || !description || !image || !categoryid || !startTime || !endTime || !price) {
         throw new BadRequest("Missing required fields");
     }
 
+    // 2. التحقق من وجود العلاقات (القسم، القسم الفرعي، الإضافات)
     const existingCategory = await db.select().from(categories)
         .where(eq(categories.id, categoryid)).limit(1);
 
@@ -68,6 +70,7 @@ export const createFood = async (req: Request, res: Response) => {
         }
     }
 
+    // 3. معالجة وحفظ الصورة (تتم خارج الـ Transaction لتجنب بطء قاعدة البيانات)
     let imageUrl = image;
     if (image && image.startsWith("data:image")) {
         imageUrl = await saveBase64Image(image, req, "foods");
@@ -75,65 +78,72 @@ export const createFood = async (req: Request, res: Response) => {
 
     const foodId = uuidv4();
 
-    // ✅ هنا الحل: مفيش variations
-    await db.insert(food).values({
-        id: foodId,
-        name,
-        nameAr,
-        nameFr,
-        description,
-        descriptionAr,
-        descriptionFr,
-        image: imageUrl,
-        restaurantid: restaurantId,
-        categoryid,
-        subcategoryid: subcategoryid || null,
-        foodtype: foodtype || "veg",
-        Nutrition: Nutrition || null,
-        allergen_ingredients: allergen_ingredients || null,
-        is_Halal: is_Halal ?? false,
-        addonsId: addonsId || null,
-        startTime,
-        endTime,
-        search_tags: search_tags || null,
-        price,
-        discount_type: discount_type || "percentage",
-        discount_value: discount_value || null,
-        Maximum_Purchase: Maximum_Purchase || null,
-        stock_type: stock_type || "unlimited",
-        status: status || "active",
-    });
+    // 4. بدء المعاملة (Transaction) - إما أن يتم حفظ كل شيء أو التراجع عن كل شيء
+    await db.transaction(async (tx) => {
+        
+        // إدخال بيانات الصنف الرئيسي (ملاحظة: استخدام tx بدلاً من db هنا)
+        await tx.insert(food).values({
+            id: foodId,
+            name,
+            nameAr,
+            nameFr,
+            description,
+            descriptionAr,
+            descriptionFr,
+            image: imageUrl,
+            restaurantid: restaurantId,
+            categoryid,
+            subcategoryid: subcategoryid || null,
+            foodtype: foodtype || "veg",
+            Nutrition: Nutrition || null,
+            allergen_ingredients: allergen_ingredients || null,
+            is_Halal: is_Halal ?? false,
+            addonsId: addonsId || null,
+            startTime,
+            endTime,
+            search_tags: search_tags || null,
+            price,
+            discount_type: discount_type || "percentage",
+            discount_value: discount_value || null,
+            Maximum_Purchase: Maximum_Purchase || null,
+            stock_type: stock_type || "unlimited",
+            status: status || "active",
+        });
 
-    // ✅ التعامل مع variations في جدولها فقط
-    if (variations && Array.isArray(variations)) {
-        for (const variation of variations) {
-            const variationId = uuidv4();
+        // إدخال الاختلافات (Variations) وخياراتها (Options)
+        if (variations && Array.isArray(variations) && variations.length > 0) {
+            for (const variation of variations) {
+                const variationId = uuidv4();
 
-            await db.insert(foodVariations).values({
-                id: variationId,
-                foodId,
-                name: variation.name,
-                nameAr: variation.nameAr,
-                nameFr: variation.nameFr,
-                isRequired: variation.isRequired || false,
-                selectionType: variation.selectionType || "single",
-                min: variation.min || null,
-                max: variation.max || null,
-            });
+                await tx.insert(foodVariations).values({
+                    id: variationId,
+                    foodId,
+                    name: variation.name,
+                    nameAr: variation.nameAr,
+                    nameFr: variation.nameFr,
+                    isRequired: variation.isRequired || false,
+                    selectionType: variation.selectionType || "single",
+                    min: variation.min || null,
+                    max: variation.max || null,
+                });
 
-            if (variation.options && Array.isArray(variation.options)) {
-                for (const option of variation.options) {
-                    await db.insert(variationOptions).values({
+                // تجميع خيارات هذا الـ Variation لإدخالها دفعة واحدة (Bulk Insert)
+                if (variation.options && Array.isArray(variation.options)) {
+                    const optionsToInsert = variation.options.map((option: any) => ({
                         variationId,
                         optionName: option.optionName,
                         optionNameAr: option.optionNameAr,
                         optionNameFr: option.optionNameFr,
                         additionalPrice: option.additionalPrice?.toString() || "0",
-                    });
+                    }));
+                    
+                    if (optionsToInsert.length > 0) {
+                        await tx.insert(variationOptions).values(optionsToInsert);
+                    }
                 }
             }
         }
-    }
+    }); // انتهاء الـ Transaction
 
     return SuccessResponse(res, {
         message: "Create food success",
