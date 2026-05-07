@@ -4,6 +4,7 @@ const express_1 = require("express");
 const catchAsync_1 = require("../../utils/catchAsync");
 const order_1 = require("../../controllers/admin/order");
 const router = (0, express_1.Router)();
+router.get("/reasons", (0, catchAsync_1.catchAsync)(order_1.getReasons));
 // كل الأوردرات
 router.get("/", (0, catchAsync_1.catchAsync)(order_1.getRestaurantOrders));
 // أوردرات بحالة معينة

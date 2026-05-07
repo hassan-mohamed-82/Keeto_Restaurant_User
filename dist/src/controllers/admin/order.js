@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateOrderStatus = exports.getRestaurantOrderById = exports.getRefundOrders = exports.getRejectedOrders = exports.getCancelledOrders = exports.getDeliveredOrders = exports.getOutForDeliveryOrders = exports.getPreparingOrders = exports.getAcceptedOrders = exports.getPendingOrders = exports.getRestaurantOrders = void 0;
+exports.getReasons = exports.updateOrderStatus = exports.getRestaurantOrderById = exports.getRefundOrders = exports.getRejectedOrders = exports.getCancelledOrders = exports.getDeliveredOrders = exports.getOutForDeliveryOrders = exports.getPreparingOrders = exports.getAcceptedOrders = exports.getPendingOrders = exports.getRestaurantOrders = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -8,6 +8,7 @@ const response_1 = require("../../utils/response");
 const BadRequest_1 = require("../../Errors/BadRequest");
 const NotFound_1 = require("../../Errors/NotFound");
 const uuid_1 = require("uuid");
+const selectReasons_1 = require("../../models/schema/admin/selectReasons");
 // ==========================================
 // 1. جلب كل الأوردرات الخاصة بالمطعم/الفرع
 // ==========================================
@@ -307,3 +308,14 @@ const updateOrderStatus = async (req, res) => {
     return (0, response_1.SuccessResponse)(res, { message: `Order status successfully updated to ${status} and financials settled` });
 };
 exports.updateOrderStatus = updateOrderStatus;
+const getReasons = async (req, res) => {
+    const reasons = await connection_1.db
+        .select()
+        .from(selectReasons_1.selectReasons)
+        .where((0, drizzle_orm_1.eq)(selectReasons_1.selectReasons.status, "active"));
+    return (0, response_1.SuccessResponse)(res, {
+        message: "Active reasons fetched successfully",
+        data: reasons
+    });
+};
+exports.getReasons = getReasons;

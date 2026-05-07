@@ -11,10 +11,14 @@ import {
     getDeliveredOrders,
     getCancelledOrders,
     getRejectedOrders,
+    getReasons,
     getRefundOrders
 } from "../../controllers/admin/order";
 
 const router = Router();
+
+
+router.get("/reasons", catchAsync(getReasons));
 
 // كل الأوردرات
 router.get("/", catchAsync(getRestaurantOrders));

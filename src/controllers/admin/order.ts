@@ -15,6 +15,7 @@ import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors/NotFound";
 import { v4 as uuidv4 } from "uuid";
+import { selectReasons } from "../../models/schema/admin/selectReasons";
 
 // ==========================================
 // 1. جلب كل الأوردرات الخاصة بالمطعم/الفرع
@@ -334,4 +335,16 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
     });
 
     return SuccessResponse(res, { message: `Order status successfully updated to ${status} and financials settled` });
+};
+
+export const getReasons = async (req: Request, res: Response) => {
+    const reasons = await db
+        .select()
+        .from(selectReasons)
+        .where(eq(selectReasons.status, "active"));
+
+    return SuccessResponse(res, { 
+        message: "Active reasons fetched successfully", 
+        data: reasons 
+    });
 };
