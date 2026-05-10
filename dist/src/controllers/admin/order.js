@@ -102,7 +102,7 @@ const getRestaurantOrderById = async (req, res) => {
     const { id } = req.params;
     const adminRestaurantId = req.user?.restaurantId || req.user?.id;
     const adminBranchId = req.user?.branchId;
-    // 1. جلب البيانات الأساسية للأوردر مع كل التفاصيل
+    // 1. جلب البيانات الأساسية للأوردر
     const [orderDetail] = await connection_1.db.select({
         order: schema_1.orders,
         customer: {
@@ -111,11 +111,7 @@ const getRestaurantOrderById = async (req, res) => {
             phone: schema_1.users.phone,
             email: schema_1.users.email,
         },
-        paymentMethod: {
-            id: schema_1.paymentMethods.id,
-            name: schema_1.paymentMethods.name,
-            type: schema_1.paymentMethods.type,
-        },
+        // ❌ شيلنا الـ paymentMethod من هنا لأنها بقت جوه الـ order نفسه
         branch: {
             id: schema_1.branches.id,
             name: schema_1.branches.name,
@@ -127,7 +123,7 @@ const getRestaurantOrderById = async (req, res) => {
     })
         .from(schema_1.orders)
         .leftJoin(schema_1.users, (0, drizzle_orm_1.eq)(schema_1.orders.userId, schema_1.users.id))
-        .leftJoin(schema_1.paymentMethods, (0, drizzle_orm_1.eq)(schema_1.orders.paymentMethodId, schema_1.paymentMethods.id))
+        // ❌ شيلنا الـ leftJoin بتاع جدول payment_methods من هنا
         .leftJoin(schema_1.branches, (0, drizzle_orm_1.eq)(schema_1.orders.branchId, schema_1.branches.id))
         .leftJoin(schema_1.restaurants, (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, schema_1.restaurants.id))
         .where((0, drizzle_orm_1.eq)(schema_1.orders.id, id))
@@ -141,7 +137,7 @@ const getRestaurantOrderById = async (req, res) => {
     if (adminBranchId && orderDetail.order.branchId !== adminBranchId) {
         throw new BadRequest_1.BadRequest("Unauthorized: Order does not belong to your branch");
     }
-    // 2. جلب أصناف الأكل اللي جوه الأوردر ده (Order Items) مع تفاصيل كاملة
+    // 2. جلب أصناف الأكل (Order Items)
     const items = await connection_1.db.select({
         id: schema_1.orderItems.id,
         foodId: schema_1.orderItems.foodId,
@@ -175,9 +171,11 @@ const getRestaurantOrderById = async (req, res) => {
             createdAt: orderDetail.order.createdAt,
             updatedAt: orderDetail.order.updatedAt,
             customer: orderDetail.customer,
-            paymentMethod: orderDetail.paymentMethod,
+            // ✅ التعديل هنا: هنقرأ الـ paymentMethodId من الـ order مباشرة
+            paymentMethodId: orderDetail.order.paymentMethodId,
             branch: orderDetail.branch,
             restaurant: orderDetail.restaurant,
+            // (addressId removed because it does not exist on the order schema)
             items
         }
     });

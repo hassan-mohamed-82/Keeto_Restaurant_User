@@ -113,7 +113,7 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
     const adminRestaurantId = req.user?.restaurantId || req.user?.id;
     const adminBranchId = req.user?.branchId;
 
-    // 1. جلب البيانات الأساسية للأوردر مع كل التفاصيل
+    // 1. جلب البيانات الأساسية للأوردر
     const [orderDetail] = await db.select({
         order: orders,
         customer: {
@@ -122,11 +122,7 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             phone: users.phone,
             email: users.email,
         },
-        paymentMethod: {
-            id: paymentMethods.id,
-            name: paymentMethods.name,
-            type: paymentMethods.type,
-        },
+        // ❌ شيلنا الـ paymentMethod من هنا لأنها بقت جوه الـ order نفسه
         branch: {
             id: branches.id,
             name: branches.name,
@@ -138,7 +134,7 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
     })
         .from(orders)
         .leftJoin(users, eq(orders.userId, users.id))
-        .leftJoin(paymentMethods, eq(orders.paymentMethodId, paymentMethods.id))
+        // ❌ شيلنا الـ leftJoin بتاع جدول payment_methods من هنا
         .leftJoin(branches, eq(orders.branchId, branches.id))
         .leftJoin(restaurants, eq(orders.restaurantId, restaurants.id))
         .where(eq(orders.id, id))
@@ -154,7 +150,7 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
         throw new BadRequest("Unauthorized: Order does not belong to your branch");
     }
 
-    // 2. جلب أصناف الأكل اللي جوه الأوردر ده (Order Items) مع تفاصيل كاملة
+    // 2. جلب أصناف الأكل (Order Items)
     const items = await db.select({
         id: orderItems.id,
         foodId: orderItems.foodId,
@@ -189,14 +185,17 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             createdAt: orderDetail.order.createdAt,
             updatedAt: orderDetail.order.updatedAt,
             customer: orderDetail.customer,
-            paymentMethod: orderDetail.paymentMethod,
+            
+            // ✅ التعديل هنا: هنقرأ الـ paymentMethodId من الـ order مباشرة
+            paymentMethodId: orderDetail.order.paymentMethodId, 
+            
             branch: orderDetail.branch,
             restaurant: orderDetail.restaurant,
+            // (addressId removed because it does not exist on the order schema)
             items
         }
     });
 };
-
 // ==========================================
 // 3. تحديث حالة الأوردر (مع إرجاع الفلوس لو اترفض)
 // ==========================================
