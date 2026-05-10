@@ -29,9 +29,13 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
     // بناء الـ Query الأساسي
     let queryConditions = eq(orders.restaurantId, adminRestaurantId);
 
-    // لو ده مدير فرع، نفلتر الأوردرات لفرعه هو بس
+    // لو ده مدير فرع، نفلتر الأوردرات لفرعه هو بس بشكل إجباري
     if (adminBranchId) {
         queryConditions = and(queryConditions, eq(orders.branchId, adminBranchId)) as any;
+    } 
+    // لو ده المالك وبعت branchId في الـ Query عشان يفلتر بيه
+    else if (req.query.branchId) {
+        queryConditions = and(queryConditions, eq(orders.branchId, req.query.branchId as string)) as any;
     }
 
     const restaurantOrders = await db.select({
@@ -66,8 +70,13 @@ const getOrdersByStatus = async (req: Request, res: Response, status: "pending" 
         eq(orders.status, status)
     ];
 
+    // لو ده مدير فرع، نفلتر إجباري لفرعه هو بس
     if (adminBranchId) {
         conditions.push(eq(orders.branchId, adminBranchId));
+    } 
+    // لو ده المالك وبعت branchId يفلتر بيه
+    else if (req.query.branchId) {
+        conditions.push(eq(orders.branchId, req.query.branchId as string));
     }
 
     const result = await db.select({

@@ -19,9 +19,13 @@ const getRestaurantOrders = async (req, res) => {
         throw new BadRequest_1.BadRequest("Unauthorized");
     // بناء الـ Query الأساسي
     let queryConditions = (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, adminRestaurantId);
-    // لو ده مدير فرع، نفلتر الأوردرات لفرعه هو بس
+    // لو ده مدير فرع، نفلتر الأوردرات لفرعه هو بس بشكل إجباري
     if (adminBranchId) {
         queryConditions = (0, drizzle_orm_1.and)(queryConditions, (0, drizzle_orm_1.eq)(schema_1.orders.branchId, adminBranchId));
+    }
+    // لو ده المالك وبعت branchId في الـ Query عشان يفلتر بيه
+    else if (req.query.branchId) {
+        queryConditions = (0, drizzle_orm_1.and)(queryConditions, (0, drizzle_orm_1.eq)(schema_1.orders.branchId, req.query.branchId));
     }
     const restaurantOrders = await connection_1.db.select({
         id: schema_1.orders.id,
@@ -52,8 +56,13 @@ const getOrdersByStatus = async (req, res, status) => {
         (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, adminRestaurantId),
         (0, drizzle_orm_1.eq)(schema_1.orders.status, status)
     ];
+    // لو ده مدير فرع، نفلتر إجباري لفرعه هو بس
     if (adminBranchId) {
         conditions.push((0, drizzle_orm_1.eq)(schema_1.orders.branchId, adminBranchId));
+    }
+    // لو ده المالك وبعت branchId يفلتر بيه
+    else if (req.query.branchId) {
+        conditions.push((0, drizzle_orm_1.eq)(schema_1.orders.branchId, req.query.branchId));
     }
     const result = await connection_1.db.select({
         id: schema_1.orders.id,
