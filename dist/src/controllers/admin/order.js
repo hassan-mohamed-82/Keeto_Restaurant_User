@@ -120,7 +120,6 @@ const getRestaurantOrderById = async (req, res) => {
             phone: schema_1.users.phone,
             email: schema_1.users.email,
         },
-        // ❌ شيلنا الـ paymentMethod من هنا لأنها بقت جوه الـ order نفسه
         branch: {
             id: schema_1.branches.id,
             name: schema_1.branches.name,
@@ -132,7 +131,6 @@ const getRestaurantOrderById = async (req, res) => {
     })
         .from(schema_1.orders)
         .leftJoin(schema_1.users, (0, drizzle_orm_1.eq)(schema_1.orders.userId, schema_1.users.id))
-        // ❌ شيلنا الـ leftJoin بتاع جدول payment_methods من هنا
         .leftJoin(schema_1.branches, (0, drizzle_orm_1.eq)(schema_1.orders.branchId, schema_1.branches.id))
         .leftJoin(schema_1.restaurants, (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, schema_1.restaurants.id))
         .where((0, drizzle_orm_1.eq)(schema_1.orders.id, id))
@@ -180,11 +178,10 @@ const getRestaurantOrderById = async (req, res) => {
             createdAt: orderDetail.order.createdAt,
             updatedAt: orderDetail.order.updatedAt,
             customer: orderDetail.customer,
-            // ✅ التعديل هنا: هنقرأ الـ paymentMethodId من الـ order مباشرة
-            paymentMethodId: orderDetail.order.paymentMethodId,
+            // ✅ التعديل هنا: هنقرأ الـ paymentMethod من الـ order مباشرة بناءً على التعديل في الداتا بيز
+            paymentMethod: orderDetail.order.paymentMethod,
             branch: orderDetail.branch,
             restaurant: orderDetail.restaurant,
-            // (addressId removed because it does not exist on the order schema)
             items
         }
     });
@@ -229,14 +226,12 @@ const updateOrderStatus = async (req, res) => {
             updatedAt: new Date()
         })
             .where((0, drizzle_orm_1.eq)(schema_1.orders.id, orderId));
-        // جلب وسيلة الدفع لاستخدامها في العمليات المالية
-        const [paymentMethod] = await tx.select().from(schema_1.paymentMethods)
-            .where((0, drizzle_orm_1.eq)(schema_1.paymentMethods.id, existingOrder.paymentMethodId)).limit(1);
         // ==========================================
         // 💰 2. الـ Refund (ترجيع الفلوس للعميل) لو الأوردر اتلغى
         // ==========================================
         if (status === "rejected" || status === "cancelled") {
-            if (paymentMethod && paymentMethod.type === "wallet") {
+            // Since paymentMethod is now an enum directly on the order:
+            if (existingOrder.paymentMethod === "wallet") {
                 const [userWallet] = await tx.select().from(schema_1.userWallets)
                     .where((0, drizzle_orm_1.eq)(schema_1.userWallets.userId, existingOrder.userId)).limit(1);
                 if (userWallet) {
@@ -251,7 +246,6 @@ const updateOrderStatus = async (req, res) => {
                     await tx.insert(schema_1.userWalletTransactions).values({
                         id: (0, uuid_1.v4)(),
                         userId: existingOrder.userId,
-                        paymentMethodId: existingOrder.paymentMethodId,
                         type: "credit",
                         transactionType: "refund",
                         amount: amountToRefund.toString(),
@@ -282,7 +276,7 @@ const updateOrderStatus = async (req, res) => {
             let newBalance = currentBalance;
             let newCollectedCash = currentCollectedCash;
             // توجيه الأموال بناءً على طريقة الدفع
-            if (paymentMethod && paymentMethod.type === "cash") {
+            if (existingOrder.paymentMethod === "cash_on_delivery") {
                 newCollectedCash = currentCollectedCash + totalAmount; // كاش في إيد المطعم
             }
             else {
@@ -301,11 +295,11 @@ const updateOrderStatus = async (req, res) => {
             await tx.insert(schema_1.restaurantWalletTransactions).values({
                 id: (0, uuid_1.v4)(),
                 restaurantId: restaurantId,
-                type: (paymentMethod && paymentMethod.type === "cash") ? "cash_collection" : "order_payment",
-                amount: (paymentMethod && paymentMethod.type === "cash") ? totalAmount.toString() : netRestaurantEarning.toString(),
-                balanceBefore: (paymentMethod && paymentMethod.type === "cash") ? currentCollectedCash.toString() : currentBalance.toString(),
-                balanceAfter: (paymentMethod && paymentMethod.type === "cash") ? newCollectedCash.toString() : newBalance.toString(),
-                method: paymentMethod ? paymentMethod.type : "unknown",
+                type: (existingOrder.paymentMethod === "cash_on_delivery") ? "cash_collection" : "order_payment",
+                amount: (existingOrder.paymentMethod === "cash_on_delivery") ? totalAmount.toString() : netRestaurantEarning.toString(),
+                balanceBefore: (existingOrder.paymentMethod === "cash_on_delivery") ? currentCollectedCash.toString() : currentBalance.toString(),
+                balanceAfter: (existingOrder.paymentMethod === "cash_on_delivery") ? newCollectedCash.toString() : newBalance.toString(),
+                method: existingOrder.paymentMethod,
                 reference: existingOrder.orderNumber,
                 note: `Order ${existingOrder.orderNumber} delivered. Commission deducted: ${appCommission}`,
                 createdAt: new Date()
