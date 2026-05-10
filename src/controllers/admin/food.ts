@@ -609,3 +609,56 @@ export const getFoodRecipe = async (req: Request, res: Response) => {
 
     return SuccessResponse(res, { message: "Get food recipe success", data: recipe });
 };
+
+// =========================================================
+// 🍳 Toggle Variation Status
+// =========================================================
+export const toggleVariationStatus = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { status } = req.body;
+    const restaurantId = req.user?.id as string;
+
+    if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
+    if (typeof status !== "boolean") throw new BadRequest("Status must be a boolean");
+
+    const existingVariation = await db.select({ id: foodVariations.id })
+        .from(foodVariations)
+        .innerJoin(food, eq(foodVariations.foodId, food.id))
+        .where(and(eq(foodVariations.id, id), eq(food.restaurantid, restaurantId)))
+        .limit(1);
+
+    if (!existingVariation[0]) throw new NotFound("Variation not found or does not belong to your restaurant");
+
+    await db.update(foodVariations)
+        .set({ status })
+        .where(eq(foodVariations.id, id));
+
+    return SuccessResponse(res, { message: "Variation status updated successfully" });
+};
+
+// =========================================================
+// 🍳 Toggle Variation Option Status
+// =========================================================
+export const toggleVariationOptionStatus = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { status } = req.body;
+    const restaurantId = req.user?.id as string;
+
+    if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
+    if (typeof status !== "boolean") throw new BadRequest("Status must be a boolean");
+
+    const existingOption = await db.select({ id: variationOptions.id })
+        .from(variationOptions)
+        .innerJoin(foodVariations, eq(variationOptions.variationId, foodVariations.id))
+        .innerJoin(food, eq(foodVariations.foodId, food.id))
+        .where(and(eq(variationOptions.id, id), eq(food.restaurantid, restaurantId)))
+        .limit(1);
+
+    if (!existingOption[0]) throw new NotFound("Variation option not found or does not belong to your restaurant");
+
+    await db.update(variationOptions)
+        .set({ status })
+        .where(eq(variationOptions.id, id));
+
+    return SuccessResponse(res, { message: "Variation option status updated successfully" });
+};

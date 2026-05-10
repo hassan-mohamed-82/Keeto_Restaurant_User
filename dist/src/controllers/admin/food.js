@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getFoodRecipe = exports.assignIngredientsToFood = exports.getFoodSelectData = exports.deleteFood = exports.updateFood = exports.getFoodById = exports.getAllFoods = exports.createFood = void 0;
+exports.toggleVariationOptionStatus = exports.toggleVariationStatus = exports.getFoodRecipe = exports.assignIngredientsToFood = exports.getFoodSelectData = exports.deleteFood = exports.updateFood = exports.getFoodById = exports.getAllFoods = exports.createFood = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 // ✅ تم إضافة and هنا عشان نصلح مشكلة الشروط المتعددة
@@ -523,3 +523,52 @@ const getFoodRecipe = async (req, res) => {
     return (0, response_1.SuccessResponse)(res, { message: "Get food recipe success", data: recipe });
 };
 exports.getFoodRecipe = getFoodRecipe;
+// =========================================================
+// 🍳 Toggle Variation Status
+// =========================================================
+const toggleVariationStatus = async (req, res) => {
+    const { id } = req.params;
+    const { status } = req.body;
+    const restaurantId = req.user?.id;
+    if (!restaurantId)
+        throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
+    if (typeof status !== "boolean")
+        throw new BadRequest_1.BadRequest("Status must be a boolean");
+    const existingVariation = await connection_1.db.select({ id: schema_1.foodVariations.id })
+        .from(schema_1.foodVariations)
+        .innerJoin(schema_1.food, (0, drizzle_orm_1.eq)(schema_1.foodVariations.foodId, schema_1.food.id))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.foodVariations.id, id), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId)))
+        .limit(1);
+    if (!existingVariation[0])
+        throw new NotFound_1.NotFound("Variation not found or does not belong to your restaurant");
+    await connection_1.db.update(schema_1.foodVariations)
+        .set({ status })
+        .where((0, drizzle_orm_1.eq)(schema_1.foodVariations.id, id));
+    return (0, response_1.SuccessResponse)(res, { message: "Variation status updated successfully" });
+};
+exports.toggleVariationStatus = toggleVariationStatus;
+// =========================================================
+// 🍳 Toggle Variation Option Status
+// =========================================================
+const toggleVariationOptionStatus = async (req, res) => {
+    const { id } = req.params;
+    const { status } = req.body;
+    const restaurantId = req.user?.id;
+    if (!restaurantId)
+        throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
+    if (typeof status !== "boolean")
+        throw new BadRequest_1.BadRequest("Status must be a boolean");
+    const existingOption = await connection_1.db.select({ id: schema_1.variationOptions.id })
+        .from(schema_1.variationOptions)
+        .innerJoin(schema_1.foodVariations, (0, drizzle_orm_1.eq)(schema_1.variationOptions.variationId, schema_1.foodVariations.id))
+        .innerJoin(schema_1.food, (0, drizzle_orm_1.eq)(schema_1.foodVariations.foodId, schema_1.food.id))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.variationOptions.id, id), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId)))
+        .limit(1);
+    if (!existingOption[0])
+        throw new NotFound_1.NotFound("Variation option not found or does not belong to your restaurant");
+    await connection_1.db.update(schema_1.variationOptions)
+        .set({ status })
+        .where((0, drizzle_orm_1.eq)(schema_1.variationOptions.id, id));
+    return (0, response_1.SuccessResponse)(res, { message: "Variation option status updated successfully" });
+};
+exports.toggleVariationOptionStatus = toggleVariationOptionStatus;

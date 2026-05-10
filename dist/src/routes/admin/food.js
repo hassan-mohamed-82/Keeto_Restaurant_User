@@ -12,4 +12,6 @@ router.put("/:id", (0, catchAsync_1.catchAsync)(food_1.updateFood));
 router.delete("/:id", (0, catchAsync_1.catchAsync)(food_1.deleteFood));
 router.post("/assign-ingredients/:id", (0, catchAsync_1.catchAsync)(food_1.assignIngredientsToFood));
 router.get("/recipe/:id", (0, catchAsync_1.catchAsync)(food_1.getFoodRecipe));
+router.put("/variation/:id/status", (0, catchAsync_1.catchAsync)(food_1.toggleVariationStatus));
+router.put("/option/:id/status", (0, catchAsync_1.catchAsync)(food_1.toggleVariationOptionStatus));
 exports.default = router;
