@@ -170,8 +170,7 @@ const getAllFoods = async (req, res) => {
         status: schema_1.food.status,
         createdAt: schema_1.food.createdAt,
         updatedAt: schema_1.food.updatedAt,
-        restaurant_id: schema_1.restaurants.id,
-        restaurant_name: schema_1.restaurants.name,
+        restaurant: schema_1.restaurants,
         category_name: schema_1.categories.name,
         category_nameAr: schema_1.categories.nameAr,
         category_nameFr: schema_1.categories.nameFr,
@@ -212,7 +211,7 @@ const getAllFoods = async (req, res) => {
             price: f.price,
             status: f.status, // ✅ تم الإضافة عشان لو حبيت تعرض حالة الأكلة في الجدول
             variations: foodVars, // ✅ تم إضافة variations
-            restaurant: f.restaurant_id ? { id: f.restaurant_id, name: f.restaurant_name } : null,
+            restaurant: f.restaurant,
             category: f.category_name ? { name: f.category_name, nameAr: f.category_nameAr, nameFr: f.category_nameFr } : null,
             subcategory: f.subcategory_name ? { name: f.subcategory_name, nameAr: f.subcategory_nameAr, nameFr: f.subcategory_nameFr } : null,
         };

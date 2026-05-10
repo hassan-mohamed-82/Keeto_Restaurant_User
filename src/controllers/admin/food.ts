@@ -207,8 +207,7 @@ export const getAllFoods = async (req: Request, res: Response) => {
  status: food.status,
  createdAt: food.createdAt,
  updatedAt: food.updatedAt,
- restaurant_id: restaurants.id,
- restaurant_name: restaurants.name,
+ restaurant: restaurants,
  category_name: categories.name,
  category_nameAr: categories.nameAr,
  category_nameFr: categories.nameFr,
@@ -253,7 +252,7 @@ export const getAllFoods = async (req: Request, res: Response) => {
             price: f.price,
             status: f.status,               // ✅ تم الإضافة عشان لو حبيت تعرض حالة الأكلة في الجدول
             variations: foodVars,           // ✅ تم إضافة variations
-            restaurant: f.restaurant_id ? { id: f.restaurant_id, name: f.restaurant_name } : null,
+            restaurant: f.restaurant,
             category: f.category_name ? { name: f.category_name, nameAr: f.category_nameAr, nameFr: f.category_nameFr } : null,
             subcategory: f.subcategory_name ? { name: f.subcategory_name, nameAr: f.subcategory_nameAr, nameFr: f.subcategory_nameFr } : null,
         };
