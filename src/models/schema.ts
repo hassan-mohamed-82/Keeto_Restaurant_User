@@ -30,3 +30,4 @@ export * from "./schema/user/emailverfication";
 export * from "./schema/user/cart";
 export * from "./schema/user/favouriteliste";
 export * from "./schema/user/address";
+export * from "./schema/user/restaurantRating";

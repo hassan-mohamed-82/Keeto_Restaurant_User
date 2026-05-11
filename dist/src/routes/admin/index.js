@@ -18,6 +18,7 @@ const order_1 = __importDefault(require("./order"));
 const ingredients_1 = __importDefault(require("./ingredients"));
 const IngredientCategory_1 = __importDefault(require("./IngredientCategory"));
 const restaurantZoneDeliveryFees_1 = __importDefault(require("./restaurantZoneDeliveryFees"));
+const rating_1 = __importDefault(require("./rating"));
 const authenticated_1 = require("../../middlewares/authenticated");
 const authorized_1 = require("../../middlewares/authorized");
 const router = (0, express_1.Router)();
@@ -37,4 +38,5 @@ router.use("/restaurant-zone-delivery-fees", restaurantZoneDeliveryFees_1.defaul
 router.use("/branches", branches_1.default);
 router.use("/ingredients", ingredients_1.default);
 router.use("/ingredientcategory", IngredientCategory_1.default);
+router.use("/ratings", rating_1.default);
 exports.default = router;

@@ -18,6 +18,7 @@ import IngredientsRouter from "./ingredients"
 import IngredientCategoryRouter from "./IngredientCategory";
 import restaurantZoneDeliveryFeesRouter from "./restaurantZoneDeliveryFees";
 import user_walletsRouter from "./userWallets";
+import RatingRouter from "./rating";
 import { authenticated } from "../../middlewares/authenticated";
 import { authorizeRoles } from "../../middlewares/authorized";
 const router = Router();
@@ -38,4 +39,5 @@ router.use("/restaurant-zone-delivery-fees", restaurantZoneDeliveryFeesRouter);
 router.use("/branches", branchesRouter);
 router.use("/ingredients", IngredientsRouter);
 router.use("/ingredientcategory", IngredientCategoryRouter);
+router.use("/ratings", RatingRouter);
 export default router;

@@ -44,3 +44,4 @@ __exportStar(require("./schema/user/emailverfication"), exports);
 __exportStar(require("./schema/user/cart"), exports);
 __exportStar(require("./schema/user/favouriteliste"), exports);
 __exportStar(require("./schema/user/address"), exports);
+__exportStar(require("./schema/user/restaurantRating"), exports);
