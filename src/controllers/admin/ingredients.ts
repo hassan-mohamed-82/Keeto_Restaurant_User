@@ -68,35 +68,66 @@ export const updateIngredient = async (req: Request, res: Response) => {
 
 // 4. Update (Magic/Toggle) - 🚨 زرار المخزون اللي بيقفل الأكل 
 export const toggleIngredientStock = async (req: Request, res: Response) => {
-    const { id } = req.params; 
-    const { inStock } = req.body; 
+    const { id } = req.params;
+    const { inStock } = req.body;
+
     const restaurantId = req.user?.restaurantId || req.user?.id;
 
-    if (inStock === undefined) throw new BadRequest("inStock boolean is required");
+    if (inStock === undefined) {
+        throw new BadRequest("inStock boolean is required");
+    }
 
     await db.transaction(async (tx) => {
-        // تحديث المكون نفسه
+
+        // تحديث المكون
         await tx.update(ingredients)
-            .set({ inStock, updatedAt: new Date() })
-            .where(and(eq(ingredients.id, id), eq(ingredients.restaurantId, restaurantId as string)));
+            .set({
+                inStock,
+                updatedAt: new Date(),
+            })
+            .where(
+                and(
+                    eq(ingredients.id, id),
+                    eq(ingredients.restaurantId, restaurantId as string)
+                )
+            );
 
-        // لو المكون خلص (false)، نقفل الأكل المربوط بيه
-        if (inStock === false) {
-            const relatedFoods = await tx.select({ foodId: foodIngredients.foodId })
-                .from(foodIngredients)
-                .where(eq(foodIngredients.ingredientId, id));
+        // الأكلات المرتبطة بالمكون
+        const relatedFoods = await tx
+            .select({
+                foodId: foodIngredients.foodId,
+            })
+            .from(foodIngredients)
+            .where(eq(foodIngredients.ingredientId, id));
 
-            const foodIdsToDisable = relatedFoods.map(f => f.foodId);
+        const foodIds = relatedFoods.map(f => f.foodId);
 
-            if (foodIdsToDisable.length > 0) {
+        if (foodIds.length > 0) {
+
+            // لو المكون غير متوفر → اقفل الفود
+            if (inStock === false) {
+
                 await tx.update(food)
-                    .set({ status: "inactive" }) 
-                    .where(inArray(food.id, foodIdsToDisable));
+                    .set({
+                        status: "inactive",
+                    })
+                    .where(inArray(food.id, foodIds));
+
+            } else {
+
+                // لو المكون متوفر → افتح الفود
+                await tx.update(food)
+                    .set({
+                        status: "active",
+                    })
+                    .where(inArray(food.id, foodIds));
             }
         }
     });
 
-    return SuccessResponse(res, { message: `Stock updated. Related products adjusted automatically.` });
+    return SuccessResponse(res, {
+        message: "Stock updated successfully",
+    });
 };
 
 // 5. Delete - مسح المكون نهائياً

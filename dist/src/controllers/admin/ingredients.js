@@ -68,27 +68,47 @@ const toggleIngredientStock = async (req, res) => {
     const { id } = req.params;
     const { inStock } = req.body;
     const restaurantId = req.user?.restaurantId || req.user?.id;
-    if (inStock === undefined)
+    if (inStock === undefined) {
         throw new BadRequest_1.BadRequest("inStock boolean is required");
+    }
     await connection_1.db.transaction(async (tx) => {
-        // تحديث المكون نفسه
+        // تحديث المكون
         await tx.update(schema_1.ingredients)
-            .set({ inStock, updatedAt: new Date() })
+            .set({
+            inStock,
+            updatedAt: new Date(),
+        })
             .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.ingredients.id, id), (0, drizzle_orm_1.eq)(schema_1.ingredients.restaurantId, restaurantId)));
-        // لو المكون خلص (false)، نقفل الأكل المربوط بيه
-        if (inStock === false) {
-            const relatedFoods = await tx.select({ foodId: schema_1.foodIngredients.foodId })
-                .from(schema_1.foodIngredients)
-                .where((0, drizzle_orm_1.eq)(schema_1.foodIngredients.ingredientId, id));
-            const foodIdsToDisable = relatedFoods.map(f => f.foodId);
-            if (foodIdsToDisable.length > 0) {
+        // الأكلات المرتبطة بالمكون
+        const relatedFoods = await tx
+            .select({
+            foodId: schema_1.foodIngredients.foodId,
+        })
+            .from(schema_1.foodIngredients)
+            .where((0, drizzle_orm_1.eq)(schema_1.foodIngredients.ingredientId, id));
+        const foodIds = relatedFoods.map(f => f.foodId);
+        if (foodIds.length > 0) {
+            // لو المكون غير متوفر → اقفل الفود
+            if (inStock === false) {
                 await tx.update(schema_1.food)
-                    .set({ status: "inactive" })
-                    .where((0, drizzle_orm_1.inArray)(schema_1.food.id, foodIdsToDisable));
+                    .set({
+                    status: "inactive",
+                })
+                    .where((0, drizzle_orm_1.inArray)(schema_1.food.id, foodIds));
+            }
+            else {
+                // لو المكون متوفر → افتح الفود
+                await tx.update(schema_1.food)
+                    .set({
+                    status: "active",
+                })
+                    .where((0, drizzle_orm_1.inArray)(schema_1.food.id, foodIds));
             }
         }
     });
-    return (0, response_1.SuccessResponse)(res, { message: `Stock updated. Related products adjusted automatically.` });
+    return (0, response_1.SuccessResponse)(res, {
+        message: "Stock updated successfully",
+    });
 };
 exports.toggleIngredientStock = toggleIngredientStock;
 // 5. Delete - مسح المكون نهائياً

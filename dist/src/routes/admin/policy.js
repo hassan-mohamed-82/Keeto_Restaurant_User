@@ -1,0 +1,12 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const policy_1 = require("../../controllers/admin/policy");
+const catchAsync_1 = require("../../utils/catchAsync");
+const router = (0, express_1.Router)();
+router.post("/", (0, catchAsync_1.catchAsync)(policy_1.createRestaurantPolicy));
+router.put("/:id", (0, catchAsync_1.catchAsync)(policy_1.updateRestaurantPolicy));
+router.delete("/:id", (0, catchAsync_1.catchAsync)(policy_1.deleteRestaurantPolicy));
+router.get("/", (0, catchAsync_1.catchAsync)(policy_1.getRestaurantPolicies));
+router.get("/:id", (0, catchAsync_1.catchAsync)(policy_1.getRestaurantPolicyById));
+exports.default = router;

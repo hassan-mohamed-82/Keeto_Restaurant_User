@@ -3,10 +3,11 @@ import { Request, Response } from "express";
 import { db } from "../../models/connection";
 import { 
     orders, orderItems, restaurantBusinessPlans, food, restaurants, 
-    restaurantWallets, restaurantWalletTransactions, // 👈 ضفنا جداول محفظة المطعم
+    restaurantWallets, restaurantWalletTransactions,
     restaurantZoneDeliveryFees, zoneDeliveryFees, restaurantSettings, 
     restaurantSchedules, cartItems, users, addresses, branches,
-    userWallets, userWalletTransactions 
+    userWallets, userWalletTransactions,
+    discounts, coupons, couponUsages
 } from "../../models/schema";
 import { eq, and, inArray, sql, desc } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
@@ -14,6 +15,7 @@ import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors/NotFound";
 import { v4 as uuidv4 } from "uuid";
 import { UnauthorizedError } from "../../Errors";
+import { validateCoupon } from "../admin/coupon";
 
 // ==========================================
 // 1. إنشاء الطلب (Checkout)
@@ -23,7 +25,7 @@ export const checkout = async (req: Request | any, res: Response) => {
     const userId = req.user.id; 
     
     // 👇 استبدلنا paymentMethodId بـ paymentMethod
-    const { orderSource, paymentMethod, orderType, idempotencyKey, userZoneId, branchId, addressId } = req.body;
+    const { orderSource, paymentMethod, orderType, idempotencyKey, userZoneId, branchId, addressId, couponCode, discountId } = req.body;
 
     // 1. Idempotency Check
     if (idempotencyKey) {
@@ -82,6 +84,59 @@ export const checkout = async (req: Request | any, res: Response) => {
     const serviceFee = plan ? parseFloat(plan.serviceFee as string || "0") : 0;
     let appCommission = orderSource === "food_aggregator" ? subtotal * (parseFloat(plan?.commissionRate as string || "0") / 100) : 0;
 
+    // ==========================================
+    // 5b. Apply Discount (if discountId provided)
+    // ==========================================
+    let discountAmount = 0;
+    let appliedDiscountId: string | null = null;
+    let appliedCouponId: string | null = null;
+    let isFreeDelivery = false;
+    let appliedCoupon: any = null;
+
+    if (discountId) {
+        const now = new Date();
+        const [discount] = await db
+            .select()
+            .from(discounts)
+            .where(and(
+                eq(discounts.id, discountId),
+                eq(discounts.restaurantId, restaurantId),
+                eq(discounts.isActive, true)
+            ))
+            .limit(1);
+
+        if (!discount) throw new BadRequest("Discount not found or inactive");
+        if (discount.startDate && now < discount.startDate) throw new BadRequest("Discount is not yet active");
+        if (discount.endDate && now > discount.endDate) throw new BadRequest("Discount has expired");
+        if (discount.usageLimit !== null && (discount.usedCount ?? 0) >= discount.usageLimit)
+            throw new BadRequest("Discount has reached its usage limit");
+
+        const minOrder = parseFloat(discount.minOrderAmount as string || "0");
+        if (subtotal < minOrder) throw new BadRequest(`Minimum order amount for this discount is ${minOrder}`);
+
+        if (discount.discountType === "percentage") {
+            discountAmount = (subtotal * parseFloat(discount.discountValue as string)) / 100;
+            const maxD = discount.maxDiscount ? parseFloat(discount.maxDiscount as string) : null;
+            if (maxD !== null && discountAmount > maxD) discountAmount = maxD;
+        } else {
+            discountAmount = parseFloat(discount.discountValue as string);
+            if (discountAmount > subtotal) discountAmount = subtotal;
+        }
+
+        appliedDiscountId = discountId;
+    }
+
+    // ==========================================
+    // 5c. Apply Coupon (if couponCode provided)
+    // ==========================================
+    if (couponCode && !discountId) { // Can't combine discount + coupon
+        const result = await validateCoupon(couponCode, userId, restaurantId, subtotal);
+        discountAmount = result.discountAmount;
+        appliedCoupon = result.coupon;
+        appliedCouponId = result.coupon.id;
+        if (result.coupon.discountType === "free_delivery") isFreeDelivery = true;
+    }
+
     // 6. Smart Delivery Logic
     let deliveryFee = 0;
     if (orderType === "delivery") {
@@ -108,7 +163,12 @@ export const checkout = async (req: Request | any, res: Response) => {
         deliveryFee = parseFloat(selfFee.deliveryFee as string || "0");
     }
 
-    const totalAmount = subtotal + deliveryFee + serviceFee;
+    // Free delivery coupon zeros out the delivery fee
+    if (isFreeDelivery) deliveryFee = 0;
+
+    // Final total: subtotal - discount + fees
+    const finalSubtotal = Math.max(0, subtotal - discountAmount);
+    const totalAmount = finalSubtotal + deliveryFee + serviceFee;
     const orderId = uuidv4();
     const orderNumber = `ORD-${Date.now()}`;
 
@@ -174,15 +234,42 @@ export const checkout = async (req: Request | any, res: Response) => {
             branchId, 
             addressId: addressId || null,
             orderSource,
-            paymentMethod, // 👈 استخدمنا الـ Enum الجديد هنا
+            paymentMethod,
             orderType: orderType || "delivery",
             subtotal: subtotal.toString(),
             deliveryFee: deliveryFee.toString(),
             serviceFee: serviceFee.toString(),
             appCommission: appCommission.toString(),
+            discountAmount: discountAmount.toFixed(2),
+            couponId: appliedCouponId || null,
+            discountId: appliedDiscountId || null,
             totalAmount: totalAmount.toString(),
             status: "pending"
         });
+
+        // Record coupon usage
+        if (appliedCouponId && appliedCoupon) {
+            await tx.insert(couponUsages).values({
+                id: uuidv4(),
+                couponId: appliedCouponId,
+                userId,
+                orderId,
+                discountAmount: discountAmount.toFixed(2),
+            });
+            // Increment coupon usedCount
+            await tx.update(coupons)
+                .set({ usedCount: (appliedCoupon.usedCount ?? 0) + 1, updatedAt: new Date() })
+                .where(eq(coupons.id, appliedCouponId));
+        }
+
+        // Increment discount usedCount
+        if (appliedDiscountId) {
+            const [currentDiscount] = await tx.select({ usedCount: discounts.usedCount })
+                .from(discounts).where(eq(discounts.id, appliedDiscountId)).limit(1);
+            await tx.update(discounts)
+                .set({ usedCount: (currentDiscount?.usedCount ?? 0) + 1, updatedAt: new Date() })
+                .where(eq(discounts.id, appliedDiscountId));
+        }
 
         // ==========================================
         // ج. تفريغ الكارت وتسجيل الأصناف
@@ -253,7 +340,16 @@ export const checkout = async (req: Request | any, res: Response) => {
     return SuccessResponse(res, {
         message: "Order created successfully",
         data: {
-            orderDetails: { orderId, orderNumber, subtotal, deliveryFee, serviceFee, totalAmount },
+            orderDetails: {
+                orderId,
+                orderNumber,
+                subtotal,
+                discountAmount: parseFloat(discountAmount.toFixed(2)),
+                deliveryFee,
+                serviceFee,
+                totalAmount,
+                couponApplied: appliedCoupon ? { code: appliedCoupon.code, name: appliedCoupon.name } : null,
+            },
             customerDetails: userInfo
         }
     });
@@ -334,13 +430,16 @@ export const getOrderDetails = async (req: Request | any, res: Response) => {
             orderNumber: orders.orderNumber,
             status: orders.status,
             createdAt: orders.createdAt,
-            paymentMethod: orders.paymentMethod, // 👈 تم التعديل هنا (كانت orderItems بالخطأ)
+            paymentMethod: orders.paymentMethod,
             orderType: orders.orderType,
 
             subtotal: orders.subtotal,
+            discountAmount: orders.discountAmount,
             deliveryFee: orders.deliveryFee,
             serviceFee: orders.serviceFee,
             totalAmount: orders.totalAmount,
+            couponId: orders.couponId,
+            discountId: orders.discountId,
 
             restaurantName: restaurants.name,
             restaurantImage: restaurants.logo
