@@ -9,8 +9,6 @@ const Users_1 = require("../user/Users");
 // تم مسح الـ import الخاص بـ paymentMethods
 const schema_1 = require("../../schema");
 const address_1 = require("../user/address");
-const coupon_1 = require("./coupon");
-const Discount_1 = require("./Discount");
 exports.orders = (0, mysql_core_1.mysqlTable)("orders", {
     id: (0, mysql_core_1.char)("id", { length: 36 }).primaryKey().default((0, drizzle_orm_1.sql) `(UUID())`),
     orderNumber: (0, mysql_core_1.varchar)("order_number", { length: 20 }).notNull().unique(),
@@ -36,10 +34,6 @@ exports.orders = (0, mysql_core_1.mysqlTable)("orders", {
     deliveryFee: (0, mysql_core_1.decimal)("delivery_fee", { precision: 10, scale: 2 }).default("0.00"),
     serviceFee: (0, mysql_core_1.decimal)("service_fee", { precision: 10, scale: 2 }).default("0.00"),
     appCommission: (0, mysql_core_1.decimal)("app_commission", { precision: 10, scale: 2 }).default("0.00"),
-    // 👇 Discount / Coupon fields
-    couponId: (0, mysql_core_1.char)("coupon_id", { length: 36 }).references(() => coupon_1.coupons.id),
-    discountId: (0, mysql_core_1.char)("discount_id", { length: 36 }).references(() => Discount_1.discounts.id),
-    discountAmount: (0, mysql_core_1.decimal)("discount_amount", { precision: 10, scale: 2 }).default("0.00"),
     totalAmount: (0, mysql_core_1.decimal)("total_amount", { precision: 10, scale: 2 }).notNull(),
     // 👇 ضفنا حالة rejected هنا
     status: (0, mysql_core_1.mysqlEnum)("status", [

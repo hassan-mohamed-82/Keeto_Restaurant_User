@@ -6,8 +6,6 @@ import { users } from "../user/Users";
 // تم مسح الـ import الخاص بـ paymentMethods
 import { branches } from "../../schema";
 import { addresses } from "../user/address";
-import { coupons } from "./coupon";
-import { discounts } from "./Discount";
 
 export const orders = mysqlTable("orders", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
@@ -42,12 +40,6 @@ export const orders = mysqlTable("orders", {
     deliveryFee: decimal("delivery_fee", { precision: 10, scale: 2 }).default("0.00"),
     serviceFee: decimal("service_fee", { precision: 10, scale: 2 }).default("0.00"),
     appCommission: decimal("app_commission", { precision: 10, scale: 2 }).default("0.00"),
-
-    // 👇 Discount / Coupon fields
-    couponId: char("coupon_id", { length: 36 }).references(() => coupons.id),
-    discountId: char("discount_id", { length: 36 }).references(() => discounts.id),
-    discountAmount: decimal("discount_amount", { precision: 10, scale: 2 }).default("0.00"),
-
     totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull(),
 
     // 👇 ضفنا حالة rejected هنا
