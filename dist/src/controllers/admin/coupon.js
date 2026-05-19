@@ -15,7 +15,7 @@ const createCoupon = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Unauthorized");
-    const { code, name, nameAr, nameFr, discountType, discountValue, maxDiscount, minOrderAmount, usageLimit, perUserLimit, startDate, endDate, isActive } = req.body;
+    const { code, name, nameAr, nameFr, discountType, discountValue, maxDiscount, minOrderAmount, usageLimit, perUserLimit, startDate, endDate, isActive, restaurantId: bodyRestaurantId } = req.body;
     if (!code)
         throw new BadRequest_1.BadRequest("Coupon code is required");
     if (!name)
@@ -35,7 +35,6 @@ const createCoupon = async (req, res) => {
     const id = (0, uuid_1.v4)();
     await connection_1.db.insert(schema_1.coupons).values({
         id,
-        restaurantId,
         code: code.toUpperCase().trim(),
         name,
         nameAr: nameAr || null,
@@ -50,6 +49,18 @@ const createCoupon = async (req, res) => {
         endDate: endDate ? new Date(endDate) : null,
         isActive: isActive !== undefined ? isActive : true,
     });
+    const finalRestaurantId = bodyRestaurantId || restaurantId;
+    if (finalRestaurantId) {
+        const rIds = Array.isArray(finalRestaurantId) ? finalRestaurantId : [finalRestaurantId];
+        if (rIds.length > 0) {
+            const crData = rIds.map((rId) => ({
+                id: (0, uuid_1.v4)(),
+                couponId: id,
+                restaurantId: rId,
+            }));
+            await connection_1.db.insert(schema_1.couponRestaurants).values(crData);
+        }
+    }
     return (0, response_1.SuccessResponse)(res, { message: "Coupon created successfully", data: { id } }, 201);
 };
 exports.createCoupon = createCoupon;
@@ -60,10 +71,12 @@ const getAllCoupons = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Unauthorized");
-    const allCoupons = await connection_1.db
+    const rawCoupons = await connection_1.db
         .select()
         .from(schema_1.coupons)
-        .where((0, drizzle_orm_1.eq)(schema_1.coupons.restaurantId, restaurantId));
+        .innerJoin(schema_1.couponRestaurants, (0, drizzle_orm_1.eq)(schema_1.coupons.id, schema_1.couponRestaurants.couponId))
+        .where((0, drizzle_orm_1.eq)(schema_1.couponRestaurants.restaurantId, restaurantId));
+    const allCoupons = rawCoupons.map(r => r.coupons);
     return (0, response_1.SuccessResponse)(res, { message: "Get all coupons success", data: allCoupons });
 };
 exports.getAllCoupons = getAllCoupons;
@@ -75,13 +88,15 @@ const getCouponById = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Unauthorized");
-    const [coupon] = await connection_1.db
+    const [rawCoupon] = await connection_1.db
         .select()
         .from(schema_1.coupons)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.coupons.id, id), (0, drizzle_orm_1.eq)(schema_1.coupons.restaurantId, restaurantId)))
+        .innerJoin(schema_1.couponRestaurants, (0, drizzle_orm_1.eq)(schema_1.coupons.id, schema_1.couponRestaurants.couponId))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.coupons.id, id), (0, drizzle_orm_1.eq)(schema_1.couponRestaurants.restaurantId, restaurantId)))
         .limit(1);
-    if (!coupon)
+    if (!rawCoupon)
         throw new NotFound_1.NotFound("Coupon not found");
+    const coupon = rawCoupon.coupons;
     return (0, response_1.SuccessResponse)(res, { message: "Get coupon success", data: coupon });
 };
 exports.getCouponById = getCouponById;
@@ -96,13 +111,14 @@ const updateCoupon = async (req, res) => {
     const [existing] = await connection_1.db
         .select()
         .from(schema_1.coupons)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.coupons.id, id), (0, drizzle_orm_1.eq)(schema_1.coupons.restaurantId, restaurantId)))
+        .innerJoin(schema_1.couponRestaurants, (0, drizzle_orm_1.eq)(schema_1.coupons.id, schema_1.couponRestaurants.couponId))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.coupons.id, id), (0, drizzle_orm_1.eq)(schema_1.couponRestaurants.restaurantId, restaurantId)))
         .limit(1);
     if (!existing)
         throw new NotFound_1.NotFound("Coupon not found");
-    const { code, name, nameAr, nameFr, discountType, discountValue, maxDiscount, minOrderAmount, usageLimit, perUserLimit, startDate, endDate, isActive } = req.body;
+    const { code, name, nameAr, nameFr, discountType, discountValue, maxDiscount, minOrderAmount, usageLimit, perUserLimit, startDate, endDate, isActive, restaurantId: bodyRestaurantId } = req.body;
     // If changing code, check uniqueness
-    if (code && code.toUpperCase() !== existing.code) {
+    if (code && code.toUpperCase() !== existing.coupons.code) {
         const [duplicate] = await connection_1.db
             .select({ id: schema_1.coupons.id })
             .from(schema_1.coupons)
@@ -139,6 +155,18 @@ const updateCoupon = async (req, res) => {
     if (isActive !== undefined)
         updateData.isActive = isActive;
     await connection_1.db.update(schema_1.coupons).set(updateData).where((0, drizzle_orm_1.eq)(schema_1.coupons.id, id));
+    if (bodyRestaurantId !== undefined) {
+        await connection_1.db.delete(schema_1.couponRestaurants).where((0, drizzle_orm_1.eq)(schema_1.couponRestaurants.couponId, id));
+        const rIds = Array.isArray(bodyRestaurantId) ? bodyRestaurantId : [bodyRestaurantId];
+        if (rIds.length > 0) {
+            const crData = rIds.map((rId) => ({
+                id: (0, uuid_1.v4)(),
+                couponId: id,
+                restaurantId: rId,
+            }));
+            await connection_1.db.insert(schema_1.couponRestaurants).values(crData);
+        }
+    }
     return (0, response_1.SuccessResponse)(res, { message: "Coupon updated successfully" });
 };
 exports.updateCoupon = updateCoupon;
@@ -153,12 +181,14 @@ const deleteCoupon = async (req, res) => {
     const [existing] = await connection_1.db
         .select()
         .from(schema_1.coupons)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.coupons.id, id), (0, drizzle_orm_1.eq)(schema_1.coupons.restaurantId, restaurantId)))
+        .innerJoin(schema_1.couponRestaurants, (0, drizzle_orm_1.eq)(schema_1.coupons.id, schema_1.couponRestaurants.couponId))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.coupons.id, id), (0, drizzle_orm_1.eq)(schema_1.couponRestaurants.restaurantId, restaurantId)))
         .limit(1);
     if (!existing)
         throw new NotFound_1.NotFound("Coupon not found");
     // Delete usage records first
     await connection_1.db.delete(schema_1.couponUsages).where((0, drizzle_orm_1.eq)(schema_1.couponUsages.couponId, id));
+    await connection_1.db.delete(schema_1.couponRestaurants).where((0, drizzle_orm_1.eq)(schema_1.couponRestaurants.couponId, id));
     await connection_1.db.delete(schema_1.coupons).where((0, drizzle_orm_1.eq)(schema_1.coupons.id, id));
     return (0, response_1.SuccessResponse)(res, { message: "Coupon deleted successfully" });
 };
@@ -171,19 +201,21 @@ const toggleCouponStatus = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Unauthorized");
-    const [existing] = await connection_1.db
+    const [rawExisting] = await connection_1.db
         .select()
         .from(schema_1.coupons)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.coupons.id, id), (0, drizzle_orm_1.eq)(schema_1.coupons.restaurantId, restaurantId)))
+        .innerJoin(schema_1.couponRestaurants, (0, drizzle_orm_1.eq)(schema_1.coupons.id, schema_1.couponRestaurants.couponId))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.coupons.id, id), (0, drizzle_orm_1.eq)(schema_1.couponRestaurants.restaurantId, restaurantId)))
         .limit(1);
-    if (!existing)
+    if (!rawExisting)
         throw new NotFound_1.NotFound("Coupon not found");
+    const existingCoupon = rawExisting.coupons;
     await connection_1.db.update(schema_1.coupons)
-        .set({ isActive: !existing.isActive, updatedAt: new Date() })
+        .set({ isActive: !existingCoupon.isActive, updatedAt: new Date() })
         .where((0, drizzle_orm_1.eq)(schema_1.coupons.id, id));
     return (0, response_1.SuccessResponse)(res, {
-        message: `Coupon ${!existing.isActive ? "activated" : "deactivated"} successfully`,
-        data: { isActive: !existing.isActive }
+        message: `Coupon ${!existingCoupon.isActive ? "activated" : "deactivated"} successfully`,
+        data: { isActive: !existingCoupon.isActive }
     });
 };
 exports.toggleCouponStatus = toggleCouponStatus;
@@ -196,13 +228,15 @@ exports.toggleCouponStatus = toggleCouponStatus;
  */
 const validateCoupon = async (couponCode, userId, restaurantId, subtotal) => {
     const now = new Date();
-    const [coupon] = await connection_1.db
+    const [rawCoupon] = await connection_1.db
         .select()
         .from(schema_1.coupons)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.coupons.code, couponCode.toUpperCase()), (0, drizzle_orm_1.eq)(schema_1.coupons.restaurantId, restaurantId)))
+        .innerJoin(schema_1.couponRestaurants, (0, drizzle_orm_1.eq)(schema_1.coupons.id, schema_1.couponRestaurants.couponId))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.coupons.code, couponCode.toUpperCase()), (0, drizzle_orm_1.eq)(schema_1.couponRestaurants.restaurantId, restaurantId)))
         .limit(1);
-    if (!coupon)
+    if (!rawCoupon)
         throw new BadRequest_1.BadRequest("Invalid coupon code");
+    const coupon = rawCoupon.coupons;
     if (!coupon.isActive)
         throw new BadRequest_1.BadRequest("This coupon is no longer active");
     // Date range check
@@ -285,12 +319,13 @@ const getCouponUsages = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Unauthorized");
-    const [coupon] = await connection_1.db
+    const [rawCoupon] = await connection_1.db
         .select({ id: schema_1.coupons.id })
         .from(schema_1.coupons)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.coupons.id, id), (0, drizzle_orm_1.eq)(schema_1.coupons.restaurantId, restaurantId)))
+        .innerJoin(schema_1.couponRestaurants, (0, drizzle_orm_1.eq)(schema_1.coupons.id, schema_1.couponRestaurants.couponId))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.coupons.id, id), (0, drizzle_orm_1.eq)(schema_1.couponRestaurants.restaurantId, restaurantId)))
         .limit(1);
-    if (!coupon)
+    if (!rawCoupon)
         throw new NotFound_1.NotFound("Coupon not found");
     const usages = await connection_1.db
         .select()
