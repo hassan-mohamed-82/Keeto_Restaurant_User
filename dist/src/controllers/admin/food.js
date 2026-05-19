@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.toggleVariationOptionStatus = exports.toggleVariationStatus = exports.getFoodRecipe = exports.assignIngredientsToFood = exports.getFoodSelectData = exports.deleteFood = exports.updateFood = exports.getFoodById = exports.getAllFoods = exports.createFood = void 0;
+exports.changeFoodStatus = exports.toggleVariationOptionStatus = exports.toggleVariationStatus = exports.getFoodRecipe = exports.assignIngredientsToFood = exports.getFoodSelectData = exports.deleteFood = exports.updateFood = exports.getFoodById = exports.getAllFoods = exports.createFood = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 // ✅ تم إضافة and هنا عشان نصلح مشكلة الشروط المتعددة
@@ -571,3 +571,22 @@ const toggleVariationOptionStatus = async (req, res) => {
     return (0, response_1.SuccessResponse)(res, { message: "Variation option status updated successfully" });
 };
 exports.toggleVariationOptionStatus = toggleVariationOptionStatus;
+const changeFoodStatus = async (req, res) => {
+    const { id } = req.params;
+    const { status } = req.body;
+    const restaurantId = req.user?.id;
+    if (!restaurantId)
+        throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
+    const existingFood = await connection_1.db.select().from(schema_1.food).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.id, id), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId))).limit(1);
+    if (!existingFood[0])
+        throw new NotFound_1.NotFound("Food not found or does not belong to you");
+    await connection_1.db.update(schema_1.food).set({ status }).where((0, drizzle_orm_1.eq)(schema_1.food.id, id));
+    if (status == "active") {
+        await connection_1.db.update(schema_1.food).set({ status: "active" }).where((0, drizzle_orm_1.eq)(schema_1.food.id, id));
+    }
+    else if (status == "inactive") {
+        await connection_1.db.update(schema_1.food).set({ status: "inactive" }).where((0, drizzle_orm_1.eq)(schema_1.food.id, id));
+    }
+    return (0, response_1.SuccessResponse)(res, { message: "Food status updated successfully" });
+};
+exports.changeFoodStatus = changeFoodStatus;

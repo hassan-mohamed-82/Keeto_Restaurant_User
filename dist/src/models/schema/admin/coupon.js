@@ -4,10 +4,12 @@ exports.couponRestaurants = exports.couponUsages = exports.coupons = void 0;
 const mysql_core_1 = require("drizzle-orm/mysql-core");
 const drizzle_orm_1 = require("drizzle-orm");
 const restaurants_1 = require("./restaurants");
+const Users_1 = require("../user/Users");
+const order_1 = require("./order");
 exports.coupons = (0, mysql_core_1.mysqlTable)("coupons", {
     id: (0, mysql_core_1.char)("id", { length: 36 }).primaryKey().default((0, drizzle_orm_1.sql) `(UUID())`),
     // The promo code users type in (unique per restaurant)
-    code: (0, mysql_core_1.varchar)("code", { length: 50 }).notNull().unique(),
+    code: (0, mysql_core_1.varchar)("code", { length: 50 }).notNull(),
     name: (0, mysql_core_1.varchar)("name", { length: 255 }).notNull(),
     nameAr: (0, mysql_core_1.varchar)("name_ar", { length: 255 }),
     nameFr: (0, mysql_core_1.varchar)("name_fr", { length: 255 }),
@@ -37,10 +39,14 @@ exports.coupons = (0, mysql_core_1.mysqlTable)("coupons", {
 exports.couponUsages = (0, mysql_core_1.mysqlTable)("coupon_usages", {
     id: (0, mysql_core_1.char)("id", { length: 36 }).primaryKey().default((0, drizzle_orm_1.sql) `(UUID())`),
     couponId: (0, mysql_core_1.char)("coupon_id", { length: 36 })
-        .references(() => exports.coupons.id)
+        .references(() => exports.coupons.id, { onDelete: "cascade" })
         .notNull(),
-    userId: (0, mysql_core_1.char)("user_id", { length: 36 }).notNull(),
-    orderId: (0, mysql_core_1.char)("order_id", { length: 36 }).notNull(),
+    userId: (0, mysql_core_1.char)("user_id", { length: 36 })
+        .references(() => Users_1.users.id)
+        .notNull(),
+    orderId: (0, mysql_core_1.char)("order_id", { length: 36 })
+        .references(() => order_1.orders.id)
+        .notNull(),
     discountAmount: (0, mysql_core_1.decimal)("discount_amount", { precision: 10, scale: 2 }).notNull(),
     usedAt: (0, mysql_core_1.timestamp)("used_at").defaultNow(),
 });

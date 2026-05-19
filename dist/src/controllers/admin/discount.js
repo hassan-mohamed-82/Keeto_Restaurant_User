@@ -9,7 +9,7 @@ const BadRequest_1 = require("../../Errors/BadRequest");
 const NotFound_1 = require("../../Errors/NotFound");
 const uuid_1 = require("uuid");
 // ==========================================
-// 1. Create Discount
+// 1. Create Discount (Auto-linked to this restaurant)
 // ==========================================
 const createDiscount = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
@@ -22,10 +22,10 @@ const createDiscount = async (req, res) => {
         throw new BadRequest_1.BadRequest("Discount type is required (percentage | fixed_amount)");
     if (discountValue === undefined || discountValue === null)
         throw new BadRequest_1.BadRequest("Discount value is required");
-    const id = (0, uuid_1.v4)();
+    const discountId = (0, uuid_1.v4)();
+    // 1. إدخال العرض في الجدول الرئيسي
     await connection_1.db.insert(schema_1.discounts).values({
-        id,
-        restaurantId,
+        id: discountId,
         name,
         nameAr: nameAr || null,
         nameFr: nameFr || null,
@@ -38,53 +38,66 @@ const createDiscount = async (req, res) => {
         endDate: endDate ? new Date(endDate) : null,
         isActive: isActive !== undefined ? isActive : true,
     });
-    return (0, response_1.SuccessResponse)(res, { message: "Discount created successfully", data: { id } }, 201);
+    // 2. ربطه تلقائياً وبأمان بالمطعم الحالي من التوكن
+    await connection_1.db.insert(schema_1.discountRestaurants).values({
+        id: (0, uuid_1.v4)(),
+        discountId: discountId,
+        restaurantId: restaurantId
+    });
+    return (0, response_1.SuccessResponse)(res, { message: "Discount created successfully", data: { id: discountId } }, 201);
 };
 exports.createDiscount = createDiscount;
 // ==========================================
-// 2. Get All Discounts (for this restaurant)
+// 2. Get All Discounts (For this restaurant only)
 // ==========================================
 const getAllDiscounts = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Unauthorized");
-    const allDiscounts = await connection_1.db
+    // جلب الخصومات المربوطة بهذا المطعم فقط عبر الـ Join
+    const rawData = await connection_1.db
         .select()
         .from(schema_1.discounts)
-        .where((0, drizzle_orm_1.eq)(schema_1.discounts.restaurantId, restaurantId));
+        .innerJoin(schema_1.discountRestaurants, (0, drizzle_orm_1.eq)(schema_1.discounts.id, schema_1.discountRestaurants.discountId))
+        .where((0, drizzle_orm_1.eq)(schema_1.discountRestaurants.restaurantId, restaurantId));
+    const allDiscounts = rawData.map(row => row.discounts);
     return (0, response_1.SuccessResponse)(res, { message: "Get all discounts success", data: allDiscounts });
 };
 exports.getAllDiscounts = getAllDiscounts;
 // ==========================================
-// 3. Get Discount by ID
+// 3. Get Discount by ID (Scoped to this restaurant)
 // ==========================================
 const getDiscountById = async (req, res) => {
     const { id } = req.params;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Unauthorized");
-    const [discount] = await connection_1.db
+    // التحقق من وجود الخصم وأنه ينتمي لهذا المطعم
+    const [rawData] = await connection_1.db
         .select()
         .from(schema_1.discounts)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.discounts.id, id), (0, drizzle_orm_1.eq)(schema_1.discounts.restaurantId, restaurantId)))
+        .innerJoin(schema_1.discountRestaurants, (0, drizzle_orm_1.eq)(schema_1.discounts.id, schema_1.discountRestaurants.discountId))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.discounts.id, id), (0, drizzle_orm_1.eq)(schema_1.discountRestaurants.restaurantId, restaurantId)))
         .limit(1);
-    if (!discount)
+    if (!rawData)
         throw new NotFound_1.NotFound("Discount not found");
-    return (0, response_1.SuccessResponse)(res, { message: "Get discount success", data: discount });
+    return (0, response_1.SuccessResponse)(res, { message: "Get discount success", data: rawData.discounts });
 };
 exports.getDiscountById = getDiscountById;
 // ==========================================
-// 4. Update Discount
+// 4. Update Discount (Protected)
 // ==========================================
 const updateDiscount = async (req, res) => {
     const { id } = req.params;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Unauthorized");
+    // تأكيد ملكية المطعم للخصم قبل التعديل
     const [existing] = await connection_1.db
         .select()
         .from(schema_1.discounts)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.discounts.id, id), (0, drizzle_orm_1.eq)(schema_1.discounts.restaurantId, restaurantId)))
+        .innerJoin(schema_1.discountRestaurants, (0, drizzle_orm_1.eq)(schema_1.discounts.id, schema_1.discountRestaurants.discountId))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.discounts.id, id), (0, drizzle_orm_1.eq)(schema_1.discountRestaurants.restaurantId, restaurantId)))
         .limit(1);
     if (!existing)
         throw new NotFound_1.NotFound("Discount not found");
@@ -117,45 +130,50 @@ const updateDiscount = async (req, res) => {
 };
 exports.updateDiscount = updateDiscount;
 // ==========================================
-// 5. Delete Discount
+// 5. Delete Discount (Protected)
 // ==========================================
 const deleteDiscount = async (req, res) => {
     const { id } = req.params;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Unauthorized");
+    // تأكيد ملكية المطعم للخصم قبل الحذف
     const [existing] = await connection_1.db
         .select()
         .from(schema_1.discounts)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.discounts.id, id), (0, drizzle_orm_1.eq)(schema_1.discounts.restaurantId, restaurantId)))
+        .innerJoin(schema_1.discountRestaurants, (0, drizzle_orm_1.eq)(schema_1.discounts.id, schema_1.discountRestaurants.discountId))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.discounts.id, id), (0, drizzle_orm_1.eq)(schema_1.discountRestaurants.restaurantId, restaurantId)))
         .limit(1);
     if (!existing)
         throw new NotFound_1.NotFound("Discount not found");
+    // الحذف من الجدول الرئيسي وسيتم مسح علاقة الربط تلقائياً بفضل الـ Cascade
     await connection_1.db.delete(schema_1.discounts).where((0, drizzle_orm_1.eq)(schema_1.discounts.id, id));
     return (0, response_1.SuccessResponse)(res, { message: "Discount deleted successfully" });
 };
 exports.deleteDiscount = deleteDiscount;
 // ==========================================
-// 6. Toggle Discount Active Status
+// 6. Toggle Discount Status
 // ==========================================
 const toggleDiscountStatus = async (req, res) => {
     const { id } = req.params;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Unauthorized");
-    const [existing] = await connection_1.db
+    const [rawData] = await connection_1.db
         .select()
         .from(schema_1.discounts)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.discounts.id, id), (0, drizzle_orm_1.eq)(schema_1.discounts.restaurantId, restaurantId)))
+        .innerJoin(schema_1.discountRestaurants, (0, drizzle_orm_1.eq)(schema_1.discounts.id, schema_1.discountRestaurants.discountId))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.discounts.id, id), (0, drizzle_orm_1.eq)(schema_1.discountRestaurants.restaurantId, restaurantId)))
         .limit(1);
-    if (!existing)
+    if (!rawData)
         throw new NotFound_1.NotFound("Discount not found");
+    const existingDiscount = rawData.discounts;
     await connection_1.db.update(schema_1.discounts)
-        .set({ isActive: !existing.isActive, updatedAt: new Date() })
+        .set({ isActive: !existingDiscount.isActive, updatedAt: new Date() })
         .where((0, drizzle_orm_1.eq)(schema_1.discounts.id, id));
     return (0, response_1.SuccessResponse)(res, {
-        message: `Discount ${!existing.isActive ? "activated" : "deactivated"} successfully`,
-        data: { isActive: !existing.isActive }
+        message: `Discount ${!existingDiscount.isActive ? "activated" : "deactivated"} successfully`,
+        data: { isActive: !existingDiscount.isActive }
     });
 };
 exports.toggleDiscountStatus = toggleDiscountStatus;

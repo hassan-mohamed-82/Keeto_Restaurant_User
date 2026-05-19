@@ -661,3 +661,25 @@ export const toggleVariationOptionStatus = async (req: Request, res: Response) =
 
     return SuccessResponse(res, { message: "Variation option status updated successfully" });
 };
+
+
+export const changeFoodStatus = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { status } = req.body;
+    const restaurantId = req.user?.id as string;
+
+    if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
+  
+    const existingFood = await db.select().from(food).where(and(eq(food.id, id), eq(food.restaurantid, restaurantId))).limit(1);
+    if (!existingFood[0]) throw new NotFound("Food not found or does not belong to you");
+
+    await db.update(food).set({ status }).where(eq(food.id, id));
+
+    if(status == "active"){
+        await db.update(food).set({ status: "active" }).where(eq(food.id, id));
+    }else if(status == "inactive"){
+        await db.update(food).set({ status: "inactive" }).where(eq(food.id, id));
+    }
+
+    return SuccessResponse(res, { message: "Food status updated successfully" });
+};  

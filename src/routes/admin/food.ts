@@ -10,7 +10,8 @@ import {
     assignIngredientsToFood,
     getFoodRecipe,
     toggleVariationStatus,
-    toggleVariationOptionStatus
+    toggleVariationOptionStatus,
+    changeFoodStatus
 } from "../../controllers/admin/food";
 
 const router = Router();
@@ -25,5 +26,6 @@ router.post("/assign-ingredients/:id", catchAsync(assignIngredientsToFood));
 router.get("/recipe/:id", catchAsync(getFoodRecipe));
 router.put("/variation/:id/status", catchAsync(toggleVariationStatus));
 router.put("/option/:id/status", catchAsync(toggleVariationOptionStatus));
+router.put("/status/:id", catchAsync(changeFoodStatus));
 
 export default router;
