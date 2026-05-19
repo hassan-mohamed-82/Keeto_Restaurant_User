@@ -4,8 +4,10 @@ exports.subcategories = void 0;
 const mysql_core_1 = require("drizzle-orm/mysql-core");
 const drizzle_orm_1 = require("drizzle-orm");
 const Category_1 = require("./Category");
+const restaurants_1 = require("./restaurants");
 exports.subcategories = (0, mysql_core_1.mysqlTable)("subcategories", {
     id: (0, mysql_core_1.char)("id", { length: 36 }).primaryKey().default((0, drizzle_orm_1.sql) `(UUID())`),
+    restaurantId: (0, mysql_core_1.char)("restaurant_id", { length: 36 }).references(() => restaurants_1.restaurants.id),
     name: (0, mysql_core_1.varchar)("name", { length: 255 }).notNull(),
     nameAr: (0, mysql_core_1.varchar)("name_ar", { length: 255 }),
     nameFr: (0, mysql_core_1.varchar)("name_fr", { length: 255 }),

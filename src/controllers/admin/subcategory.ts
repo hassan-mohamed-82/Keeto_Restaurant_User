@@ -1,13 +1,18 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
 import { subcategories, categories } from "../../models/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { NotFound } from "../../Errors/NotFound";
 import { BadRequest } from "../../Errors/BadRequest";
 import { v4 as uuidv4 } from "uuid";
 
 export const createSubcategory = async (req: Request, res: Response) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+
+    if (!restaurantId) {
+        throw new BadRequest("Restaurant context is missing or unauthorized");
+    }
     const { name, categoryId, priority, status, nameAr, nameFr } = req.body;
 
     if (!name || !categoryId) {
@@ -44,6 +49,7 @@ export const createSubcategory = async (req: Request, res: Response) => {
         nameAr,
         nameFr,
         categoryId,
+        restaurantId: restaurantId ,
         priority: priority || "low",
         status: status || "active",
     });
@@ -52,6 +58,12 @@ export const createSubcategory = async (req: Request, res: Response) => {
 };
 
 export const getAllSubcategories = async (req: Request, res: Response) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+
+    if (!restaurantId) {
+        throw new BadRequest("Restaurant context is missing or unauthorized");
+    }
+
     const allSubcategories = await db
         .select({
             id: subcategories.id,
@@ -72,14 +84,20 @@ export const getAllSubcategories = async (req: Request, res: Response) => {
             },
         })
         .from(subcategories)
+        .where(eq(subcategories.restaurantId, restaurantId))
         .leftJoin(categories, eq(subcategories.categoryId, categories.id));
 
     return SuccessResponse(res, { message: "Get all subcategories success", data: allSubcategories });
 };
 
 export const getSubcategoryById = async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
 
+    if (!restaurantId) {
+        throw new BadRequest("Restaurant context is missing or unauthorized");
+    }
+
+    const { id } = req.params;
     const subcategory = await db
         .select({
             id: subcategories.id,
@@ -101,7 +119,7 @@ export const getSubcategoryById = async (req: Request, res: Response) => {
         })
         .from(subcategories)
         .leftJoin(categories, eq(subcategories.categoryId, categories.id))
-        .where(eq(subcategories.id, id))
+        .where(and(eq(subcategories.id, id), eq(subcategories.restaurantId, restaurantId)))
         .limit(1);
 
     if (!subcategory[0]) {
@@ -112,20 +130,27 @@ export const getSubcategoryById = async (req: Request, res: Response) => {
 };
 
 export const updateSubcategory = async (req: Request, res: Response) => {
+    // 1. استخراج ID المطعم
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId) {
+        throw new BadRequest("Restaurant context is missing or unauthorized");
+    }
+
     const { id } = req.params;
     const { name, categoryId, priority, status, nameAr, nameFr } = req.body;
 
+    // 2. التأكد إن الـ subcategory موجود ومملوك للمطعم ده
     const existingSubcategory = await db
         .select()
         .from(subcategories)
-        .where(eq(subcategories.id, id))
+        .where(and(eq(subcategories.id, id), eq(subcategories.restaurantId, restaurantId))) // التعديل هنا
         .limit(1);
 
     if (!existingSubcategory[0]) {
-        throw new NotFound("Subcategory not found");
+        throw new NotFound("Subcategory not found or you don't have permission to edit it");
     }
 
-    // Check if category exists if categoryId is provided
+    // التأكد إن القسم الأساسي موجود (إذا تم تمريره)
     if (categoryId) {
         const existingCategory = await db
             .select()
@@ -153,25 +178,37 @@ export const updateSubcategory = async (req: Request, res: Response) => {
         throw new BadRequest("No data to update");
     }
 
-    await db.update(subcategories).set(updateData).where(eq(subcategories.id, id));
+    // 3. التحديث بشرط أن يكون الـ ID خاص بنفس المطعم
+    await db.update(subcategories)
+        .set(updateData)
+        .where(and(eq(subcategories.id, id), eq(subcategories.restaurantId, restaurantId))); // التعديل هنا
 
     return SuccessResponse(res, { message: "Update subcategory success" });
 };
 
 export const deleteSubcategory = async (req: Request, res: Response) => {
+    // 1. استخراج ID المطعم
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId) {
+        throw new BadRequest("Restaurant context is missing or unauthorized");
+    }
+
     const { id } = req.params;
 
+    // 2. التأكد إن الـ subcategory موجود ومملوك للمطعم ده
     const existingSubcategory = await db
         .select()
         .from(subcategories)
-        .where(eq(subcategories.id, id))
+        .where(and(eq(subcategories.id, id), eq(subcategories.restaurantId, restaurantId))) // التعديل هنا
         .limit(1);
 
     if (!existingSubcategory[0]) {
-        throw new NotFound("Subcategory not found");
+        throw new NotFound("Subcategory not found or you don't have permission to delete it");
     }
 
-    await db.delete(subcategories).where(eq(subcategories.id, id));
+    // 3. الحذف بشرط أن يكون الـ ID خاص بنفس المطعم
+    await db.delete(subcategories)
+        .where(and(eq(subcategories.id, id), eq(subcategories.restaurantId, restaurantId))); // التعديل هنا
 
     return SuccessResponse(res, { message: "Delete subcategory success" });
 };
