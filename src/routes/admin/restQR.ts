@@ -1,0 +1,10 @@
+import { Router } from "express";
+import { generateRestaurantQR, getRestaurantQR, deletRestaurantQR, updateRestaurantQR, getRestaurantQRbyid } from "../../controllers/admin/restQR";
+import { catchAsync } from "../../utils/catchAsync";
+const router = Router();
+router.post("/", catchAsync(generateRestaurantQR));
+router.get("/", catchAsync(getRestaurantQR));
+router.get("/:id", catchAsync(getRestaurantQRbyid));
+router.delete("/:id", catchAsync(deletRestaurantQR));
+router.put("/:id", catchAsync(updateRestaurantQR));
+export default router;

@@ -1,0 +1,12 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const restQR_1 = require("../../controllers/admin/restQR");
+const catchAsync_1 = require("../../utils/catchAsync");
+const router = (0, express_1.Router)();
+router.post("/", (0, catchAsync_1.catchAsync)(restQR_1.generateRestaurantQR));
+router.get("/", (0, catchAsync_1.catchAsync)(restQR_1.getRestaurantQR));
+router.get("/:id", (0, catchAsync_1.catchAsync)(restQR_1.getRestaurantQRbyid));
+router.delete("/:id", (0, catchAsync_1.catchAsync)(restQR_1.deletRestaurantQR));
+router.put("/:id", (0, catchAsync_1.catchAsync)(restQR_1.updateRestaurantQR));
+exports.default = router;

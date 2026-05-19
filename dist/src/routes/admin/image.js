@@ -1,0 +1,12 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const image_1 = require("../../controllers/admin/image");
+const catchAsync_1 = require("../../utils/catchAsync");
+const router = (0, express_1.Router)();
+router.post("/", (0, catchAsync_1.catchAsync)(image_1.createImage));
+router.get("/", (0, catchAsync_1.catchAsync)(image_1.getAllImages));
+router.get("/:id", (0, catchAsync_1.catchAsync)(image_1.getImageById));
+router.delete("/:id", (0, catchAsync_1.catchAsync)(image_1.deleteImage));
+router.put("/:id", (0, catchAsync_1.catchAsync)(image_1.updateImage));
+exports.default = router;

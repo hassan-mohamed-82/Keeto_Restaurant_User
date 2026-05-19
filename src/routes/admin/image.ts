@@ -1,0 +1,10 @@
+import { Router } from "express";
+import { createImage, deleteImage, getAllImages, getImageById, updateImage } from "../../controllers/admin/image";
+import { catchAsync } from "../../utils/catchAsync";
+const router = Router();
+router.post("/", catchAsync(createImage));
+router.get("/", catchAsync(getAllImages));
+router.get("/:id", catchAsync(getImageById));
+router.delete("/:id", catchAsync(deleteImage));
+router.put("/:id", catchAsync(updateImage));
+export default router;
