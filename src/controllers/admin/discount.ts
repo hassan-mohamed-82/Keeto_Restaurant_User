@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { discounts } from "../../models/schema";
+import { discounts, discountRestaurants } from "../../models/schema";
 import { eq, and } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
@@ -8,7 +8,7 @@ import { NotFound } from "../../Errors/NotFound";
 import { v4 as uuidv4 } from "uuid";
 
 // ==========================================
-// 1. Create Discount
+// 1. Create Discount (Auto-linked to this restaurant)
 // ==========================================
 export const createDiscount = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
@@ -18,19 +18,18 @@ export const createDiscount = async (req: Request, res: Response) => {
         name, nameAr, nameFr,
         discountType, discountValue,
         maxDiscount, minOrderAmount,
-        usageLimit, startDate, endDate,
-        isActive
+        usageLimit, startDate, endDate, isActive
     } = req.body;
 
     if (!name) throw new BadRequest("Discount name is required");
     if (!discountType) throw new BadRequest("Discount type is required (percentage | fixed_amount)");
     if (discountValue === undefined || discountValue === null) throw new BadRequest("Discount value is required");
 
-    const id = uuidv4();
+    const discountId = uuidv4();
 
+    // 1. إدخال العرض في الجدول الرئيسي
     await db.insert(discounts).values({
-        id,
-        restaurantId,
+        id: discountId,
         name,
         nameAr: nameAr || null,
         nameFr: nameFr || null,
@@ -44,55 +43,80 @@ export const createDiscount = async (req: Request, res: Response) => {
         isActive: isActive !== undefined ? isActive : true,
     });
 
-    return SuccessResponse(res, { message: "Discount created successfully", data: { id } }, 201);
+    // 2. ربطه تلقائياً وبأمان بالمطعم الحالي من التوكن
+    await db.insert(discountRestaurants).values({
+        id: uuidv4(),
+        discountId: discountId,
+        restaurantId: restaurantId
+    });
+
+    return SuccessResponse(res, { message: "Discount created successfully", data: { id: discountId } }, 201);
 };
 
 // ==========================================
-// 2. Get All Discounts (for this restaurant)
+// 2. Get All Discounts (For this restaurant only)
 // ==========================================
 export const getAllDiscounts = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Unauthorized");
 
-    const allDiscounts = await db
+    // جلب الخصومات المربوطة بهذا المطعم فقط عبر الـ Join
+    const rawData = await db
         .select()
         .from(discounts)
-        .where(eq(discounts.restaurantId, restaurantId));
+        .innerJoin(discountRestaurants, eq(discounts.id, discountRestaurants.discountId))
+        .where(eq(discountRestaurants.restaurantId, restaurantId));
+
+    const allDiscounts = rawData.map(row => row.discounts);
 
     return SuccessResponse(res, { message: "Get all discounts success", data: allDiscounts });
 };
 
 // ==========================================
-// 3. Get Discount by ID
+// 3. Get Discount by ID (Scoped to this restaurant)
 // ==========================================
 export const getDiscountById = async (req: Request, res: Response) => {
     const { id } = req.params;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Unauthorized");
 
-    const [discount] = await db
+    // التحقق من وجود الخصم وأنه ينتمي لهذا المطعم
+    const [rawData] = await db
         .select()
         .from(discounts)
-        .where(and(eq(discounts.id, id), eq(discounts.restaurantId, restaurantId)))
+        .innerJoin(discountRestaurants, eq(discounts.id, discountRestaurants.discountId))
+        .where(
+            and(
+                eq(discounts.id, id),
+                eq(discountRestaurants.restaurantId, restaurantId)
+            )
+        )
         .limit(1);
 
-    if (!discount) throw new NotFound("Discount not found");
+    if (!rawData) throw new NotFound("Discount not found");
 
-    return SuccessResponse(res, { message: "Get discount success", data: discount });
+    return SuccessResponse(res, { message: "Get discount success", data: rawData.discounts });
 };
 
 // ==========================================
-// 4. Update Discount
+// 4. Update Discount (Protected)
 // ==========================================
 export const updateDiscount = async (req: Request, res: Response) => {
     const { id } = req.params;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Unauthorized");
 
+    // تأكيد ملكية المطعم للخصم قبل التعديل
     const [existing] = await db
         .select()
         .from(discounts)
-        .where(and(eq(discounts.id, id), eq(discounts.restaurantId, restaurantId)))
+        .innerJoin(discountRestaurants, eq(discounts.id, discountRestaurants.discountId))
+        .where(
+            and(
+                eq(discounts.id, id),
+                eq(discountRestaurants.restaurantId, restaurantId)
+            )
+        )
         .limit(1);
 
     if (!existing) throw new NotFound("Discount not found");
@@ -101,8 +125,7 @@ export const updateDiscount = async (req: Request, res: Response) => {
         name, nameAr, nameFr,
         discountType, discountValue,
         maxDiscount, minOrderAmount,
-        usageLimit, startDate, endDate,
-        isActive
+        usageLimit, startDate, endDate, isActive
     } = req.body;
 
     const updateData: any = { updatedAt: new Date() };
@@ -125,48 +148,63 @@ export const updateDiscount = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 5. Delete Discount
+// 5. Delete Discount (Protected)
 // ==========================================
 export const deleteDiscount = async (req: Request, res: Response) => {
     const { id } = req.params;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Unauthorized");
 
+    // تأكيد ملكية المطعم للخصم قبل الحذف
     const [existing] = await db
         .select()
         .from(discounts)
-        .where(and(eq(discounts.id, id), eq(discounts.restaurantId, restaurantId)))
+        .innerJoin(discountRestaurants, eq(discounts.id, discountRestaurants.discountId))
+        .where(
+            and(
+                eq(discounts.id, id),
+                eq(discountRestaurants.restaurantId, restaurantId)
+            )
+        )
         .limit(1);
 
     if (!existing) throw new NotFound("Discount not found");
 
+    // الحذف من الجدول الرئيسي وسيتم مسح علاقة الربط تلقائياً بفضل الـ Cascade
     await db.delete(discounts).where(eq(discounts.id, id));
 
     return SuccessResponse(res, { message: "Discount deleted successfully" });
 };
 
 // ==========================================
-// 6. Toggle Discount Active Status
+// 6. Toggle Discount Status
 // ==========================================
 export const toggleDiscountStatus = async (req: Request, res: Response) => {
     const { id } = req.params;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Unauthorized");
 
-    const [existing] = await db
+    const [rawData] = await db
         .select()
         .from(discounts)
-        .where(and(eq(discounts.id, id), eq(discounts.restaurantId, restaurantId)))
+        .innerJoin(discountRestaurants, eq(discounts.id, discountRestaurants.discountId))
+        .where(
+            and(
+                eq(discounts.id, id),
+                eq(discountRestaurants.restaurantId, restaurantId)
+            )
+        )
         .limit(1);
 
-    if (!existing) throw new NotFound("Discount not found");
+    if (!rawData) throw new NotFound("Discount not found");
+    const existingDiscount = rawData.discounts;
 
     await db.update(discounts)
-        .set({ isActive: !existing.isActive, updatedAt: new Date() })
+        .set({ isActive: !existingDiscount.isActive, updatedAt: new Date() })
         .where(eq(discounts.id, id));
 
     return SuccessResponse(res, {
-        message: `Discount ${!existing.isActive ? "activated" : "deactivated"} successfully`,
-        data: { isActive: !existing.isActive }
+        message: `Discount ${!existingDiscount.isActive ? "activated" : "deactivated"} successfully`,
+        data: { isActive: !existingDiscount.isActive }
     });
 };

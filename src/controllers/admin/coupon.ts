@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
 import { coupons, couponUsages, orders, couponRestaurants } from "../../models/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, inArray } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors/NotFound";
@@ -19,8 +19,7 @@ export const createCoupon = async (req: Request, res: Response) => {
         discountType, discountValue,
         maxDiscount, minOrderAmount,
         usageLimit, perUserLimit,
-        startDate, endDate, isActive,
-        restaurantId: bodyRestaurantId
+        startDate, endDate, isActive
     } = req.body;
 
     if (!code) throw new BadRequest("Coupon code is required");
@@ -28,20 +27,29 @@ export const createCoupon = async (req: Request, res: Response) => {
     if (!discountType) throw new BadRequest("Discount type is required (percentage | fixed_amount | free_delivery)");
     if (discountValue === undefined || discountValue === null) throw new BadRequest("Discount value is required");
 
-    // Check uniqueness of code (globally unique because of .unique() in schema)
+    const normalizedCode = code.toUpperCase().trim();
+
+    // [تعديل جوهري]: التأكد من عدم تكرار الكود لهذا المطعم بالذات وليس عالمياً
     const [existing] = await db
         .select({ id: coupons.id })
         .from(coupons)
-        .where(eq(coupons.code, code.toUpperCase()))
+        .innerJoin(couponRestaurants, eq(coupons.id, couponRestaurants.couponId))
+        .where(
+            and(
+                eq(coupons.code, normalizedCode),
+                eq(couponRestaurants.restaurantId, restaurantId)
+            )
+        )
         .limit(1);
 
-    if (existing) throw new BadRequest("Coupon code already exists, please choose another");
+    if (existing) throw new BadRequest("Coupon code already exists in your restaurant, please choose another");
 
     const id = uuidv4();
 
+    // 1. إدخال الكوبون في الجدول الأساسي
     await db.insert(coupons).values({
         id,
-        code: code.toUpperCase().trim(),
+        code: normalizedCode,
         name,
         nameAr: nameAr || null,
         nameFr: nameFr || null,
@@ -56,18 +64,12 @@ export const createCoupon = async (req: Request, res: Response) => {
         isActive: isActive !== undefined ? isActive : true,
     });
 
-    const finalRestaurantId = bodyRestaurantId || restaurantId;
-    if (finalRestaurantId) {
-        const rIds = Array.isArray(finalRestaurantId) ? finalRestaurantId : [finalRestaurantId];
-        if (rIds.length > 0) {
-            const crData = rIds.map((rId: string) => ({
-                id: uuidv4(),
-                couponId: id,
-                restaurantId: rId,
-            }));
-            await db.insert(couponRestaurants).values(crData);
-        }
-    }
+    // 2. ربط الكوبون بالمطعم الحالي أوتوماتيكياً
+    await db.insert(couponRestaurants).values({
+        id: uuidv4(),
+        couponId: id,
+        restaurantId: restaurantId,
+    });
 
     return SuccessResponse(res, { message: "Coupon created successfully", data: { id } }, 201);
 };
@@ -107,9 +109,7 @@ export const getCouponById = async (req: Request, res: Response) => {
 
     if (!rawCoupon) throw new NotFound("Coupon not found");
 
-    const coupon = rawCoupon.coupons;
-
-    return SuccessResponse(res, { message: "Get coupon success", data: coupon });
+    return SuccessResponse(res, { message: "Get coupon success", data: rawCoupon.coupons });
 };
 
 // ==========================================
@@ -120,6 +120,7 @@ export const updateCoupon = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Unauthorized");
 
+    // التأكد أولاً أن الكوبون يخص هذا المطعم
     const [existing] = await db
         .select()
         .from(coupons)
@@ -134,23 +135,30 @@ export const updateCoupon = async (req: Request, res: Response) => {
         discountType, discountValue,
         maxDiscount, minOrderAmount,
         usageLimit, perUserLimit,
-        startDate, endDate, isActive,
-        restaurantId: bodyRestaurantId
+        startDate, endDate, isActive
     } = req.body;
 
-    // If changing code, check uniqueness
-    if (code && code.toUpperCase() !== existing.coupons.code) {
+    const normalizedCode = code ? code.toUpperCase().trim() : existing.coupons.code;
+
+    // [تعديل جوهري]: تشيك الاسم المتكرر يبحث فقط داخل نطاق هذا المطعم
+    if (code && normalizedCode !== existing.coupons.code) {
         const [duplicate] = await db
             .select({ id: coupons.id })
             .from(coupons)
-            .where(eq(coupons.code, code.toUpperCase()))
+            .innerJoin(couponRestaurants, eq(coupons.id, couponRestaurants.couponId))
+            .where(
+                and(
+                    eq(coupons.code, normalizedCode),
+                    eq(couponRestaurants.restaurantId, restaurantId)
+                )
+            )
             .limit(1);
-        if (duplicate) throw new BadRequest("Coupon code already exists");
+        if (duplicate) throw new BadRequest("Coupon code already exists in your restaurant");
     }
 
     const updateData: any = { updatedAt: new Date() };
 
-    if (code !== undefined) updateData.code = code.toUpperCase().trim();
+    if (code !== undefined) updateData.code = normalizedCode;
     if (name !== undefined) updateData.name = name;
     if (nameAr !== undefined) updateData.nameAr = nameAr;
     if (nameFr !== undefined) updateData.nameFr = nameFr;
@@ -165,19 +173,6 @@ export const updateCoupon = async (req: Request, res: Response) => {
     if (isActive !== undefined) updateData.isActive = isActive;
 
     await db.update(coupons).set(updateData).where(eq(coupons.id, id));
-
-    if (bodyRestaurantId !== undefined) {
-        await db.delete(couponRestaurants).where(eq(couponRestaurants.couponId, id));
-        const rIds = Array.isArray(bodyRestaurantId) ? bodyRestaurantId : [bodyRestaurantId];
-        if (rIds.length > 0) {
-            const crData = rIds.map((rId: string) => ({
-                id: uuidv4(),
-                couponId: id,
-                restaurantId: rId,
-            }));
-            await db.insert(couponRestaurants).values(crData);
-        }
-    }
 
     return SuccessResponse(res, { message: "Coupon updated successfully" });
 };
@@ -199,9 +194,9 @@ export const deleteCoupon = async (req: Request, res: Response) => {
 
     if (!existing) throw new NotFound("Coupon not found");
 
-    // Delete usage records first
+    // حذف سجلات الاستخدام أولاً، ثم حذف الكوبون 
+    // (الـ couponRestaurants هيتمسح تلقائي بسبب الـ Cascade في الداتابيز)
     await db.delete(couponUsages).where(eq(couponUsages.couponId, id));
-    await db.delete(couponRestaurants).where(eq(couponRestaurants.couponId, id));
     await db.delete(coupons).where(eq(coupons.id, id));
 
     return SuccessResponse(res, { message: "Coupon deleted successfully" });
@@ -236,12 +231,8 @@ export const toggleCouponStatus = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 7. Validate & Apply Coupon (used from order flow)
+// 7. Validate & Apply Coupon (Internal Function)
 // ==========================================
-/**
- * Returns the calculated discount amount if the coupon is valid.
- * Throws a BadRequest with a descriptive message if invalid.
- */
 export const validateCoupon = async (
     couponCode: string,
     userId: string,
@@ -255,7 +246,7 @@ export const validateCoupon = async (
         .from(coupons)
         .innerJoin(couponRestaurants, eq(coupons.id, couponRestaurants.couponId))
         .where(and(
-            eq(coupons.code, couponCode.toUpperCase()),
+            eq(coupons.code, couponCode.toUpperCase().trim()),
             eq(couponRestaurants.restaurantId, restaurantId)
         ))
         .limit(1);
@@ -264,41 +255,35 @@ export const validateCoupon = async (
     const coupon = rawCoupon.coupons;
     if (!coupon.isActive) throw new BadRequest("This coupon is no longer active");
 
-    // Date range check
     if (coupon.startDate && now < coupon.startDate)
         throw new BadRequest("This coupon is not yet valid");
     if (coupon.endDate && now > coupon.endDate)
         throw new BadRequest("This coupon has expired");
 
-    // Minimum order check
     const minOrder = parseFloat(coupon.minOrderAmount as string);
     if (subtotal < minOrder)
         throw new BadRequest(`Minimum order amount to use this coupon is ${minOrder}`);
 
-    // Global usage limit
     if (coupon.usageLimit !== null && (coupon.usedCount ?? 0) >= coupon.usageLimit)
         throw new BadRequest("This coupon has reached its usage limit");
 
-    // Per-user usage limit
     if (coupon.perUserLimit !== null) {
-        const userUsageCount = await db
+        const rows = await db
             .select({ count: sql<number>`COUNT(*)` })
             .from(couponUsages)
             .where(and(
                 eq(couponUsages.couponId, coupon.id),
                 eq(couponUsages.userId, userId)
-            ))
-            .then(rows => Number(rows[0]?.count ?? 0));
+            ));
 
+        const userUsageCount = Number(rows[0]?.count ?? 0);
         if (userUsageCount >= coupon.perUserLimit)
             throw new BadRequest("You have already used this coupon the maximum number of times");
     }
 
-    // Calculate discount amount
     let discountAmount = 0;
 
     if (coupon.discountType === "free_delivery") {
-        // Handled at order level (deliveryFee = 0)
         discountAmount = 0;
     } else if (coupon.discountType === "percentage") {
         const pct = parseFloat(coupon.discountValue as string);
@@ -306,7 +291,6 @@ export const validateCoupon = async (
         const maxD = coupon.maxDiscount ? parseFloat(coupon.maxDiscount as string) : null;
         if (maxD !== null && discountAmount > maxD) discountAmount = maxD;
     } else {
-        // fixed_amount
         discountAmount = parseFloat(coupon.discountValue as string);
         if (discountAmount > subtotal) discountAmount = subtotal;
     }
@@ -315,17 +299,17 @@ export const validateCoupon = async (
 };
 
 // ==========================================
-// 8. Validate Coupon Endpoint (for frontend check before order)
+// 8. Validate Coupon Endpoint (Used by Customers App)
 // ==========================================
 export const validateCouponEndpoint = async (req: Request, res: Response) => {
-    const { code, subtotal } = req.body;
-    const userId = req.user?.id;
-    const restaurantId = req.user?.restaurantId || req.user?.id;
+    // [تعديل مهم]: الـ restaurantId يأتي من الـ body لأن المستخدم (العميل) هو من يفحص الكوبون
+    const { code, subtotal, restaurantId } = req.body;
+    const userId = req.user?.id; // الـ ID بتاع العميل اللي مسجل دخول
 
     if (!code) throw new BadRequest("Coupon code is required");
     if (!subtotal) throw new BadRequest("Subtotal is required");
+    if (!restaurantId) throw new BadRequest("Restaurant ID is required");
     if (!userId) throw new BadRequest("Unauthorized");
-    if (!restaurantId) throw new BadRequest("Unauthorized");
 
     const { discountAmount, coupon } = await validateCoupon(
         code,
