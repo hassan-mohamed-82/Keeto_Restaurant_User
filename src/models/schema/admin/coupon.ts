@@ -14,9 +14,6 @@ import { restaurants } from "./restaurants";
 export const coupons = mysqlTable("coupons", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
 
-    restaurantId: char("restaurant_id", { length: 36 })
-        .references(() => restaurants.id)
-        .notNull(),
 
     // The promo code users type in (unique per restaurant)
     code: varchar("code", { length: 50 }).notNull().unique(),
@@ -72,4 +69,18 @@ export const couponUsages = mysqlTable("coupon_usages", {
     discountAmount: decimal("discount_amount", { precision: 10, scale: 2 }).notNull(),
 
     usedAt: timestamp("used_at").defaultNow(),
+});
+
+export const couponRestaurants = mysqlTable("coupon_restaurants", {
+    id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
+
+    couponId: char("coupon_id", { length: 36 })
+        .references(() => coupons.id, { onDelete: "cascade" })
+        .notNull(),
+
+    restaurantId: char("restaurant_id", { length: 36 })
+        .references(() => restaurants.id, { onDelete: "cascade" })
+        .notNull(),
+
+    createdAt: timestamp("created_at").defaultNow(),
 });
