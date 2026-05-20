@@ -51,4 +51,6 @@ __exportStar(require("./schema/user/restaurantRating"), exports);
 __exportStar(require("./schema/admin/coupon"), exports);
 __exportStar(require("./schema/admin/discount"), exports);
 __exportStar(require("./schema/admin/policy"), exports);
+__exportStar(require("./schema/user/userAddHome"), exports);
 __exportStar(require("./schema/admin/popup"), exports);
+__exportStar(require("./schema/admin/notifications"), exports);

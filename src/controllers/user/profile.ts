@@ -4,10 +4,11 @@ import { db } from "../../models/connection";
 import { cities, countries, users, userWallets, zones, } from "../../models/schema";
 import { eq } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
-import { handleImageUpdate } from "../../utils/handleImages";
+import { UnauthorizedError } from "../../Errors";
 
 export const getProfile = async (req: Request | any, res: Response) => {
-    const userId = req.user.id;
+    if (!req.user) throw new UnauthorizedError("Unauthenticated");
+    const userId = req.user?.id || req.user?._id; 
 
     const [userInfo] = await db
         .select({
@@ -19,10 +20,6 @@ export const getProfile = async (req: Request | any, res: Response) => {
             isVerified: users.isVerified,
             createdAt: users.createdAt,
 
-            // 🔥 names بدل IDs
-            countryName: countries.name,
-            cityName: cities.name,
-            zoneName: zones.name,
         })
         .from(users)
         .where(eq(users.id, userId))
@@ -45,7 +42,8 @@ export const getProfile = async (req: Request | any, res: Response) => {
                 phone: userInfo.phone,
                 photo: userInfo.photo,
 
-            
+          
+
                 isVerified: userInfo.isVerified,
                 createdAt: userInfo.createdAt,
             },
@@ -54,20 +52,12 @@ export const getProfile = async (req: Request | any, res: Response) => {
     });
 };
 export const updateProfile = async (req: Request | any, res: Response) => {
-    const userId = req.user.id;
+    if (!req.user) throw new UnauthorizedError("Unauthenticated");
+    const userId = req.user?.id || req.user?._id; 
     const { name, phone, photo } = req.body;
 
-    const existingUser = await db.select({ photo: users.photo }).from(users).where(eq(users.id, userId)).limit(1);
-
-    let updatedPhoto: string | null = existingUser[0]?.photo ?? null;
-    if (photo && photo.startsWith("data:image")) {
-        updatedPhoto = (await handleImageUpdate(req, existingUser[0]?.photo, photo, "users")) ?? null;
-    } else if (photo !== undefined) {
-        updatedPhoto = photo ?? null;
-    }
-
     await db.update(users)
-        .set({ name, phone, photo: updatedPhoto ?? null })
+        .set({ name, phone, photo })
         .where(eq(users.id, userId));
 
     return SuccessResponse(res, { message: "Profile updated successfully" });

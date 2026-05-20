@@ -7,12 +7,14 @@ const drizzle_orm_1 = require("drizzle-orm");
 const response_1 = require("../../utils/response");
 const BadRequest_1 = require("../../Errors/BadRequest");
 const uuid_1 = require("uuid");
-const handleImages_1 = require("../../utils/handleImages");
+const Errors_1 = require("../../Errors");
 // =====================================================
 // 1. شحن المحفظة (Add Fund to Wallet)
 // =====================================================
 const addFundToWallet = async (req, res) => {
-    const userId = req.user?.id;
+    if (!req.user)
+        throw new Errors_1.UnauthorizedError("Unauthenticated");
+    const userId = req.user.id;
     const { amount, paymentMethodId, receiptImage } = req.body;
     const depositAmount = Number(amount);
     const [method] = await connection_1.db
@@ -22,11 +24,7 @@ const addFundToWallet = async (req, res) => {
         .limit(1);
     if (!method)
         throw new BadRequest_1.BadRequest("Invalid payment method");
-    let finalReceiptImage = receiptImage;
-    if (receiptImage && receiptImage.startsWith("data:image")) {
-        finalReceiptImage = await (0, handleImages_1.saveBase64Image)(receiptImage, req, "receipts");
-    }
-    const isManual = !!finalReceiptImage;
+    const isManual = !!receiptImage;
     await connection_1.db.transaction(async (tx) => {
         let [wallet] = await tx
             .select()
@@ -57,7 +55,7 @@ const addFundToWallet = async (req, res) => {
                 transactionType: "manual_deposit",
                 amount: depositAmount.toString(),
                 balanceBefore: before.toString(),
-                receiptImage: finalReceiptImage,
+                receiptImage,
                 status: "pending",
                 reference: "Waiting Admin Approval"
             });
@@ -90,7 +88,9 @@ exports.addFundToWallet = addFundToWallet;
 // 2. تحويل النقاط لفلوس (Convert Loyalty Points)
 // =====================================================
 const convertLoyaltyPoints = async (req, res) => {
-    const userId = req.user?.id;
+    if (!req.user)
+        throw new Errors_1.UnauthorizedError("Unauthenticated");
+    const userId = req.user.id;
     const { pointsToConvert } = req.body;
     const points = parseInt(pointsToConvert);
     // افتراض: كل 100 نقطة = 10 جنيه
@@ -129,7 +129,9 @@ exports.convertLoyaltyPoints = convertLoyaltyPoints;
 // 3. عرض سجل المحفظة مع الفلتر (Wallet History Filter)
 // =====================================================
 const getWalletHistory = async (req, res) => {
-    const userId = req.user?.id;
+    if (!req.user)
+        throw new Errors_1.UnauthorizedError("Unauthenticated");
+    const userId = req.user.id;
     const { filter } = req.query;
     let conditions = (0, drizzle_orm_1.eq)(schema_1.userWalletTransactions.userId, userId);
     if (filter === "orders") {

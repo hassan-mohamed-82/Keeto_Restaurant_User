@@ -9,6 +9,7 @@ const BadRequest_1 = require("../../Errors/BadRequest");
 const NotFound_1 = require("../../Errors/NotFound");
 const uuid_1 = require("uuid");
 const selectReasons_1 = require("../../models/schema/admin/selectReasons");
+const notifications_1 = require("../../utils/notifications");
 // ==========================================
 // 1. جلب كل الأوردرات الخاصة بالمطعم/الفرع
 // ==========================================
@@ -304,6 +305,25 @@ const updateOrderStatus = async (req, res) => {
                 note: `Order ${existingOrder.orderNumber} delivered. Commission deducted: ${appCommission}`,
                 createdAt: new Date()
             });
+        }
+    });
+    // ==========================================
+    // 4. Send Notification to User
+    // ==========================================
+    let messageBody = `Your order ${existingOrder.orderNumber} is now ${status}.`;
+    if (status === "cancelled" || status === "rejected") {
+        messageBody = `Your order ${existingOrder.orderNumber} was ${status}. Reason: ${cancelReason || "Not specified"}`;
+    }
+    await (0, notifications_1.sendPushNotification)({
+        recipientType: "user",
+        recipientId: existingOrder.userId,
+        title: "Order Update",
+        body: messageBody,
+        data: {
+            orderId: existingOrder.id,
+            orderNumber: existingOrder.orderNumber,
+            status: status,
+            type: "ORDER_STATUS_UPDATE"
         }
     });
     return (0, response_1.SuccessResponse)(res, { message: `Order status successfully updated to ${status} and financials settled` });

@@ -6,13 +6,14 @@ import { eq, and, desc } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { v4 as uuidv4 } from "uuid";
-import { saveBase64Image } from "../../utils/handleImages";
+import { UnauthorizedError } from "../../Errors";
 
 // =====================================================
 // 1. شحن المحفظة (Add Fund to Wallet)
 // =====================================================
 export const addFundToWallet = async (req: Request, res: Response) => {
-    const userId = req.user?.id;
+    if (!req.user) throw new UnauthorizedError("Unauthenticated");
+    const userId = req.user.id; 
     const {
         amount,
         paymentMethodId,
@@ -29,12 +30,7 @@ export const addFundToWallet = async (req: Request, res: Response) => {
 
     if (!method) throw new BadRequest("Invalid payment method");
 
-    let finalReceiptImage = receiptImage;
-    if (receiptImage && receiptImage.startsWith("data:image")) {
-        finalReceiptImage = await saveBase64Image(receiptImage, req, "receipts");
-    }
-
-    const isManual = !!finalReceiptImage;
+    const isManual = !!receiptImage;
 
     await db.transaction(async (tx) => {
 
@@ -71,7 +67,7 @@ export const addFundToWallet = async (req: Request, res: Response) => {
                 transactionType: "manual_deposit",
                 amount: depositAmount.toString(),
                 balanceBefore: before.toString(),
-                receiptImage: finalReceiptImage,
+                receiptImage,
                 status: "pending",
                 reference: "Waiting Admin Approval"
             });
@@ -108,7 +104,8 @@ export const addFundToWallet = async (req: Request, res: Response) => {
 // 2. تحويل النقاط لفلوس (Convert Loyalty Points)
 // =====================================================
 export const convertLoyaltyPoints = async (req: Request, res: Response) => {
-    const userId = req.user?.id;
+    if (!req.user) throw new UnauthorizedError("Unauthenticated");
+    const userId = req.user.id; 
     const { pointsToConvert } = req.body;
     const points = parseInt(pointsToConvert);
 
@@ -155,9 +152,9 @@ export const convertLoyaltyPoints = async (req: Request, res: Response) => {
 // 3. عرض سجل المحفظة مع الفلتر (Wallet History Filter)
 // =====================================================
 export const getWalletHistory = async (req: Request, res: Response) => {
-    const userId = req.user?.id;
-    const { filter } = req.query;
-
+    if (!req.user) throw new UnauthorizedError("Unauthenticated");
+    const userId = req.user.id; 
+     const { filter } = req.query;
     let conditions = eq(userWalletTransactions.userId, userId as string);
 
     if (filter === "orders") {
