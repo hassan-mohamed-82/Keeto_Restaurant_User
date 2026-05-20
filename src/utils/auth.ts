@@ -13,7 +13,7 @@ const JWT_SECRET = process.env.JWT_SECRET as string;
 const TOKEN_EXPIRY: Record<Role, SignOptions['expiresIn']> = {
   user: '30d',
   admin: '7d',
-  restaurant_admin: '7d',
+  owner: '7d',
 };
 
 // ═══════════════════════════════════════════════════════════════

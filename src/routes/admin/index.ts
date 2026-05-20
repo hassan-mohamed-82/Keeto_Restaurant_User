@@ -31,7 +31,7 @@ const router = Router();
 
 router.use("/auth", authRouter);
 // ضفنا الـ Underscore هنا 👇
-router.use(authenticated, authorizeRoles("restaurant_admin", "subadmin", "branch_manager"));
+router.use(authenticated, authorizeRoles("owner", "subadmin", "branch_manager", "staff"));
 router.use("/restaurantadmin", AdmiRouter);
 router.use("/roles", RolesRouter);
 router.use("/subcategories", SubcategoryRouter);

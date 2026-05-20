@@ -47,7 +47,8 @@ export const generateAdminToken = (data: {
 export const generateRestaurantAdminToken = (data: {
     id: string;
     name: string;
-    type: "subadmin" | "branch_manager" | "restaurantadmin";
+    // 🔄 ضفنا هنا "owner" و "staff" لتقبلها الدالة في الـ Login مباشرة دون اعتراض
+    type: "subadmin" | "branch_manager" | "owner" | "staff";
     restaurantId: string;
     branchId?: string | null;
 }): string => {
@@ -55,8 +56,8 @@ export const generateRestaurantAdminToken = (data: {
         {
             id: data.id,
             name: data.name,
-            role: "restaurant_admin",
-            type: data.type,
+            role: data.type,
+            type: data.type, // هنا سيتم تخزين "owner" أو "staff" داخل الـ token payload
             restaurantId: data.restaurantId,
             branchId: data.branchId || null,
         },
