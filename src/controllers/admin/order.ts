@@ -16,6 +16,7 @@ import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors/NotFound";
 import { v4 as uuidv4 } from "uuid";
 import { selectReasons } from "../../models/schema/admin/selectReasons";
+import { sendPushNotification } from "../../utils/notifications";
 
 // ==========================================
 // 1. جلب كل الأوردرات الخاصة بالمطعم/الفرع
@@ -332,6 +333,27 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
                 note: `Order ${existingOrder.orderNumber} delivered. Commission deducted: ${appCommission}`,
                 createdAt: new Date()
             });
+        }
+    });
+
+    // ==========================================
+    // 4. Send Notification to User
+    // ==========================================
+    let messageBody = `Your order ${existingOrder.orderNumber} is now ${status}.`;
+    if (status === "cancelled" || status === "rejected") {
+        messageBody = `Your order ${existingOrder.orderNumber} was ${status}. Reason: ${cancelReason || "Not specified"}`;
+    }
+
+    await sendPushNotification({
+        recipientType: "user",
+        recipientId: existingOrder.userId,
+        title: "Order Update",
+        body: messageBody,
+        data: {
+            orderId: existingOrder.id,
+            orderNumber: existingOrder.orderNumber,
+            status: status,
+            type: "ORDER_STATUS_UPDATE"
         }
     });
 

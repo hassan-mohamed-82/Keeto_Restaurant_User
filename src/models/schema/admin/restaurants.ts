@@ -60,6 +60,7 @@ export const restaurants = mysqlTable("restaurants", {
     // بيانات الدخول (Account Information)
     email: varchar("email", { length: 255 }).notNull().unique(),
     password: varchar("password", { length: 255 }).notNull(),
+    fcmToken: text("fcm_token"),
     // 💡 ملاحظة: حقل Confirm Password مش بيتسجل في الداتابيز، ده بيكون Validation في الـ Controller بس
      
     type: mysqlEnum("type", ["restaurantadmin", "subadmin"]).default("restaurantadmin"),

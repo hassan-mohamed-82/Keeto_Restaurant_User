@@ -14,7 +14,6 @@ const BadRequest_1 = require("../../Errors/BadRequest");
 const jwt_1 = require("../../utils/jwt");
 const sendEmails_1 = require("../../utils/sendEmails");
 const verifyEmailPages_1 = require("../../utils/verifyEmailPages");
-const handleImages_1 = require("../../utils/handleImages");
 const generateOTP = (length = 6) => {
     let otp = "";
     for (let i = 0; i < length; i++) {
@@ -34,10 +33,6 @@ const signup = async (req, res) => {
     const hashedPassword = await bcrypt_1.default.hash(password, 10);
     // 🔥 always use same userId logic
     const userId = existingUser ? existingUser.id : (0, uuid_1.v4)();
-    let savedPhoto = photo;
-    if (photo && photo.startsWith("data:image")) {
-        savedPhoto = await (0, handleImages_1.saveBase64Image)(photo, req, "users");
-    }
     // استدعاء الرابط من البيئة، وإذا لم يوجد نستخدم لوكال هوست كاحتياط
     const baseUrl = process.env.BASE_URL || "http://localhost:3000";
     const token = (0, uuid_1.v4)();
@@ -52,7 +47,7 @@ const signup = async (req, res) => {
                 name,
                 phone,
                 password: hashedPassword,
-                photo: savedPhoto,
+                photo,
             }).where((0, drizzle_orm_1.eq)(schema_1.users.id, userId));
             // delete old tokens
             await tx.delete(schema_1.emailVerifications).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.emailVerifications.userId, userId), (0, drizzle_orm_1.eq)(schema_1.emailVerifications.purpose, "verify_email")));
@@ -64,7 +59,7 @@ const signup = async (req, res) => {
                 email,
                 phone,
                 password: hashedPassword,
-                photo: savedPhoto,
+                photo,
                 isVerified: false
             });
         }
@@ -196,8 +191,6 @@ const login = async (req, res) => {
         // ممكن نعيد إرسال الكود هنا لو أردت
         throw new BadRequest_1.BadRequest("Please verify your email before logging in");
     }
-    if (!user.password)
-        throw new BadRequest_1.BadRequest("This account uses social login. Please login with Google or Facebook.");
     const isMatch = await bcrypt_1.default.compare(password, user.password);
     if (!isMatch)
         throw new BadRequest_1.BadRequest("Invalid credentials");

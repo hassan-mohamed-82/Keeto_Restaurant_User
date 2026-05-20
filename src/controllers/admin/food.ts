@@ -506,36 +506,46 @@ export const getFoodSelectData = async (req: Request, res: Response) => {
 
   
     // ✅ جلب الأقسام الخاصة بالمطعم فقط (بافتراض إن الجدول يحتوي على restaurantid)
-    const myCategories = await db
-        .select({ id: categories.id, name: categories.name })
-        .from(categories)
-        .where(and(eq(categories.status, "active")));
+    // ✅ Categories - عام لجميع المطاعم (لأن الجدول ليس له restaurantId)
+const myCategories = await db
+    .select({ id: categories.id, name: categories.name })
+    .from(categories)
+    .where(eq(categories.status, "active"));
 
-    // ✅ جلب الأقسام الفرعية الخاصة بالمطعم فقط
-    const mySubcategories = await db
-        .select({
-            id: subcategories.id,
-            name: subcategories.name,
-            categoryId: subcategories.categoryId
-        })
-        .from(subcategories)
-        .where(and(eq(subcategories.status, "active")));
+// ✅ Subcategories - فقط الخاصة بالمطعم الحالي
+const mySubcategories = await db
+    .select({
+        id: subcategories.id,
+        name: subcategories.name,
+        categoryId: subcategories.categoryId
+    })
+    .from(subcategories)
+    .where(and(
+        eq(subcategories.status, "active"), 
+        eq(subcategories.restaurantId, restaurantId)  // ✅ تمت الإضافة
+    ));
 
-    // ✅ جلب الإضافات الخاصة بالمطعم فقط
-    const myAddons = await db
-        .select({ id: addons.id, name: addons.name })
-        .from(addons)
-        .where(and(eq(addons.status, "active"), eq(addons.restaurantid, restaurantId)));
-   const list = await db.select({
-           id: ingredients.id,
-           name: ingredients.name,
-           inStock: ingredients.inStock,
-           categoryId: ingredients.categoryId,
-           categoryName: ingredientCategories.name
-       })
-       .from(ingredients)
-       .leftJoin(ingredientCategories, eq(ingredients.categoryId, ingredientCategories.id))
-       .where(eq(ingredients.restaurantId, restaurantId));
+// ✅ Addons - فقط الخاصة بالمطعم
+const myAddons = await db
+    .select({ id: addons.id, name: addons.name })
+    .from(addons)
+    .where(and(
+        eq(addons.status, "active"), 
+        eq(addons.restaurantid, restaurantId)
+    ));
+
+    // ✅ جلب المكونات الخاصة بالمطعم فقط
+    const list = await db.select({
+        id: ingredients.id,
+        name: ingredients.name,
+        inStock: ingredients.inStock,
+        categoryId: ingredients.categoryId,
+        categoryName: ingredientCategories.name
+    })
+    .from(ingredients)
+    .leftJoin(ingredientCategories, eq(ingredients.categoryId, ingredientCategories.id))
+    .where(eq(ingredients.restaurantId, restaurantId));
+
     
     return SuccessResponse(res, {
         message: "Get food select data success",

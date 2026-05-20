@@ -37,4 +37,7 @@ export * from "./schema/user/restaurantRating";
 export * from "./schema/admin/coupon";
 export * from "./schema/admin/discount";
 export * from "./schema/admin/policy";
+export * from "./schema/user/userAddHome";
 export * from "./schema/admin/popup";
+export * from "./schema/admin/notifications";
+

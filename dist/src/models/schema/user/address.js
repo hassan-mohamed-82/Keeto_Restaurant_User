@@ -11,6 +11,8 @@ exports.addresses = (0, mysql_core_1.mysqlTable)("addresses", {
     zoneId: (0, mysql_core_1.char)("zone_id", { length: 36 }).references(() => zone_1.zones.id).notNull(),
     type: (0, mysql_core_1.mysqlEnum)("type", ["home", "work", "other"]).default("home"),
     title: (0, mysql_core_1.varchar)("title", { length: 255 }).notNull(),
+    lat: (0, mysql_core_1.varchar)("lat", { length: 255 }).notNull(),
+    lng: (0, mysql_core_1.varchar)("lng", { length: 255 }).notNull(),
     street: (0, mysql_core_1.varchar)("street", { length: 255 }).notNull(),
     number: (0, mysql_core_1.varchar)("number", { length: 20 }).notNull(),
     floor: (0, mysql_core_1.varchar)("floor", { length: 20 }),

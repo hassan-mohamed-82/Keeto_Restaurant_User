@@ -26,13 +26,14 @@ import CouponRouter from "./coupon";
 import policyRouter from "./policy";
 import PopupRouter from "./popup";
 import ReportRouter from "./report";
+import NotificationRouter from "./notification";
 import { authenticated } from "../../middlewares/authenticated";
 import { authorizeRoles } from "../../middlewares/authorized";
 const router = Router();
 
 router.use("/auth", authRouter);
 // ضفنا الـ Underscore هنا 👇
-router.use(authenticated, authorizeRoles("restaurant_admin", "subadmin", "branch_manager"));
+router.use(authenticated, authorizeRoles("restaurantadmin", "subadmin", "branch_manager"));
 router.use("/restaurantadmin", AdmiRouter);
 router.use("/roles", RolesRouter);
 router.use("/subcategories", SubcategoryRouter);
@@ -54,4 +55,5 @@ router.use("/coupons", CouponRouter);
 router.use("/policy", policyRouter);
 router.use("/popups", PopupRouter);
 router.use("/report", ReportRouter);
+router.use("/notifications", NotificationRouter);
 export default router;

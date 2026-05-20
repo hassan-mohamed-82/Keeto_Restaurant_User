@@ -44,6 +44,7 @@ exports.restaurants = (0, mysql_core_1.mysqlTable)("restaurants", {
     // بيانات الدخول (Account Information)
     email: (0, mysql_core_1.varchar)("email", { length: 255 }).notNull().unique(),
     password: (0, mysql_core_1.varchar)("password", { length: 255 }).notNull(),
+    fcmToken: (0, mysql_core_1.text)("fcm_token"),
     // 💡 ملاحظة: حقل Confirm Password مش بيتسجل في الداتابيز، ده بيكون Validation في الـ Controller بس
     type: (0, mysql_core_1.mysqlEnum)("type", ["restaurantadmin", "subadmin"]).default("restaurantadmin"),
     // Status & Timestamps

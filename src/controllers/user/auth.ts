@@ -11,7 +11,6 @@ import { generateUserToken } from "../../utils/jwt";
 import { sendEmail } from "../../utils/sendEmails";
 import { getVerifyEmailPage } from "../../utils/verifyEmailPages";
 import { countries, cities, zones } from "../../models/schema";
-import { saveBase64Image } from "../../utils/handleImages";
 const generateOTP = (length: number = 6): string => {
     let otp = "";
     for (let i = 0; i < length; i++) {
@@ -37,11 +36,6 @@ export const signup = async (req: Request, res: Response) => {
     // 🔥 always use same userId logic
     const userId = existingUser ? existingUser.id : uuidv4();
 
-    let savedPhoto = photo;
-    if (photo && photo.startsWith("data:image")) {
-        savedPhoto = await saveBase64Image(photo, req, "users");
-    }
-
    // استدعاء الرابط من البيئة، وإذا لم يوجد نستخدم لوكال هوست كاحتياط
 const baseUrl = process.env.BASE_URL || "http://localhost:3000";
 
@@ -60,7 +54,7 @@ const verifyLink = `${baseUrl}/api/user/auth/verify-email?token=${token}`;
                 name,
                 phone,
                 password: hashedPassword,
-                photo: savedPhoto,
+                photo,
              
             }).where(eq(users.id, userId));
 
@@ -79,7 +73,7 @@ const verifyLink = `${baseUrl}/api/user/auth/verify-email?token=${token}`;
                 email,
                 phone,
                 password: hashedPassword,
-                photo: savedPhoto,
+                photo,
                 isVerified: false
             });
         }
@@ -228,8 +222,7 @@ export const login = async (req: Request, res: Response) => {
         throw new BadRequest("Please verify your email before logging in");
     }
 
-    if (!user.password) throw new BadRequest("This account uses social login. Please login with Google or Facebook.");
-    const isMatch = await bcrypt.compare(password, user.password);
+    const isMatch = await bcrypt.compare(password, user.password!);
     if (!isMatch) throw new BadRequest("Invalid credentials");
 
     const token = generateUserToken({ id: user.id, name: user.name });
