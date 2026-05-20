@@ -18,82 +18,72 @@ async function login(req, res) {
         throw new BadRequest_1.BadRequest("Email and password are required");
     }
     // ====================================================
-    // 1. أولاً: البحث في جدول المطاعم (حساب المالك - Owner)
+    // 1. البحث في جدول الحسابات الموحد (restrauntadmin)
     // ====================================================
-    const restaurantOwner = await connection_1.db.select().from(schema_1.restaurants).where((0, drizzle_orm_1.eq)(schema_1.restaurants.email, email)).limit(1);
-    if (restaurantOwner.length > 0) {
-        const owner = restaurantOwner[0];
-        const isPasswordValid = await bcrypt_1.default.compare(password, owner.password);
-        if (!isPasswordValid)
-            throw new Errors_1.UnauthorizedError("Invalid Credentials");
-        if (owner.status === "inactive")
-            throw new Errors_1.UnauthorizedError("Restaurant account is inactive");
-        // 💡 التوكن الخاص بمالك المطعم (معهوش branchId لأنه بيشوف كل الفروع)
-        const tokenPayload = {
-            id: owner.id,
-            restaurantId: owner.id, // 👈 مهم عشان باقي الكنترولرز بتدور على req.user.restaurantId
-            name: owner.name,
-            type: "subadmin", // المالك بيتعامل كـ subadmin (أعلى صلاحية في المطعم)
-        };
-        const token = (0, jwt_1.generateRestaurantAdminToken)(tokenPayload);
-        return (0, response_1.SuccessResponse)(res, {
-            message: "Restaurant Owner logged in successfully",
-            token,
-            admin: {
-                name: owner.name,
-                email: owner.email,
-                phoneNumber: owner.ownerPhone,
-                roleId: null, // المالك ملوش Role محدد لأنه الـ Super بتاع مطعمه
-                permissions: [], // ممكن تخلي الفرانتد يفهم إن الـ permissions الفاضية للمالك تعني "كل الصلاحيات"
-                status: owner.status,
-                type: "restaurantadmin",
-                restaurantId: owner.id
-            }
-        }, 200);
+    const [user] = await connection_1.db
+        .select()
+        .from(schema_1.restrauntadmin)
+        .where((0, drizzle_orm_1.eq)(schema_1.restrauntadmin.email, email.trim().toLowerCase()))
+        .limit(1);
+    // إذا لم يتم العثور على الحساب
+    if (!user) {
+        throw new Errors_1.UnauthorizedError("Invalid Credentials");
     }
-    // ====================================================
-    // 2. ثانياً: البحث في جدول الموظفين (Staff / Branch Managers)
-    // ====================================================
-    const staff = await connection_1.db.select().from(schema_1.restrauntadmin).where((0, drizzle_orm_1.eq)(schema_1.restrauntadmin.email, email)).limit(1);
-    if (staff.length > 0) {
-        const admin = staff[0];
-        const isPasswordValid = await bcrypt_1.default.compare(password, admin.password);
-        if (!isPasswordValid)
-            throw new Errors_1.UnauthorizedError("Invalid Credentials");
-        if (admin.status === "inactive")
-            throw new Errors_1.UnauthorizedError("Admin is inactive");
-        let role = null;
-        if (admin.roleId) {
-            const roleResult = await connection_1.db.select().from(schema_1.rolesadmin).where((0, drizzle_orm_1.eq)(schema_1.rolesadmin.id, admin.roleId)).limit(1);
-            role = roleResult[0];
+    // 2. التحقق من صحة كلمة المرور
+    const isPasswordValid = await bcrypt_1.default.compare(password, user.password);
+    if (!isPasswordValid) {
+        throw new Errors_1.UnauthorizedError("Invalid Credentials");
+    }
+    // 3. التحقق من حالة حساب المستخدم نفسه
+    if (user.status === "inactive") {
+        throw new Errors_1.UnauthorizedError("Your account is deactivated. Please contact support.");
+    }
+    // 4. التحقق من حالة المطعم التابع له الحساب (لحماية السيستم إذا قام السوبر أدمن بحظر المطعم)
+    if (user.restaurantId) {
+        const [restaurant] = await connection_1.db
+            .select({ status: schema_1.restaurants.status })
+            .from(schema_1.restaurants)
+            .where((0, drizzle_orm_1.eq)(schema_1.restaurants.id, user.restaurantId))
+            .limit(1);
+        if (restaurant && restaurant.status === "inactive") {
+            throw new Errors_1.UnauthorizedError("The restaurant business is currently suspended.");
         }
-        // 💡 التوكن الخاص بالموظف (معاه restaurantId وممكن branchId)
-        const tokenPayload = {
-            id: admin.id,
-            restaurantId: admin.restaurantId, // 👈 بيتربط بمطعم معين
-            branchId: admin.branchId, // 👈 بيتربط بفرع معين (لو مدير فرع)
-            name: admin.name,
-            type: admin.type, // "subadmin" | "branch_manager"
-        };
-        const token = (0, jwt_1.generateRestaurantAdminToken)(tokenPayload);
-        return (0, response_1.SuccessResponse)(res, {
-            message: "Staff logged in successfully",
-            token,
-            admin: {
-                name: admin.name,
-                email: admin.email,
-                phoneNumber: admin.phoneNumber,
-                roleId: admin.roleId,
-                permissions: admin.permissions,
-                status: admin.status,
-                type: admin.type,
-                restaurantId: admin.restaurantId,
-                branchId: admin.branchId
-            }
-        }, 200);
     }
-    // ====================================================
-    // 3. لو ملقاهوش لا هنا ولا هنا
-    // ====================================================
-    throw new Errors_1.UnauthorizedError("Invalid Credentials");
+    // 5. جلب الـ Role إذا كان المستخدم موظفاً وله دور محدد
+    let role = null;
+    if (user.roleId) {
+        const [roleResult] = await connection_1.db
+            .select()
+            .from(schema_1.rolesadmin)
+            .where((0, drizzle_orm_1.eq)(schema_1.rolesadmin.id, user.roleId))
+            .limit(1);
+        role = roleResult;
+    }
+    // 6. تجهيز الـ Token Payload الديناميكي
+    // الـ Owner يملك صلاحيات كاملة (branchId: null)، والـ Staff يتربط بفرعه الفردي
+    const tokenPayload = {
+        id: user.id,
+        restaurantId: user.restaurantId,
+        branchId: user.branchId, // سيكون تلقائياً null في حالة الـ owner
+        name: user.name,
+        type: user.type, // "owner" | "branch_manager" | "staff"
+    };
+    const token = (0, jwt_1.generateRestaurantAdminToken)(tokenPayload);
+    // 7. صياغة الاستجابة الموحدة لتناسب الـ Frontend
+    return (0, response_1.SuccessResponse)(res, {
+        message: `${user.type === "owner" ? "Owner" : "Staff"} logged in successfully`,
+        token,
+        admin: {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            phoneNumber: user.phoneNumber,
+            roleId: user.roleId,
+            permissions: user.permissions || [],
+            status: user.status,
+            type: user.type, // الـ الفرونت إند سيتعرف على المالك من خلال "owner"
+            restaurantId: user.restaurantId,
+            branchId: user.branchId
+        }
+    }, 200);
 }

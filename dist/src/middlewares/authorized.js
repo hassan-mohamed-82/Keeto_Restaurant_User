@@ -8,7 +8,9 @@ const authorizeRoles = (...roles) => {
         if (!req.user) {
             throw new Errors_1.UnauthorizedError("Not authenticated");
         }
-        if (!roles.includes(req.user.role)) {
+        // 🔄 2. تأمين الفحص: نقرأ الرتبة سواء كانت مخزنة في الـ Token باسم type أو role
+        const userRole = (req.user.type || req.user.role);
+        if (!roles.includes(userRole)) {
             throw new Errors_1.UnauthorizedError("You don't have permission to access this resource");
         }
         next();

@@ -13,7 +13,7 @@ const BadRequest_1 = require("../../Errors/BadRequest");
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const uuid_1 = require("uuid");
 // ==========================================
-// 1. إضافة موظف جديد
+// 1. إضافة موظف جديد (Staff / Branch Manager)
 // ==========================================
 const createStaff = async (req, res) => {
     const restaurantId = (req.user?.restaurantId || req.user?.id);
@@ -23,8 +23,12 @@ const createStaff = async (req, res) => {
     if (!name || !email || !password || !phoneNumber) {
         throw new BadRequest_1.BadRequest("Missing required fields");
     }
-    // التأكد إن الإيميل مش متكرر
-    const existingAdmin = await connection_1.db.select().from(schema_1.restrauntadmin).where((0, drizzle_orm_1.eq)(schema_1.restrauntadmin.email, email)).limit(1);
+    // 🛡️ أمنياً: لا يمكن إنشاء حساب من نوع owner من هنا، المالك ينشأ من السوبر أدمن فقط
+    if (type === "owner") {
+        throw new BadRequest_1.BadRequest("Cannot create another owner account");
+    }
+    // التأكد إن الإيميل مش متكرر في السيستم بالكامل
+    const existingAdmin = await connection_1.db.select().from(schema_1.restrauntadmin).where((0, drizzle_orm_1.eq)(schema_1.restrauntadmin.email, email.trim())).limit(1);
     if (existingAdmin[0])
         throw new BadRequest_1.BadRequest("Email already exists");
     // لو الموظف هيتربط بفرع معين، نتأكد إن الفرع ده تبع المطعم
@@ -47,19 +51,19 @@ const createStaff = async (req, res) => {
         restaurantId,
         branchId: branchId || null,
         name,
-        email,
+        email: email.trim(),
         password: hashedPassword,
         phoneNumber,
-        type: type || "branch_manager",
+        type: type || "branch_manager", // القيمة الافتراضية موظف/مدير فرع وليس مالك
         roleId: roleId || null,
-        permissions: permissions || [], // في حالة لو هتديله Custom permissions غير الـ Role
+        permissions: permissions || [],
         status: "active"
     });
     return (0, response_1.SuccessResponse)(res, { message: "Staff created successfully", data: { id } }, 201);
 };
 exports.createStaff = createStaff;
 // ==========================================
-// 2. جلب كل الموظفين (الخاصين بهذا المطعم فقط)
+// 2. جلب كل الموظفين (مع استثناء حساب الـ Owner الرئيسي)
 // ==========================================
 const getAllStaff = async (req, res) => {
     const restaurantId = (req.user?.restaurantId || req.user?.id);
@@ -86,7 +90,8 @@ const getAllStaff = async (req, res) => {
         .from(schema_1.restrauntadmin)
         .leftJoin(schema_1.branches, (0, drizzle_orm_1.eq)(schema_1.restrauntadmin.branchId, schema_1.branches.id))
         .leftJoin(schema_1.rolesadmin, (0, drizzle_orm_1.eq)(schema_1.restrauntadmin.roleId, schema_1.rolesadmin.id))
-        .where((0, drizzle_orm_1.eq)(schema_1.restrauntadmin.restaurantId, restaurantId)); // 🛡️ حماية: موظفين المطعم ده بس
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.restrauntadmin.restaurantId, restaurantId), (0, drizzle_orm_1.ne)(schema_1.restrauntadmin.type, "owner") // 🛡️ استثناء المالك حتى لا يظهر كالموظفين العاديين
+    ));
     return (0, response_1.SuccessResponse)(res, { message: "Get all staff success", data: staffList });
 };
 exports.getAllStaff = getAllStaff;
@@ -109,8 +114,7 @@ const getStaffById = async (req, res) => {
         roleId: schema_1.restrauntadmin.roleId,
     })
         .from(schema_1.restrauntadmin)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.restrauntadmin.id, id), (0, drizzle_orm_1.eq)(schema_1.restrauntadmin.restaurantId, restaurantId) // 🛡️ حماية
-    )).limit(1);
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.restrauntadmin.id, id), (0, drizzle_orm_1.eq)(schema_1.restrauntadmin.restaurantId, restaurantId))).limit(1);
     if (!staffItem[0])
         throw new NotFound_1.NotFound("Staff member not found");
     return (0, response_1.SuccessResponse)(res, { message: "Get staff by id success", data: staffItem[0] });
@@ -127,6 +131,14 @@ const updateStaff = async (req, res) => {
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.restrauntadmin.id, id), (0, drizzle_orm_1.eq)(schema_1.restrauntadmin.restaurantId, restaurantId))).limit(1);
     if (!existingStaff[0])
         throw new NotFound_1.NotFound("Staff member not found");
+    // 🛡️ حماية أمنية: منع تعديل حساب المالك من لوحة تحكم الموظفين/الفروع
+    if (existingStaff[0].type === "owner") {
+        throw new BadRequest_1.BadRequest("Action denied. Owner account can only be updated by Super Admin.");
+    }
+    // 🛡️ حماية أمنية: منع ترقية موظف عادي إلى رتبة owner من هنا
+    if (type === "owner") {
+        throw new BadRequest_1.BadRequest("Cannot assign owner role to a staff member");
+    }
     const updateData = {};
     if (name)
         updateData.name = name;
@@ -140,12 +152,12 @@ const updateStaff = async (req, res) => {
         updateData.roleId = roleId || null;
     if (permissions)
         updateData.permissions = permissions;
-    // لو بيغير الإيميل، لازم نتأكد إنه مش مستخدم
+    // لو بيغير الإيميل، لازم نتأكد إنه مش مستخدم في أي حساب آخر
     if (email && email !== existingStaff[0].email) {
-        const emailExists = await connection_1.db.select().from(schema_1.restrauntadmin).where((0, drizzle_orm_1.eq)(schema_1.restrauntadmin.email, email)).limit(1);
+        const emailExists = await connection_1.db.select().from(schema_1.restrauntadmin).where((0, drizzle_orm_1.eq)(schema_1.restrauntadmin.email, email.trim())).limit(1);
         if (emailExists[0])
             throw new BadRequest_1.BadRequest("Email already in use");
-        updateData.email = email;
+        updateData.email = email.trim();
     }
     if (Object.keys(updateData).length === 0)
         throw new BadRequest_1.BadRequest("No data to update");
@@ -159,11 +171,15 @@ exports.updateStaff = updateStaff;
 const toggleStaffStatus = async (req, res) => {
     const { id } = req.params;
     const restaurantId = (req.user?.restaurantId || req.user?.id);
-    const existingStaff = await connection_1.db.select({ status: schema_1.restrauntadmin.status })
+    const existingStaff = await connection_1.db.select({ type: schema_1.restrauntadmin.type, status: schema_1.restrauntadmin.status })
         .from(schema_1.restrauntadmin)
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.restrauntadmin.id, id), (0, drizzle_orm_1.eq)(schema_1.restrauntadmin.restaurantId, restaurantId))).limit(1);
     if (!existingStaff[0])
         throw new NotFound_1.NotFound("Staff member not found");
+    // 🛡️ حماية أمنية: منع قفل حساب الـ Owner من هنا
+    if (existingStaff[0].type === "owner") {
+        throw new BadRequest_1.BadRequest("Action denied. Owner status can only be toggled by Super Admin.");
+    }
     const newStatus = existingStaff[0].status === "active" ? "inactive" : "active";
     await connection_1.db.update(schema_1.restrauntadmin)
         .set({ status: newStatus })
@@ -181,6 +197,10 @@ const deleteStaff = async (req, res) => {
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.restrauntadmin.id, id), (0, drizzle_orm_1.eq)(schema_1.restrauntadmin.restaurantId, restaurantId))).limit(1);
     if (!existingStaff[0])
         throw new NotFound_1.NotFound("Staff member not found");
+    // 🛡️ حماية أمنية: منع حذف الـ Owner نهائياً إلا عن طريق حذف المطعم كاملاً من الـ Super Admin
+    if (existingStaff[0].type === "owner") {
+        throw new BadRequest_1.BadRequest("Action denied. Owner account cannot be deleted individually.");
+    }
     await connection_1.db.delete(schema_1.restrauntadmin).where((0, drizzle_orm_1.eq)(schema_1.restrauntadmin.id, id));
     return (0, response_1.SuccessResponse)(res, { message: "Staff deleted successfully" });
 };

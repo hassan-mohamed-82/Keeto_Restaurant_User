@@ -17,7 +17,7 @@ const updateFcmToken = async (req, res) => {
     if (!fcmToken) {
         throw new BadRequest_1.BadRequest("FCM Token is required");
     }
-    if (req.user.type === "restaurantadmin") {
+    if (req.user.type === "owner") {
         // Main restaurant owner
         await connection_1.db.update(schema_1.restaurants)
             .set({ fcmToken })

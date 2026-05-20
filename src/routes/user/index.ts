@@ -12,7 +12,7 @@ import { authorizeRoles } from "../../middlewares/authorized";
 const router = Router();
 router.use("/home", homeRouter);
 router.use("/auth", authRouter);
-router.use(authenticated,authorizeRoles("user"));
+// router.use(authenticated,authorizeRoles("user"));
 router.use("/profile", profileRouter);
 router.use("/order", orderRouter);
 router.use("/cart", cartRouter);

@@ -431,11 +431,12 @@ const getFoodSelectData = async (req, res) => {
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
     // ✅ جلب الأقسام الخاصة بالمطعم فقط (بافتراض إن الجدول يحتوي على restaurantid)
+    // ✅ Categories - عام لجميع المطاعم (لأن الجدول ليس له restaurantId)
     const myCategories = await connection_1.db
         .select({ id: schema_1.categories.id, name: schema_1.categories.name })
         .from(schema_1.categories)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.categories.status, "active")));
-    // ✅ جلب الأقسام الفرعية الخاصة بالمطعم فقط
+        .where((0, drizzle_orm_1.eq)(schema_1.categories.status, "active"));
+    // ✅ Subcategories - فقط الخاصة بالمطعم الحالي
     const mySubcategories = await connection_1.db
         .select({
         id: schema_1.subcategories.id,
@@ -443,12 +444,14 @@ const getFoodSelectData = async (req, res) => {
         categoryId: schema_1.subcategories.categoryId
     })
         .from(schema_1.subcategories)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.status, "active")));
-    // ✅ جلب الإضافات الخاصة بالمطعم فقط
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.status, "active"), (0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId) // ✅ تمت الإضافة
+    ));
+    // ✅ Addons - فقط الخاصة بالمطعم
     const myAddons = await connection_1.db
         .select({ id: schema_1.addons.id, name: schema_1.addons.name })
         .from(schema_1.addons)
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.addons.status, "active"), (0, drizzle_orm_1.eq)(schema_1.addons.restaurantid, restaurantId)));
+    // ✅ جلب المكونات الخاصة بالمطعم فقط
     const list = await connection_1.db.select({
         id: schema_1.ingredients.id,
         name: schema_1.ingredients.name,

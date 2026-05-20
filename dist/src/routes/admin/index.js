@@ -32,7 +32,7 @@ const authorized_1 = require("../../middlewares/authorized");
 const router = (0, express_1.Router)();
 router.use("/auth", auth_1.default);
 // ضفنا الـ Underscore هنا 👇
-router.use(authenticated_1.authenticated, (0, authorized_1.authorizeRoles)("restaurantadmin", "subadmin", "branch_manager"));
+router.use(authenticated_1.authenticated, (0, authorized_1.authorizeRoles)("owner", "subadmin", "branch_manager", "staff"));
 router.use("/restaurantadmin", admin_1.default);
 router.use("/roles", roles_1.default);
 router.use("/subcategories", subcategory_1.default);

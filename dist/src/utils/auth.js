@@ -45,7 +45,7 @@ const JWT_SECRET = process.env.JWT_SECRET;
 const TOKEN_EXPIRY = {
     user: '30d',
     admin: '7d',
-    restaurant_admin: '7d',
+    owner: '7d',
 };
 const generateToken = (data) => {
     const payload = {

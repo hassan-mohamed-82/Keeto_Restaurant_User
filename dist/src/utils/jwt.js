@@ -36,8 +36,8 @@ const generateRestaurantAdminToken = (data) => {
     return jsonwebtoken_1.default.sign({
         id: data.id,
         name: data.name,
-        role: "restaurant_admin",
-        type: data.type,
+        role: data.type,
+        type: data.type, // هنا سيتم تخزين "owner" أو "staff" داخل الـ token payload
         restaurantId: data.restaurantId,
         branchId: data.branchId || null,
     }, JWT_SECRET, { expiresIn: "7d" });
