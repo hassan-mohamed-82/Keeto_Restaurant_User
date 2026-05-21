@@ -55,6 +55,57 @@ export const checkout = async (req: Request | any, res: Response) => {
     const restaurantId = userCart[0].restaurantId;
 
     // ==========================================
+    // 🔒 3.5 Check Restaurant Settings
+    // ==========================================
+    const [settings] = await db
+        .select()
+        .from(restaurantSettings)
+        .where(eq(restaurantSettings.restaurantId, restaurantId))
+        .limit(1);
+
+    if (settings) {
+        // ✅ التحقق من نوع الأوردر
+        if (orderType === "delivery" && !settings.homeDelivery) {
+            throw new BadRequest("Delivery service is currently disabled for this restaurant");
+        }
+        if (orderType === "takeaway" && !settings.takeaway) {
+            throw new BadRequest("Takeaway service is currently disabled for this restaurant");
+        }
+        if (orderType === "dine_in" && !settings.dineIn) {
+            throw new BadRequest("Dine-in service is currently disabled for this restaurant");
+        }
+
+        // ✅ التحقق من مواعيد العمل (إذا لم يكن المطعم مفتوح دائماً)
+        if (!settings.isAlwaysOpen) {
+            const now = new Date();
+            const currentDay = now.getDay(); // 0 = Sunday, 1 = Monday, ...
+            const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+            const schedules = await db
+                .select()
+                .from(restaurantSchedules)
+                .where(eq(restaurantSchedules.restaurantId, restaurantId));
+
+            const todaySchedule = schedules.find(s => s.dayOfWeek === currentDay);
+
+            if (todaySchedule) {
+                if (todaySchedule.isOffDay) {
+                    throw new BadRequest("Restaurant is closed today");
+                }
+
+                // التحقق من الوقت
+                if (todaySchedule.openingTime && todaySchedule.closingTime) {
+                    if (currentTime < todaySchedule.openingTime || currentTime > todaySchedule.closingTime) {
+                        throw new BadRequest(
+                            `Restaurant is closed. Opening hours: ${todaySchedule.openingTime} - ${todaySchedule.closingTime}`
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    // ==========================================
     // 4. Get Restaurant & Business Plan
     // ==========================================
     const [restaurant] = await db.select().from(restaurants).where(eq(restaurants.id, restaurantId)).limit(1);
@@ -96,6 +147,18 @@ export const checkout = async (req: Request | any, res: Response) => {
 
     const serviceFee = plan ? parseFloat(plan.serviceFee as string || "0") : 0;
     let appCommission = orderSource === "food_aggregator" ? subtotal * (parseFloat(plan?.commissionRate as string || "0") / 100) : 0;
+
+    // ==========================================
+    // 5.5 Check Minimum Order Amount
+    // ==========================================
+    if (settings) {
+        const minOrderAmount = parseFloat(settings.minOrderAmount || "0");
+        if (subtotal < minOrderAmount) {
+            throw new BadRequest(
+                `Minimum order amount is ${minOrderAmount}. Your order subtotal is ${subtotal.toFixed(2)}`
+            );
+        }
+    }
 
     // ==========================================
     // 6. Smart Delivery Logic
