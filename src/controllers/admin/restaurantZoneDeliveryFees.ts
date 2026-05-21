@@ -11,7 +11,7 @@ import { v4 as uuidv4 } from "uuid";
 // CREATE Delivery Fee
 // =============================================
 export const createDeliveryFee = async (req: Request, res: Response) => {
-    const restaurantId = req.user?.id;
+    const restaurantId = req.user?.restaurantId || req.user?.id
     if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
 
     const { zoneId, deliveryFee, status } = req.body;
@@ -57,7 +57,7 @@ export const createDeliveryFee = async (req: Request, res: Response) => {
 // GET ALL Delivery Fees (For the Current Restaurant)
 // =============================================
 export const getDeliveryFees = async (req: Request, res: Response) => {
-    const restaurantId = req.user?.id;
+    const restaurantId = req.user?.restaurantId || req.user?.id
     if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
 
     const rawFees = await db.select({
@@ -87,7 +87,7 @@ export const getDeliveryFees = async (req: Request, res: Response) => {
 // =============================================
 export const getDeliveryFeeById = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const restaurantId = req.user?.id;
+    const restaurantId = req.user?.restaurantId || req.user?.id
     if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
 
     const fee = await db.select({
@@ -125,7 +125,7 @@ export const getDeliveryFeeById = async (req: Request, res: Response) => {
 export const updateDeliveryFee = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { deliveryFee, status } = req.body;
-    const restaurantId = req.user?.id;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     
     if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
 
@@ -160,7 +160,7 @@ export const updateDeliveryFee = async (req: Request, res: Response) => {
 // =============================================
 export const deleteDeliveryFee = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const restaurantId = req.user?.id;
+    const restaurantId =req.user?.restaurantId || req.user?.id;
     
     if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
 

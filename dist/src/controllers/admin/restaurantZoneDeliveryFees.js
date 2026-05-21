@@ -12,7 +12,7 @@ const uuid_1 = require("uuid");
 // CREATE Delivery Fee
 // =============================================
 const createDeliveryFee = async (req, res) => {
-    const restaurantId = req.user?.id;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
     const { zoneId, deliveryFee, status } = req.body;
@@ -47,7 +47,7 @@ exports.createDeliveryFee = createDeliveryFee;
 // GET ALL Delivery Fees (For the Current Restaurant)
 // =============================================
 const getDeliveryFees = async (req, res) => {
-    const restaurantId = req.user?.id;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
     const rawFees = await connection_1.db.select({
@@ -76,7 +76,7 @@ exports.getDeliveryFees = getDeliveryFees;
 // =============================================
 const getDeliveryFeeById = async (req, res) => {
     const { id } = req.params;
-    const restaurantId = req.user?.id;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
     const fee = await connection_1.db.select({
@@ -109,7 +109,7 @@ exports.getDeliveryFeeById = getDeliveryFeeById;
 const updateDeliveryFee = async (req, res) => {
     const { id } = req.params;
     const { deliveryFee, status } = req.body;
-    const restaurantId = req.user?.id;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
     // ✅ التحقق من الملكية قبل التعديل باستخدام and
@@ -137,7 +137,7 @@ exports.updateDeliveryFee = updateDeliveryFee;
 // =============================================
 const deleteDeliveryFee = async (req, res) => {
     const { id } = req.params;
-    const restaurantId = req.user?.id;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
     // ✅ التحقق من الملكية قبل الحذف باستخدام and
