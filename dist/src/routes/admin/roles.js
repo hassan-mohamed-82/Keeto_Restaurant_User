@@ -4,6 +4,7 @@ const express_1 = require("express");
 const roles_1 = require("../../controllers/admin/roles");
 const catchAsync_1 = require("../../utils/catchAsync");
 const router = (0, express_1.Router)();
+router.get("/permissions", (0, catchAsync_1.catchAsync)(roles_1.getAvailablePermissions));
 router.post("/", (0, catchAsync_1.catchAsync)(roles_1.createRole));
 router.get("/", (0, catchAsync_1.catchAsync)(roles_1.getAllRoles));
 router.get("/:id", (0, catchAsync_1.catchAsync)(roles_1.getRoleById));
