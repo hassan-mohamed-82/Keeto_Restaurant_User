@@ -12,8 +12,8 @@ import {
     ingredients,
     ingredientCategories,
 } from "../../models/schema";
-// ✅ تم إضافة and هنا عشان نصلح مشكلة الشروط المتعددة
-import { eq, inArray, and } from "drizzle-orm";
+// ✅ تم إضافة and, or, isNull هنا عشان نصلح مشكلة الشروط المتعددة
+import { eq, inArray, and, or, isNull } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { NotFound } from "../../Errors/NotFound";
 import { BadRequest } from "../../Errors/BadRequest";
@@ -512,7 +512,7 @@ const myCategories = await db
     .from(categories)
     .where(eq(categories.status, "active"));
 
-// ✅ Subcategories - فقط الخاصة بالمطعم الحالي
+// ✅ Subcategories - الخاصة بالمطعم أو العامة (restaurantId = null)
 const mySubcategories = await db
     .select({
         id: subcategories.id,
@@ -522,7 +522,10 @@ const mySubcategories = await db
     .from(subcategories)
     .where(and(
         eq(subcategories.status, "active"), 
-        eq(subcategories.restaurantId, restaurantId)  // ✅ تمت الإضافة
+        or(
+            eq(subcategories.restaurantId, restaurantId),
+            isNull(subcategories.restaurantId)
+        )
     ));
 
 // ✅ Addons - فقط الخاصة بالمطعم

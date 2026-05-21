@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.changeFoodStatus = exports.toggleVariationOptionStatus = exports.toggleVariationStatus = exports.getFoodRecipe = exports.assignIngredientsToFood = exports.getFoodSelectData = exports.deleteFood = exports.updateFood = exports.getFoodById = exports.getAllFoods = exports.createFood = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
-// ✅ تم إضافة and هنا عشان نصلح مشكلة الشروط المتعددة
+// ✅ تم إضافة and, or, isNull هنا عشان نصلح مشكلة الشروط المتعددة
 const drizzle_orm_1 = require("drizzle-orm");
 const response_1 = require("../../utils/response");
 const NotFound_1 = require("../../Errors/NotFound");
@@ -436,7 +436,7 @@ const getFoodSelectData = async (req, res) => {
         .select({ id: schema_1.categories.id, name: schema_1.categories.name })
         .from(schema_1.categories)
         .where((0, drizzle_orm_1.eq)(schema_1.categories.status, "active"));
-    // ✅ Subcategories - فقط الخاصة بالمطعم الحالي
+    // ✅ Subcategories - الخاصة بالمطعم أو العامة (restaurantId = null)
     const mySubcategories = await connection_1.db
         .select({
         id: schema_1.subcategories.id,
@@ -444,8 +444,7 @@ const getFoodSelectData = async (req, res) => {
         categoryId: schema_1.subcategories.categoryId
     })
         .from(schema_1.subcategories)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.status, "active"), (0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId) // ✅ تمت الإضافة
-    ));
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.status, "active"), (0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId), (0, drizzle_orm_1.isNull)(schema_1.subcategories.restaurantId))));
     // ✅ Addons - فقط الخاصة بالمطعم
     const myAddons = await connection_1.db
         .select({ id: schema_1.addons.id, name: schema_1.addons.name })
