@@ -441,10 +441,12 @@ const getFoodSelectData = async (req, res) => {
         .select({
         id: schema_1.subcategories.id,
         name: schema_1.subcategories.name,
-        categoryId: schema_1.subcategories.categoryId
+        categoryId: schema_1.subcategories.categoryId,
+        restaurantId: schema_1.subcategories.restaurantId, // ✅ للتأكد من القيمة
+        status: schema_1.subcategories.status // ✅ للتأكد من القيمة
     })
         .from(schema_1.subcategories)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.status, "active"), (0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId), (0, drizzle_orm_1.isNull)(schema_1.subcategories.restaurantId))));
+        .where((0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId), (0, drizzle_orm_1.isNull)(schema_1.subcategories.restaurantId)));
     // ✅ Addons - فقط الخاصة بالمطعم
     const myAddons = await connection_1.db
         .select({ id: schema_1.addons.id, name: schema_1.addons.name })

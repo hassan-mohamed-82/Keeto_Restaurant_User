@@ -512,21 +512,22 @@ const myCategories = await db
     .from(categories)
     .where(eq(categories.status, "active"));
 
-// ✅ Subcategories - الخاصة بالمطعم أو العامة (restaurantId = null)
-const mySubcategories = await db
-    .select({
-        id: subcategories.id,
-        name: subcategories.name,
-        categoryId: subcategories.categoryId
-    })
-    .from(subcategories)
-    .where(and(
-        eq(subcategories.status, "active"), 
-        or(
-            eq(subcategories.restaurantId, restaurantId),
-            isNull(subcategories.restaurantId)
-        )
-    ));
+    // ✅ Subcategories - الخاصة بالمطعم أو العامة (restaurantId = null)
+    const mySubcategories = await db
+        .select({
+            id: subcategories.id,
+            name: subcategories.name,
+            categoryId: subcategories.categoryId,
+            restaurantId: subcategories.restaurantId, // ✅ للتأكد من القيمة
+            status: subcategories.status // ✅ للتأكد من القيمة
+        })
+        .from(subcategories)
+        .where(
+            or(
+                eq(subcategories.restaurantId, restaurantId),
+                isNull(subcategories.restaurantId)
+            )
+        );
 
 // ✅ Addons - فقط الخاصة بالمطعم
 const myAddons = await db
