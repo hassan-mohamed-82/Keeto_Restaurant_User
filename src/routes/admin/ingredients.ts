@@ -1,5 +1,6 @@
 import { catchAsync } from "../../utils/catchAsync";
 import { Router } from "express";
+import { hasPermission } from "../../middlewares/hasPermission";
 import {
     getIngredientById,
     getIngredients,
@@ -12,13 +13,28 @@ import {
 } from "../../controllers/admin/ingredients"
 const router = Router();
 
-router.get("/select", catchAsync(getallactiveingredientscategory));
-router.post("/", catchAsync(createIngredient));
-router.get("/", catchAsync(getIngredients));
-router.get("/:id", catchAsync(getIngredientById));
-router.get("/foods/:id", catchAsync(getFoodsByIngredient));
-router.put("/:id", catchAsync(updateIngredient));
-router.put("/stock/:id", catchAsync(toggleIngredientStock));
-router.delete("/:id", catchAsync(deleteIngredient));
+// ✅ Get select data - يحتاج صلاحية read (foods module)
+router.get("/select", hasPermission("foods", "read"), catchAsync(getallactiveingredientscategory));
+
+// ✅ Create ingredient - يحتاج صلاحية create (foods module)
+router.post("/", hasPermission("foods", "create"), catchAsync(createIngredient));
+
+// ✅ Get all ingredients - يحتاج صلاحية read (foods module)
+router.get("/", hasPermission("foods", "read"), catchAsync(getIngredients));
+
+// ✅ Get ingredient by id - يحتاج صلاحية read (foods module)
+router.get("/:id", hasPermission("foods", "read"), catchAsync(getIngredientById));
+
+// ✅ Get foods by ingredient - يحتاج صلاحية read (foods module)
+router.get("/foods/:id", hasPermission("foods", "read"), catchAsync(getFoodsByIngredient));
+
+// ✅ Update ingredient - يحتاج صلاحية update (foods module)
+router.put("/:id", hasPermission("foods", "update"), catchAsync(updateIngredient));
+
+// ✅ Toggle stock - يحتاج صلاحية update (foods module)
+router.put("/stock/:id", hasPermission("foods", "update"), catchAsync(toggleIngredientStock));
+
+// ✅ Delete ingredient - يحتاج صلاحية delete (foods module)
+router.delete("/:id", hasPermission("foods", "delete"), catchAsync(deleteIngredient));
 
 export default router;

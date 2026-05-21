@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { catchAsync } from "../../utils/catchAsync";
+import { hasPermission } from "../../middlewares/hasPermission";
 import {
     getRestaurantOrders,
     getRestaurantOrderById,
@@ -17,26 +18,26 @@ import {
 
 const router = Router();
 
+// ✅ Get reasons - يحتاج صلاحية read
+router.get("/reasons", hasPermission("orders", "read"), catchAsync(getReasons));
 
-router.get("/reasons", catchAsync(getReasons));
+// ✅ كل الأوردرات - يحتاج صلاحية read + التحقق من الفرع
+router.get("/", hasPermission("orders", "read", true), catchAsync(getRestaurantOrders));
 
-// كل الأوردرات
-router.get("/", catchAsync(getRestaurantOrders));
+// ✅ أوردرات بحالة معينة - يحتاج صلاحية read + التحقق من الفرع
+router.get("/pending", hasPermission("orders", "read", true), catchAsync(getPendingOrders));
+router.get("/accepted", hasPermission("orders", "read", true), catchAsync(getAcceptedOrders));
+router.get("/preparing", hasPermission("orders", "read", true), catchAsync(getPreparingOrders));
+router.get("/out-for-delivery", hasPermission("orders", "read", true), catchAsync(getOutForDeliveryOrders));
+router.get("/delivered", hasPermission("orders", "read", true), catchAsync(getDeliveredOrders));
+router.get("/cancelled", hasPermission("orders", "read", true), catchAsync(getCancelledOrders));
+router.get("/rejected", hasPermission("orders", "read", true), catchAsync(getRejectedOrders));
+router.get("/refund", hasPermission("orders", "read", true), catchAsync(getRefundOrders));
 
-// أوردرات بحالة معينة
-router.get("/pending", catchAsync(getPendingOrders));
-router.get("/accepted", catchAsync(getAcceptedOrders));
-router.get("/preparing", catchAsync(getPreparingOrders));
-router.get("/out-for-delivery", catchAsync(getOutForDeliveryOrders));
-router.get("/delivered", catchAsync(getDeliveredOrders));
-router.get("/cancelled", catchAsync(getCancelledOrders));
-router.get("/rejected", catchAsync(getRejectedOrders));
-router.get("/refund", catchAsync(getRefundOrders));
+// ✅ تفاصيل أوردر بالـ ID - يحتاج صلاحية read + التحقق من الفرع
+router.get("/:id", hasPermission("orders", "read", true), catchAsync(getRestaurantOrderById));
 
-// تفاصيل أوردر بالـ ID
-router.get("/:id", catchAsync(getRestaurantOrderById));
-
-// تحديث حالة الأوردر
-router.put("/:orderId", catchAsync(updateOrderStatus));
+// ✅ تحديث حالة الأوردر - يحتاج صلاحية update + التحقق من الفرع
+router.put("/:orderId", hasPermission("orders", "update", true), catchAsync(updateOrderStatus));
 
 export default router;
