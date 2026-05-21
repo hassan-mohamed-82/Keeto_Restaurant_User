@@ -25,7 +25,7 @@ import { saveBase64Image, handleImageUpdate } from "../../utils/handleImages";
 // =============================================
 export const createFood = async (req: Request, res: Response) => {
     try {
-        const restaurantId = req.user?.id;
+        const restaurantId = req.user?.restaurantId || req.user?.id;
         if (!restaurantId) {
             throw new Error("Restaurant ID missing or unauthorized"); // يمكنك استخدام BadRequest هنا
         }
@@ -176,7 +176,7 @@ export const createFood = async (req: Request, res: Response) => {
 // GET ALL Foods (Optimized & Secured)
 // =============================================
 export const getAllFoods = async (req: Request, res: Response) => {
- const restaurantId = req.user?.id;
+ const restaurantId = req.user?.restaurantId || req.user?.id;
  if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
 
  const rawFoods = await db.select({
@@ -268,7 +268,7 @@ export const getAllFoods = async (req: Request, res: Response) => {
 // =============================================
 export const getFoodById = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const restaurantId = req.user?.id;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
 
     const foodItem = await db.select({
@@ -350,7 +350,7 @@ export const getFoodById = async (req: Request, res: Response) => {
 export const updateFood = async (req: Request, res: Response) => {
     const { id } = req.params;
     const data = req.body;
-    const restaurantId = req.user?.id;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
 
     if (!restaurantId) {
         throw new BadRequest("Restaurant ID missing or unauthorized");
@@ -476,7 +476,7 @@ export const updateFood = async (req: Request, res: Response) => {
 // =============================================
 export const deleteFood = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const restaurantId = req.user?.id;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
 
     // ✅ استخدام and هنا أيضاً للحماية
@@ -574,7 +574,7 @@ const myAddons = await db
 export const assignIngredientsToFood = async (req: Request, res: Response) => {
     const { id } = req.params; 
     const { ingredientsList } = req.body;
-    const restaurantId = req.user?.id as string;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
 
     if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
     if (!Array.isArray(ingredientsList)) throw new BadRequest("ingredientsList must be an array");
@@ -601,7 +601,7 @@ export const assignIngredientsToFood = async (req: Request, res: Response) => {
 
 export const getFoodRecipe = async (req: Request, res: Response) => {
     const { id } = req.params; 
-    const restaurantId = req.user?.id as string;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
 
     if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
 
@@ -630,7 +630,7 @@ export const getFoodRecipe = async (req: Request, res: Response) => {
 export const toggleVariationStatus = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { status } = req.body;
-    const restaurantId = req.user?.id as string;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
 
     if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
     if (typeof status !== "boolean") throw new BadRequest("Status must be a boolean");
@@ -656,7 +656,7 @@ export const toggleVariationStatus = async (req: Request, res: Response) => {
 export const toggleVariationOptionStatus = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { status } = req.body;
-    const restaurantId = req.user?.id as string;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
 
     if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
     if (typeof status !== "boolean") throw new BadRequest("Status must be a boolean");
@@ -681,7 +681,7 @@ export const toggleVariationOptionStatus = async (req: Request, res: Response) =
 export const changeFoodStatus = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { status } = req.body;
-    const restaurantId = req.user?.id as string;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
 
     if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
   

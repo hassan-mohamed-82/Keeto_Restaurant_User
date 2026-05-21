@@ -15,7 +15,7 @@ const handleImages_1 = require("../../utils/handleImages");
 // =============================================
 const createFood = async (req, res) => {
     try {
-        const restaurantId = req.user?.id;
+        const restaurantId = req.user?.restaurantId || req.user?.id;
         if (!restaurantId) {
             throw new Error("Restaurant ID missing or unauthorized"); // يمكنك استخدام BadRequest هنا
         }
@@ -139,7 +139,7 @@ exports.createFood = createFood;
 // GET ALL Foods (Optimized & Secured)
 // =============================================
 const getAllFoods = async (req, res) => {
-    const restaurantId = req.user?.id;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
     const rawFoods = await connection_1.db.select({
@@ -227,7 +227,7 @@ exports.getAllFoods = getAllFoods;
 // =============================================
 const getFoodById = async (req, res) => {
     const { id } = req.params;
-    const restaurantId = req.user?.id;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
     const foodItem = await connection_1.db.select({
@@ -305,7 +305,7 @@ exports.getFoodById = getFoodById;
 const updateFood = async (req, res) => {
     const { id } = req.params;
     const data = req.body;
-    const restaurantId = req.user?.id;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) {
         throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
     }
@@ -407,7 +407,7 @@ exports.updateFood = updateFood;
 // =============================================
 const deleteFood = async (req, res) => {
     const { id } = req.params;
-    const restaurantId = req.user?.id;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
     // ✅ استخدام and هنا أيضاً للحماية
@@ -481,7 +481,7 @@ exports.getFoodSelectData = getFoodSelectData;
 const assignIngredientsToFood = async (req, res) => {
     const { id } = req.params;
     const { ingredientsList } = req.body;
-    const restaurantId = req.user?.id;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
     if (!Array.isArray(ingredientsList))
@@ -506,7 +506,7 @@ const assignIngredientsToFood = async (req, res) => {
 exports.assignIngredientsToFood = assignIngredientsToFood;
 const getFoodRecipe = async (req, res) => {
     const { id } = req.params;
-    const restaurantId = req.user?.id;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
     const existingFood = await connection_1.db.select().from(schema_1.food).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.id, id), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId))).limit(1);
@@ -533,7 +533,7 @@ exports.getFoodRecipe = getFoodRecipe;
 const toggleVariationStatus = async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
-    const restaurantId = req.user?.id;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
     if (typeof status !== "boolean")
@@ -557,7 +557,7 @@ exports.toggleVariationStatus = toggleVariationStatus;
 const toggleVariationOptionStatus = async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
-    const restaurantId = req.user?.id;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
     if (typeof status !== "boolean")
@@ -579,7 +579,7 @@ exports.toggleVariationOptionStatus = toggleVariationOptionStatus;
 const changeFoodStatus = async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
-    const restaurantId = req.user?.id;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
     const existingFood = await connection_1.db.select().from(schema_1.food).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.id, id), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId))).limit(1);
