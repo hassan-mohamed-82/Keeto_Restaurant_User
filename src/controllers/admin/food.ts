@@ -501,7 +501,8 @@ export const deleteFood = async (req: Request, res: Response) => {
 // GET Food Select Data (For Dropdowns)
 // =============================================
 export const getFoodSelectData = async (req: Request, res: Response) => {
-    const restaurantId = req.user?.id;
+    // ✅ استخدام نفس الطريقة اللي في subcategory.ts
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
 
   

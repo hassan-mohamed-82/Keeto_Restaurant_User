@@ -427,7 +427,8 @@ exports.deleteFood = deleteFood;
 // GET Food Select Data (For Dropdowns)
 // =============================================
 const getFoodSelectData = async (req, res) => {
-    const restaurantId = req.user?.id;
+    // ✅ استخدام نفس الطريقة اللي في subcategory.ts
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
     // ✅ جلب الأقسام الخاصة بالمطعم فقط (بافتراض إن الجدول يحتوي على restaurantid)
