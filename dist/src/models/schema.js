@@ -49,7 +49,7 @@ __exportStar(require("./schema/user/favouriteliste"), exports);
 __exportStar(require("./schema/user/address"), exports);
 __exportStar(require("./schema/user/restaurantRating"), exports);
 __exportStar(require("./schema/admin/coupon"), exports);
-__exportStar(require("./schema/admin/discount"), exports);
+__exportStar(require("./schema/admin/Discount"), exports);
 __exportStar(require("./schema/admin/policy"), exports);
 __exportStar(require("./schema/user/userAddHome"), exports);
 __exportStar(require("./schema/admin/popup"), exports);
