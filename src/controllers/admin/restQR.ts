@@ -52,9 +52,6 @@ export const getRestaurantQR = async (req: Request, res: Response) => {
         throw new BadRequest("Restaurant ID is required.");
     }
     const existingRestaurant = await db.select().from(restaurantsUrl).where(eq(restaurantsUrl.restaurantid, restaurantId));
-    if (existingRestaurant[0]) {
-        throw new BadRequest("Restaurant QR already exists.");
-    }
     return SuccessResponse(res, {
         message: "Restaurants fetched successfully",
         data: existingRestaurant,
