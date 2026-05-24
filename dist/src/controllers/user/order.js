@@ -263,18 +263,25 @@ const checkout = async (req, res) => {
     // ==========================================
     // 11. Send Notification to Restaurant
     // ==========================================
-    await (0, notifications_1.sendPushNotification)({
-        recipientType: "restaurant",
-        recipientId: restaurantId,
-        title: "New Order!",
-        body: `You have received a new order (${orderNumber}) for $${totalAmount.toFixed(2)}`,
-        data: {
-            orderId,
-            orderNumber,
-            branchId: branchId || null,
-            type: "NEW_ORDER"
-        }
-    });
+    try {
+        console.log(`[CHECKOUT] Sending notification to restaurant: ${restaurantId}, order: ${orderNumber}`);
+        await (0, notifications_1.sendPushNotification)({
+            recipientType: "restaurant",
+            recipientId: restaurantId,
+            title: "New Order!",
+            body: `You have received a new order (${orderNumber}) for $${totalAmount.toFixed(2)}`,
+            data: {
+                orderId,
+                orderNumber,
+                branchId: branchId || null,
+                type: "NEW_ORDER"
+            }
+        });
+        console.log(`[CHECKOUT] Notification sent successfully for order: ${orderNumber}`);
+    }
+    catch (notifError) {
+        console.error(`[CHECKOUT] Failed to send notification for order ${orderNumber}:`, notifError);
+    }
     return (0, response_1.SuccessResponse)(res, {
         message: "Order created successfully",
         data: {
