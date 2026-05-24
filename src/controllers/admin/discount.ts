@@ -1,14 +1,14 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
 import { discounts, discountRestaurants } from "../../models/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, or } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors/NotFound";
 import { v4 as uuidv4 } from "uuid";
 
 // ==========================================
-// 1. Create Discount (Auto-linked to this restaurant)
+// 1. Create Discount (For this restaurant specifically)
 // ==========================================
 export const createDiscount = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
@@ -27,7 +27,7 @@ export const createDiscount = async (req: Request, res: Response) => {
 
     const discountId = uuidv4();
 
-    // 1. إدخال العرض في الجدول الرئيسي
+    // 1. إدخال العرض في الجدول الرئيسي (مع ضبط isGlobal على false لأن المطعم هو من ينشئه لنفسه)
     await db.insert(discounts).values({
         id: discountId,
         name,
@@ -41,6 +41,7 @@ export const createDiscount = async (req: Request, res: Response) => {
         startDate: startDate ? new Date(startDate) : null,
         endDate: endDate ? new Date(endDate) : null,
         isActive: isActive !== undefined ? isActive : true,
+        isGlobal: false // عروض المطاعم ليست عامة تلقائياً
     });
 
     // 2. ربطه تلقائياً وبأمان بالمطعم الحالي من التوكن
@@ -54,18 +55,23 @@ export const createDiscount = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 2. Get All Discounts (For this restaurant only)
+// 2. Get All Discounts (This restaurant's discounts + Global discounts)
 // ==========================================
 export const getAllDiscounts = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Unauthorized");
 
-    // جلب الخصومات المربوطة بهذا المطعم فقط عبر الـ Join
+    // جلب الخصومات المربوطة بهذا المطعم عبر الـ leftJoin + جلب العروض الـ Global التي تشمله
     const rawData = await db
-        .select()
+        .selectDistinct({ discounts: discounts })
         .from(discounts)
-        .innerJoin(discountRestaurants, eq(discounts.id, discountRestaurants.discountId))
-        .where(eq(discountRestaurants.restaurantId, restaurantId));
+        .leftJoin(discountRestaurants, eq(discounts.id, discountRestaurants.discountId))
+        .where(
+            or(
+                eq(discounts.isGlobal, true), // جلب العروض العامة التي تطبق على الجميع
+                eq(discountRestaurants.restaurantId, restaurantId) // جلب عروض المطعم الخاصة
+            )
+        );
 
     const allDiscounts = rawData.map(row => row.discounts);
 
@@ -73,22 +79,25 @@ export const getAllDiscounts = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 3. Get Discount by ID (Scoped to this restaurant)
+// 3. Get Discount by ID (Scoped to this restaurant or Global)
 // ==========================================
 export const getDiscountById = async (req: Request, res: Response) => {
     const { id } = req.params;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Unauthorized");
 
-    // التحقق من وجود الخصم وأنه ينتمي لهذا المطعم
+    // التحقق من وجود الخصم وأنه إما مخصص للمطعم أو خصم عام متاح للجميع
     const [rawData] = await db
-        .select()
+        .selectDistinct({ discounts: discounts })
         .from(discounts)
-        .innerJoin(discountRestaurants, eq(discounts.id, discountRestaurants.discountId))
+        .leftJoin(discountRestaurants, eq(discounts.id, discountRestaurants.discountId))
         .where(
             and(
                 eq(discounts.id, id),
-                eq(discountRestaurants.restaurantId, restaurantId)
+                or(
+                    eq(discounts.isGlobal, true),
+                    eq(discountRestaurants.restaurantId, restaurantId)
+                )
             )
         )
         .limit(1);
@@ -99,14 +108,14 @@ export const getDiscountById = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 4. Update Discount (Protected)
+// 4. Update Discount (Protected - Restrict editing global discounts)
 // ==========================================
 export const updateDiscount = async (req: Request, res: Response) => {
     const { id } = req.params;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Unauthorized");
 
-    // تأكيد ملكية المطعم للخصم قبل التعديل
+    // تأكيد ملكية المطعم للخصم، والتأكد أنه ليس خصماً عاماً (لأن المطعم لا يملك صلاحية تعديل خصومات الأدمن العامة)
     const [existing] = await db
         .select()
         .from(discounts)
@@ -114,12 +123,13 @@ export const updateDiscount = async (req: Request, res: Response) => {
         .where(
             and(
                 eq(discounts.id, id),
-                eq(discountRestaurants.restaurantId, restaurantId)
+                eq(discountRestaurants.restaurantId, restaurantId),
+                eq(discounts.isGlobal, false) // حماية: لمنع تعديل عروض الـ Global من قبل الـ Vendor
             )
         )
         .limit(1);
 
-    if (!existing) throw new NotFound("Discount not found");
+    if (!existing) throw new NotFound("Discount not found or cannot be modified");
 
     const {
         name, nameAr, nameFr,
@@ -148,14 +158,14 @@ export const updateDiscount = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 5. Delete Discount (Protected)
+// 5. Delete Discount (Protected - Restrict deleting global discounts)
 // ==========================================
 export const deleteDiscount = async (req: Request, res: Response) => {
     const { id } = req.params;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Unauthorized");
 
-    // تأكيد ملكية المطعم للخصم قبل الحذف
+    // تأكيد ملكية المطعم للخصم وأنه ليس Global قبل الحذف
     const [existing] = await db
         .select()
         .from(discounts)
@@ -163,21 +173,21 @@ export const deleteDiscount = async (req: Request, res: Response) => {
         .where(
             and(
                 eq(discounts.id, id),
-                eq(discountRestaurants.restaurantId, restaurantId)
+                eq(discountRestaurants.restaurantId, restaurantId),
+                eq(discounts.isGlobal, false) // حماية من الحذف لعروض الأدمن العامة
             )
         )
         .limit(1);
 
-    if (!existing) throw new NotFound("Discount not found");
+    if (!existing) throw new NotFound("Discount not found or cannot be deleted");
 
-    // الحذف من الجدول الرئيسي وسيتم مسح علاقة الربط تلقائياً بفضل الـ Cascade
     await db.delete(discounts).where(eq(discounts.id, id));
 
     return SuccessResponse(res, { message: "Discount deleted successfully" });
 };
 
 // ==========================================
-// 6. Toggle Discount Status
+// 6. Toggle Discount Status (Protected)
 // ==========================================
 export const toggleDiscountStatus = async (req: Request, res: Response) => {
     const { id } = req.params;
@@ -191,12 +201,13 @@ export const toggleDiscountStatus = async (req: Request, res: Response) => {
         .where(
             and(
                 eq(discounts.id, id),
-                eq(discountRestaurants.restaurantId, restaurantId)
+                eq(discountRestaurants.restaurantId, restaurantId),
+                eq(discounts.isGlobal, false) // حماية لعدم تفعيل/تعطيل عروض الأدمن
             )
         )
         .limit(1);
 
-    if (!rawData) throw new NotFound("Discount not found");
+    if (!rawData) throw new NotFound("Discount not found or cannot be modified");
     const existingDiscount = rawData.discounts;
 
     await db.update(discounts)
