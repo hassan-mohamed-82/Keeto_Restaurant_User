@@ -44,9 +44,6 @@ const getRestaurantQR = async (req, res) => {
         throw new BadRequest_1.BadRequest("Restaurant ID is required.");
     }
     const existingRestaurant = await connection_1.db.select().from(restQR_1.restaurantsUrl).where((0, drizzle_orm_1.eq)(restQR_1.restaurantsUrl.restaurantid, restaurantId));
-    if (existingRestaurant[0]) {
-        throw new BadRequest_1.BadRequest("Restaurant QR already exists.");
-    }
     return (0, response_1.SuccessResponse)(res, {
         message: "Restaurants fetched successfully",
         data: existingRestaurant,

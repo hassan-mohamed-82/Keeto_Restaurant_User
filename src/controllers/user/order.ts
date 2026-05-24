@@ -328,6 +328,7 @@ export const checkout = async (req: Request | any, res: Response) => {
         data: {
             orderId,
             orderNumber,
+            branchId: branchId || null,
             type: "NEW_ORDER"
         }
     });

@@ -8,6 +8,11 @@ const drizzle_orm_1 = require("drizzle-orm");
 const uuid_1 = require("uuid");
 /**
  * Utility to send a push notification via Firebase and save it to the DB.
+ *
+ * For "restaurant" recipients:
+ *   - Saves ONE notification record (linked to the restaurant).
+ *   - Sends FCM push to ALL admins of that restaurant who have FCM tokens.
+ *   - If branchId is provided in data, also specifically targets branch managers.
  */
 const sendPushNotification = async (params) => {
     const { recipientType, recipientId, title, body, data } = params;
@@ -21,42 +26,82 @@ const sendPushNotification = async (params) => {
         data: data || {},
     });
     try {
-        // 2. Look up the FCM token for the recipient
-        let fcmToken = null;
+        // 2. Look up the FCM token(s) for the recipient
         if (recipientType === "user") {
+            // Single user → single token
             const [user] = await connection_1.db
                 .select({ fcmToken: schema_1.users.fcmToken })
                 .from(schema_1.users)
                 .where((0, drizzle_orm_1.eq)(schema_1.users.id, recipientId))
                 .limit(1);
-            fcmToken = user?.fcmToken || null;
+            const fcmToken = user?.fcmToken || null;
+            if (fcmToken) {
+                await firebase_1.messaging.send({
+                    notification: { title, body },
+                    data: { payload: JSON.stringify(data || {}) },
+                    token: fcmToken,
+                });
+                console.log(`[FCM] Notification sent successfully to user ${recipientId}`);
+            }
+            else {
+                console.log(`[FCM] Skipped push: No FCM token found for user ${recipientId}`);
+            }
         }
         else {
-            const [restaurant] = await connection_1.db
-                .select({ fcmToken: schema_1.restaurants.fcmToken })
-                .from(schema_1.restaurants)
-                .where((0, drizzle_orm_1.eq)(schema_1.restaurants.id, recipientId))
-                .limit(1);
-            fcmToken = restaurant?.fcmToken || null;
-        }
-        // 3. Send via Firebase if token exists
-        if (fcmToken) {
-            const message = {
-                notification: {
-                    title,
-                    body,
-                },
-                data: {
-                    // FCM data payload only accepts string values
-                    payload: JSON.stringify(data || {}),
-                },
-                token: fcmToken,
-            };
-            await firebase_1.messaging.send(message);
-            console.log(`[FCM] Notification sent successfully to ${recipientType} ${recipientId}`);
-        }
-        else {
-            console.log(`[FCM] Skipped push: No FCM token found for ${recipientType} ${recipientId}`);
+            // Restaurant → send to ALL admins (owner, subadmins, branch managers)
+            const branchId = data?.branchId || null;
+            // Build query conditions: all admins of this restaurant who have FCM tokens
+            const conditions = [
+                (0, drizzle_orm_1.eq)(schema_1.restrauntadmin.restaurantId, recipientId),
+                (0, drizzle_orm_1.eq)(schema_1.restrauntadmin.status, "active"),
+                (0, drizzle_orm_1.isNotNull)(schema_1.restrauntadmin.fcmToken),
+            ];
+            const adminTokens = await connection_1.db
+                .select({
+                id: schema_1.restrauntadmin.id,
+                fcmToken: schema_1.restrauntadmin.fcmToken,
+                type: schema_1.restrauntadmin.type,
+                branchId: schema_1.restrauntadmin.branchId
+            })
+                .from(schema_1.restrauntadmin)
+                .where((0, drizzle_orm_1.and)(...conditions));
+            if (!adminTokens.length) {
+                console.log(`[FCM] Skipped push: No active admins with FCM tokens for restaurant ${recipientId}`);
+                return;
+            }
+            // Filter: send to owner/subadmins (they see all), 
+            // AND branch managers of the specific branch (if branchId exists)
+            const relevantAdmins = adminTokens.filter(admin => {
+                // Owner & subadmins always get notifications
+                if (admin.type === "owner" || admin.type === "subadmin")
+                    return true;
+                // Branch managers only get notified if the order is for their branch
+                if (branchId && admin.branchId === branchId)
+                    return true;
+                // If no branchId specified, notify all branch managers too
+                if (!branchId)
+                    return true;
+                return false;
+            });
+            // Send push to each relevant admin
+            let sentCount = 0;
+            for (const admin of relevantAdmins) {
+                if (!admin.fcmToken)
+                    continue;
+                try {
+                    await firebase_1.messaging.send({
+                        notification: { title, body },
+                        data: { payload: JSON.stringify(data || {}) },
+                        token: admin.fcmToken,
+                    });
+                    sentCount++;
+                }
+                catch (tokenError) {
+                    // Token might be expired/invalid, log and continue
+                    console.error(`[FCM] Failed to send to admin ${admin.id}:`, tokenError?.message);
+                }
+            }
+            console.log(`[FCM] Notification sent to ${sentCount}/${relevantAdmins.length} admins for restaurant ${recipientId}`);
         }
     }
     catch (error) {
