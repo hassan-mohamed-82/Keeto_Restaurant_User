@@ -368,6 +368,7 @@ export const updateFood = async (req: Request, res: Response) => {
     }
 
     // ✅ الحقول المسموح بتحديثها فقط (Clean Code + Security)
+    // 💡 تم استبدال isAvailable بـ status لتتطابق مع الـ Schema
     const allowedFields = [
         "name",
         "nameAr",
@@ -376,9 +377,7 @@ export const updateFood = async (req: Request, res: Response) => {
         "descriptionAr",
         "descriptionFr",
         "price",
-        "categoryid",
-        "subcategoryid",
-        "isAvailable",
+        "status", 
         "image"
     ];
 
@@ -386,9 +385,9 @@ export const updateFood = async (req: Request, res: Response) => {
         updatedAt: new Date(), // ✅ دايمًا Date object
     };
 
+    // 1️⃣ معالجة الحقول العادية والصورة
     for (const key of allowedFields) {
         if (data[key] !== undefined) {
-
             // 🖼️ معالجة الصورة
             if (
                 key === "image" &&
@@ -402,15 +401,30 @@ export const updateFood = async (req: Request, res: Response) => {
                     data[key],
                     "foods"
                 );
-            } 
-            else {
+            } else {
                 updateData[key] = data[key];
             }
         }
     }
 
-    // ✅ تنفيذ التحديث
-    await db.update(food).set(updateData).where(eq(food.id, id));
+    // 2️⃣ معالجة الـ Categories بشكل مخصص 
+    // ندعم حالة الـ CamelCase (categoryId) والـ Lowercase (categoryid)
+    const incomingCategoryId = data.categoryid ?? data.categoryId;
+    if (incomingCategoryId !== undefined) {
+        // حقل categoryid مطلوب (notNull)، لذا نمرره كما هو
+        updateData.categoryid = incomingCategoryId;
+    }
+
+    const incomingSubcategoryId = data.subcategoryid ?? data.subcategoryId;
+    if (incomingSubcategoryId !== undefined) {
+        // حقل subcategoryid يقبل Null، لذلك لو تم إرساله كنص فارغ نجعله null في الداتابيز
+        updateData.subcategoryid = incomingSubcategoryId === "" ? null : incomingSubcategoryId;
+    }
+
+    // ✅ تنفيذ التحديث (نتأكد إن فيه بيانات للتحديث غير الـ updatedAt)
+    if (Object.keys(updateData).length > 1) {
+        await db.update(food).set(updateData).where(eq(food.id, id));
+    }
 
     // ===========================
     // ✅ Variations Update
@@ -471,7 +485,6 @@ export const updateFood = async (req: Request, res: Response) => {
         message: "Update food success",
     });
 };
-
 // =============================================
 // DELETE Food
 // =============================================

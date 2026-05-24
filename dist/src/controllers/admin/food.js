@@ -319,6 +319,7 @@ const updateFood = async (req, res) => {
         throw new NotFound_1.NotFound("Food not found or you don't have permission to edit it");
     }
     // ✅ الحقول المسموح بتحديثها فقط (Clean Code + Security)
+    // 💡 تم استبدال isAvailable بـ status لتتطابق مع الـ Schema
     const allowedFields = [
         "name",
         "nameAr",
@@ -327,14 +328,13 @@ const updateFood = async (req, res) => {
         "descriptionAr",
         "descriptionFr",
         "price",
-        "categoryid",
-        "subcategoryid",
-        "isAvailable",
+        "status",
         "image"
     ];
     const updateData = {
         updatedAt: new Date(), // ✅ دايمًا Date object
     };
+    // 1️⃣ معالجة الحقول العادية والصورة
     for (const key of allowedFields) {
         if (data[key] !== undefined) {
             // 🖼️ معالجة الصورة
@@ -349,8 +349,22 @@ const updateFood = async (req, res) => {
             }
         }
     }
-    // ✅ تنفيذ التحديث
-    await connection_1.db.update(schema_1.food).set(updateData).where((0, drizzle_orm_1.eq)(schema_1.food.id, id));
+    // 2️⃣ معالجة الـ Categories بشكل مخصص 
+    // ندعم حالة الـ CamelCase (categoryId) والـ Lowercase (categoryid)
+    const incomingCategoryId = data.categoryid ?? data.categoryId;
+    if (incomingCategoryId !== undefined) {
+        // حقل categoryid مطلوب (notNull)، لذا نمرره كما هو
+        updateData.categoryid = incomingCategoryId;
+    }
+    const incomingSubcategoryId = data.subcategoryid ?? data.subcategoryId;
+    if (incomingSubcategoryId !== undefined) {
+        // حقل subcategoryid يقبل Null، لذلك لو تم إرساله كنص فارغ نجعله null في الداتابيز
+        updateData.subcategoryid = incomingSubcategoryId === "" ? null : incomingSubcategoryId;
+    }
+    // ✅ تنفيذ التحديث (نتأكد إن فيه بيانات للتحديث غير الـ updatedAt)
+    if (Object.keys(updateData).length > 1) {
+        await connection_1.db.update(schema_1.food).set(updateData).where((0, drizzle_orm_1.eq)(schema_1.food.id, id));
+    }
     // ===========================
     // ✅ Variations Update
     // ===========================
