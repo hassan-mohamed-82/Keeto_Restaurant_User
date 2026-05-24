@@ -376,7 +376,8 @@ export const updateFood = async (req: Request, res: Response) => {
         "descriptionAr",
         "descriptionFr",
         "price",
-        "categoryId",
+        "categoryid",
+        "subcategoryid",
         "isAvailable",
         "image"
     ];

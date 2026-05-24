@@ -327,7 +327,8 @@ const updateFood = async (req, res) => {
         "descriptionAr",
         "descriptionFr",
         "price",
-        "categoryId",
+        "categoryid",
+        "subcategoryid",
         "isAvailable",
         "image"
     ];
