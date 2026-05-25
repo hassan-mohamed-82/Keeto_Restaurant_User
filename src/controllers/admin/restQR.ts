@@ -64,13 +64,17 @@ export const deletRestaurantQR = async (req: Request, res: Response) => {
     if (!restaurantId) {
         throw new BadRequest("Restaurant ID is required.");
     }
-    const existingRestaurant = await db.select().from(restaurantsUrl).where(eq(restaurantsUrl.restaurantid, restaurantId));
-    if (existingRestaurant[0]) {
-        throw new BadRequest("Restaurant QR already exists.");
+        const { id } = req.params;
+    if (!id) {
+        throw new BadRequest("id is required.");
     }
+    const existingRestaurant = await db.select().from(restaurantsUrl).where(eq(restaurantsUrl.id, id));
+    if (!existingRestaurant[0]) {
+        throw new BadRequest("Restaurant QR not found.");
+    }
+    await db.delete(restaurantsUrl).where(eq(restaurantsUrl.id, id));
     return SuccessResponse(res, {
-        message: "Restaurants fetched successfully",
-        data: existingRestaurant,
+        message: "Restaurants deleted successfully",
     }, 200);
 };
 
