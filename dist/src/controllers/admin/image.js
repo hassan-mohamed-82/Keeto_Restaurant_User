@@ -10,7 +10,7 @@ const BadRequest_1 = require("../../Errors/BadRequest");
 const uuid_1 = require("uuid");
 const handleImages_1 = require("../../utils/handleImages");
 const createImage = async (req, res) => {
-    const { img } = req.body;
+    const { img, periorty } = req.body;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) {
         throw new BadRequest_1.BadRequest("Restaurant context is missing or unauthorized");
@@ -26,12 +26,14 @@ const createImage = async (req, res) => {
         id,
         restaurantid: restaurantId,
         img: result, // Use 'result' directly
+        periorty
     });
     return (0, response_1.SuccessResponse)(res, {
         message: "Image created successfully",
         data: {
             id,
-            img: result // Use 'result' directly
+            img: result, // Use 'result' directly
+            periorty
         }
     }, 201);
 };
@@ -88,7 +90,7 @@ const getImageById = async (req, res) => {
 exports.getImageById = getImageById;
 const updateImage = async (req, res) => {
     const { id } = req.params;
-    const { img } = req.body;
+    const { img, periorty } = req.body;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) {
         throw new BadRequest_1.BadRequest("Restaurant context is missing or unauthorized");
@@ -106,6 +108,7 @@ const updateImage = async (req, res) => {
     }
     await connection_1.db.update(schema_1.images).set({
         img: updatedUrl,
+        periorty: periorty,
     }).where((0, drizzle_orm_1.eq)(schema_1.images.id, id));
     return (0, response_1.SuccessResponse)(res, {
         message: "Image updated successfully",

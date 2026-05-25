@@ -17,6 +17,7 @@ export const images = mysqlTable("images", {
         .references(() => restaurants.id)
         .notNull(),
     img: varchar("img", { length: 500 }).notNull(),
-    createdAt: timestamp("created_at").defaultNow(),
+    periorty:int("periorty").default(0),
+       createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
 });
