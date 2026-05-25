@@ -15,25 +15,12 @@ export const getMyNotifications = async (req: Request | any, res: Response) => {
     // Both restaurant owner and subadmins/managers belong to a restaurantId
     const restaurantId = req.user.restaurantId || req.user.id; 
 
-    console.log(`[NOTIFICATIONS] Fetching notifications for:`, {
-        resolvedRestaurantId: restaurantId,
-        userObj: req.user,
-    });
-
-    // Pagination (optional)
+    // Pagination
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const offset = (page - 1) * limit;
 
-    // DEBUG: First check ALL restaurant notifications in the DB
-    const allRestaurantNotifs = await db
-        .select()
-        .from(notifications)
-        .where(eq(notifications.recipientType, "restaurant"))
-        .orderBy(desc(notifications.createdAt))
-        .limit(5);
-    console.log(`[NOTIFICATIONS] All restaurant notifications in DB:`, allRestaurantNotifs.length, allRestaurantNotifs.map(n => ({ id: n.id, recipientId: n.recipientId, title: n.title })));
-
+    // Fetching notifications from DB
     const restaurantNotifications = await db
         .select()
         .from(notifications)
@@ -45,16 +32,36 @@ export const getMyNotifications = async (req: Request | any, res: Response) => {
         .limit(limit)
         .offset(offset);
     
-    console.log(`[NOTIFICATIONS] Filtered notifications count: ${restaurantNotifications.length}`);
+    // 1. Format the notifications (Parse stringified JSON)
+    const formattedNotifications = restaurantNotifications.map((notif) => {
+        let parsedData = null;
+        if (notif.data) {
+            try {
+                // تحويل الـ String لـ JSON Object
+                parsedData = typeof notif.data === 'string' ? JSON.parse(notif.data) : notif.data;
+            } catch (error) {
+                console.error(`[NOTIFICATIONS] Failed to parse data for notification ${notif.id}`);
+                parsedData = notif.data; // Fallback in case of invalid JSON
+            }
+        }
 
+        return {
+            ...notif,
+            data: parsedData, // استخدام الداتا بعد التحويل
+        };
+    });
+
+    // 2. Return clean response structure
+    // افتراضاً إن الـ SuccessResponse بياخد الـ Payload بالشكل ده
     return SuccessResponse(res, {
         message: "Notifications fetched successfully",
-        data: restaurantNotifications,
-        page,
-        limit
+        data: formattedNotifications, // الـ Array بتاع الإشعارات مباشرة
+        pagination: {
+            page,
+            limit
+        }
     });
 };
-
 // ==========================================
 // 2. Mark Notification as Read
 // ==========================================
