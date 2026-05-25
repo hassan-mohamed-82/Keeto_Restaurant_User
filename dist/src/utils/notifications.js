@@ -65,9 +65,15 @@ const sendPushNotification = async (params) => {
             })
                 .from(schema_1.restrauntadmin)
                 .where((0, drizzle_orm_1.and)(...conditions));
-            if (!adminTokens.length) {
-                console.log(`[FCM] Skipped push: No active admins with FCM tokens for restaurant ${recipientId}`);
-                return;
+            // Also get the main restaurant owner's token (stored in the restaurants table)
+            const [restaurant] = await connection_1.db
+                .select({ fcmToken: schema_1.restaurants.fcmToken })
+                .from(schema_1.restaurants)
+                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.restaurants.id, recipientId), (0, drizzle_orm_1.isNotNull)(schema_1.restaurants.fcmToken)))
+                .limit(1);
+            const allTokens = new Set();
+            if (restaurant?.fcmToken && restaurant.fcmToken.trim() !== "") {
+                allTokens.add(restaurant.fcmToken);
             }
             // Filter: send to owner/subadmins (they see all), 
             // AND branch managers of the specific branch (if branchId exists)
@@ -83,25 +89,33 @@ const sendPushNotification = async (params) => {
                     return true;
                 return false;
             });
-            // Send push to each relevant admin
-            let sentCount = 0;
+            // Add relevant admin tokens
             for (const admin of relevantAdmins) {
-                if (!admin.fcmToken)
-                    continue;
+                if (admin.fcmToken && admin.fcmToken.trim() !== "") {
+                    allTokens.add(admin.fcmToken);
+                }
+            }
+            if (allTokens.size === 0) {
+                console.log(`[FCM] Skipped push: No active admins with FCM tokens for restaurant ${recipientId}`);
+                return;
+            }
+            // Send push to each relevant token
+            let sentCount = 0;
+            for (const token of allTokens) {
                 try {
                     await firebase_1.messaging.send({
                         notification: { title, body },
                         data: { payload: JSON.stringify(data || {}) },
-                        token: admin.fcmToken,
+                        token: token,
                     });
                     sentCount++;
                 }
                 catch (tokenError) {
                     // Token might be expired/invalid, log and continue
-                    console.error(`[FCM] Failed to send to admin ${admin.id}:`, tokenError?.message);
+                    console.error(`[FCM] Failed to send to token:`, tokenError?.message);
                 }
             }
-            console.log(`[FCM] Notification sent to ${sentCount}/${relevantAdmins.length} admins for restaurant ${recipientId}`);
+            console.log(`[FCM] Notification sent to ${sentCount}/${allTokens.size} devices for restaurant ${recipientId}`);
         }
     }
     catch (error) {

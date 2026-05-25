@@ -75,9 +75,17 @@ export const sendPushNotification = async (params: {
                 .from(restrauntadmin)
                 .where(and(...conditions));
 
-            if (!adminTokens.length) {
-                console.log(`[FCM] Skipped push: No active admins with FCM tokens for restaurant ${recipientId}`);
-                return;
+            // Also get the main restaurant owner's token (stored in the restaurants table)
+            const [restaurant] = await db
+                .select({ fcmToken: restaurants.fcmToken })
+                .from(restaurants)
+                .where(and(eq(restaurants.id, recipientId), isNotNull(restaurants.fcmToken)))
+                .limit(1);
+
+            const allTokens = new Set<string>();
+
+            if (restaurant?.fcmToken && restaurant.fcmToken.trim() !== "") {
+                allTokens.add(restaurant.fcmToken);
             }
 
             // Filter: send to owner/subadmins (they see all), 
@@ -92,23 +100,34 @@ export const sendPushNotification = async (params: {
                 return false;
             });
 
-            // Send push to each relevant admin
-            let sentCount = 0;
+            // Add relevant admin tokens
             for (const admin of relevantAdmins) {
-                if (!admin.fcmToken) continue;
+                if (admin.fcmToken && admin.fcmToken.trim() !== "") {
+                    allTokens.add(admin.fcmToken);
+                }
+            }
+
+            if (allTokens.size === 0) {
+                console.log(`[FCM] Skipped push: No active admins with FCM tokens for restaurant ${recipientId}`);
+                return;
+            }
+
+            // Send push to each relevant token
+            let sentCount = 0;
+            for (const token of allTokens) {
                 try {
                     await messaging.send({
                         notification: { title, body },
                         data: { payload: JSON.stringify(data || {}) },
-                        token: admin.fcmToken,
+                        token: token,
                     });
                     sentCount++;
                 } catch (tokenError: any) {
                     // Token might be expired/invalid, log and continue
-                    console.error(`[FCM] Failed to send to admin ${admin.id}:`, tokenError?.message);
+                    console.error(`[FCM] Failed to send to token:`, tokenError?.message);
                 }
             }
-            console.log(`[FCM] Notification sent to ${sentCount}/${relevantAdmins.length} admins for restaurant ${recipientId}`);
+            console.log(`[FCM] Notification sent to ${sentCount}/${allTokens.size} devices for restaurant ${recipientId}`);
         }
     } catch (error) {
         console.error(`[FCM] Failed to send push notification to ${recipientType} ${recipientId}:`, error);
