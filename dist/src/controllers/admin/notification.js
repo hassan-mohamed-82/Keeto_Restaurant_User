@@ -15,10 +15,22 @@ const getMyNotifications = async (req, res) => {
         throw new Errors_1.UnauthorizedError("Unauthenticated");
     // Both restaurant owner and subadmins/managers belong to a restaurantId
     const restaurantId = req.user.restaurantId || req.user.id;
+    console.log(`[NOTIFICATIONS] Fetching notifications for:`, {
+        resolvedRestaurantId: restaurantId,
+        userObj: req.user,
+    });
     // Pagination (optional)
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
     const offset = (page - 1) * limit;
+    // DEBUG: First check ALL restaurant notifications in the DB
+    const allRestaurantNotifs = await connection_1.db
+        .select()
+        .from(schema_1.notifications)
+        .where((0, drizzle_orm_1.eq)(schema_1.notifications.recipientType, "restaurant"))
+        .orderBy((0, drizzle_orm_1.desc)(schema_1.notifications.createdAt))
+        .limit(5);
+    console.log(`[NOTIFICATIONS] All restaurant notifications in DB:`, allRestaurantNotifs.length, allRestaurantNotifs.map(n => ({ id: n.id, recipientId: n.recipientId, title: n.title })));
     const restaurantNotifications = await connection_1.db
         .select()
         .from(schema_1.notifications)
@@ -26,6 +38,7 @@ const getMyNotifications = async (req, res) => {
         .orderBy((0, drizzle_orm_1.desc)(schema_1.notifications.createdAt))
         .limit(limit)
         .offset(offset);
+    console.log(`[NOTIFICATIONS] Filtered notifications count: ${restaurantNotifications.length}`);
     return (0, response_1.SuccessResponse)(res, {
         message: "Notifications fetched successfully",
         data: restaurantNotifications,

@@ -15,10 +15,24 @@ export const getMyNotifications = async (req: Request | any, res: Response) => {
     // Both restaurant owner and subadmins/managers belong to a restaurantId
     const restaurantId = req.user.restaurantId || req.user.id; 
 
+    console.log(`[NOTIFICATIONS] Fetching notifications for:`, {
+        resolvedRestaurantId: restaurantId,
+        userObj: req.user,
+    });
+
     // Pagination (optional)
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const offset = (page - 1) * limit;
+
+    // DEBUG: First check ALL restaurant notifications in the DB
+    const allRestaurantNotifs = await db
+        .select()
+        .from(notifications)
+        .where(eq(notifications.recipientType, "restaurant"))
+        .orderBy(desc(notifications.createdAt))
+        .limit(5);
+    console.log(`[NOTIFICATIONS] All restaurant notifications in DB:`, allRestaurantNotifs.length, allRestaurantNotifs.map(n => ({ id: n.id, recipientId: n.recipientId, title: n.title })));
 
     const restaurantNotifications = await db
         .select()
@@ -30,6 +44,8 @@ export const getMyNotifications = async (req: Request | any, res: Response) => {
         .orderBy(desc(notifications.createdAt))
         .limit(limit)
         .offset(offset);
+    
+    console.log(`[NOTIFICATIONS] Filtered notifications count: ${restaurantNotifications.length}`);
 
     return SuccessResponse(res, {
         message: "Notifications fetched successfully",
