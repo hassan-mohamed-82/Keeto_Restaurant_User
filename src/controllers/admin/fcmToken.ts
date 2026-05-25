@@ -21,7 +21,7 @@ export const updateFcmToken = async (req: Request | any, res: Response) => {
         // Main restaurant owner
         await db.update(restaurants)
             .set({ fcmToken })
-            .where(eq(restaurants.id, req.user.id));
+            .where(eq(restaurants.id, req.user.restaurantId));
     } else {
         // Sub-admin or branch manager
         await db.update(restrauntadmin)
