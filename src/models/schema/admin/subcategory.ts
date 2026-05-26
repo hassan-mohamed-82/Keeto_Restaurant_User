@@ -20,7 +20,7 @@ export const subcategories = mysqlTable("subcategories", {
     categoryId: char("category_id", { length: 36 }).references(() => categories.id).notNull(),
     addonsIds: json("addons_ids").$type<string[]>().default([]),
     priority: mysqlEnum("priority", ["low", "medium", "high"]).default("low"),
-    sortOrder: int("sort_order").default(0), // الحقل الجديد الخاص بالترتيب (اختياري)
+    order_Level: int("order_level").default(0), // تم تغيير الاسم هنا
     status: mysqlEnum("status", ["active", "inactive"]).default("active"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),

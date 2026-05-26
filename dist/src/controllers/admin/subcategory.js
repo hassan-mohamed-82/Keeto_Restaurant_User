@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getallcategory = exports.deleteSubcategory = exports.updateSubcategory = exports.getSubcategoryById = exports.getAllSubcategories = exports.createSubcategory = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
-const drizzle_orm_1 = require("drizzle-orm"); // أضفنا asc هنا للترتيب
+const drizzle_orm_1 = require("drizzle-orm");
 const response_1 = require("../../utils/response");
 const NotFound_1 = require("../../Errors/NotFound");
 const BadRequest_1 = require("../../Errors/BadRequest");
@@ -13,8 +13,8 @@ const createSubcategory = async (req, res) => {
     if (!restaurantId) {
         throw new BadRequest_1.BadRequest("Restaurant context is missing or unauthorized");
     }
-    // استقبلنا sortOrder
-    const { name, categoryId, priority, status, nameAr, nameFr, addonsIds, sortOrder } = req.body;
+    // استقبلنا order_level
+    const { name, categoryId, priority, status, nameAr, nameFr, addonsIds, order_level } = req.body;
     if (!name || !categoryId) {
         throw new BadRequest_1.BadRequest("Subcategory name and category ID are required");
     }
@@ -47,7 +47,7 @@ const createSubcategory = async (req, res) => {
         restaurantId: restaurantId,
         addonsIds: addonsIds || [],
         priority: priority || "low",
-        sortOrder: sortOrder !== undefined ? sortOrder : 0, // إضافته هنا
+        order_Level: order_level !== undefined ? order_level : 0, // ربط المتغير الجديد
         status: status || "active",
     });
     return (0, response_1.SuccessResponse)(res, { message: "Create subcategory success", data: { id } }, 201);
@@ -67,7 +67,7 @@ const getAllSubcategories = async (req, res) => {
         categoryId: schema_1.subcategories.categoryId,
         addonsIds: schema_1.subcategories.addonsIds,
         priority: schema_1.subcategories.priority,
-        sortOrder: schema_1.subcategories.sortOrder, // إرجاعه مع الداتا
+        order_level: schema_1.subcategories.order_Level, // إرجاعه باسم order_level
         status: schema_1.subcategories.status,
         createdAt: schema_1.subcategories.createdAt,
         updatedAt: schema_1.subcategories.updatedAt,
@@ -82,7 +82,7 @@ const getAllSubcategories = async (req, res) => {
         .from(schema_1.subcategories)
         .where((0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId))
         .leftJoin(schema_1.categories, (0, drizzle_orm_1.eq)(schema_1.subcategories.categoryId, schema_1.categories.id))
-        .orderBy((0, drizzle_orm_1.asc)(schema_1.subcategories.sortOrder)); // ترتيب النتائج بناءً على sortOrder
+        .orderBy((0, drizzle_orm_1.asc)(schema_1.subcategories.order_Level)); // الترتيب بناءً على orderLevel
     // Fetch all addons for this restaurant to map them
     const allAddons = await connection_1.db.select().from(schema_1.addons).where((0, drizzle_orm_1.eq)(schema_1.addons.restaurantid, restaurantId));
     const dataWithAddons = allSubcategories.map(sub => {
@@ -112,7 +112,7 @@ const getSubcategoryById = async (req, res) => {
         categoryId: schema_1.subcategories.categoryId,
         addonsIds: schema_1.subcategories.addonsIds,
         priority: schema_1.subcategories.priority,
-        sortOrder: schema_1.subcategories.sortOrder, // إرجاعه مع الداتا
+        order_level: schema_1.subcategories.order_Level, // إرجاعه باسم order_level
         status: schema_1.subcategories.status,
         createdAt: schema_1.subcategories.createdAt,
         updatedAt: schema_1.subcategories.updatedAt,
@@ -152,8 +152,8 @@ const updateSubcategory = async (req, res) => {
         throw new BadRequest_1.BadRequest("Restaurant context is missing or unauthorized");
     }
     const { id } = req.params;
-    // استقبال sortOrder
-    const { name, categoryId, priority, status, nameAr, nameFr, addonsIds, sortOrder } = req.body;
+    // استقبال order_level
+    const { name, categoryId, priority, status, nameAr, nameFr, addonsIds, order_level } = req.body;
     const existingSubcategory = await connection_1.db
         .select()
         .from(schema_1.subcategories)
@@ -196,8 +196,8 @@ const updateSubcategory = async (req, res) => {
         updateData.addonsIds = addonsIds;
     if (priority)
         updateData.priority = priority;
-    if (sortOrder !== undefined)
-        updateData.sortOrder = sortOrder; // تحديثه لو تم تمريره
+    if (order_level !== undefined)
+        updateData.orderLevel = order_level; // التحديث في حالة التمرير
     if (status)
         updateData.status = status;
     if (Object.keys(updateData).length === 1) {

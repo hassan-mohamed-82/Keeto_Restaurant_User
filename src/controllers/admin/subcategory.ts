@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
 import { subcategories, categories, addons } from "../../models/schema";
-import { eq, and, inArray, asc } from "drizzle-orm"; // أضفنا asc هنا للترتيب
+import { eq, and, inArray, asc } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { NotFound } from "../../Errors/NotFound";
 import { BadRequest } from "../../Errors/BadRequest";
@@ -14,8 +14,8 @@ export const createSubcategory = async (req: Request, res: Response) => {
         throw new BadRequest("Restaurant context is missing or unauthorized");
     }
     
-    // استقبلنا sortOrder
-    const { name, categoryId, priority, status, nameAr, nameFr, addonsIds, sortOrder } = req.body;
+    // استقبلنا order_level
+    const { name, categoryId, priority, status, nameAr, nameFr, addonsIds, order_level } = req.body;
 
     if (!name || !categoryId) {
         throw new BadRequest("Subcategory name and category ID are required");
@@ -60,7 +60,7 @@ export const createSubcategory = async (req: Request, res: Response) => {
         restaurantId: restaurantId,
         addonsIds: addonsIds || [],
         priority: priority || "low",
-        sortOrder: sortOrder !== undefined ? sortOrder : 0, // إضافته هنا
+        order_Level: order_level !== undefined ? order_level : 0, // ربط المتغير الجديد
         status: status || "active",
     });
 
@@ -83,7 +83,7 @@ export const getAllSubcategories = async (req: Request, res: Response) => {
             categoryId: subcategories.categoryId,
             addonsIds: subcategories.addonsIds,
             priority: subcategories.priority,
-            sortOrder: subcategories.sortOrder, // إرجاعه مع الداتا
+            order_level: subcategories.order_Level, // إرجاعه باسم order_level
             status: subcategories.status,
             createdAt: subcategories.createdAt,
             updatedAt: subcategories.updatedAt,
@@ -98,7 +98,7 @@ export const getAllSubcategories = async (req: Request, res: Response) => {
         .from(subcategories)
         .where(eq(subcategories.restaurantId, restaurantId))
         .leftJoin(categories, eq(subcategories.categoryId, categories.id))
-        .orderBy(asc(subcategories.sortOrder)); // ترتيب النتائج بناءً على sortOrder
+        .orderBy(asc(subcategories.order_Level)); // الترتيب بناءً على orderLevel
 
     // Fetch all addons for this restaurant to map them
     const allAddons = await db.select().from(addons).where(eq(addons.restaurantid, restaurantId));
@@ -133,7 +133,7 @@ export const getSubcategoryById = async (req: Request, res: Response) => {
             categoryId: subcategories.categoryId,
             addonsIds: subcategories.addonsIds,
             priority: subcategories.priority,
-            sortOrder: subcategories.sortOrder, // إرجاعه مع الداتا
+            order_level: subcategories.order_Level, // إرجاعه باسم order_level
             status: subcategories.status,
             createdAt: subcategories.createdAt,
             updatedAt: subcategories.updatedAt,
@@ -179,8 +179,8 @@ export const updateSubcategory = async (req: Request, res: Response) => {
 
     const { id } = req.params;
     
-    // استقبال sortOrder
-    const { name, categoryId, priority, status, nameAr, nameFr, addonsIds, sortOrder } = req.body;
+    // استقبال order_level
+    const { name, categoryId, priority, status, nameAr, nameFr, addonsIds, order_level } = req.body;
 
     const existingSubcategory = await db
         .select()
@@ -230,7 +230,7 @@ export const updateSubcategory = async (req: Request, res: Response) => {
     if (categoryId) updateData.categoryId = categoryId;
     if (addonsIds !== undefined) updateData.addonsIds = addonsIds;
     if (priority) updateData.priority = priority;
-    if (sortOrder !== undefined) updateData.sortOrder = sortOrder; // تحديثه لو تم تمريره
+    if (order_level !== undefined) updateData.orderLevel = order_level; // التحديث في حالة التمرير
     if (status) updateData.status = status;
 
     if (Object.keys(updateData).length === 1) {
