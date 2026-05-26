@@ -5,10 +5,12 @@ import {
     mysqlEnum,
     json,
     char,
+    int,
 } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
 import { categories } from "./Category";
 import { restaurants } from "./restaurants";
+
 export const subcategories = mysqlTable("subcategories", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
     restaurantId: char("restaurant_id", { length: 36 }).references(() => restaurants.id),
@@ -18,6 +20,7 @@ export const subcategories = mysqlTable("subcategories", {
     categoryId: char("category_id", { length: 36 }).references(() => categories.id).notNull(),
     addonsIds: json("addons_ids").$type<string[]>().default([]),
     priority: mysqlEnum("priority", ["low", "medium", "high"]).default("low"),
+    sortOrder: int("sort_order").default(0), // الحقل الجديد الخاص بالترتيب (اختياري)
     status: mysqlEnum("status", ["active", "inactive"]).default("active"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
