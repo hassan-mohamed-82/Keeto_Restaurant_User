@@ -10,14 +10,20 @@ const NotFound_1 = require("../../Errors/NotFound");
 const uuid_1 = require("uuid");
 const selectReasons_1 = require("../../models/schema/admin/selectReasons");
 const notifications_1 = require("../../utils/notifications");
+const Errors_1 = require("../../Errors");
 // ==========================================
 // 1. جلب كل الأوردرات الخاصة بالمطعم/الفرع
 // ==========================================
 const getRestaurantOrders = async (req, res) => {
-    const adminRestaurantId = req.user?.restaurantId || req.user?.id;
-    const adminBranchId = req.user?.branchId; // لو Null يبقى ده المالك
-    if (!adminRestaurantId)
-        throw new BadRequest_1.BadRequest("Unauthorized");
+    // ✅ التحقق من وجود req.user أولاً
+    if (!req.user) {
+        throw new Errors_1.UnauthorizedError("Not authenticated");
+    }
+    const adminRestaurantId = req.user.restaurantId || req.user.id;
+    const adminBranchId = req.user.branchId; // لو Null يبقى ده المالك
+    if (!adminRestaurantId) {
+        throw new BadRequest_1.BadRequest("Restaurant ID not found");
+    }
     // بناء الـ Query الأساسي
     let queryConditions = (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, adminRestaurantId);
     // لو ده مدير فرع، نفلتر الأوردرات لفرعه هو بس بشكل إجباري
@@ -49,10 +55,15 @@ exports.getRestaurantOrders = getRestaurantOrders;
 // Helper: جلب أوردرات بحالة معينة
 // ==========================================
 const getOrdersByStatus = async (req, res, status) => {
-    const adminRestaurantId = req.user?.restaurantId || req.user?.id;
-    const adminBranchId = req.user?.branchId;
-    if (!adminRestaurantId)
-        throw new BadRequest_1.BadRequest("Unauthorized");
+    // ✅ التحقق من وجود req.user أولاً
+    if (!req.user) {
+        throw new Errors_1.UnauthorizedError("Not authenticated");
+    }
+    const adminRestaurantId = req.user.restaurantId || req.user.id;
+    const adminBranchId = req.user.branchId;
+    if (!adminRestaurantId) {
+        throw new BadRequest_1.BadRequest("Restaurant ID not found");
+    }
     const conditions = [
         (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, adminRestaurantId),
         (0, drizzle_orm_1.eq)(schema_1.orders.status, status)

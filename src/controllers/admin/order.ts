@@ -17,15 +17,23 @@ import { NotFound } from "../../Errors/NotFound";
 import { v4 as uuidv4 } from "uuid";
 import { selectReasons } from "../../models/schema/admin/selectReasons";
 import { sendPushNotification } from "../../utils/notifications";
+import { UnauthorizedError } from "../../Errors";
 
 // ==========================================
 // 1. جلب كل الأوردرات الخاصة بالمطعم/الفرع
 // ==========================================
 export const getRestaurantOrders = async (req: Request, res: Response) => {
-    const adminRestaurantId = req.user?.restaurantId || req.user?.id;
-    const adminBranchId = req.user?.branchId; // لو Null يبقى ده المالك
+    // ✅ التحقق من وجود req.user أولاً
+    if (!req.user) {
+        throw new UnauthorizedError("Not authenticated");
+    }
 
-    if (!adminRestaurantId) throw new BadRequest("Unauthorized");
+    const adminRestaurantId = req.user.restaurantId || req.user.id;
+    const adminBranchId = req.user.branchId; // لو Null يبقى ده المالك
+
+    if (!adminRestaurantId) {
+        throw new BadRequest("Restaurant ID not found");
+    }
 
     // بناء الـ Query الأساسي
     let queryConditions = eq(orders.restaurantId, adminRestaurantId);
@@ -61,10 +69,17 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
 // Helper: جلب أوردرات بحالة معينة
 // ==========================================
 const getOrdersByStatus = async (req: Request, res: Response, status: "pending" | "accepted" | "preparing" | "out_for_delivery" | "delivered" | "cancelled" | "rejected" | "refund") => {
-    const adminRestaurantId = req.user?.restaurantId || req.user?.id;
-    const adminBranchId = req.user?.branchId;
+    // ✅ التحقق من وجود req.user أولاً
+    if (!req.user) {
+        throw new UnauthorizedError("Not authenticated");
+    }
 
-    if (!adminRestaurantId) throw new BadRequest("Unauthorized");
+    const adminRestaurantId = req.user.restaurantId || req.user.id;
+    const adminBranchId = req.user.branchId;
+
+    if (!adminRestaurantId) {
+        throw new BadRequest("Restaurant ID not found");
+    }
 
     const conditions: any[] = [
         eq(orders.restaurantId, adminRestaurantId),
