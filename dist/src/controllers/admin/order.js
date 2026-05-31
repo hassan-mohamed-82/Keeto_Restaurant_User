@@ -31,7 +31,7 @@ const getRestaurantOrders = async (req, res) => {
         queryConditions = (0, drizzle_orm_1.and)(queryConditions, (0, drizzle_orm_1.eq)(schema_1.orders.branchId, adminBranchId));
     }
     // لو ده المالك وبعت branchId في الـ Query عشان يفلتر بيه
-    else if (req.query.branchId) {
+    else if (req.query?.branchId) {
         queryConditions = (0, drizzle_orm_1.and)(queryConditions, (0, drizzle_orm_1.eq)(schema_1.orders.branchId, req.query.branchId));
     }
     const restaurantOrders = await connection_1.db.select({
@@ -73,7 +73,7 @@ const getOrdersByStatus = async (req, res, status) => {
         conditions.push((0, drizzle_orm_1.eq)(schema_1.orders.branchId, adminBranchId));
     }
     // لو ده المالك وبعت branchId يفلتر بيه
-    else if (req.query.branchId) {
+    else if (req.query?.branchId) {
         conditions.push((0, drizzle_orm_1.eq)(schema_1.orders.branchId, req.query.branchId));
     }
     const result = await connection_1.db.select({

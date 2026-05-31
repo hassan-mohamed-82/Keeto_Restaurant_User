@@ -39,7 +39,7 @@ const hasPermission = (module, action, checkBranch = false) => {
             if (userType === "branch_manager") {
                 // لو محتاجين نتحقق من الفرع
                 if (checkBranch) {
-                    const requestedBranchId = req.body.branchId || req.params.branchId || req.query.branchId;
+                    const requestedBranchId = req.body?.branchId || req.params?.branchId || req.query?.branchId;
                     if (!userBranchId) {
                         throw new forbiddenError_1.ForbiddenError("Branch manager must be assigned to a branch");
                     }
@@ -64,7 +64,7 @@ const hasPermission = (module, action, checkBranch = false) => {
                 }
                 // التحقق من الفرع (لو مطلوب)
                 if (checkBranch && admin.branchId) {
-                    const requestedBranchId = req.body.branchId || req.params.branchId || req.query.branchId;
+                    const requestedBranchId = req.body?.branchId || req.params?.branchId || req.query?.branchId;
                     if (requestedBranchId && requestedBranchId !== admin.branchId) {
                         throw new forbiddenError_1.ForbiddenError("You can only access resources in your branch");
                     }
@@ -131,7 +131,7 @@ const hasAnyPermission = (permissions, checkBranch = false) => {
             // Branch Manager: له صلاحية الوصول لكل شيء في فرعه
             if (userType === "branch_manager") {
                 if (checkBranch) {
-                    const requestedBranchId = req.body.branchId || req.params.branchId || req.query.branchId;
+                    const requestedBranchId = req.body?.branchId || req.params?.branchId || req.query?.branchId;
                     if (!userBranchId) {
                         throw new forbiddenError_1.ForbiddenError("Branch manager must be assigned to a branch");
                     }
@@ -153,7 +153,7 @@ const hasAnyPermission = (permissions, checkBranch = false) => {
                 }
                 // التحقق من الفرع
                 if (checkBranch && admin.branchId) {
-                    const requestedBranchId = req.body.branchId || req.params.branchId || req.query.branchId;
+                    const requestedBranchId = req.body?.branchId || req.params?.branchId || req.query?.branchId;
                     if (requestedBranchId && requestedBranchId !== admin.branchId) {
                         throw new forbiddenError_1.ForbiddenError("You can only access resources in your branch");
                     }
@@ -217,7 +217,7 @@ const hasAllPermissions = (permissions, checkBranch = false) => {
             // Branch Manager: له صلاحية الوصول لكل شيء في فرعه
             if (userType === "branch_manager") {
                 if (checkBranch) {
-                    const requestedBranchId = req.body.branchId || req.params.branchId || req.query.branchId;
+                    const requestedBranchId = req.body?.branchId || req.params?.branchId || req.query?.branchId;
                     if (!userBranchId) {
                         throw new forbiddenError_1.ForbiddenError("Branch manager must be assigned to a branch");
                     }
@@ -239,7 +239,7 @@ const hasAllPermissions = (permissions, checkBranch = false) => {
                 }
                 // التحقق من الفرع
                 if (checkBranch && admin.branchId) {
-                    const requestedBranchId = req.body.branchId || req.params.branchId || req.query.branchId;
+                    const requestedBranchId = req.body?.branchId || req.params?.branchId || req.query?.branchId;
                     if (requestedBranchId && requestedBranchId !== admin.branchId) {
                         throw new forbiddenError_1.ForbiddenError("You can only access resources in your branch");
                     }

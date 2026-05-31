@@ -43,7 +43,7 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
         queryConditions = and(queryConditions, eq(orders.branchId, adminBranchId)) as any;
     } 
     // لو ده المالك وبعت branchId في الـ Query عشان يفلتر بيه
-    else if (req.query.branchId) {
+    else if (req.query?.branchId) {
         queryConditions = and(queryConditions, eq(orders.branchId, req.query.branchId as string)) as any;
     }
 
@@ -91,7 +91,7 @@ const getOrdersByStatus = async (req: Request, res: Response, status: "pending" 
         conditions.push(eq(orders.branchId, adminBranchId));
     } 
     // لو ده المالك وبعت branchId يفلتر بيه
-    else if (req.query.branchId) {
+    else if (req.query?.branchId) {
         conditions.push(eq(orders.branchId, req.query.branchId as string));
     }
 
