@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { subcategories, categories, addons } from "../../models/schema";
+import { subcategories, categories, addons, food } from "../../models/schema";
 import { eq, and, inArray, asc } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { NotFound } from "../../Errors/NotFound";
@@ -63,6 +63,13 @@ export const createSubcategory = async (req: Request, res: Response) => {
         order_Level: order_Level !== undefined ? order_Level : (order_level !== undefined ? order_level : 0), // ربط المتغير الجديد
         status: status || "active",
     });
+
+    // ✅ نشر الأدونز على كل الأكل الموجود في الساب كاتيجوري
+    if (addonsIds && Array.isArray(addonsIds) && addonsIds.length > 0) {
+        await db.update(food)
+            .set({ addonsId: addonsIds })
+            .where(eq(food.subcategoryid, id));
+    }
 
     return SuccessResponse(res, { message: "Create subcategory success", data: { id } }, 201);
 };
@@ -243,6 +250,13 @@ export const updateSubcategory = async (req: Request, res: Response) => {
     await db.update(subcategories)
         .set(updateData)
         .where(and(eq(subcategories.id, id), eq(subcategories.restaurantId, restaurantId)));
+
+    // ✅ لو الأدونز اتغيرت، ننشرها على كل الأكل الموجود في الساب كاتيجوري
+    if (addonsIds !== undefined) {
+        await db.update(food)
+            .set({ addonsId: addonsIds })
+            .where(eq(food.subcategoryid, id));
+    }
 
     return SuccessResponse(res, { message: "Update subcategory success" });
 };

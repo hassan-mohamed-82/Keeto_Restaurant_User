@@ -37,12 +37,11 @@ const createFood = async (req, res) => {
                 throw new Error("Subcategory not found");
             }
         }
-        if (addonsId) {
-            const existingAddon = await connection_1.db.select().from(schema_1.addons)
-                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.addons.id, addonsId), (0, drizzle_orm_1.eq)(schema_1.addons.restaurantid, restaurantId)))
-                .limit(1);
-            if (!existingAddon[0]) {
-                throw new Error("Addon not found");
+        if (addonsId && Array.isArray(addonsId) && addonsId.length > 0) {
+            const existingAddons = await connection_1.db.select({ id: schema_1.addons.id }).from(schema_1.addons)
+                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.addons.id, addonsId), (0, drizzle_orm_1.eq)(schema_1.addons.restaurantid, restaurantId)));
+            if (existingAddons.length !== addonsId.length) {
+                throw new Error("One or more Addon IDs are invalid");
             }
         }
         // 3. معالجة الصورة (خارج المعاملة لتجنب بطء قاعدة البيانات)
@@ -70,7 +69,7 @@ const createFood = async (req, res) => {
                 Nutrition: Nutrition || null,
                 allergen_ingredients: allergen_ingredients || null,
                 is_Halal: is_Halal ?? false,
-                addonsId: addonsId || null,
+                addonsId: addonsId || [],
                 startTime,
                 endTime,
                 search_tags: search_tags || null,

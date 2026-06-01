@@ -63,13 +63,15 @@ export const createFood = async (req: Request, res: Response) => {
             }
         }
 
-        if (addonsId) {
-            const existingAddon = await db.select().from(addons)
-                .where(and(eq(addons.id, addonsId), eq(addons.restaurantid, restaurantId)))
-                .limit(1);
+        if (addonsId && Array.isArray(addonsId) && addonsId.length > 0) {
+            const existingAddons = await db.select({ id: addons.id }).from(addons)
+                .where(and(
+                    inArray(addons.id, addonsId),
+                    eq(addons.restaurantid, restaurantId)
+                ));
 
-            if (!existingAddon[0]) {
-                throw new Error("Addon not found");
+            if (existingAddons.length !== addonsId.length) {
+                throw new Error("One or more Addon IDs are invalid");
             }
         }
 
@@ -101,7 +103,7 @@ export const createFood = async (req: Request, res: Response) => {
                 Nutrition: Nutrition || null,
                 allergen_ingredients: allergen_ingredients || null,
                 is_Halal: is_Halal ?? false,
-                addonsId: addonsId || null,
+                addonsId: addonsId || [],
                 startTime,
                 endTime,
                 search_tags: search_tags || null,

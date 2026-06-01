@@ -50,6 +50,12 @@ const createSubcategory = async (req, res) => {
         order_Level: order_Level !== undefined ? order_Level : (order_level !== undefined ? order_level : 0), // ربط المتغير الجديد
         status: status || "active",
     });
+    // ✅ نشر الأدونز على كل الأكل الموجود في الساب كاتيجوري
+    if (addonsIds && Array.isArray(addonsIds) && addonsIds.length > 0) {
+        await connection_1.db.update(schema_1.food)
+            .set({ addonsId: addonsIds })
+            .where((0, drizzle_orm_1.eq)(schema_1.food.subcategoryid, id));
+    }
     return (0, response_1.SuccessResponse)(res, { message: "Create subcategory success", data: { id } }, 201);
 };
 exports.createSubcategory = createSubcategory;
@@ -207,6 +213,12 @@ const updateSubcategory = async (req, res) => {
     await connection_1.db.update(schema_1.subcategories)
         .set(updateData)
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.id, id), (0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId)));
+    // ✅ لو الأدونز اتغيرت، ننشرها على كل الأكل الموجود في الساب كاتيجوري
+    if (addonsIds !== undefined) {
+        await connection_1.db.update(schema_1.food)
+            .set({ addonsId: addonsIds })
+            .where((0, drizzle_orm_1.eq)(schema_1.food.subcategoryid, id));
+    }
     return (0, response_1.SuccessResponse)(res, { message: "Update subcategory success" });
 };
 exports.updateSubcategory = updateSubcategory;
