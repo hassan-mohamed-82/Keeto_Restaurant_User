@@ -9,6 +9,7 @@ import { v4 as uuidv4 } from "uuid";
 import QRCode from "qrcode";
 import { saveBase64Image } from "../../utils/handleImages"; 
 import { db } from "../../models/connection";
+import redis from "../../config/redis";
 
 export const generateRestaurantQR = async (req: Request, res: Response) => {
     // 1. استلام اللينك من الـ body
@@ -32,6 +33,9 @@ export const generateRestaurantQR = async (req: Request, res: Response) => {
             qrCodeImg: qrCodeBase64,
         });
 
+        // Invalidate cache since a new QR was generated
+        await redis.del(`qr:${restaurantId}`);
+
          // 3. إرجاع الـ QR Code للمطعم
         return SuccessResponse(res, {
             message: "QR Code generated successfully",
@@ -51,7 +55,22 @@ export const getRestaurantQR = async (req: Request, res: Response) => {
     if (!restaurantId) {
         throw new BadRequest("Restaurant ID is required.");
     }
+    
+    const cacheKey = `qr:${restaurantId}`;
+    const cachedData = await redis.get(cacheKey);
+
+    if (cachedData) {
+        return SuccessResponse(res, {
+            message: "Restaurants fetched successfully (from cache)",
+            data: JSON.parse(cachedData),
+        }, 200);
+    }
+
     const existingRestaurant = await db.select().from(restaurantsUrl).where(eq(restaurantsUrl.restaurantid, restaurantId));
+    
+    // Cache the result for 1 hour (3600 seconds)
+    await redis.set(cacheKey, JSON.stringify(existingRestaurant), 'EX', 3600);
+
     return SuccessResponse(res, {
         message: "Restaurants fetched successfully",
         data: existingRestaurant,
@@ -73,6 +92,10 @@ export const deletRestaurantQR = async (req: Request, res: Response) => {
         throw new BadRequest("Restaurant QR not found.");
     }
     await db.delete(restaurantsUrl).where(eq(restaurantsUrl.id, id));
+    
+    // Invalidate cache after deletion
+    await redis.del(`qr:${restaurantId}`);
+
     return SuccessResponse(res, {
         message: "Restaurants deleted successfully",
     }, 200);

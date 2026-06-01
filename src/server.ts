@@ -10,6 +10,7 @@ import helmet from "helmet";
 import http from "http";
 import { Server } from "socket.io";
 import { connectDB } from './models/connection'; 
+import './config/redis';
 
 dotenv.config();
 

@@ -29,11 +29,16 @@ import ReportRouter from "./report";
 import NotificationRouter from "./notification";
 import { authenticated } from "../../middlewares/authenticated";
 import { authorizeRoles } from "../../middlewares/authorized";
+import { invalidateCache } from "../../middlewares/invalidateCache";
 const router = Router();
 
 router.use("/auth", authRouter);
 // ضفنا الـ Underscore هنا 👇
 router.use(authenticated, authorizeRoles("owner", "subadmin", "branch_manager", "staff"));
+
+// أضفنا ميدل وير لمسح الكاش تلقائياً عند أي تعديل من الأدمن
+router.use(invalidateCache);
+
 router.use("/restaurantadmin", AdmiRouter);
 router.use("/roles", RolesRouter);
 router.use("/subcategories", SubcategoryRouter);

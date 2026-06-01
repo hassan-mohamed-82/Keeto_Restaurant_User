@@ -1,4 +1,7 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.searchRestaurantWithMenu = exports.getUserFavorites = exports.toggleFavorite = exports.getRestaurantDetails = exports.getFoodsByCategory = exports.getRestaurantsByCuisine = exports.getHomeScreen = void 0;
 const connection_1 = require("../../models/connection");
@@ -6,6 +9,7 @@ const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
 const response_1 = require("../../utils/response");
 const Errors_1 = require("../../Errors");
+const redis_1 = __importDefault(require("../../config/redis"));
 // ==========================================
 // 🔥 Helper: تجهيز favorites لو اليوزر عامل login
 // ==========================================
@@ -32,33 +36,45 @@ const getUserFavoritesSets = async (userId) => {
 const getHomeScreen = async (req, res) => {
     const userId = req.user?.id;
     const { favoriteRestaurantIds } = await getUserFavoritesSets(userId);
-    const activeCuisines = await connection_1.db.select({
-        id: schema_1.cuisines.id,
-        name: schema_1.cuisines.name,
-        nameAr: schema_1.cuisines.nameAr,
-        nameFr: schema_1.cuisines.nameFr,
-        image: schema_1.cuisines.Image
-    }).from(schema_1.cuisines).where((0, drizzle_orm_1.eq)(schema_1.cuisines.status, "active"));
-    const activeCategories = await connection_1.db.select({
-        id: schema_1.categories.id,
-        name: schema_1.categories.name,
-        nameAr: schema_1.categories.nameAr,
-        nameFr: schema_1.categories.nameFr,
-        image: schema_1.categories.Image
-    }).from(schema_1.categories).where((0, drizzle_orm_1.eq)(schema_1.categories.status, "active"));
-    const restaurantsData = await connection_1.db.select({
-        id: schema_1.restaurants.id,
-        name: schema_1.restaurants.name,
-        nameAr: schema_1.restaurants.nameAr,
-        nameFr: schema_1.restaurants.nameFr,
-        cover: schema_1.restaurants.cover,
-        logo: schema_1.restaurants.logo,
-        address: schema_1.restaurants.address,
-        addressAr: schema_1.restaurants.addressAr,
-        addressFr: schema_1.restaurants.addressFr,
-        minDeliveryTime: schema_1.restaurants.minDeliveryTime,
-    }).from(schema_1.restaurants).where((0, drizzle_orm_1.eq)(schema_1.restaurants.status, "active"));
-    const popularRestaurants = restaurantsData.map(r => ({
+    const cacheKey = 'home_screen_data';
+    let cachedData = await redis_1.default.get(cacheKey);
+    let activeCuisines, activeCategories, restaurantsData;
+    if (cachedData) {
+        const parsed = JSON.parse(cachedData);
+        activeCuisines = parsed.activeCuisines;
+        activeCategories = parsed.activeCategories;
+        restaurantsData = parsed.restaurantsData;
+    }
+    else {
+        activeCuisines = await connection_1.db.select({
+            id: schema_1.cuisines.id,
+            name: schema_1.cuisines.name,
+            nameAr: schema_1.cuisines.nameAr,
+            nameFr: schema_1.cuisines.nameFr,
+            image: schema_1.cuisines.Image
+        }).from(schema_1.cuisines).where((0, drizzle_orm_1.eq)(schema_1.cuisines.status, "active"));
+        activeCategories = await connection_1.db.select({
+            id: schema_1.categories.id,
+            name: schema_1.categories.name,
+            nameAr: schema_1.categories.nameAr,
+            nameFr: schema_1.categories.nameFr,
+            image: schema_1.categories.Image
+        }).from(schema_1.categories).where((0, drizzle_orm_1.eq)(schema_1.categories.status, "active"));
+        restaurantsData = await connection_1.db.select({
+            id: schema_1.restaurants.id,
+            name: schema_1.restaurants.name,
+            nameAr: schema_1.restaurants.nameAr,
+            nameFr: schema_1.restaurants.nameFr,
+            cover: schema_1.restaurants.cover,
+            logo: schema_1.restaurants.logo,
+            address: schema_1.restaurants.address,
+            addressAr: schema_1.restaurants.addressAr,
+            addressFr: schema_1.restaurants.addressFr,
+            minDeliveryTime: schema_1.restaurants.minDeliveryTime,
+        }).from(schema_1.restaurants).where((0, drizzle_orm_1.eq)(schema_1.restaurants.status, "active"));
+        await redis_1.default.set(cacheKey, JSON.stringify({ activeCuisines, activeCategories, restaurantsData }), 'EX', 3600);
+    }
+    const popularRestaurants = restaurantsData.map((r) => ({
         ...r,
         isFavorite: userId ? favoriteRestaurantIds.has(r.id) : false
     }));
@@ -78,20 +94,29 @@ const getRestaurantsByCuisine = async (req, res) => {
     const { cuisineId } = req.params;
     const userId = req.user?.id;
     const { favoriteRestaurantIds } = await getUserFavoritesSets(userId);
-    const data = await connection_1.db.select({
-        id: schema_1.restaurants.id,
-        name: schema_1.restaurants.name,
-        nameAr: schema_1.restaurants.nameAr,
-        nameFr: schema_1.restaurants.nameFr,
-        cover: schema_1.restaurants.cover,
-        logo: schema_1.restaurants.logo,
-        address: schema_1.restaurants.address,
-        addressAr: schema_1.restaurants.addressAr,
-        addressFr: schema_1.restaurants.addressFr,
-        minDeliveryTime: schema_1.restaurants.minDeliveryTime,
-    }).from(schema_1.restaurants)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.sql) `JSON_CONTAINS(${schema_1.restaurants.cuisineId}, ${JSON.stringify(cuisineId)})`));
-    const result = data.map(r => ({
+    const cacheKey = `restaurants_cuisine:${cuisineId}`;
+    let data;
+    const cachedData = await redis_1.default.get(cacheKey);
+    if (cachedData) {
+        data = JSON.parse(cachedData);
+    }
+    else {
+        data = await connection_1.db.select({
+            id: schema_1.restaurants.id,
+            name: schema_1.restaurants.name,
+            nameAr: schema_1.restaurants.nameAr,
+            nameFr: schema_1.restaurants.nameFr,
+            cover: schema_1.restaurants.cover,
+            logo: schema_1.restaurants.logo,
+            address: schema_1.restaurants.address,
+            addressAr: schema_1.restaurants.addressAr,
+            addressFr: schema_1.restaurants.addressFr,
+            minDeliveryTime: schema_1.restaurants.minDeliveryTime,
+        }).from(schema_1.restaurants)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.sql) `JSON_CONTAINS(${schema_1.restaurants.cuisineId}, ${JSON.stringify(cuisineId)})`));
+        await redis_1.default.set(cacheKey, JSON.stringify(data), 'EX', 3600);
+    }
+    const result = data.map((r) => ({
         ...r,
         isFavorite: userId ? favoriteRestaurantIds.has(r.id) : false
     }));
@@ -105,23 +130,32 @@ const getFoodsByCategory = async (req, res) => {
     const { categoryId } = req.params;
     const userId = req.user?.id;
     const { favoriteFoodIds } = await getUserFavoritesSets(userId);
-    const data = await connection_1.db.select({
-        foodId: schema_1.food.id,
-        foodName: schema_1.food.name,
-        foodNameAr: schema_1.food.nameAr,
-        foodNameFr: schema_1.food.nameFr,
-        foodImage: schema_1.food.image,
-        price: schema_1.food.price,
-        restaurantId: schema_1.restaurants.id,
-        restaurantName: schema_1.restaurants.name,
-        restaurantNameAr: schema_1.restaurants.nameAr,
-        restaurantNameFr: schema_1.restaurants.nameFr,
-        restaurantLogo: schema_1.restaurants.logo
-    })
-        .from(schema_1.food)
-        .leftJoin(schema_1.restaurants, (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, schema_1.restaurants.id))
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.categoryid, categoryId), (0, drizzle_orm_1.eq)(schema_1.food.status, "active")));
-    const result = data.map(f => ({
+    const cacheKey = `foods_category:${categoryId}`;
+    let data;
+    const cachedData = await redis_1.default.get(cacheKey);
+    if (cachedData) {
+        data = JSON.parse(cachedData);
+    }
+    else {
+        data = await connection_1.db.select({
+            foodId: schema_1.food.id,
+            foodName: schema_1.food.name,
+            foodNameAr: schema_1.food.nameAr,
+            foodNameFr: schema_1.food.nameFr,
+            foodImage: schema_1.food.image,
+            price: schema_1.food.price,
+            restaurantId: schema_1.restaurants.id,
+            restaurantName: schema_1.restaurants.name,
+            restaurantNameAr: schema_1.restaurants.nameAr,
+            restaurantNameFr: schema_1.restaurants.nameFr,
+            restaurantLogo: schema_1.restaurants.logo
+        })
+            .from(schema_1.food)
+            .leftJoin(schema_1.restaurants, (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, schema_1.restaurants.id))
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.categoryid, categoryId), (0, drizzle_orm_1.eq)(schema_1.food.status, "active")));
+        await redis_1.default.set(cacheKey, JSON.stringify(data), 'EX', 3600);
+    }
+    const result = data.map((f) => ({
         ...f,
         isFavorite: userId ? favoriteFoodIds.has(f.foodId) : false
     }));
@@ -135,125 +169,144 @@ const getRestaurantDetails = async (req, res) => {
     const { restaurantId } = req.params;
     const userId = req.user?.id;
     const { favoriteFoodIds, favoriteRestaurantIds } = await getUserFavoritesSets(userId);
-    const [restaurantInfo] = await connection_1.db.select().from(schema_1.restaurants)
-        .where((0, drizzle_orm_1.eq)(schema_1.restaurants.id, restaurantId));
-    if (!restaurantInfo)
-        throw new Error("Restaurant not found");
-    const { ...safeRestaurantInfo } = restaurantInfo;
+    const cacheKey = `restaurant_details:${restaurantId}`;
+    let cachedData = await redis_1.default.get(cacheKey);
+    let safeRestaurantInfo, finalMenu;
+    if (cachedData) {
+        const parsed = JSON.parse(cachedData);
+        safeRestaurantInfo = parsed.safeRestaurantInfo;
+        finalMenu = parsed.finalMenu;
+    }
+    else {
+        const [restaurantInfo] = await connection_1.db.select().from(schema_1.restaurants)
+            .where((0, drizzle_orm_1.eq)(schema_1.restaurants.id, restaurantId));
+        if (!restaurantInfo)
+            throw new Error("Restaurant not found");
+        const { ...safeInfo } = restaurantInfo;
+        safeRestaurantInfo = safeInfo;
+        const rawMenu = await connection_1.db.select({
+            foodId: schema_1.food.id,
+            foodName: schema_1.food.name,
+            foodNameAr: schema_1.food.nameAr,
+            foodNameFr: schema_1.food.nameFr,
+            description: schema_1.food.description,
+            descriptionAr: schema_1.food.descriptionAr,
+            descriptionFr: schema_1.food.descriptionFr,
+            price: schema_1.food.price,
+            image: schema_1.food.image,
+            // 👇 تم إضافة الـ ID واللغات الثلاثة للكاتيجوري
+            categoryId: schema_1.categories.id,
+            categoryName: schema_1.categories.name,
+            categoryNameAr: schema_1.categories.nameAr,
+            categoryNameFr: schema_1.categories.nameFr,
+            variationId: schema_1.foodVariations.id,
+            variationName: schema_1.foodVariations.name,
+            variationNameAr: schema_1.foodVariations.nameAr,
+            variationNameFr: schema_1.foodVariations.nameFr,
+            isRequired: schema_1.foodVariations.isRequired,
+            selectionType: schema_1.foodVariations.selectionType,
+            min: schema_1.foodVariations.min,
+            max: schema_1.foodVariations.max,
+            optionId: schema_1.variationOptions.id,
+            optionName: schema_1.variationOptions.optionName,
+            optionNameAr: schema_1.variationOptions.optionNameAr,
+            optionNameFr: schema_1.variationOptions.optionNameFr,
+            additionalPrice: schema_1.variationOptions.additionalPrice
+        })
+            .from(schema_1.food)
+            .leftJoin(schema_1.categories, (0, drizzle_orm_1.eq)(schema_1.food.categoryid, schema_1.categories.id))
+            .leftJoin(schema_1.foodVariations, (0, drizzle_orm_1.eq)(schema_1.food.id, schema_1.foodVariations.foodId))
+            .leftJoin(schema_1.variationOptions, (0, drizzle_orm_1.eq)(schema_1.foodVariations.id, schema_1.variationOptions.variationId))
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId), (0, drizzle_orm_1.eq)(schema_1.food.status, "active")));
+        // 👇 تجميع الداتا بناءً على الـ Category ID بدلاً من الاسم
+        const groupedMenuObj = rawMenu.reduce((acc, row) => {
+            const catId = row.categoryId || "uncategorized";
+            // 1. تجميع الكاتيجوري
+            if (!acc[catId]) {
+                acc[catId] = {
+                    id: catId === "uncategorized" ? null : catId,
+                    name: row.categoryName || "Other",
+                    nameAr: row.categoryNameAr || "أخرى",
+                    nameFr: row.categoryNameFr || "Autre",
+                    foods: {} // هنجمع الأكل هنا كـ Object مؤقتاً
+                };
+            }
+            // 2. تجميع الأكل داخل الكاتيجوري
+            if (row.foodId) {
+                if (!acc[catId].foods[row.foodId]) {
+                    acc[catId].foods[row.foodId] = {
+                        id: row.foodId,
+                        name: row.foodName,
+                        nameAr: row.foodNameAr,
+                        nameFr: row.foodNameFr,
+                        description: row.description,
+                        descriptionAr: row.descriptionAr,
+                        descriptionFr: row.descriptionFr,
+                        price: row.price,
+                        image: row.image,
+                        isFavorite: false, // Will be mapped dynamically later
+                        variations: {}
+                    };
+                }
+                // 3. تجميع الـ Variations داخل الأكل
+                if (row.variationId) {
+                    if (!acc[catId].foods[row.foodId].variations[row.variationId]) {
+                        acc[catId].foods[row.foodId].variations[row.variationId] = {
+                            id: row.variationId,
+                            name: row.variationName,
+                            nameAr: row.variationNameAr,
+                            nameFr: row.variationNameFr,
+                            isRequired: row.isRequired,
+                            selectionType: row.selectionType,
+                            min: row.min,
+                            max: row.max,
+                            options: []
+                        };
+                    }
+                    // 4. تجميع الـ Options داخل الـ Variations
+                    if (row.optionId) {
+                        acc[catId].foods[row.foodId].variations[row.variationId].options.push({
+                            id: row.optionId,
+                            name: row.optionName,
+                            nameAr: row.optionNameAr,
+                            nameFr: row.optionNameFr,
+                            additionalPrice: row.additionalPrice
+                        });
+                    }
+                }
+            }
+            return acc;
+        }, {});
+        // 👇 تحويل الكاتيجوريز والأكلات من Objects إلى Arrays عشان الـ Response يكون مظبوط
+        finalMenu = Object.values(groupedMenuObj).map((category) => {
+            return {
+                id: category.id,
+                name: category.name,
+                nameAr: category.nameAr,
+                nameFr: category.nameFr,
+                foods: Object.values(category.foods).map((f) => {
+                    f.variations = Object.values(f.variations);
+                    return f;
+                })
+            };
+        });
+        await redis_1.default.set(cacheKey, JSON.stringify({ safeRestaurantInfo, finalMenu }), 'EX', 3600);
+    }
     const restaurantWithFav = {
         ...safeRestaurantInfo,
         isFavorite: userId ? favoriteRestaurantIds.has(restaurantId) : false
     };
-    const rawMenu = await connection_1.db.select({
-        foodId: schema_1.food.id,
-        foodName: schema_1.food.name,
-        foodNameAr: schema_1.food.nameAr,
-        foodNameFr: schema_1.food.nameFr,
-        description: schema_1.food.description,
-        descriptionAr: schema_1.food.descriptionAr,
-        descriptionFr: schema_1.food.descriptionFr,
-        price: schema_1.food.price,
-        image: schema_1.food.image,
-        // 👇 تم إضافة الـ ID واللغات الثلاثة للكاتيجوري
-        categoryId: schema_1.categories.id,
-        categoryName: schema_1.categories.name,
-        categoryNameAr: schema_1.categories.nameAr,
-        categoryNameFr: schema_1.categories.nameFr,
-        variationId: schema_1.foodVariations.id,
-        variationName: schema_1.foodVariations.name,
-        variationNameAr: schema_1.foodVariations.nameAr,
-        variationNameFr: schema_1.foodVariations.nameFr,
-        isRequired: schema_1.foodVariations.isRequired,
-        selectionType: schema_1.foodVariations.selectionType,
-        min: schema_1.foodVariations.min,
-        max: schema_1.foodVariations.max,
-        optionId: schema_1.variationOptions.id,
-        optionName: schema_1.variationOptions.optionName,
-        optionNameAr: schema_1.variationOptions.optionNameAr,
-        optionNameFr: schema_1.variationOptions.optionNameFr,
-        additionalPrice: schema_1.variationOptions.additionalPrice
-    })
-        .from(schema_1.food)
-        .leftJoin(schema_1.categories, (0, drizzle_orm_1.eq)(schema_1.food.categoryid, schema_1.categories.id))
-        .leftJoin(schema_1.foodVariations, (0, drizzle_orm_1.eq)(schema_1.food.id, schema_1.foodVariations.foodId))
-        .leftJoin(schema_1.variationOptions, (0, drizzle_orm_1.eq)(schema_1.foodVariations.id, schema_1.variationOptions.variationId))
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId), (0, drizzle_orm_1.eq)(schema_1.food.status, "active")));
-    // 👇 تجميع الداتا بناءً على الـ Category ID بدلاً من الاسم
-    const groupedMenuObj = rawMenu.reduce((acc, row) => {
-        const catId = row.categoryId || "uncategorized";
-        // 1. تجميع الكاتيجوري
-        if (!acc[catId]) {
-            acc[catId] = {
-                id: catId === "uncategorized" ? null : catId,
-                name: row.categoryName || "Other",
-                nameAr: row.categoryNameAr || "أخرى",
-                nameFr: row.categoryNameFr || "Autre",
-                foods: {} // هنجمع الأكل هنا كـ Object مؤقتاً
-            };
-        }
-        // 2. تجميع الأكل داخل الكاتيجوري
-        if (row.foodId) {
-            if (!acc[catId].foods[row.foodId]) {
-                acc[catId].foods[row.foodId] = {
-                    id: row.foodId,
-                    name: row.foodName,
-                    nameAr: row.foodNameAr,
-                    nameFr: row.foodNameFr,
-                    description: row.description,
-                    descriptionAr: row.descriptionAr,
-                    descriptionFr: row.descriptionFr,
-                    price: row.price,
-                    image: row.image,
-                    isFavorite: userId ? favoriteFoodIds.has(row.foodId) : false,
-                    variations: {}
-                };
-            }
-            // 3. تجميع الـ Variations داخل الأكل
-            if (row.variationId) {
-                if (!acc[catId].foods[row.foodId].variations[row.variationId]) {
-                    acc[catId].foods[row.foodId].variations[row.variationId] = {
-                        id: row.variationId,
-                        name: row.variationName,
-                        nameAr: row.variationNameAr,
-                        nameFr: row.variationNameFr,
-                        isRequired: row.isRequired,
-                        selectionType: row.selectionType,
-                        min: row.min,
-                        max: row.max,
-                        options: []
-                    };
-                }
-                // 4. تجميع الـ Options داخل الـ Variations
-                if (row.optionId) {
-                    acc[catId].foods[row.foodId].variations[row.variationId].options.push({
-                        id: row.optionId,
-                        name: row.optionName,
-                        nameAr: row.optionNameAr,
-                        nameFr: row.optionNameFr,
-                        additionalPrice: row.additionalPrice
-                    });
-                }
-            }
-        }
-        return acc;
-    }, {});
-    // 👇 تحويل الكاتيجوريز والأكلات من Objects إلى Arrays عشان الـ Response يكون مظبوط
-    const finalMenu = Object.values(groupedMenuObj).map((category) => {
-        return {
-            id: category.id,
-            name: category.name,
-            nameAr: category.nameAr,
-            nameFr: category.nameFr,
-            foods: Object.values(category.foods).map((f) => {
-                f.variations = Object.values(f.variations);
-                return f;
-            })
-        };
-    });
+    const finalMenuWithFavs = finalMenu.map((category) => ({
+        ...category,
+        foods: category.foods.map((f) => ({
+            ...f,
+            isFavorite: userId ? favoriteFoodIds.has(f.id) : false
+        }))
+    }));
     return (0, response_1.SuccessResponse)(res, {
         data: {
             restaurant: restaurantWithFav,
-            menu: finalMenu
+            menu: finalMenuWithFavs
         }
     });
 };

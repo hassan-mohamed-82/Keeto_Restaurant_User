@@ -14,8 +14,8 @@ export const createSubcategory = async (req: Request, res: Response) => {
         throw new BadRequest("Restaurant context is missing or unauthorized");
     }
     
-    // استقبلنا order_level
-    const { name, categoryId, priority, status, nameAr, nameFr, addonsIds, order_level } = req.body;
+    // استقبلنا order_level و order_Level لدعم الحالتين
+    const { name, categoryId, priority, status, nameAr, nameFr, addonsIds, order_level, order_Level } = req.body;
 
     if (!name || !categoryId) {
         throw new BadRequest("Subcategory name and category ID are required");
@@ -60,7 +60,7 @@ export const createSubcategory = async (req: Request, res: Response) => {
         restaurantId: restaurantId,
         addonsIds: addonsIds || [],
         priority: priority || "low",
-        order_Level: order_level !== undefined ? order_level : 0, // ربط المتغير الجديد
+        order_Level: order_Level !== undefined ? order_Level : (order_level !== undefined ? order_level : 0), // ربط المتغير الجديد
         status: status || "active",
     });
 
@@ -180,7 +180,7 @@ export const updateSubcategory = async (req: Request, res: Response) => {
     const { id } = req.params;
     
     // استقبال order_level
-    const { name, categoryId, priority, status, nameAr, nameFr, addonsIds, order_level } = req.body;
+    const { name, categoryId, priority, status, nameAr, nameFr, addonsIds, order_level, order_Level } = req.body;
 
     const existingSubcategory = await db
         .select()
@@ -230,7 +230,10 @@ export const updateSubcategory = async (req: Request, res: Response) => {
     if (categoryId) updateData.categoryId = categoryId;
     if (addonsIds !== undefined) updateData.addonsIds = addonsIds;
     if (priority) updateData.priority = priority;
-    if (order_level !== undefined) updateData.orderLevel = order_level; // التحديث في حالة التمرير
+    
+    const finalOrderLevel = order_Level !== undefined ? order_Level : order_level;
+    if (finalOrderLevel !== undefined) updateData.order_Level = finalOrderLevel; // التحديث في حالة التمرير
+    
     if (status) updateData.status = status;
 
     if (Object.keys(updateData).length === 1) {

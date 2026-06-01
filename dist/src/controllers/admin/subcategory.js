@@ -13,8 +13,8 @@ const createSubcategory = async (req, res) => {
     if (!restaurantId) {
         throw new BadRequest_1.BadRequest("Restaurant context is missing or unauthorized");
     }
-    // استقبلنا order_level
-    const { name, categoryId, priority, status, nameAr, nameFr, addonsIds, order_level } = req.body;
+    // استقبلنا order_level و order_Level لدعم الحالتين
+    const { name, categoryId, priority, status, nameAr, nameFr, addonsIds, order_level, order_Level } = req.body;
     if (!name || !categoryId) {
         throw new BadRequest_1.BadRequest("Subcategory name and category ID are required");
     }
@@ -47,7 +47,7 @@ const createSubcategory = async (req, res) => {
         restaurantId: restaurantId,
         addonsIds: addonsIds || [],
         priority: priority || "low",
-        order_Level: order_level !== undefined ? order_level : 0, // ربط المتغير الجديد
+        order_Level: order_Level !== undefined ? order_Level : (order_level !== undefined ? order_level : 0), // ربط المتغير الجديد
         status: status || "active",
     });
     return (0, response_1.SuccessResponse)(res, { message: "Create subcategory success", data: { id } }, 201);
@@ -153,7 +153,7 @@ const updateSubcategory = async (req, res) => {
     }
     const { id } = req.params;
     // استقبال order_level
-    const { name, categoryId, priority, status, nameAr, nameFr, addonsIds, order_level } = req.body;
+    const { name, categoryId, priority, status, nameAr, nameFr, addonsIds, order_level, order_Level } = req.body;
     const existingSubcategory = await connection_1.db
         .select()
         .from(schema_1.subcategories)
@@ -196,8 +196,9 @@ const updateSubcategory = async (req, res) => {
         updateData.addonsIds = addonsIds;
     if (priority)
         updateData.priority = priority;
-    if (order_level !== undefined)
-        updateData.orderLevel = order_level; // التحديث في حالة التمرير
+    const finalOrderLevel = order_Level !== undefined ? order_Level : order_level;
+    if (finalOrderLevel !== undefined)
+        updateData.order_Level = finalOrderLevel; // التحديث في حالة التمرير
     if (status)
         updateData.status = status;
     if (Object.keys(updateData).length === 1) {

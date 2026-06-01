@@ -11,6 +11,7 @@ const BadRequest_1 = require("../../Errors/BadRequest");
 const uuid_1 = require("uuid");
 const qrcode_1 = __importDefault(require("qrcode"));
 const connection_1 = require("../../models/connection");
+const redis_1 = __importDefault(require("../../config/redis"));
 const generateRestaurantQR = async (req, res) => {
     // 1. استلام اللينك من الـ body
     const { restaurantUrl } = req.body;
@@ -28,6 +29,8 @@ const generateRestaurantQR = async (req, res) => {
         restaurantid: restaurantId,
         qrCodeImg: qrCodeBase64,
     });
+    // Invalidate cache since a new QR was generated
+    await redis_1.default.del(`qr:${restaurantId}`);
     // 3. إرجاع الـ QR Code للمطعم
     return (0, response_1.SuccessResponse)(res, {
         message: "QR Code generated successfully",
@@ -43,7 +46,17 @@ const getRestaurantQR = async (req, res) => {
     if (!restaurantId) {
         throw new BadRequest_1.BadRequest("Restaurant ID is required.");
     }
+    const cacheKey = `qr:${restaurantId}`;
+    const cachedData = await redis_1.default.get(cacheKey);
+    if (cachedData) {
+        return (0, response_1.SuccessResponse)(res, {
+            message: "Restaurants fetched successfully (from cache)",
+            data: JSON.parse(cachedData),
+        }, 200);
+    }
     const existingRestaurant = await connection_1.db.select().from(restQR_1.restaurantsUrl).where((0, drizzle_orm_1.eq)(restQR_1.restaurantsUrl.restaurantid, restaurantId));
+    // Cache the result for 1 hour (3600 seconds)
+    await redis_1.default.set(cacheKey, JSON.stringify(existingRestaurant), 'EX', 3600);
     return (0, response_1.SuccessResponse)(res, {
         message: "Restaurants fetched successfully",
         data: existingRestaurant,
@@ -64,6 +77,8 @@ const deletRestaurantQR = async (req, res) => {
         throw new BadRequest_1.BadRequest("Restaurant QR not found.");
     }
     await connection_1.db.delete(restQR_1.restaurantsUrl).where((0, drizzle_orm_1.eq)(restQR_1.restaurantsUrl.id, id));
+    // Invalidate cache after deletion
+    await redis_1.default.del(`qr:${restaurantId}`);
     return (0, response_1.SuccessResponse)(res, {
         message: "Restaurants deleted successfully",
     }, 200);

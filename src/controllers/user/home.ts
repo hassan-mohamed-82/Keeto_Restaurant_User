@@ -4,6 +4,7 @@ import { cuisines, categories, restaurants, food, favorites, foodVariations, var
 import { eq, and, like, or, sql } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest, UnauthorizedError } from "../../Errors";
+import redis from "../../config/redis";
 
 // ==========================================
 // 🔥 Helper: تجهيز favorites لو اليوزر عامل login
@@ -34,36 +35,49 @@ export const getHomeScreen = async (req: Request, res: Response) => {
     const userId = req.user?.id;
     const { favoriteRestaurantIds } = await getUserFavoritesSets(userId);
 
-    const activeCuisines = await db.select({
-        id: cuisines.id,
-        name: cuisines.name,
-        nameAr: cuisines.nameAr,
-        nameFr: cuisines.nameFr,
-        image: cuisines.Image
-    }).from(cuisines).where(eq(cuisines.status, "active"));
+    const cacheKey = 'home_screen_data';
+    let cachedData = await redis.get(cacheKey);
+    let activeCuisines, activeCategories, restaurantsData;
 
-    const activeCategories = await db.select({
-        id: categories.id,
-        name: categories.name,
-        nameAr: categories.nameAr,
-        nameFr: categories.nameFr,
-        image: categories.Image
-    }).from(categories).where(eq(categories.status, "active"));
+    if (cachedData) {
+        const parsed = JSON.parse(cachedData);
+        activeCuisines = parsed.activeCuisines;
+        activeCategories = parsed.activeCategories;
+        restaurantsData = parsed.restaurantsData;
+    } else {
+        activeCuisines = await db.select({
+            id: cuisines.id,
+            name: cuisines.name,
+            nameAr: cuisines.nameAr,
+            nameFr: cuisines.nameFr,
+            image: cuisines.Image
+        }).from(cuisines).where(eq(cuisines.status, "active"));
 
-    const restaurantsData = await db.select({
-        id: restaurants.id,
-        name: restaurants.name,
-        nameAr: restaurants.nameAr,
-        nameFr: restaurants.nameFr,
-        cover: restaurants.cover,
-        logo: restaurants.logo,
-        address: restaurants.address,
-        addressAr: restaurants.addressAr,
-        addressFr: restaurants.addressFr,
-        minDeliveryTime: restaurants.minDeliveryTime,
-    }).from(restaurants).where(eq(restaurants.status, "active"));
+        activeCategories = await db.select({
+            id: categories.id,
+            name: categories.name,
+            nameAr: categories.nameAr,
+            nameFr: categories.nameFr,
+            image: categories.Image
+        }).from(categories).where(eq(categories.status, "active"));
 
-    const popularRestaurants = restaurantsData.map(r => ({
+        restaurantsData = await db.select({
+            id: restaurants.id,
+            name: restaurants.name,
+            nameAr: restaurants.nameAr,
+            nameFr: restaurants.nameFr,
+            cover: restaurants.cover,
+            logo: restaurants.logo,
+            address: restaurants.address,
+            addressAr: restaurants.addressAr,
+            addressFr: restaurants.addressFr,
+            minDeliveryTime: restaurants.minDeliveryTime,
+        }).from(restaurants).where(eq(restaurants.status, "active"));
+
+        await redis.set(cacheKey, JSON.stringify({ activeCuisines, activeCategories, restaurantsData }), 'EX', 3600);
+    }
+
+    const popularRestaurants = restaurantsData.map((r: any) => ({
         ...r,
         isFavorite: userId ? favoriteRestaurantIds.has(r.id) : false
     }));
@@ -86,23 +100,33 @@ export const getRestaurantsByCuisine = async (req: Request, res: Response) => {
 
     const { favoriteRestaurantIds } = await getUserFavoritesSets(userId);
 
-    const data = await db.select({
-        id: restaurants.id,
-        name: restaurants.name,
-        nameAr: restaurants.nameAr,
-        nameFr: restaurants.nameFr,
-        cover: restaurants.cover,
-        logo: restaurants.logo,
-        address: restaurants.address,
-        addressAr: restaurants.addressAr,
-        addressFr: restaurants.addressFr,
-        minDeliveryTime: restaurants.minDeliveryTime,
-    }).from(restaurants)
-    .where(and(
-        sql`JSON_CONTAINS(${restaurants.cuisineId}, ${JSON.stringify(cuisineId)})`
-    ));
+    const cacheKey = `restaurants_cuisine:${cuisineId}`;
+    let data;
+    const cachedData = await redis.get(cacheKey);
 
-    const result = data.map(r => ({
+    if (cachedData) {
+        data = JSON.parse(cachedData);
+    } else {
+        data = await db.select({
+            id: restaurants.id,
+            name: restaurants.name,
+            nameAr: restaurants.nameAr,
+            nameFr: restaurants.nameFr,
+            cover: restaurants.cover,
+            logo: restaurants.logo,
+            address: restaurants.address,
+            addressAr: restaurants.addressAr,
+            addressFr: restaurants.addressFr,
+            minDeliveryTime: restaurants.minDeliveryTime,
+        }).from(restaurants)
+        .where(and(
+            sql`JSON_CONTAINS(${restaurants.cuisineId}, ${JSON.stringify(cuisineId)})`
+        ));
+
+        await redis.set(cacheKey, JSON.stringify(data), 'EX', 3600);
+    }
+
+    const result = data.map((r: any) => ({
         ...r,
         isFavorite: userId ? favoriteRestaurantIds.has(r.id) : false
     }));
@@ -119,27 +143,37 @@ export const getFoodsByCategory = async (req: Request, res: Response) => {
 
     const { favoriteFoodIds } = await getUserFavoritesSets(userId);
 
-    const data = await db.select({
-        foodId: food.id,
-        foodName: food.name,
-        foodNameAr: food.nameAr,
-        foodNameFr: food.nameFr,
-        foodImage: food.image,
-        price: food.price,
-        restaurantId: restaurants.id,
-        restaurantName: restaurants.name,
-        restaurantNameAr: restaurants.nameAr,
-        restaurantNameFr: restaurants.nameFr,
-        restaurantLogo: restaurants.logo
-    })
-    .from(food)
-    .leftJoin(restaurants, eq(food.restaurantid, restaurants.id))
-    .where(and(
-        eq(food.categoryid, categoryId),
-        eq(food.status, "active")
-    ));
+    const cacheKey = `foods_category:${categoryId}`;
+    let data;
+    const cachedData = await redis.get(cacheKey);
 
-    const result = data.map(f => ({
+    if (cachedData) {
+        data = JSON.parse(cachedData);
+    } else {
+        data = await db.select({
+            foodId: food.id,
+            foodName: food.name,
+            foodNameAr: food.nameAr,
+            foodNameFr: food.nameFr,
+            foodImage: food.image,
+            price: food.price,
+            restaurantId: restaurants.id,
+            restaurantName: restaurants.name,
+            restaurantNameAr: restaurants.nameAr,
+            restaurantNameFr: restaurants.nameFr,
+            restaurantLogo: restaurants.logo
+        })
+        .from(food)
+        .leftJoin(restaurants, eq(food.restaurantid, restaurants.id))
+        .where(and(
+            eq(food.categoryid, categoryId),
+            eq(food.status, "active")
+        ));
+
+        await redis.set(cacheKey, JSON.stringify(data), 'EX', 3600);
+    }
+
+    const result = data.map((f: any) => ({
         ...f,
         isFavorite: userId ? favoriteFoodIds.has(f.foodId) : false
     }));
@@ -156,57 +190,62 @@ export const getRestaurantDetails = async (req: Request, res: Response) => {
 
     const { favoriteFoodIds, favoriteRestaurantIds } = await getUserFavoritesSets(userId);
 
-    const [restaurantInfo] = await db.select().from(restaurants)
-        .where(eq(restaurants.id, restaurantId));
+    const cacheKey = `restaurant_details:${restaurantId}`;
+    let cachedData = await redis.get(cacheKey);
+    let safeRestaurantInfo: any, finalMenu: any;
 
-    if (!restaurantInfo) throw new Error("Restaurant not found");
+    if (cachedData) {
+        const parsed = JSON.parse(cachedData);
+        safeRestaurantInfo = parsed.safeRestaurantInfo;
+        finalMenu = parsed.finalMenu;
+    } else {
+        const [restaurantInfo] = await db.select().from(restaurants)
+            .where(eq(restaurants.id, restaurantId));
 
-    const {...safeRestaurantInfo } = restaurantInfo;
+        if (!restaurantInfo) throw new Error("Restaurant not found");
 
-    const restaurantWithFav = {
-        ...safeRestaurantInfo,
-        isFavorite: userId ? favoriteRestaurantIds.has(restaurantId) : false
-    };
+        const {...safeInfo } = restaurantInfo;
+        safeRestaurantInfo = safeInfo;
 
-    const rawMenu = await db.select({
-        foodId: food.id,
-        foodName: food.name,
-        foodNameAr: food.nameAr,
-        foodNameFr: food.nameFr,
-        description: food.description,
-        descriptionAr: food.descriptionAr,
-        descriptionFr: food.descriptionFr,
-        price: food.price,
-        image: food.image,
-        
-        // 👇 تم إضافة الـ ID واللغات الثلاثة للكاتيجوري
-        categoryId: categories.id,
-        categoryName: categories.name,
-        categoryNameAr: categories.nameAr,
-        categoryNameFr: categories.nameFr,
-        
-        variationId: foodVariations.id,
-        variationName: foodVariations.name,
-        variationNameAr: foodVariations.nameAr,
-        variationNameFr: foodVariations.nameFr,
-        isRequired: foodVariations.isRequired,
-        selectionType: foodVariations.selectionType,
-        min: foodVariations.min,
-        max: foodVariations.max,
-        optionId: variationOptions.id,
-        optionName: variationOptions.optionName,
-        optionNameAr: variationOptions.optionNameAr,
-        optionNameFr: variationOptions.optionNameFr,
-        additionalPrice: variationOptions.additionalPrice
-    })
-    .from(food)
-    .leftJoin(categories, eq(food.categoryid, categories.id))
-    .leftJoin(foodVariations, eq(food.id, foodVariations.foodId))
-    .leftJoin(variationOptions, eq(foodVariations.id, variationOptions.variationId))
-    .where(and(
-        eq(food.restaurantid, restaurantId),
-        eq(food.status, "active")
-    ));
+        const rawMenu = await db.select({
+            foodId: food.id,
+            foodName: food.name,
+            foodNameAr: food.nameAr,
+            foodNameFr: food.nameFr,
+            description: food.description,
+            descriptionAr: food.descriptionAr,
+            descriptionFr: food.descriptionFr,
+            price: food.price,
+            image: food.image,
+            
+            // 👇 تم إضافة الـ ID واللغات الثلاثة للكاتيجوري
+            categoryId: categories.id,
+            categoryName: categories.name,
+            categoryNameAr: categories.nameAr,
+            categoryNameFr: categories.nameFr,
+            
+            variationId: foodVariations.id,
+            variationName: foodVariations.name,
+            variationNameAr: foodVariations.nameAr,
+            variationNameFr: foodVariations.nameFr,
+            isRequired: foodVariations.isRequired,
+            selectionType: foodVariations.selectionType,
+            min: foodVariations.min,
+            max: foodVariations.max,
+            optionId: variationOptions.id,
+            optionName: variationOptions.optionName,
+            optionNameAr: variationOptions.optionNameAr,
+            optionNameFr: variationOptions.optionNameFr,
+            additionalPrice: variationOptions.additionalPrice
+        })
+        .from(food)
+        .leftJoin(categories, eq(food.categoryid, categories.id))
+        .leftJoin(foodVariations, eq(food.id, foodVariations.foodId))
+        .leftJoin(variationOptions, eq(foodVariations.id, variationOptions.variationId))
+        .where(and(
+            eq(food.restaurantid, restaurantId),
+            eq(food.status, "active")
+        ));
 
     // 👇 تجميع الداتا بناءً على الـ Category ID بدلاً من الاسم
     const groupedMenuObj = rawMenu.reduce((acc: any, row) => {
@@ -236,7 +275,7 @@ export const getRestaurantDetails = async (req: Request, res: Response) => {
                     descriptionFr: row.descriptionFr,
                     price: row.price,
                     image: row.image,
-                    isFavorite: userId ? favoriteFoodIds.has(row.foodId) : false,
+                    isFavorite: false, // Will be mapped dynamically later
                     variations: {}
                 };
             }
@@ -273,24 +312,40 @@ export const getRestaurantDetails = async (req: Request, res: Response) => {
         return acc;
     }, {});
 
-    // 👇 تحويل الكاتيجوريز والأكلات من Objects إلى Arrays عشان الـ Response يكون مظبوط
-    const finalMenu = Object.values(groupedMenuObj).map((category: any) => {
-        return {
-            id: category.id,
-            name: category.name,
-            nameAr: category.nameAr,
-            nameFr: category.nameFr,
-            foods: Object.values(category.foods).map((f: any) => {
-                f.variations = Object.values(f.variations);
-                return f;
-            })
-        };
-    });
+        // 👇 تحويل الكاتيجوريز والأكلات من Objects إلى Arrays عشان الـ Response يكون مظبوط
+        finalMenu = Object.values(groupedMenuObj).map((category: any) => {
+            return {
+                id: category.id,
+                name: category.name,
+                nameAr: category.nameAr,
+                nameFr: category.nameFr,
+                foods: Object.values(category.foods).map((f: any) => {
+                    f.variations = Object.values(f.variations);
+                    return f;
+                })
+            };
+        });
+
+        await redis.set(cacheKey, JSON.stringify({ safeRestaurantInfo, finalMenu }), 'EX', 3600);
+    }
+
+    const restaurantWithFav = {
+        ...safeRestaurantInfo,
+        isFavorite: userId ? favoriteRestaurantIds.has(restaurantId) : false
+    };
+
+    const finalMenuWithFavs = finalMenu.map((category: any) => ({
+        ...category,
+        foods: category.foods.map((f: any) => ({
+            ...f,
+            isFavorite: userId ? favoriteFoodIds.has(f.id) : false
+        }))
+    }));
 
     return SuccessResponse(res, {
         data: {
             restaurant: restaurantWithFav,
-            menu: finalMenu
+            menu: finalMenuWithFavs
         }
     });
 };
