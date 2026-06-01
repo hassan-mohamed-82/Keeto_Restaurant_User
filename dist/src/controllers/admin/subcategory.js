@@ -92,11 +92,21 @@ const getAllSubcategories = async (req, res) => {
     // Fetch all addons for this restaurant to map them
     const allAddons = await connection_1.db.select().from(schema_1.addons).where((0, drizzle_orm_1.eq)(schema_1.addons.restaurantid, restaurantId));
     const dataWithAddons = allSubcategories.map(sub => {
-        const subAddons = sub.addonsIds && Array.isArray(sub.addonsIds)
-            ? allAddons.filter(a => sub.addonsIds.includes(a.id))
+        let parsedAddonsIds = sub.addonsIds;
+        if (typeof sub.addonsIds === 'string') {
+            try {
+                parsedAddonsIds = JSON.parse(sub.addonsIds);
+            }
+            catch (e) {
+                parsedAddonsIds = [];
+            }
+        }
+        const subAddons = parsedAddonsIds && Array.isArray(parsedAddonsIds)
+            ? allAddons.filter(a => parsedAddonsIds.includes(a.id))
             : [];
         return {
             ...sub,
+            addonsIds: parsedAddonsIds, // Ensure it's returned as an array in response
             addons: subAddons
         };
     });
@@ -138,15 +148,25 @@ const getSubcategoryById = async (req, res) => {
         throw new NotFound_1.NotFound("Subcategory not found");
     }
     const sub = subcategory[0];
+    let parsedAddonsIds = sub.addonsIds;
+    if (typeof sub.addonsIds === 'string') {
+        try {
+            parsedAddonsIds = JSON.parse(sub.addonsIds);
+        }
+        catch (e) {
+            parsedAddonsIds = [];
+        }
+    }
     let subAddons = [];
-    if (sub.addonsIds && Array.isArray(sub.addonsIds) && sub.addonsIds.length > 0) {
+    if (parsedAddonsIds && Array.isArray(parsedAddonsIds) && parsedAddonsIds.length > 0) {
         subAddons = await connection_1.db
             .select()
             .from(schema_1.addons)
-            .where((0, drizzle_orm_1.inArray)(schema_1.addons.id, sub.addonsIds));
+            .where((0, drizzle_orm_1.inArray)(schema_1.addons.id, parsedAddonsIds));
     }
     const dataWithAddons = {
         ...sub,
+        addonsIds: parsedAddonsIds, // Ensure it's returned as an array in response
         addons: subAddons
     };
     return (0, response_1.SuccessResponse)(res, { message: "Get subcategory by id success", data: dataWithAddons });

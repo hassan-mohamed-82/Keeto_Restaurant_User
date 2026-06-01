@@ -111,11 +111,21 @@ export const getAllSubcategories = async (req: Request, res: Response) => {
     const allAddons = await db.select().from(addons).where(eq(addons.restaurantid, restaurantId));
 
     const dataWithAddons = allSubcategories.map(sub => {
-        const subAddons = sub.addonsIds && Array.isArray(sub.addonsIds) 
-            ? allAddons.filter(a => (sub.addonsIds as string[]).includes(a.id)) 
+        let parsedAddonsIds = sub.addonsIds;
+        if (typeof sub.addonsIds === 'string') {
+            try {
+                parsedAddonsIds = JSON.parse(sub.addonsIds);
+            } catch (e) {
+                parsedAddonsIds = [];
+            }
+        }
+
+        const subAddons = parsedAddonsIds && Array.isArray(parsedAddonsIds) 
+            ? allAddons.filter(a => (parsedAddonsIds as string[]).includes(a.id)) 
             : [];
         return {
             ...sub,
+            addonsIds: parsedAddonsIds, // Ensure it's returned as an array in response
             addons: subAddons
         };
     });
@@ -162,16 +172,27 @@ export const getSubcategoryById = async (req: Request, res: Response) => {
     }
 
     const sub = subcategory[0];
+
+    let parsedAddonsIds = sub.addonsIds;
+    if (typeof sub.addonsIds === 'string') {
+        try {
+            parsedAddonsIds = JSON.parse(sub.addonsIds);
+        } catch (e) {
+            parsedAddonsIds = [];
+        }
+    }
+
     let subAddons: any[] = [];
-    if (sub.addonsIds && Array.isArray(sub.addonsIds) && sub.addonsIds.length > 0) {
+    if (parsedAddonsIds && Array.isArray(parsedAddonsIds) && parsedAddonsIds.length > 0) {
         subAddons = await db
             .select()
             .from(addons)
-            .where(inArray(addons.id, sub.addonsIds as string[]));
+            .where(inArray(addons.id, parsedAddonsIds as string[]));
     }
 
     const dataWithAddons = {
         ...sub,
+        addonsIds: parsedAddonsIds, // Ensure it's returned as an array in response
         addons: subAddons
     };
 
