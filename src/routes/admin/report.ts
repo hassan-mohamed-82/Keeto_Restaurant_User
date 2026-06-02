@@ -11,7 +11,7 @@ router.get("/my-restaurant", catchAsync(getMyRestaurantReport));
 // تحميل كشف حساب المطعم كـ PDF
 //GET /report/my-restaurant/invoice?startDate=2026-01-01&endDate=2026-05-19
 
-router.get("/my-restaurant/invoice", catchAsync(downloadSavedInvoicePDF));
+router.get("/my-restaurant/:invoiceId/invoice", catchAsync(downloadSavedInvoicePDF));
 
 router.get("/my-invoices", catchAsync(getMyInvoices));
 // // تقرير تفصيلي لكل المطاعم (للسوبر أدمن)
