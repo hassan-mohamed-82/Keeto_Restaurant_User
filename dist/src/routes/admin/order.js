@@ -20,6 +20,8 @@ router.get("/rejected", (0, hasPermission_1.hasPermission)("orders", "read", tru
 router.get("/refund", (0, hasPermission_1.hasPermission)("orders", "read", true), (0, catchAsync_1.catchAsync)(order_1.getRefundOrders));
 // ✅ تفاصيل أوردر بالـ ID - يحتاج صلاحية read + التحقق من الفرع
 router.get("/:id", (0, hasPermission_1.hasPermission)("orders", "read", true), (0, catchAsync_1.catchAsync)(order_1.getRestaurantOrderById));
+// ✅ تحميل الفاتورة (Receipt PDF) للأوردر
+router.get("/:orderId/invoice", (0, hasPermission_1.hasPermission)("orders", "read", true), (0, catchAsync_1.catchAsync)(order_1.generateOrderInvoicePDF));
 // ✅ تحديث حالة الأوردر - يحتاج صلاحية update + التحقق من الفرع
 router.put("/:orderId", (0, hasPermission_1.hasPermission)("orders", "update", true), (0, catchAsync_1.catchAsync)(order_1.updateOrderStatus));
 exports.default = router;

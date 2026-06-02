@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import PDFDocument from "pdfkit";
 import { db } from "../../models/connection";
 import {
     orders, orderItems, food, users, paymentMethods,
@@ -8,7 +9,9 @@ import {
     branches,
     restaurants,
     foodVariations,
-    variationOptions
+    variationOptions,
+    addresses,
+    zones
 } from "../../models/schema";
 import { eq, and, desc, inArray } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
@@ -385,4 +388,162 @@ export const getReasons = async (req: Request, res: Response) => {
         message: "Active reasons fetched successfully", 
         data: reasons 
     });
+};
+
+// ==========================================
+// 5. إنشاء فاتورة (PDF) لطلب معين
+// ==========================================
+export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
+    const { orderId } = req.params;
+    const adminRestaurantId = req.user?.restaurantId || req.user?.id;
+    const adminBranchId = req.user?.branchId;
+
+    // 1. جلب البيانات الأساسية للأوردر
+    const [orderDetail] = await db.select({
+        order: orders,
+        customer: {
+            id: users.id,
+            name: users.name,
+            phone: users.phone,
+        },
+        branch: {
+            id: branches.id,
+            name: branches.name,
+        },
+        restaurant: {
+            id: restaurants.id,
+            name: restaurants.name,
+        },
+        address: addresses,
+        zone: {
+            name: zones.name
+        }
+    })
+        .from(orders)
+        .leftJoin(users, eq(orders.userId, users.id))
+        .leftJoin(branches, eq(orders.branchId, branches.id))
+        .leftJoin(restaurants, eq(orders.restaurantId, restaurants.id))
+        .leftJoin(addresses, eq(orders.addressId, addresses.id))
+        .leftJoin(zones, eq(addresses.zoneId, zones.id))
+        .where(eq(orders.id, orderId))
+        .limit(1);
+
+    if (!orderDetail) throw new NotFound("Order not found");
+
+    // 🛡️ حماية الصلاحيات
+    if (orderDetail.order.restaurantId !== adminRestaurantId) {
+        throw new BadRequest("Unauthorized: Order does not belong to your restaurant");
+    }
+    if (adminBranchId && orderDetail.order.branchId !== adminBranchId) {
+        throw new BadRequest("Unauthorized: Order does not belong to your branch");
+    }
+
+    // 2. جلب أصناف الأكل
+    const items = await db.select({
+        quantity: orderItems.quantity,
+        basePrice: orderItems.basePrice,
+        totalPrice: orderItems.totalPrice,
+        foodName: food.name,
+        foodNameAr: food.nameAr,
+    })
+        .from(orderItems)
+        .leftJoin(food, eq(orderItems.foodId, food.id))
+        .where(eq(orderItems.orderId, orderId));
+
+    // 3. إنشاء الـ PDF (شكل إيصال حراري / فاتورة)
+    const doc = new PDFDocument({ margin: 20, size: [250, 600] }); // حجم إيصال حراري تقريبي
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="Receipt_${orderDetail.order.orderNumber}.pdf"`);
+
+    doc.pipe(res);
+
+    // Header
+    doc.fontSize(16).text(orderDetail.restaurant?.name || 'Restaurant', { align: 'center' });
+    if (orderDetail.branch?.name) {
+        doc.fontSize(12).text(orderDetail.branch.name, { align: 'center' });
+    }
+    
+    doc.moveDown(0.5);
+    doc.moveTo(10, doc.y).lineTo(240, doc.y).dash(2, { space: 2 }).stroke();
+    doc.undash();
+    doc.moveDown(0.5);
+
+    // Order Info
+    doc.fontSize(10);
+    doc.text(`Order #: ${orderDetail.order.orderNumber}`);
+    const orderDate = new Date(orderDetail.order.createdAt || new Date());
+    doc.text(`Date: ${orderDate.toISOString().split('T')[0]}`);
+    doc.text(`Time: ${orderDate.toLocaleTimeString()}`);
+    doc.text(`Client: ${orderDetail.customer?.name || 'Guest'}`);
+    doc.text(`Phone: ${orderDetail.customer?.phone || 'N/A'}`);
+    doc.text(`Order Type: ${orderDetail.order.orderType}`);
+    doc.text(`Payment: ${orderDetail.order.paymentMethod}`);
+    
+    doc.moveDown(0.5);
+    doc.moveTo(10, doc.y).lineTo(240, doc.y).dash(2, { space: 2 }).stroke();
+    doc.undash();
+    doc.moveDown(0.5);
+
+    // Delivery Address if applicable
+    if (orderDetail.order.orderType === 'delivery' && orderDetail.address) {
+        doc.text('Delivery Address:', { underline: true });
+        doc.text(`Zone: ${orderDetail.zone?.name || ''}`);
+        doc.text(`Street: ${orderDetail.address.street || ''}`);
+        let details = `Bldg: ${orderDetail.address.number || ''}`;
+        if (orderDetail.address.floor) details += ` | Floor: ${orderDetail.address.floor}`;
+        doc.text(details);
+        
+        doc.moveDown(0.5);
+        doc.moveTo(10, doc.y).lineTo(240, doc.y).dash(2, { space: 2 }).stroke();
+        doc.undash();
+        doc.moveDown(0.5);
+    }
+
+    // Items Header
+    const itemStartY = doc.y;
+    doc.text('Item', 10, itemStartY, { width: 100 });
+    doc.text('Qty', 110, itemStartY, { width: 30, align: 'right' });
+    doc.text('Price', 140, itemStartY, { width: 45, align: 'right' });
+    doc.text('Total', 185, itemStartY, { width: 55, align: 'right' });
+    doc.moveDown(0.2);
+    
+    doc.moveTo(10, doc.y).lineTo(240, doc.y).stroke();
+    doc.moveDown(0.5);
+
+    // Items Loop
+    for (const item of items) {
+        const y = doc.y;
+        const name = item.foodName || item.foodNameAr || 'Item';
+        doc.text(name, 10, y, { width: 100 });
+        doc.text(item.quantity.toString(), 110, y, { width: 30, align: 'right' });
+        doc.text(parseFloat(item.basePrice as string).toFixed(2), 140, y, { width: 45, align: 'right' });
+        doc.text(parseFloat(item.totalPrice as string).toFixed(2), 185, y, { width: 55, align: 'right' });
+        doc.moveDown(0.5);
+    }
+
+    doc.moveTo(10, doc.y).lineTo(240, doc.y).stroke();
+    doc.moveDown(0.5);
+
+    // Totals
+    const subtotal = parseFloat(orderDetail.order.subtotal as string).toFixed(2);
+    const tax = "0.00"; // Assuming 0 for now as tax isn't in DB currently
+    const deliveryFee = parseFloat(orderDetail.order.deliveryFee as string).toFixed(2);
+    const total = parseFloat(orderDetail.order.totalAmount as string).toFixed(2);
+
+    doc.text(`Total Product Price`, 10, doc.y, { continued: true }).text(`${subtotal}`, { align: 'right' });
+    doc.text(`Tax %`, 10, doc.y, { continued: true }).text(`${tax}`, { align: 'right' });
+    doc.text(`Delivery Fee`, 10, doc.y, { continued: true }).text(`${deliveryFee}`, { align: 'right' });
+    
+    doc.moveDown(0.5);
+    doc.moveTo(10, doc.y).lineTo(240, doc.y).stroke();
+    doc.moveDown(0.5);
+
+    doc.fontSize(14).text(`Grand Total`, 10, doc.y, { continued: true }).text(`${total}`, { align: 'right' });
+
+    doc.moveDown(1);
+    doc.fontSize(10).text('Thank you for your order', { align: 'center' });
+    doc.fontSize(8).text('Powered by Keeto', { align: 'center' });
+
+    doc.end();
 };

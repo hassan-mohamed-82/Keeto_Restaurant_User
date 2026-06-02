@@ -1,6 +1,10 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getReasons = exports.updateOrderStatus = exports.getRestaurantOrderById = exports.getRefundOrders = exports.getRejectedOrders = exports.getCancelledOrders = exports.getDeliveredOrders = exports.getOutForDeliveryOrders = exports.getPreparingOrders = exports.getAcceptedOrders = exports.getPendingOrders = exports.getRestaurantOrders = void 0;
+exports.generateOrderInvoicePDF = exports.getReasons = exports.updateOrderStatus = exports.getRestaurantOrderById = exports.getRefundOrders = exports.getRejectedOrders = exports.getCancelledOrders = exports.getDeliveredOrders = exports.getOutForDeliveryOrders = exports.getPreparingOrders = exports.getAcceptedOrders = exports.getPendingOrders = exports.getRestaurantOrders = void 0;
+const pdfkit_1 = __importDefault(require("pdfkit"));
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -351,3 +355,140 @@ const getReasons = async (req, res) => {
     });
 };
 exports.getReasons = getReasons;
+// ==========================================
+// 5. إنشاء فاتورة (PDF) لطلب معين
+// ==========================================
+const generateOrderInvoicePDF = async (req, res) => {
+    const { orderId } = req.params;
+    const adminRestaurantId = req.user?.restaurantId || req.user?.id;
+    const adminBranchId = req.user?.branchId;
+    // 1. جلب البيانات الأساسية للأوردر
+    const [orderDetail] = await connection_1.db.select({
+        order: schema_1.orders,
+        customer: {
+            id: schema_1.users.id,
+            name: schema_1.users.name,
+            phone: schema_1.users.phone,
+        },
+        branch: {
+            id: schema_1.branches.id,
+            name: schema_1.branches.name,
+        },
+        restaurant: {
+            id: schema_1.restaurants.id,
+            name: schema_1.restaurants.name,
+        },
+        address: schema_1.addresses,
+        zone: {
+            name: schema_1.zones.name
+        }
+    })
+        .from(schema_1.orders)
+        .leftJoin(schema_1.users, (0, drizzle_orm_1.eq)(schema_1.orders.userId, schema_1.users.id))
+        .leftJoin(schema_1.branches, (0, drizzle_orm_1.eq)(schema_1.orders.branchId, schema_1.branches.id))
+        .leftJoin(schema_1.restaurants, (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, schema_1.restaurants.id))
+        .leftJoin(schema_1.addresses, (0, drizzle_orm_1.eq)(schema_1.orders.addressId, schema_1.addresses.id))
+        .leftJoin(schema_1.zones, (0, drizzle_orm_1.eq)(schema_1.addresses.zoneId, schema_1.zones.id))
+        .where((0, drizzle_orm_1.eq)(schema_1.orders.id, orderId))
+        .limit(1);
+    if (!orderDetail)
+        throw new NotFound_1.NotFound("Order not found");
+    // 🛡️ حماية الصلاحيات
+    if (orderDetail.order.restaurantId !== adminRestaurantId) {
+        throw new BadRequest_1.BadRequest("Unauthorized: Order does not belong to your restaurant");
+    }
+    if (adminBranchId && orderDetail.order.branchId !== adminBranchId) {
+        throw new BadRequest_1.BadRequest("Unauthorized: Order does not belong to your branch");
+    }
+    // 2. جلب أصناف الأكل
+    const items = await connection_1.db.select({
+        quantity: schema_1.orderItems.quantity,
+        basePrice: schema_1.orderItems.basePrice,
+        totalPrice: schema_1.orderItems.totalPrice,
+        foodName: schema_1.food.name,
+        foodNameAr: schema_1.food.nameAr,
+    })
+        .from(schema_1.orderItems)
+        .leftJoin(schema_1.food, (0, drizzle_orm_1.eq)(schema_1.orderItems.foodId, schema_1.food.id))
+        .where((0, drizzle_orm_1.eq)(schema_1.orderItems.orderId, orderId));
+    // 3. إنشاء الـ PDF (شكل إيصال حراري / فاتورة)
+    const doc = new pdfkit_1.default({ margin: 20, size: [250, 600] }); // حجم إيصال حراري تقريبي
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="Receipt_${orderDetail.order.orderNumber}.pdf"`);
+    doc.pipe(res);
+    // Header
+    doc.fontSize(16).text(orderDetail.restaurant?.name || 'Restaurant', { align: 'center' });
+    if (orderDetail.branch?.name) {
+        doc.fontSize(12).text(orderDetail.branch.name, { align: 'center' });
+    }
+    doc.moveDown(0.5);
+    doc.moveTo(10, doc.y).lineTo(240, doc.y).dash(2, { space: 2 }).stroke();
+    doc.undash();
+    doc.moveDown(0.5);
+    // Order Info
+    doc.fontSize(10);
+    doc.text(`Order #: ${orderDetail.order.orderNumber}`);
+    const orderDate = new Date(orderDetail.order.createdAt || new Date());
+    doc.text(`Date: ${orderDate.toISOString().split('T')[0]}`);
+    doc.text(`Time: ${orderDate.toLocaleTimeString()}`);
+    doc.text(`Client: ${orderDetail.customer?.name || 'Guest'}`);
+    doc.text(`Phone: ${orderDetail.customer?.phone || 'N/A'}`);
+    doc.text(`Order Type: ${orderDetail.order.orderType}`);
+    doc.text(`Payment: ${orderDetail.order.paymentMethod}`);
+    doc.moveDown(0.5);
+    doc.moveTo(10, doc.y).lineTo(240, doc.y).dash(2, { space: 2 }).stroke();
+    doc.undash();
+    doc.moveDown(0.5);
+    // Delivery Address if applicable
+    if (orderDetail.order.orderType === 'delivery' && orderDetail.address) {
+        doc.text('Delivery Address:', { underline: true });
+        doc.text(`Zone: ${orderDetail.zone?.name || ''}`);
+        doc.text(`Street: ${orderDetail.address.street || ''}`);
+        let details = `Bldg: ${orderDetail.address.number || ''}`;
+        if (orderDetail.address.floor)
+            details += ` | Floor: ${orderDetail.address.floor}`;
+        doc.text(details);
+        doc.moveDown(0.5);
+        doc.moveTo(10, doc.y).lineTo(240, doc.y).dash(2, { space: 2 }).stroke();
+        doc.undash();
+        doc.moveDown(0.5);
+    }
+    // Items Header
+    const itemStartY = doc.y;
+    doc.text('Item', 10, itemStartY, { width: 100 });
+    doc.text('Qty', 110, itemStartY, { width: 30, align: 'right' });
+    doc.text('Price', 140, itemStartY, { width: 45, align: 'right' });
+    doc.text('Total', 185, itemStartY, { width: 55, align: 'right' });
+    doc.moveDown(0.2);
+    doc.moveTo(10, doc.y).lineTo(240, doc.y).stroke();
+    doc.moveDown(0.5);
+    // Items Loop
+    for (const item of items) {
+        const y = doc.y;
+        const name = item.foodName || item.foodNameAr || 'Item';
+        doc.text(name, 10, y, { width: 100 });
+        doc.text(item.quantity.toString(), 110, y, { width: 30, align: 'right' });
+        doc.text(parseFloat(item.basePrice).toFixed(2), 140, y, { width: 45, align: 'right' });
+        doc.text(parseFloat(item.totalPrice).toFixed(2), 185, y, { width: 55, align: 'right' });
+        doc.moveDown(0.5);
+    }
+    doc.moveTo(10, doc.y).lineTo(240, doc.y).stroke();
+    doc.moveDown(0.5);
+    // Totals
+    const subtotal = parseFloat(orderDetail.order.subtotal).toFixed(2);
+    const tax = "0.00"; // Assuming 0 for now as tax isn't in DB currently
+    const deliveryFee = parseFloat(orderDetail.order.deliveryFee).toFixed(2);
+    const total = parseFloat(orderDetail.order.totalAmount).toFixed(2);
+    doc.text(`Total Product Price`, 10, doc.y, { continued: true }).text(`${subtotal}`, { align: 'right' });
+    doc.text(`Tax %`, 10, doc.y, { continued: true }).text(`${tax}`, { align: 'right' });
+    doc.text(`Delivery Fee`, 10, doc.y, { continued: true }).text(`${deliveryFee}`, { align: 'right' });
+    doc.moveDown(0.5);
+    doc.moveTo(10, doc.y).lineTo(240, doc.y).stroke();
+    doc.moveDown(0.5);
+    doc.fontSize(14).text(`Grand Total`, 10, doc.y, { continued: true }).text(`${total}`, { align: 'right' });
+    doc.moveDown(1);
+    doc.fontSize(10).text('Thank you for your order', { align: 'center' });
+    doc.fontSize(8).text('Powered by Keeto', { align: 'center' });
+    doc.end();
+};
+exports.generateOrderInvoicePDF = generateOrderInvoicePDF;
