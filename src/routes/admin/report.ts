@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { catchAsync } from "../../utils/catchAsync";
-import { getDetailedRestaurantReport, getMyRestaurantReport } from "../../controllers/admin/Report";
+import { getMyRestaurantReport } from "../../controllers/admin/Report";
 
 const router = Router();
 
