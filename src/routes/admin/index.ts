@@ -30,6 +30,7 @@ import NotificationRouter from "./notification";
 import { authenticated } from "../../middlewares/authenticated";
 import { authorizeRoles } from "../../middlewares/authorized";
 import { invalidateCache } from "../../middlewares/invalidateCache";
+import SocialMediaRouter from "./SocialMedia";
 const router = Router();
 
 router.use("/auth", authRouter);
@@ -61,4 +62,5 @@ router.use("/policy", policyRouter);
 router.use("/popups", PopupRouter);
 router.use("/report", ReportRouter);
 router.use("/notifications", NotificationRouter);
+router.use("/socialmedia", SocialMediaRouter);
 export default router;

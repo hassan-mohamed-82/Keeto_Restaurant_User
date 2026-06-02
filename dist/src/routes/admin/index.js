@@ -30,6 +30,7 @@ const notification_1 = __importDefault(require("./notification"));
 const authenticated_1 = require("../../middlewares/authenticated");
 const authorized_1 = require("../../middlewares/authorized");
 const invalidateCache_1 = require("../../middlewares/invalidateCache");
+const SocialMedia_1 = __importDefault(require("./SocialMedia"));
 const router = (0, express_1.Router)();
 router.use("/auth", auth_1.default);
 // ضفنا الـ Underscore هنا 👇
@@ -58,4 +59,5 @@ router.use("/policy", policy_1.default);
 router.use("/popups", popup_1.default);
 router.use("/report", report_1.default);
 router.use("/notifications", notification_1.default);
+router.use("/socialmedia", SocialMedia_1.default);
 exports.default = router;
