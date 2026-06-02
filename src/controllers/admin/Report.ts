@@ -406,7 +406,7 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
 export const downloadMyRestaurantInvoicePDF = async (req: Request | any, res: Response) => {
     if (!req.user) throw new UnauthorizedError("Unauthenticated");
 
-    const restaurantId = req.user.restaurantId || req.user.id;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Restaurant ID not found");
 
     const { startDate, endDate } = req.query;
