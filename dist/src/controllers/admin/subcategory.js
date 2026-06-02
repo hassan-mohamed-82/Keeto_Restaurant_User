@@ -47,15 +47,11 @@ const createSubcategory = async (req, res) => {
         restaurantId: restaurantId,
         addonsIds: addonsIds || [],
         priority: priority || "low",
-        order_Level: order_Level !== undefined ? order_Level : (order_level !== undefined ? order_level : 0), // ربط المتغير الجديد
+        order_Level: order_Level !== undefined ? order_Level : (order_level !== undefined ? order_level : 0),
         status: status || "active",
     });
-    // ✅ نشر الأدونز على كل الأكل الموجود في الساب كاتيجوري
-    if (addonsIds && Array.isArray(addonsIds) && addonsIds.length > 0) {
-        await connection_1.db.update(schema_1.food)
-            .set({ addonsId: addonsIds })
-            .where((0, drizzle_orm_1.eq)(schema_1.food.subcategoryid, id));
-    }
+    // ❌ تم إزالة كود تحديث الأكل هنا لأن الـ subcategory لسه جديدة ومفيش أكل مربوط بيها لسه!
+    // الكود ده مكانه الصحيح هيكون في دالة الـ updateSubcategory
     return (0, response_1.SuccessResponse)(res, { message: "Create subcategory success", data: { id } }, 201);
 };
 exports.createSubcategory = createSubcategory;

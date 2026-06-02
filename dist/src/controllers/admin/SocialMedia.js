@@ -9,7 +9,7 @@ const uuid_1 = require("uuid");
 const handleImages_1 = require("../../utils/handleImages");
 const connection_1 = require("../../models/connection");
 const addSocialMedia = async (req, res) => {
-    const restaurantId = req.user?.restaurantId;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     const { link, icon } = req.body;
     if (!restaurantId) {
         throw new BadRequest_1.BadRequest("Restaurant ID is required");
@@ -32,7 +32,7 @@ const addSocialMedia = async (req, res) => {
 };
 exports.addSocialMedia = addSocialMedia;
 const getSocialMedia = async (req, res) => {
-    const restaurantId = req.user?.restaurantId;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) {
         throw new BadRequest_1.BadRequest("Restaurant ID is required");
     }
@@ -42,7 +42,7 @@ const getSocialMedia = async (req, res) => {
 exports.getSocialMedia = getSocialMedia;
 const getSocialMediaById = async (req, res) => {
     const { id } = req.params;
-    const restaurantId = req.user?.restaurantId;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) {
         throw new BadRequest_1.BadRequest("Restaurant ID is required");
     }
@@ -52,7 +52,7 @@ const getSocialMediaById = async (req, res) => {
 exports.getSocialMediaById = getSocialMediaById;
 const updateSocialMedia = async (req, res) => {
     const { id } = req.params;
-    const restaurantId = req.user?.restaurantId;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     const { link, icon } = req.body;
     if (!restaurantId) {
         throw new BadRequest_1.BadRequest("Restaurant ID is required");

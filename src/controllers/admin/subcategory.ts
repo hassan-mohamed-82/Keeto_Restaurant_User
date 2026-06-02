@@ -60,16 +60,12 @@ export const createSubcategory = async (req: Request, res: Response) => {
         restaurantId: restaurantId,
         addonsIds: addonsIds || [],
         priority: priority || "low",
-        order_Level: order_Level !== undefined ? order_Level : (order_level !== undefined ? order_level : 0), // ربط المتغير الجديد
+        order_Level: order_Level !== undefined ? order_Level : (order_level !== undefined ? order_level : 0),
         status: status || "active",
     });
 
-    // ✅ نشر الأدونز على كل الأكل الموجود في الساب كاتيجوري
-    if (addonsIds && Array.isArray(addonsIds) && addonsIds.length > 0) {
-        await db.update(food)
-            .set({ addonsId: addonsIds })
-            .where(eq(food.subcategoryid, id));
-    }
+    // ❌ تم إزالة كود تحديث الأكل هنا لأن الـ subcategory لسه جديدة ومفيش أكل مربوط بيها لسه!
+    // الكود ده مكانه الصحيح هيكون في دالة الـ updateSubcategory
 
     return SuccessResponse(res, { message: "Create subcategory success", data: { id } }, 201);
 };

@@ -9,7 +9,7 @@ import { saveBase64Image } from "../../utils/handleImages";
 import { db } from "../../models/connection";
 
 export const addSocialMedia = async (req: Request, res: Response) => {
-    const restaurantId = req.user?.restaurantId;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     const { link, icon } = req.body;
 
     if (!restaurantId) {
@@ -34,7 +34,7 @@ export const addSocialMedia = async (req: Request, res: Response) => {
 };
 
 export const getSocialMedia = async (req: Request, res: Response) => {
-    const restaurantId = req.user?.restaurantId;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) {
         throw new BadRequest("Restaurant ID is required");
     }
@@ -46,7 +46,7 @@ export const getSocialMedia = async (req: Request, res: Response) => {
 
 export const getSocialMediaById = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const restaurantId = req.user?.restaurantId;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) {
         throw new BadRequest("Restaurant ID is required");
     }
@@ -59,7 +59,7 @@ export const getSocialMediaById = async (req: Request, res: Response) => {
 
 export const updateSocialMedia = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const restaurantId = req.user?.restaurantId;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     const { link, icon } = req.body;
     if (!restaurantId) {
         throw new BadRequest("Restaurant ID is required");
