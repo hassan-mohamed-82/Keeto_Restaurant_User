@@ -16,6 +16,7 @@ import { SuccessResponse } from "../../utils/response";
 import { UnauthorizedError } from "../../Errors";
 import { BadRequest } from "../../Errors/BadRequest";
 import PDFDocument from "pdfkit";
+import { invoices } from "../../models/schema/admin/invoices";
 
 type OrderStatus = "pending" | "accepted" | "preparing" | "out_for_delivery" | "delivered" | "cancelled" | "rejected" | "refund";
 type PaymentMethod = "cash_on_delivery" | "visa" | "wallet";
@@ -403,175 +404,82 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
 
 
 
-export const downloadMyRestaurantInvoicePDF = async (req: Request | any, res: Response) => {
+export const downloadSavedInvoicePDF = async (req: Request | any, res: Response) => {
     if (!req.user) throw new UnauthorizedError("Unauthenticated");
+    
+    const restaurantId = req.user.restaurantId || req.user.id;
+    const { invoiceId } = req.params;
 
-    const restaurantId = req.user?.restaurantId || req.user?.id;
-    if (!restaurantId) throw new BadRequest("Restaurant ID not found");
+    // 1. نجيب الفاتورة من الداتابيز ونتأكد إنها بتاعته
+    const [invoice] = await db.select().from(invoices)
+        .where(and(eq(invoices.id, invoiceId), eq(invoices.restaurantId, restaurantId)));
 
-    const { startDate, endDate } = req.query;
+    if (!invoice) throw new BadRequest("Invoice not found");
 
-    const [restaurantInfo] = await db
-        .select()
-        .from(restaurants)
-        .where(eq(restaurants.id, restaurantId))
-        .limit(1);
+    // 2. نجيب بيانات المطعم عشان اللوجو والاسم (White-labeling)
+    const [restaurantInfo] = await db.select().from(restaurants).where(eq(restaurants.id, restaurantId));
 
-    if (!restaurantInfo) {
-        const { NotFound } = await import("../../Errors/NotFound");
-        throw new NotFound("Restaurant not found");
-    }
-
-    const conditions = [
-        eq(orders.restaurantId, restaurantId),
-        eq(orders.status, "delivered" as OrderStatus)
-    ];
-
-    if (startDate) {
-        conditions.push(gte(orders.createdAt, new Date(startDate as string)));
-    }
-    if (endDate) {
-        const end = new Date(endDate as string);
-        end.setHours(23, 59, 59, 999);
-        conditions.push(lte(orders.createdAt, end));
-    }
-
-    const deliveredOrders = await db
-        .select({
-            paymentMethod: orders.paymentMethod,
-            subtotal: orders.subtotal,
-            deliveryFee: orders.deliveryFee,
-            serviceFee: orders.serviceFee,
-            appCommission: orders.appCommission,
-            totalAmount: orders.totalAmount,
-        })
-        .from(orders)
-        .where(and(...conditions));
-
-    const businessPlans = await db
-        .select()
-        .from(restaurantBusinessPlans)
-        .where(eq(restaurantBusinessPlans.restaurantId, restaurantId));
-
-    let grandTotal = {
-        orders: 0,
-        revenue: 0,
-        cash: 0,
-        visa: 0,
-        wallet: 0,
-        commission: 0,
-        serviceFee: 0,
-        deliveryFee: 0,
-        subtotal: 0,
-    };
-
-    for (const order of deliveredOrders) {
-        const amount = parseFloat(order.totalAmount as string || "0");
-        const subtotal = parseFloat(order.subtotal as string || "0");
-        const commission = parseFloat(order.appCommission as string || "0");
-        const serviceFee = parseFloat(order.serviceFee as string || "0");
-        const deliveryFee = parseFloat(order.deliveryFee as string || "0");
-
-        if (order.paymentMethod === "cash_on_delivery") {
-            grandTotal.cash += amount;
-        } else if (order.paymentMethod === "visa") {
-            grandTotal.visa += amount;
-        } else if (order.paymentMethod === "wallet") {
-            grandTotal.wallet += amount;
-        }
-
-        grandTotal.orders += 1;
-        grandTotal.revenue += amount;
-        grandTotal.subtotal += subtotal;
-        grandTotal.commission += commission;
-        grandTotal.serviceFee += serviceFee;
-        grandTotal.deliveryFee += deliveryFee;
-    }
-
-    let commissionRate = 0;
-    if (businessPlans.length > 0) {
-        const onlinePlan = businessPlans.find(p => p.platformType === "online_order") || businessPlans[0];
-        commissionRate = parseFloat(onlinePlan.commissionRate || "0");
-    }
-
-    const restaurantOwes = (grandTotal.cash * commissionRate) / 100 + 
-                           (grandTotal.serviceFee * (grandTotal.cash / (grandTotal.revenue || 1)));
-
-    const digitalTotal = grandTotal.visa + grandTotal.wallet;
-    const platformOwes = digitalTotal - 
-                         (digitalTotal * commissionRate) / 100 - 
-                         (grandTotal.serviceFee * (digitalTotal / (grandTotal.revenue || 1)));
-
-    const netBalance = platformOwes - restaurantOwes;
-
-    // ==========================================
-    // إنشاء الـ PDF بأسلوب الـ White-labeling
-    // ==========================================
+    // 3. نعمل الـ PDF بالبيانات المحفوظة سلفاً
     const doc = new PDFDocument({ margin: 50 });
     
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="Financial_Statement_${restaurantInfo.name.replace(/\s+/g, '_')}_${Date.now()}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${invoice.invoiceNumber}.pdf"`);
     
     doc.pipe(res);
     
-    // Header (White-labeled - يظهر كأنه سيستم المطعم)
+    // Header
     doc.fontSize(24).text(`${restaurantInfo.name}`, { align: 'center' });
-    if (restaurantInfo.nameAr) {
-        doc.fontSize(16).text(`${restaurantInfo.nameAr}`, { align: 'center' });
-    }
-    doc.fontSize(14).fillColor('gray').text('Financial Statement & Settlement', { align: 'center' });
+    doc.fontSize(14).fillColor('gray').text('Invoice / Financial Statement', { align: 'center' });
     doc.moveDown();
     
-    // Date & Context
-    doc.fontSize(12).fillColor('black').text(`Statement Period: ${startDate || 'All Time'} to ${endDate || 'All Time'}`);
-    doc.text(`Generated On: ${new Date().toLocaleString()}`);
+    // Invoice Details
+    doc.fontSize(12).fillColor('black').text(`Invoice Number: ${invoice.invoiceNumber}`);
+    doc.text(`Status: ${(invoice.status || 'unpaid').toUpperCase()}`);
+    doc.text(`Period: ${invoice.startDate.toISOString().split('T')[0]} to ${invoice.endDate.toISOString().split('T')[0]}`);
     doc.moveDown();
     
     doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
     doc.moveDown();
 
-    // Summary Statistics
-    doc.fontSize(16).text('Sales Overview', { underline: true });
-    doc.fontSize(12).text(`Total Delivered Orders: ${grandTotal.orders}`);
-    doc.text(`Total Gross Sales: ${grandTotal.revenue.toFixed(2)} EGP`);
+    // Summary & Settlement
+    doc.fontSize(16).text('Financial Summary', { underline: true });
+    doc.fontSize(12).text(`Total Sales: ${invoice.totalGrossSales} EGP`);
+    doc.text(`Cash Collected: ${invoice.totalCashCollected} EGP`);
+    doc.text(`Digital Payments: ${invoice.totalDigitalCollected} EGP`);
+    doc.text(`Total Commission Deducted: ${invoice.totalCommission} EGP`);
     doc.moveDown();
 
-    // Payment Breakdown
-    doc.fontSize(14).text('Collection Breakdown', { underline: true });
-    doc.fontSize(12).text(`Cash Collected (By You): ${grandTotal.cash.toFixed(2)} EGP`);
-    doc.text(`Digital Payments (By Platform): ${digitalTotal.toFixed(2)} EGP`);
-    doc.moveDown();
-
-    // Fees
-    doc.fontSize(14).text('Platform Fees & Deductions', { underline: true });
-    doc.fontSize(12).text(`Agreed Commission Rate: ${commissionRate}%`);
-    doc.text(`Total Commission Deducted: ${grandTotal.commission.toFixed(2)} EGP`);
-    doc.text(`Total Service Fees Deducted: ${grandTotal.serviceFee.toFixed(2)} EGP`);
-    doc.text(`Total Delivery Fees (Earned by You): ${grandTotal.deliveryFee.toFixed(2)} EGP`);
-    doc.moveDown();
-
-    doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
-    doc.moveDown();
-
-    // Settlement Analysis
-    doc.fontSize(16).text('Net Settlement Statement', { underline: true });
-    doc.fontSize(12).text(`Fees owed from cash orders (You owe platform): ${restaurantOwes.toFixed(2)} EGP`);
-    doc.text(`Net digital payouts (Platform owes you): ${platformOwes.toFixed(2)} EGP`);
+    doc.fontSize(16).text('Settlement Details', { underline: true });
+    doc.fontSize(12).text(`You owe platform: ${invoice.restaurantOwesPlatform} EGP`);
+    doc.text(`Platform owes you: ${invoice.platformOwesRestaurant} EGP`);
     
     doc.moveDown();
+    const net = parseFloat(invoice.netBalance as string);
     doc.fontSize(14).text('Final Account Balance:', { continued: true });
     
-    if (netBalance > 0) {
-        doc.fillColor('green').text(` Platform owes you ${Math.abs(netBalance).toFixed(2)} EGP`);
-    } else if (netBalance < 0) {
-        doc.fillColor('red').text(` You owe platform ${Math.abs(netBalance).toFixed(2)} EGP`);
+    if (net > 0) {
+        doc.fillColor('green').text(` Platform owes you ${Math.abs(net)} EGP`);
+    } else if (net < 0) {
+        doc.fillColor('red').text(` You owe platform ${Math.abs(net)} EGP`);
     } else {
-        doc.fillColor('black').text(` Accounts are settled (0.00 EGP)`);
+        doc.fillColor('black').text(` Settled (0.00 EGP)`);
     }
     
-    // Footer
-    doc.moveDown(3);
-    doc.fontSize(10).fillColor('gray').text('This is an automatically generated document.', { align: 'center' });
-
     doc.end();
+};
+
+// controllers/restaurant/RestaurantInvoiceController.ts
+
+export const getMyInvoices = async (req: Request | any, res: Response) => {
+    if (!req.user) throw new UnauthorizedError("Unauthenticated");
+    const restaurantId = req.user.restaurantId || req.user.id;
+
+    // هيجيب كل فواتيره المحفوظة ويقدر يشوف الـ status بتاعتها
+    const myInvoices = await db
+        .select()
+        .from(invoices)
+        .where(eq(invoices.restaurantId, restaurantId))
+        .orderBy(desc(invoices.createdAt));
+
+    return SuccessResponse(res, { data: myInvoices });
 };

@@ -1,42 +1,9 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.downloadMyRestaurantInvoicePDF = exports.getMyRestaurantReport = void 0;
+exports.getMyInvoices = exports.downloadSavedInvoicePDF = exports.getMyRestaurantReport = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -44,6 +11,7 @@ const response_1 = require("../../utils/response");
 const Errors_1 = require("../../Errors");
 const BadRequest_1 = require("../../Errors/BadRequest");
 const pdfkit_1 = __importDefault(require("pdfkit"));
+const invoices_1 = require("../../models/schema/admin/invoices");
 const getMyRestaurantReport = async (req, res) => {
     if (!req.user)
         throw new Errors_1.UnauthorizedError("Unauthenticated");
@@ -360,151 +328,70 @@ const getMyRestaurantReport = async (req, res) => {
     });
 };
 exports.getMyRestaurantReport = getMyRestaurantReport;
-const downloadMyRestaurantInvoicePDF = async (req, res) => {
+const downloadSavedInvoicePDF = async (req, res) => {
     if (!req.user)
         throw new Errors_1.UnauthorizedError("Unauthenticated");
-    const restaurantId = req.user?.restaurantId || req.user?.id;
-    if (!restaurantId)
-        throw new BadRequest_1.BadRequest("Restaurant ID not found");
-    const { startDate, endDate } = req.query;
-    const [restaurantInfo] = await connection_1.db
-        .select()
-        .from(schema_1.restaurants)
-        .where((0, drizzle_orm_1.eq)(schema_1.restaurants.id, restaurantId))
-        .limit(1);
-    if (!restaurantInfo) {
-        const { NotFound } = await Promise.resolve().then(() => __importStar(require("../../Errors/NotFound")));
-        throw new NotFound("Restaurant not found");
-    }
-    const conditions = [
-        (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId),
-        (0, drizzle_orm_1.eq)(schema_1.orders.status, "delivered")
-    ];
-    if (startDate) {
-        conditions.push((0, drizzle_orm_1.gte)(schema_1.orders.createdAt, new Date(startDate)));
-    }
-    if (endDate) {
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        conditions.push((0, drizzle_orm_1.lte)(schema_1.orders.createdAt, end));
-    }
-    const deliveredOrders = await connection_1.db
-        .select({
-        paymentMethod: schema_1.orders.paymentMethod,
-        subtotal: schema_1.orders.subtotal,
-        deliveryFee: schema_1.orders.deliveryFee,
-        serviceFee: schema_1.orders.serviceFee,
-        appCommission: schema_1.orders.appCommission,
-        totalAmount: schema_1.orders.totalAmount,
-    })
-        .from(schema_1.orders)
-        .where((0, drizzle_orm_1.and)(...conditions));
-    const businessPlans = await connection_1.db
-        .select()
-        .from(schema_1.restaurantBusinessPlans)
-        .where((0, drizzle_orm_1.eq)(schema_1.restaurantBusinessPlans.restaurantId, restaurantId));
-    let grandTotal = {
-        orders: 0,
-        revenue: 0,
-        cash: 0,
-        visa: 0,
-        wallet: 0,
-        commission: 0,
-        serviceFee: 0,
-        deliveryFee: 0,
-        subtotal: 0,
-    };
-    for (const order of deliveredOrders) {
-        const amount = parseFloat(order.totalAmount || "0");
-        const subtotal = parseFloat(order.subtotal || "0");
-        const commission = parseFloat(order.appCommission || "0");
-        const serviceFee = parseFloat(order.serviceFee || "0");
-        const deliveryFee = parseFloat(order.deliveryFee || "0");
-        if (order.paymentMethod === "cash_on_delivery") {
-            grandTotal.cash += amount;
-        }
-        else if (order.paymentMethod === "visa") {
-            grandTotal.visa += amount;
-        }
-        else if (order.paymentMethod === "wallet") {
-            grandTotal.wallet += amount;
-        }
-        grandTotal.orders += 1;
-        grandTotal.revenue += amount;
-        grandTotal.subtotal += subtotal;
-        grandTotal.commission += commission;
-        grandTotal.serviceFee += serviceFee;
-        grandTotal.deliveryFee += deliveryFee;
-    }
-    let commissionRate = 0;
-    if (businessPlans.length > 0) {
-        const onlinePlan = businessPlans.find(p => p.platformType === "online_order") || businessPlans[0];
-        commissionRate = parseFloat(onlinePlan.commissionRate || "0");
-    }
-    const restaurantOwes = (grandTotal.cash * commissionRate) / 100 +
-        (grandTotal.serviceFee * (grandTotal.cash / (grandTotal.revenue || 1)));
-    const digitalTotal = grandTotal.visa + grandTotal.wallet;
-    const platformOwes = digitalTotal -
-        (digitalTotal * commissionRate) / 100 -
-        (grandTotal.serviceFee * (digitalTotal / (grandTotal.revenue || 1)));
-    const netBalance = platformOwes - restaurantOwes;
-    // ==========================================
-    // إنشاء الـ PDF بأسلوب الـ White-labeling
-    // ==========================================
+    const restaurantId = req.user.restaurantId || req.user.id;
+    const { invoiceId } = req.params;
+    // 1. نجيب الفاتورة من الداتابيز ونتأكد إنها بتاعته
+    const [invoice] = await connection_1.db.select().from(invoices_1.invoices)
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(invoices_1.invoices.id, invoiceId), (0, drizzle_orm_1.eq)(invoices_1.invoices.restaurantId, restaurantId)));
+    if (!invoice)
+        throw new BadRequest_1.BadRequest("Invoice not found");
+    // 2. نجيب بيانات المطعم عشان اللوجو والاسم (White-labeling)
+    const [restaurantInfo] = await connection_1.db.select().from(schema_1.restaurants).where((0, drizzle_orm_1.eq)(schema_1.restaurants.id, restaurantId));
+    // 3. نعمل الـ PDF بالبيانات المحفوظة سلفاً
     const doc = new pdfkit_1.default({ margin: 50 });
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="Financial_Statement_${restaurantInfo.name.replace(/\s+/g, '_')}_${Date.now()}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${invoice.invoiceNumber}.pdf"`);
     doc.pipe(res);
-    // Header (White-labeled - يظهر كأنه سيستم المطعم)
+    // Header
     doc.fontSize(24).text(`${restaurantInfo.name}`, { align: 'center' });
-    if (restaurantInfo.nameAr) {
-        doc.fontSize(16).text(`${restaurantInfo.nameAr}`, { align: 'center' });
-    }
-    doc.fontSize(14).fillColor('gray').text('Financial Statement & Settlement', { align: 'center' });
+    doc.fontSize(14).fillColor('gray').text('Invoice / Financial Statement', { align: 'center' });
     doc.moveDown();
-    // Date & Context
-    doc.fontSize(12).fillColor('black').text(`Statement Period: ${startDate || 'All Time'} to ${endDate || 'All Time'}`);
-    doc.text(`Generated On: ${new Date().toLocaleString()}`);
+    // Invoice Details
+    doc.fontSize(12).fillColor('black').text(`Invoice Number: ${invoice.invoiceNumber}`);
+    doc.text(`Status: ${(invoice.status || 'unpaid').toUpperCase()}`);
+    doc.text(`Period: ${invoice.startDate.toISOString().split('T')[0]} to ${invoice.endDate.toISOString().split('T')[0]}`);
     doc.moveDown();
     doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
     doc.moveDown();
-    // Summary Statistics
-    doc.fontSize(16).text('Sales Overview', { underline: true });
-    doc.fontSize(12).text(`Total Delivered Orders: ${grandTotal.orders}`);
-    doc.text(`Total Gross Sales: ${grandTotal.revenue.toFixed(2)} EGP`);
+    // Summary & Settlement
+    doc.fontSize(16).text('Financial Summary', { underline: true });
+    doc.fontSize(12).text(`Total Sales: ${invoice.totalGrossSales} EGP`);
+    doc.text(`Cash Collected: ${invoice.totalCashCollected} EGP`);
+    doc.text(`Digital Payments: ${invoice.totalDigitalCollected} EGP`);
+    doc.text(`Total Commission Deducted: ${invoice.totalCommission} EGP`);
     doc.moveDown();
-    // Payment Breakdown
-    doc.fontSize(14).text('Collection Breakdown', { underline: true });
-    doc.fontSize(12).text(`Cash Collected (By You): ${grandTotal.cash.toFixed(2)} EGP`);
-    doc.text(`Digital Payments (By Platform): ${digitalTotal.toFixed(2)} EGP`);
+    doc.fontSize(16).text('Settlement Details', { underline: true });
+    doc.fontSize(12).text(`You owe platform: ${invoice.restaurantOwesPlatform} EGP`);
+    doc.text(`Platform owes you: ${invoice.platformOwesRestaurant} EGP`);
     doc.moveDown();
-    // Fees
-    doc.fontSize(14).text('Platform Fees & Deductions', { underline: true });
-    doc.fontSize(12).text(`Agreed Commission Rate: ${commissionRate}%`);
-    doc.text(`Total Commission Deducted: ${grandTotal.commission.toFixed(2)} EGP`);
-    doc.text(`Total Service Fees Deducted: ${grandTotal.serviceFee.toFixed(2)} EGP`);
-    doc.text(`Total Delivery Fees (Earned by You): ${grandTotal.deliveryFee.toFixed(2)} EGP`);
-    doc.moveDown();
-    doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
-    doc.moveDown();
-    // Settlement Analysis
-    doc.fontSize(16).text('Net Settlement Statement', { underline: true });
-    doc.fontSize(12).text(`Fees owed from cash orders (You owe platform): ${restaurantOwes.toFixed(2)} EGP`);
-    doc.text(`Net digital payouts (Platform owes you): ${platformOwes.toFixed(2)} EGP`);
-    doc.moveDown();
+    const net = parseFloat(invoice.netBalance);
     doc.fontSize(14).text('Final Account Balance:', { continued: true });
-    if (netBalance > 0) {
-        doc.fillColor('green').text(` Platform owes you ${Math.abs(netBalance).toFixed(2)} EGP`);
+    if (net > 0) {
+        doc.fillColor('green').text(` Platform owes you ${Math.abs(net)} EGP`);
     }
-    else if (netBalance < 0) {
-        doc.fillColor('red').text(` You owe platform ${Math.abs(netBalance).toFixed(2)} EGP`);
+    else if (net < 0) {
+        doc.fillColor('red').text(` You owe platform ${Math.abs(net)} EGP`);
     }
     else {
-        doc.fillColor('black').text(` Accounts are settled (0.00 EGP)`);
+        doc.fillColor('black').text(` Settled (0.00 EGP)`);
     }
-    // Footer
-    doc.moveDown(3);
-    doc.fontSize(10).fillColor('gray').text('This is an automatically generated document.', { align: 'center' });
     doc.end();
 };
-exports.downloadMyRestaurantInvoicePDF = downloadMyRestaurantInvoicePDF;
+exports.downloadSavedInvoicePDF = downloadSavedInvoicePDF;
+// controllers/restaurant/RestaurantInvoiceController.ts
+const getMyInvoices = async (req, res) => {
+    if (!req.user)
+        throw new Errors_1.UnauthorizedError("Unauthenticated");
+    const restaurantId = req.user.restaurantId || req.user.id;
+    // هيجيب كل فواتيره المحفوظة ويقدر يشوف الـ status بتاعتها
+    const myInvoices = await connection_1.db
+        .select()
+        .from(invoices_1.invoices)
+        .where((0, drizzle_orm_1.eq)(invoices_1.invoices.restaurantId, restaurantId))
+        .orderBy((0, drizzle_orm_1.desc)(invoices_1.invoices.createdAt));
+    return (0, response_1.SuccessResponse)(res, { data: myInvoices });
+};
+exports.getMyInvoices = getMyInvoices;
