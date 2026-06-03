@@ -31,6 +31,7 @@ import { authenticated } from "../../middlewares/authenticated";
 import { authorizeRoles } from "../../middlewares/authorized";
 import { invalidateCache } from "../../middlewares/invalidateCache";
 import SocialMediaRouter from "./SocialMedia";
+import ProfileRouter from "./profile";
 const router = Router();
 
 router.use("/auth", authRouter);
@@ -63,4 +64,5 @@ router.use("/popups", PopupRouter);
 router.use("/report", ReportRouter);
 router.use("/notifications", NotificationRouter);
 router.use("/socialmedia", SocialMediaRouter);
+router.use("/profile", ProfileRouter);
 export default router;
