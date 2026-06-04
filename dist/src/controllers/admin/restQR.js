@@ -10,6 +10,7 @@ const response_1 = require("../../utils/response");
 const BadRequest_1 = require("../../Errors/BadRequest");
 const uuid_1 = require("uuid");
 const qrcode_1 = __importDefault(require("qrcode"));
+const handleImages_1 = require("../../utils/handleImages");
 const connection_1 = require("../../models/connection");
 const redis_1 = __importDefault(require("../../config/redis"));
 const generateRestaurantQR = async (req, res) => {
@@ -24,19 +25,22 @@ const generateRestaurantQR = async (req, res) => {
     }
     // 2. تحويل اللينك لـ QR Code (على هيئة Base64)
     const qrCodeBase64 = await qrcode_1.default.toDataURL(restaurantUrl);
+    // 3. حفظ الـ QR كصورة فعلية بدل ما يتحفظ base64 في الداتابيز
+    const savedQrUrl = await (0, handleImages_1.saveBase64Image)(qrCodeBase64, req, "qrcodes");
+    const id = (0, uuid_1.v4)();
     await connection_1.db.insert(restQR_1.restaurantsUrl).values({
-        id: (0, uuid_1.v4)(),
+        id,
         restaurantid: restaurantId,
-        qrCodeImg: qrCodeBase64,
+        qrCodeImg: savedQrUrl,
     });
     // Invalidate cache since a new QR was generated
     await redis_1.default.del(`qr:${restaurantId}`);
-    // 3. إرجاع الـ QR Code للمطعم
+    // 4. إرجاع الـ URL للصورة المحفوظة
     return (0, response_1.SuccessResponse)(res, {
         message: "QR Code generated successfully",
         data: {
-            qrCode: qrCodeBase64, // هيرجع كنص Base64 ممكن الفرونت اند يعرضه مباشرة في تاج <img>
-            // qrUrl: savedQrUrl // لو قررت تحفظه وترجع اللينك
+            id,
+            qrCodeImg: savedQrUrl,
         }
     }, 200);
 };

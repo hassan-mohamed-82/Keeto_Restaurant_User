@@ -27,21 +27,26 @@ export const generateRestaurantQR = async (req: Request, res: Response) => {
 
         // 2. تحويل اللينك لـ QR Code (على هيئة Base64)
         const qrCodeBase64 = await QRCode.toDataURL(restaurantUrl);
+
+        // 3. حفظ الـ QR كصورة فعلية بدل ما يتحفظ base64 في الداتابيز
+        const savedQrUrl = await saveBase64Image(qrCodeBase64, req, "qrcodes");
+
+        const id = uuidv4();
         await db.insert(restaurantsUrl).values({
-            id: uuidv4(),
+            id,
             restaurantid: restaurantId,
-            qrCodeImg: qrCodeBase64,
+            qrCodeImg: savedQrUrl,
         });
 
         // Invalidate cache since a new QR was generated
         await redis.del(`qr:${restaurantId}`);
 
-         // 3. إرجاع الـ QR Code للمطعم
+         // 4. إرجاع الـ URL للصورة المحفوظة
         return SuccessResponse(res, {
             message: "QR Code generated successfully",
             data: {
-                qrCode: qrCodeBase64, // هيرجع كنص Base64 ممكن الفرونت اند يعرضه مباشرة في تاج <img>
-                // qrUrl: savedQrUrl // لو قررت تحفظه وترجع اللينك
+                id,
+                qrCodeImg: savedQrUrl,
             }
         }, 200);
 
