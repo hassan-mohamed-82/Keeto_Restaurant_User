@@ -61,7 +61,7 @@ export type ModuleName =
     | "categories"
     | "coupons"
     | "restrauntadmins"
-    | "roles"
+    | "role_restaurant"
     | "addon"
     | "basiccampaign"
     | "branchemenu"

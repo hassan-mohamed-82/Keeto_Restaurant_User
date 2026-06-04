@@ -1,11 +1,11 @@
 import { Router } from "express";
 import {assignFoodToBranch,getBranchMenu,updateBranchMenuItem,deleteBranchMenuItem,getRestaurantSelectData} from "../../controllers/admin/branchemenu";
 import { catchAsync } from "../../utils/catchAsync";
-
+import { authorizeRoles } from "../../middlewares/authorized";
 const router = Router();
-router.get("/select-data", catchAsync(getRestaurantSelectData));
-router.post("/", catchAsync(assignFoodToBranch));
-router.get("/:branchId", catchAsync(getBranchMenu));
-router.put("/:id", catchAsync(updateBranchMenuItem));
-router.delete("/:id", catchAsync(deleteBranchMenuItem));
+router.get("/select-data",authorizeRoles("branch_manager","staff"), catchAsync(getRestaurantSelectData));
+router.post("/", authorizeRoles("branch_manager","staff"),catchAsync(assignFoodToBranch));
+router.get("/:branchId",authorizeRoles("branch_manager","staff"), catchAsync(getBranchMenu));
+router.put("/:id",authorizeRoles("branch_manager","staff"), catchAsync(updateBranchMenuItem));
+router.delete("/:id",authorizeRoles("branch_manager","staff"), catchAsync(deleteBranchMenuItem));
 export default router;

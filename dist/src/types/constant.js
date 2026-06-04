@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.BASE64_IMAGE_REGEX = exports.ACTION_NAMES = exports.MODULES = void 0;
 exports.MODULES = [
     "restrauntadmins",
-    "roles",
+    "role_restaurant",
     "addon",
     "basiccampaign",
     "branchemenu",

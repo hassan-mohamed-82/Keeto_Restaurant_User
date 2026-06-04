@@ -1,6 +1,6 @@
 export const MODULES = [
     "restrauntadmins",
-    "roles",
+    "role_restaurant",
     "addon",
     "basiccampaign",
     "branchemenu",

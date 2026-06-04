@@ -37,7 +37,7 @@ const router = Router();
 
 router.use("/auth", authRouter);
 // ضفنا الـ Underscore هنا 👇
-router.use(authenticated, authorizeRoles("owner", "subadmin", "branch_manager", "staff"));
+router.use(authenticated, authorizeRoles("owner", "subadmin"));
 
 // أضفنا ميدل وير لمسح الكاش تلقائياً عند أي تعديل من الأدمن
 router.use(invalidateCache);

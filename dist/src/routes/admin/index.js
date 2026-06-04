@@ -36,7 +36,7 @@ const profile_1 = __importDefault(require("./profile"));
 const router = (0, express_1.Router)();
 router.use("/auth", auth_1.default);
 // ضفنا الـ Underscore هنا 👇
-router.use(authenticated_1.authenticated, (0, authorized_1.authorizeRoles)("owner", "subadmin", "branch_manager", "staff"));
+router.use(authenticated_1.authenticated, (0, authorized_1.authorizeRoles)("owner", "subadmin"));
 // أضفنا ميدل وير لمسح الكاش تلقائياً عند أي تعديل من الأدمن
 router.use(invalidateCache_1.invalidateCache);
 router.use("/restaurantadmin", admin_1.default);
