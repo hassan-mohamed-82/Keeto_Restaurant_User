@@ -40,4 +40,5 @@ export * from "./schema/admin/policy";
 export * from "./schema/user/userAddHome";
 export * from "./schema/admin/popup";
 export * from "./schema/admin/notifications";
+export * from "./schema/admin/slider";
 

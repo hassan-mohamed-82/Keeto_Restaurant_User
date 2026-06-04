@@ -8,4 +8,4 @@ router.get("/", catchAsync(getProfile));
 router.put("/", catchAsync(updateProfile));
 router.put("/change-password", catchAsync(changePassword));
 
-export default router;
+export default router; 
