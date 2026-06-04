@@ -14,41 +14,40 @@ import {
     toggleVariationOptionStatus,
     changeFoodStatus
 } from "../../controllers/admin/food";
-import { authorizeRoles } from "../../middlewares/authorized";
 
 const router = Router();
 
 // ✅ Select data - يحتاج صلاحية read فقط
-router.get("/select",authorizeRoles("branch_manager","staff"), hasPermission("foods", "read"), catchAsync(getFoodSelectData));
+router.get("/select", hasPermission("foods", "read"), catchAsync(getFoodSelectData));
 
 // ✅ Create food - يحتاج صلاحية create
-router.post("/", authorizeRoles("branch_manager","staff"),hasPermission("foods", "create"), catchAsync(createFood));
+router.post("/", hasPermission("foods", "create"), catchAsync(createFood));
 
 // ✅ Get all foods - يحتاج صلاحية read
-router.get("/",authorizeRoles("branch_manager","staff"), hasPermission("foods", "read"), catchAsync(getAllFoods));
+router.get("/", hasPermission("foods", "read"), catchAsync(getAllFoods));
 
 // ✅ Get food by id - يحتاج صلاحية read
-router.get("/:id",authorizeRoles("branch_manager","staff"), hasPermission("foods", "read"), catchAsync(getFoodById));
+router.get("/:id", hasPermission("foods", "read"), catchAsync(getFoodById));
 
 // ✅ Update food - يحتاج صلاحية update
-router.put("/:id",authorizeRoles("branch_manager","staff"), hasPermission("foods", "update"), catchAsync(updateFood));
+router.put("/:id", hasPermission("foods", "update"), catchAsync(updateFood));
 
 // ✅ Delete food - يحتاج صلاحية delete
-router.delete("/:id",authorizeRoles("branch_manager","staff"), hasPermission("foods", "delete"), catchAsync(deleteFood));
+router.delete("/:id", hasPermission("foods", "delete"), catchAsync(deleteFood));
 
 // ✅ Assign ingredients - يحتاج صلاحية update
-router.post("/assign-ingredients/:id",authorizeRoles("branch_manager","staff"), hasPermission("foods", "update"), catchAsync(assignIngredientsToFood));
+router.post("/assign-ingredients/:id", hasPermission("foods", "update"), catchAsync(assignIngredientsToFood));
 
 // ✅ Get recipe - يحتاج صلاحية read
-router.get("/recipe/:id",authorizeRoles("branch_manager","staff"), hasPermission("foods", "read"), catchAsync(getFoodRecipe));
+router.get("/recipe/:id", hasPermission("foods", "read"), catchAsync(getFoodRecipe));
 
 // ✅ Toggle variation status - يحتاج صلاحية update
-router.put("/variation/:id/status",authorizeRoles("branch_manager","staff"), hasPermission("foods", "update"), catchAsync(toggleVariationStatus));
+router.put("/variation/:id/status", hasPermission("foods", "update"), catchAsync(toggleVariationStatus));
 
 // ✅ Toggle option status - يحتاج صلاحية update
-router.put("/option/:id/status",authorizeRoles("branch_manager","staff"), hasPermission("foods", "update"), catchAsync(toggleVariationOptionStatus));
+router.put("/option/:id/status", hasPermission("foods", "update"), catchAsync(toggleVariationOptionStatus));
 
 // ✅ Change food status - يحتاج صلاحية update
-router.put("/status/:id",authorizeRoles("branch_manager","staff"), hasPermission("foods", "update"), catchAsync(changeFoodStatus));
+router.put("/status/:id", hasPermission("foods", "update"), catchAsync(changeFoodStatus));
 
 export default router;
