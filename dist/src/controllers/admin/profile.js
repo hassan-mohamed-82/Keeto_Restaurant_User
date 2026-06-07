@@ -11,7 +11,7 @@ const response_1 = require("../../utils/response");
 const Errors_1 = require("../../Errors");
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const getProfile = async (req, res) => {
-    const adminId = req.user?.restaurantId || req.user?.id;
+    const adminId = req.user?.id;
     if (!adminId) {
         throw new Errors_1.UnauthorizedError("Unauthorized");
     }
@@ -39,7 +39,7 @@ const getProfile = async (req, res) => {
 };
 exports.getProfile = getProfile;
 const updateProfile = async (req, res) => {
-    const adminId = req.user?.restaurantId || req.user?.id;
+    const adminId = req.user?.id;
     const { name, phoneNumber, fcmToken } = req.body;
     if (!adminId) {
         throw new Errors_1.UnauthorizedError("Unauthorized");

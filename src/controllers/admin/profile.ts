@@ -7,7 +7,7 @@ import { BadRequest, NotFound, UnauthorizedError } from "../../Errors";
 import bcrypt from "bcrypt";
 
 export const getProfile = async (req: Request, res: Response) => {
-    const adminId = req.user?.restaurantId || req.user?.id;
+    const adminId = req.user?.id;
 
     if (!adminId) {
         throw new UnauthorizedError("Unauthorized");
@@ -39,7 +39,7 @@ export const getProfile = async (req: Request, res: Response) => {
 };
 
 export const updateProfile = async (req: Request, res: Response) => {
-    const adminId = req.user?.restaurantId || req.user?.id;
+    const adminId = req.user?.id;
     const { name, phoneNumber, fcmToken } = req.body;
 
     if (!adminId) {
