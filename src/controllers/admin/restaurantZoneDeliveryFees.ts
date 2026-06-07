@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { restaurantZoneDeliveryFees, zones } from "../../models/schema"; // تأكد من مسار الـ schema
+import { cities, restaurantZoneDeliveryFees, zones } from "../../models/schema"; // تأكد من مسار الـ schema
 import { eq, and } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { NotFound } from "../../Errors/NotFound";
@@ -14,7 +14,7 @@ export const createDeliveryFee = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id
     if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
 
-    const { zoneId, deliveryFee, status } = req.body;
+    const { zoneId, deliveryFee, status,cityId } = req.body;
 
     if (!zoneId || deliveryFee === undefined) {
         throw new BadRequest("Zone ID and Delivery Fee are required");
@@ -39,13 +39,15 @@ export const createDeliveryFee = async (req: Request, res: Response) => {
     if (existingFee[0]) {
         throw new BadRequest("Delivery fee for this zone already exists for your restaurant");
     }
-
+    const existingCity = await db.select().from(cities).where(eq(cities.id, cityId)).limit(1);
+    if (!existingCity[0]) throw new BadRequest("City not found");
     const feeId = uuidv4();
 
     await db.insert(restaurantZoneDeliveryFees).values({
         id: feeId,
         restaurantId, // ✅ إجبار إن الريكورد يتسجل باسم المطعم الحالي
         zoneId,
+        cityId,
         deliveryFee: deliveryFee.toString(), // يفضل تحويلها لـ string عشان الـ decimal في Drizzle
         status: status || "active",
     });
@@ -68,11 +70,16 @@ export const getDeliveryFees = async (req: Request, res: Response) => {
         zone: {
             id: zones.id,
             name: zones.name, // بافتراض إن جدول الـ zones فيه حقل اسمه name
+        },
+        city: {
+            id: cities.id,
+            name: cities.name, // بافتراض إن جدول الـ cities فيه حقل اسمه name
         }
     })
     .from(restaurantZoneDeliveryFees)
     // ✅ ربطنا بجدول الـ zones عشان نجيب بيانات المنطقة
     .leftJoin(zones, eq(restaurantZoneDeliveryFees.zoneId, zones.id))
+    .leftJoin(cities, eq(restaurantZoneDeliveryFees.cityId, cities.id))
     // ✅ فلترة: المطعم الحالي فقط
     .where(eq(restaurantZoneDeliveryFees.restaurantId, restaurantId));
 
@@ -98,10 +105,15 @@ export const getDeliveryFeeById = async (req: Request, res: Response) => {
         zone: {
             id: zones.id,
             name: zones.name, 
+        },
+        city: {
+            id: cities.id,
+            name: cities.name, 
         }
     })
     .from(restaurantZoneDeliveryFees)
     .leftJoin(zones, eq(restaurantZoneDeliveryFees.zoneId, zones.id))
+    .leftJoin(cities, eq(restaurantZoneDeliveryFees.cityId, cities.id))
     .where(
         // ✅ حماية: لازم الـ ID بتاع التسعيرة يطابق، ويكون تابع للمطعم الحالي
         and(
@@ -124,7 +136,7 @@ export const getDeliveryFeeById = async (req: Request, res: Response) => {
 // =============================================
 export const updateDeliveryFee = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { deliveryFee, status } = req.body;
+    const { deliveryFee, status ,cityId,zoneId} = req.body;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     
     if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
@@ -142,10 +154,19 @@ export const updateDeliveryFee = async (req: Request, res: Response) => {
         .limit(1);
 
     if (!existingFee[0]) throw new NotFound("Delivery fee not found or you don't have permission to edit it");
-
+    if (req.body.cityId) {
+        const existingCity = await db.select().from(cities).where(eq(cities.id, req.body.cityId)).limit(1);
+        if (!existingCity[0]) throw new BadRequest("City not found");
+    }
+    if (req.body.zoneId) {
+        const existingZone = await db.select().from(zones).where(eq(zones.id, req.body.zoneId)).limit(1);
+        if (!existingZone[0]) throw new BadRequest("Zone not found");
+    }
     const updateData: any = {};
     if (deliveryFee !== undefined) updateData.deliveryFee = deliveryFee.toString();
     if (status !== undefined) updateData.status = status;
+    if (cityId !== undefined) updateData.cityId = cityId;
+    if (zoneId !== undefined) updateData.zoneId = zoneId;
 
     await db
         .update(restaurantZoneDeliveryFees)
@@ -190,8 +211,9 @@ export const deleteDeliveryFee = async (req: Request, res: Response) => {
 
 export const select = async (req: Request, res: Response) => {
     const zonesselect=await db.select().from(zones).where(eq(zones.status,"active"));
+    const citiesselect=await db.select().from(cities).where(eq(cities.status,"active"));
   return SuccessResponse(res, {
         message: "Get delivery fees success",
-        data: zonesselect
+        data: {zonesselect,citiesselect}
     });
 };

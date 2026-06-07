@@ -10,6 +10,7 @@ exports.ingredientCategories = (0, mysql_core_1.mysqlTable)("ingredient_categori
     id: (0, mysql_core_1.char)("id", { length: 36 }).primaryKey().default((0, drizzle_orm_1.sql) `(UUID())`),
     restaurantId: (0, mysql_core_1.char)("restaurant_id", { length: 36 }).references(() => restaurants_1.restaurants.id).notNull(),
     name: (0, mysql_core_1.varchar)("name", { length: 255 }).notNull(),
+    nameAr: (0, mysql_core_1.varchar)("nameAr", { length: 255 }),
     status: (0, mysql_core_1.mysqlEnum)("status", ["active", "inactive"]).default("active"),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow().onUpdateNow(),
@@ -20,7 +21,7 @@ exports.ingredients = (0, mysql_core_1.mysqlTable)("ingredients", {
     restaurantId: (0, mysql_core_1.char)("restaurant_id", { length: 36 }).references(() => restaurants_1.restaurants.id).notNull(),
     categoryId: (0, mysql_core_1.char)("category_id", { length: 36 }).references(() => exports.ingredientCategories.id).notNull(),
     name: (0, mysql_core_1.varchar)("name", { length: 255 }).notNull(),
-    // 👇 ده "الزرار السحري" اللي هتقفله لما الفراولة تخلص
+    nameAr: (0, mysql_core_1.varchar)("nameAr", { length: 255 }),
     inStock: (0, mysql_core_1.boolean)("in_stock").default(true),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow().onUpdateNow(),

@@ -13,7 +13,7 @@ const uuid_1 = require("uuid");
 // 1. Create - إضافة مكون جديد
 const createIngredient = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
-    const { name, categoryId } = req.body;
+    const { name, categoryId, nameAr } = req.body;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Unauthorized");
     if (!name || !categoryId)
@@ -23,6 +23,7 @@ const createIngredient = async (req, res) => {
         id,
         restaurantId,
         categoryId,
+        nameAr,
         name,
         inStock: true
     });
@@ -37,6 +38,7 @@ const getIngredients = async (req, res) => {
     const list = await connection_1.db.select({
         id: schema_1.ingredients.id,
         name: schema_1.ingredients.name,
+        nameAr: schema_1.ingredients.nameAr,
         inStock: schema_1.ingredients.inStock,
         categoryId: schema_1.ingredients.categoryId,
         categoryName: schema_1.ingredientCategories.name
@@ -50,13 +52,15 @@ exports.getIngredients = getIngredients;
 // 3. Update (Normal) - تعديل اسم المكون أو التصنيف بتاعه
 const updateIngredient = async (req, res) => {
     const { id } = req.params;
-    const { name, categoryId } = req.body;
+    const { name, categoryId, nameAr } = req.body;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     const updateData = { updatedAt: new Date() };
     if (name)
         updateData.name = name;
     if (categoryId)
         updateData.categoryId = categoryId;
+    if (nameAr)
+        updateData.nameAr = nameAr;
     await connection_1.db.update(schema_1.ingredients)
         .set(updateData)
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.ingredients.id, id), (0, drizzle_orm_1.eq)(schema_1.ingredients.restaurantId, restaurantId)));

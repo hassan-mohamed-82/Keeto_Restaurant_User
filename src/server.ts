@@ -17,7 +17,7 @@ dotenv.config();
 const app = express();
 connectDB(); 
 
-const httpServer = http.createServer(app);
+const httpServer: http.Server = http.createServer(app);
 
 const io = new Server(httpServer, {
   cors: {
