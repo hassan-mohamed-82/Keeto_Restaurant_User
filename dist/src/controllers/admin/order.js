@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.generateOrderInvoicePDF = exports.getReasons = exports.updateOrderStatus = exports.getRestaurantOrderById = exports.getRefundOrders = exports.getRejectedOrders = exports.getCancelledOrders = exports.getDeliveredOrders = exports.getOutForDeliveryOrders = exports.getPreparingOrders = exports.getAcceptedOrders = exports.getPendingOrders = exports.getRestaurantOrders = void 0;
+exports.getallnumbersoforders = exports.generateOrderInvoicePDF = exports.getReasons = exports.updateOrderStatus = exports.getRestaurantOrderById = exports.getRefundOrders = exports.getRejectedOrders = exports.getCancelledOrders = exports.getDeliveredOrders = exports.getOutForDeliveryOrders = exports.getPreparingOrders = exports.getAcceptedOrders = exports.getPendingOrders = exports.getRestaurantOrders = void 0;
 const pdfkit_1 = __importDefault(require("pdfkit"));
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
@@ -492,3 +492,31 @@ const generateOrderInvoicePDF = async (req, res) => {
     doc.end();
 };
 exports.generateOrderInvoicePDF = generateOrderInvoicePDF;
+const getallnumbersoforders = async (req, res) => {
+    const adminRestaurantId = req.user?.restaurantId || req.user?.id;
+    if (!adminRestaurantId)
+        throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
+    const statusCountsResult = await connection_1.db
+        .select({
+        status: schema_1.orders.status,
+        count: (0, drizzle_orm_1.sql) `count(${schema_1.orders.id})`,
+    })
+        .from(schema_1.orders)
+        .where((0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, adminRestaurantId))
+        .groupBy(schema_1.orders.status);
+    const totalOrders = statusCountsResult.reduce((acc, curr) => acc + Number(curr.count), 0);
+    // Format the status counts as an object for easier consumption
+    const statusCounts = statusCountsResult.reduce((acc, curr) => {
+        if (curr.status) {
+            acc[curr.status] = Number(curr.count);
+        }
+        return acc;
+    }, {});
+    return (0, response_1.SuccessResponse)(res, {
+        data: {
+            totalOrders,
+            statusCounts
+        }
+    });
+};
+exports.getallnumbersoforders = getallnumbersoforders;

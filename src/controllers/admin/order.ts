@@ -13,7 +13,7 @@ import {
     addresses,
     zones
 } from "../../models/schema";
-import { eq, and, desc, inArray } from "drizzle-orm";
+import { eq, and, desc, inArray, sql } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors/NotFound";
@@ -546,4 +546,37 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
     doc.fontSize(8).text('Powered by Keeto', { align: 'center' });
 
     doc.end();
+};
+
+
+
+export const getallnumbersoforders = async (req: Request, res: Response) => {
+    const adminRestaurantId = req.user?.restaurantId || req.user?.id;
+    if (!adminRestaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
+
+    const statusCountsResult = await db
+        .select({
+            status: orders.status,
+            count: sql<number>`count(${orders.id})`,
+        })
+        .from(orders)
+        .where(eq(orders.restaurantId, adminRestaurantId))
+        .groupBy(orders.status);
+
+    const totalOrders = statusCountsResult.reduce((acc, curr) => acc + Number(curr.count), 0);
+
+    // Format the status counts as an object for easier consumption
+    const statusCounts = statusCountsResult.reduce((acc, curr) => {
+        if (curr.status) {
+            acc[curr.status] = Number(curr.count);
+        }
+        return acc;
+    }, {} as Record<string, number>);
+
+    return SuccessResponse(res, { 
+        data: {
+            totalOrders,
+            statusCounts
+        } 
+    });
 };
