@@ -26,7 +26,7 @@ const addSocialMedia = async (req, res) => {
         id: socialMediaId,
         restaurantid: restaurantId,
         link: link,
-        icon: icon,
+        icon: iconUrl || icon,
     });
     return (0, response_1.SuccessResponse)(res, { message: "Social media added successfully", data: { id: socialMediaId } }, 201);
 };
@@ -66,7 +66,7 @@ const updateSocialMedia = async (req, res) => {
     const iconUrl = await (0, handleImages_1.saveBase64Image)(icon, req, "icons");
     await connection_1.db.update(SocialMedia_1.socialmedia).set({
         link: link,
-        icon: icon,
+        icon: icon || iconUrl,
     }).where((0, drizzle_orm_1.eq)(SocialMedia_1.socialmedia.restaurantid, restaurantId));
     return (0, response_1.SuccessResponse)(res, { message: "Social media updated successfully", data: { id } }, 200);
 };

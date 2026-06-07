@@ -27,7 +27,7 @@ export const addSocialMedia = async (req: Request, res: Response) => {
         id: socialMediaId,
         restaurantid: restaurantId,
         link: link,
-        icon: icon,
+        icon: iconUrl || icon,
     });
 
     return SuccessResponse(res, { message: "Social media added successfully", data: { id: socialMediaId } }, 201);
@@ -73,7 +73,7 @@ export const updateSocialMedia = async (req: Request, res: Response) => {
     const iconUrl = await saveBase64Image(icon, req, "icons");
     await db.update(socialmedia).set({
         link: link,
-        icon: icon,
+        icon: icon || iconUrl,
     }).where(eq(socialmedia.restaurantid, restaurantId));
     return SuccessResponse(res, { message: "Social media updated successfully", data: { id } }, 200);
 };
