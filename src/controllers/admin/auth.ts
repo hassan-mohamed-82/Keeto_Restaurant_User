@@ -40,15 +40,19 @@ export async function login(req: Request, res: Response) {
     }
 
     // 4. التحقق من حالة المطعم التابع له الحساب (لحماية السيستم إذا قام السوبر أدمن بحظر المطعم)
+    let restaurantName: string | null = null;
     if (user.restaurantId) {
         const [restaurant] = await db
-            .select({ status: restaurants.status })
+            .select({ status: restaurants.status, name: restaurants.name })
             .from(restaurants)
             .where(eq(restaurants.id, user.restaurantId))
             .limit(1);
 
-        if (restaurant && restaurant.status === "inactive") {
-            throw new UnauthorizedError("The restaurant business is currently suspended.");
+        if (restaurant) {
+            if (restaurant.status === "inactive") {
+                throw new UnauthorizedError("The restaurant business is currently suspended.");
+            }
+            restaurantName = restaurant.name as string;
         }
     }
 
@@ -68,8 +72,9 @@ export async function login(req: Request, res: Response) {
     const tokenPayload = {
         id: user.id,
         restaurantId: user.restaurantId, 
+        name:user.name,
+        restaurantName,
         branchId: user.branchId, // سيكون تلقائياً null في حالة الـ owner
-        name: user.name,
         type: user.type, // "owner" | "branch_manager" | "staff"
     };
 
@@ -89,6 +94,7 @@ export async function login(req: Request, res: Response) {
             status: user.status,
             type: user.type, // الـ الفرونت إند سيتعرف على المالك من خلال "owner"
             restaurantId: user.restaurantId,
+            restaurantName,
             branchId: user.branchId
         }
     }, 200);
