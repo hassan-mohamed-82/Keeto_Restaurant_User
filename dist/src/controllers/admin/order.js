@@ -225,12 +225,30 @@ const updateOrderStatus = async (req, res) => {
         throw new BadRequest_1.BadRequest("Unauthorized");
     if (adminBranchId && existingOrder.branchId !== adminBranchId)
         throw new BadRequest_1.BadRequest("Unauthorized");
-    // 🛡️ حماية مالية: منع تكرار العملية لو الطلب متسلم أو ملغي مسبقاً
-    if (existingOrder.status === "delivered" && status === "delivered") {
-        throw new BadRequest_1.BadRequest("Order is already delivered and settled");
+    const currentStatus = existingOrder.status;
+    // 🛡️ حماية ضد التغيير بعد الوصول لحالة نهائية
+    const finalStatuses = ["delivered", "cancelled", "rejected", "refund"];
+    if (finalStatuses.includes(currentStatus)) {
+        throw new BadRequest_1.BadRequest(`Order is already ${currentStatus} and cannot be changed`);
     }
-    if ((existingOrder.status === "cancelled" || existingOrder.status === "rejected") && (status === "cancelled" || status === "rejected")) {
-        throw new BadRequest_1.BadRequest("Order is already cancelled/rejected");
+    // 🛡️ حماية ضد الرجوع خطوة للوراء في مسار الطلب
+    const statusFlowOrder = {
+        "pending": 1,
+        "accepted": 2,
+        "preparing": 3,
+        "out_for_delivery": 4,
+        "delivered": 5,
+    };
+    if (statusFlowOrder[currentStatus] && statusFlowOrder[status]) {
+        if (statusFlowOrder[status] === statusFlowOrder[currentStatus]) {
+            throw new BadRequest_1.BadRequest(`Order is already ${currentStatus}`);
+        }
+        if (statusFlowOrder[status] < statusFlowOrder[currentStatus]) {
+            throw new BadRequest_1.BadRequest(`Cannot revert status from ${currentStatus} to ${status}`);
+        }
+    }
+    else if (currentStatus === status) {
+        throw new BadRequest_1.BadRequest(`Order is already ${currentStatus}`);
     }
     // Transaction لتحديث الحالة وتنفيذ العمليات المالية
     await connection_1.db.transaction(async (tx) => {
