@@ -7,6 +7,7 @@ const order_1 = require("../../controllers/admin/order");
 const router = (0, express_1.Router)();
 // ✅ Get reasons - يحتاج صلاحية read
 router.get("/reasons", (0, hasPermission_1.hasPermission)("orders", "read"), (0, catchAsync_1.catchAsync)(order_1.getReasons));
+router.get("/numbers", (0, hasPermission_1.hasPermission)("orders", "read", true), (0, catchAsync_1.catchAsync)(order_1.getallnumbersoforders));
 // ✅ كل الأوردرات - يحتاج صلاحية read + التحقق من الفرع
 router.get("/", (0, hasPermission_1.hasPermission)("orders", "read", true), (0, catchAsync_1.catchAsync)(order_1.getRestaurantOrders));
 // ✅ أوردرات بحالة معينة - يحتاج صلاحية read + التحقق من الفرع
@@ -25,5 +26,4 @@ router.get("/:orderId/invoice", (0, hasPermission_1.hasPermission)("orders", "re
 // ✅ تحديث حالة الأوردر - يحتاج صلاحية update + التحقق من الفرع
 router.put("/:orderId", (0, hasPermission_1.hasPermission)("orders", "update", true), (0, catchAsync_1.catchAsync)(order_1.updateOrderStatus));
 // ✅ الحصول على أرقام جميع الأوردرات (عدادات حسب الحالة)
-router.get("/numbers", (0, hasPermission_1.hasPermission)("orders", "read", true), (0, catchAsync_1.catchAsync)(order_1.getallnumbersoforders));
 exports.default = router;

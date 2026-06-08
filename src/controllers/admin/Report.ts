@@ -1,4 +1,3 @@
-// controllers/admin/Report.ts
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
 import {
@@ -10,8 +9,9 @@ import {
     restaurantBusinessPlans,
     restaurantWallets,
     users,
+    paymentMethods,
 } from "../../models/schema";
-import { eq, and, desc, gte, lte, sql } from "drizzle-orm";
+import { eq, and, desc, gte, lte, sql, inArray } from "drizzle-orm"; // 👈 تمت إضافة inArray
 import { SuccessResponse } from "../../utils/response";
 import { UnauthorizedError } from "../../Errors";
 import { BadRequest } from "../../Errors/BadRequest";
@@ -19,7 +19,7 @@ import PDFDocument from "pdfkit";
 import { invoices } from "../../models/schema/admin/invoices";
 
 type OrderStatus = "pending" | "accepted" | "preparing" | "out_for_delivery" | "delivered" | "cancelled" | "rejected" | "refund";
-type PaymentMethod = "cash_on_delivery" | "visa" | "wallet";
+type PaymentMethod = "cash_on_delivery" | "visa" | "wallet" | "الدفع عند الاستلام" | "بطاقة" | "محفظتى";
 
 export const getMyRestaurantReport = async (req: Request | any, res: Response) => {
     if (!req.user) throw new UnauthorizedError("Unauthenticated");
@@ -55,7 +55,7 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
             status: orders.status,
             orderSource: orders.orderSource,
             orderType: orders.orderType,
-            paymentMethod: orders.paymentMethod,
+            paymentMethod: paymentMethods.name,
             subtotal: orders.subtotal,
             deliveryFee: orders.deliveryFee,
             serviceFee: orders.serviceFee,
@@ -67,6 +67,7 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
         })
         .from(orders)
         .leftJoin(branches, eq(orders.branchId, branches.id))
+        .leftJoin(paymentMethods, eq(orders.paymentMethod, paymentMethods.id))
         .where(and(...conditions))
         .orderBy(desc(orders.createdAt));
 
@@ -113,9 +114,18 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
     let totalAppCommission = 0;
     let deliveredRevenue = 0; 
 
-    // 👇 الإضافات الخاصة بحساب الدفع
+    // متغيرات الكاش والديجيتال
     let totalCashCollected = 0;
     let totalDigitalCollected = 0;
+
+    // متغيرات العمولات الدقيقة
+    let totalCashCommission = 0;
+    let totalDigitalCommission = 0;
+    let totalCashServiceFees = 0;
+    let totalDigitalServiceFees = 0;
+
+    // 👇 الحالات التي تستحق فيها المنصة عمولة (تشمل الـ Cancelled لأنه تم الإلغاء بعد الـ Accept)
+    const commissionableStatuses = ["delivered", "accepted", "preparing", "out_for_delivery", "cancelled"];
 
     for (const order of allOrders) {
         const amount = parseFloat(order.totalAmount as string || "0");
@@ -123,8 +133,11 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
         const dlvFee = parseFloat(order.deliveryFee as string || "0");
         const svcFee = parseFloat(order.serviceFee as string || "0");
         const commission = parseFloat(order.appCommission as string || "0");
+        
         const status = order.status || "pending";
-        const payment = order.paymentMethod || "cash_on_delivery";
+        const payment = (order.paymentMethod as PaymentMethod) || "cash_on_delivery";
+        const isCash = payment === "cash_on_delivery" || payment === "الدفع عند الاستلام";
+        
         const oType = order.orderType || "delivery";
         const oSource = order.orderSource || "online_order";
 
@@ -132,28 +145,42 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
         totalRevenue += amount;
         totalSubtotal += subtotal;
         totalDeliveryFees += dlvFee;
-        totalServiceFees += svcFee;
-        totalAppCommission += commission;
 
+        // 👇 1. حساب عمولات المنصة للحالات المستحقة فقط
+        if (commissionableStatuses.includes(status)) {
+            totalAppCommission += commission;
+            totalServiceFees += svcFee;
+
+            if (isCash) {
+                totalCashCommission += commission;
+                totalCashServiceFees += svcFee;
+            } else {
+                totalDigitalCommission += commission;
+                totalDigitalServiceFees += svcFee;
+            }
+        }
+
+        // 👇 2. حساب الفلوس الفعلية اللي دخلت (للطلبات المكتملة فقط)
         if (status === "delivered") {
             deliveredRevenue += amount;
             
-            // 👇 تجميع الكاش والديجيتال
-            if (payment === "cash_on_delivery") {
+            if (isCash) {
                 totalCashCollected += amount;
             } else {
                 totalDigitalCollected += amount;
             }
         }
 
+        // تجميعات الإحصائيات للداشبورد
         if (statusSummary[status]) {
             statusSummary[status].count++;
             statusSummary[status].totalAmount += amount;
         }
 
-        if (paymentSummary[payment]) {
-            paymentSummary[payment].count++;
-            paymentSummary[payment].totalAmount += amount;
+        const standardPayment = isCash ? "cash_on_delivery" : (payment === "محفظتى" ? "wallet" : "visa");
+        if (paymentSummary[standardPayment]) {
+            paymentSummary[standardPayment].count++;
+            paymentSummary[standardPayment].totalAmount += amount;
         }
 
         if (orderTypeSummary[oType]) {
@@ -226,9 +253,7 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
                 })
                 .from(orderItems)
                 .leftJoin(food, eq(orderItems.foodId, food.id))
-                .where(
-                    sql`${orderItems.orderId} IN (${sql.join(batch.map(id => sql`${id}`), sql`, `)})`
-                );
+                .where(inArray(orderItems.orderId, batch)); // 👈 استخدام inArray
 
             for (const item of items) {
                 const fId = item.foodId;
@@ -278,6 +303,7 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
         .where(eq(restaurants.id, restaurantId))
         .limit(1);
 
+    // 👇 الـ Net Revenue أصبح يعتمد فقط على الإيراد الفعلي والعمولات المستحقة فعلياً
     const netRevenue = deliveredRevenue - totalAppCommission;
 
     const cancelledCount = (statusSummary["cancelled"]?.count || 0) + (statusSummary["rejected"]?.count || 0);
@@ -287,20 +313,14 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
     const avgOrderValue = deliveredCount > 0 ? (deliveredRevenue / deliveredCount).toFixed(2) : "0.00";
 
     // ==========================================
-    // 👇 حساب المديونيات (Settlement)
+    // 👇 حساب المديونيات الدقيق (Settlement)
     // ==========================================
-    let activeCommissionRate = 0;
-    if (businessPlans.length > 0) {
-        const onlinePlan = businessPlans.find(p => p.platformType === "online_order") || businessPlans[0];
-        activeCommissionRate = parseFloat(onlinePlan.commissionRate || "0");
-    }
+    
+    // المطعم مدين للمنصة بعمولة الطلبات الكاش المستحقة + رسوم الخدمة للطلبات الكاش
+    const restaurantOwesPlatform = totalCashCommission + totalCashServiceFees;
 
-    const restaurantOwesPlatform = (totalCashCollected * activeCommissionRate) / 100 + 
-                                   (totalServiceFees * (totalCashCollected / (deliveredRevenue || 1)));
-
-    const platformOwesRestaurant = totalDigitalCollected - 
-                                   (totalDigitalCollected * activeCommissionRate) / 100 - 
-                                   (totalServiceFees * (totalDigitalCollected / (deliveredRevenue || 1)));
+    // المنصة مدينة للمطعم بفلوس الطلبات الديجيتال المكتملة - (عمولتها + رسوم خدمتها على الطلبات الديجيتال المستحقة)
+    const platformOwesRestaurant = totalDigitalCollected - (totalDigitalCommission + totalDigitalServiceFees);
 
     const netBalance = platformOwesRestaurant - restaurantOwesPlatform;
 
@@ -327,7 +347,6 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
                 netRevenue: netRevenue.toFixed(2),
             },
 
-            // 👇 إضافة المديونيات للـ Response
             settlement: {
                 cashCollectedByYou: totalCashCollected.toFixed(2),
                 digitalCollectedByPlatform: totalDigitalCollected.toFixed(2),
@@ -401,7 +420,6 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
         },
     });
 };
-
 
 
 export const downloadSavedInvoicePDF = async (req: Request | any, res: Response) => {

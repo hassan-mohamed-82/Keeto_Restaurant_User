@@ -22,6 +22,7 @@ const router = Router();
 
 // ✅ Get reasons - يحتاج صلاحية read
 router.get("/reasons", hasPermission("orders", "read"), catchAsync(getReasons));
+router.get("/numbers", hasPermission("orders", "read", true), catchAsync(getallnumbersoforders));
 
 // ✅ كل الأوردرات - يحتاج صلاحية read + التحقق من الفرع
 router.get("/", hasPermission("orders", "read", true), catchAsync(getRestaurantOrders));
@@ -46,6 +47,5 @@ router.get("/:orderId/invoice", hasPermission("orders", "read", true), catchAsyn
 router.put("/:orderId", hasPermission("orders", "update", true), catchAsync(updateOrderStatus));
 
 // ✅ الحصول على أرقام جميع الأوردرات (عدادات حسب الحالة)
-router.get("/numbers", hasPermission("orders", "read", true), catchAsync(getallnumbersoforders));
 
 export default router;

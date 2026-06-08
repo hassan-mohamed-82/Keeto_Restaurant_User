@@ -70,10 +70,12 @@ export const getDeliveryFees = async (req: Request, res: Response) => {
         zone: {
             id: zones.id,
             name: zones.name, // بافتراض إن جدول الـ zones فيه حقل اسمه name
+            nameAr:zones.nameAr
         },
         city: {
             id: cities.id,
             name: cities.name, // بافتراض إن جدول الـ cities فيه حقل اسمه name
+            nameAr:cities.nameAr
         }
     })
     .from(restaurantZoneDeliveryFees)
@@ -105,10 +107,12 @@ export const getDeliveryFeeById = async (req: Request, res: Response) => {
         zone: {
             id: zones.id,
             name: zones.name, 
+            nameAr:zones.nameAr
         },
         city: {
             id: cities.id,
             name: cities.name, 
+            nameAr:cities.nameAr
         }
     })
     .from(restaurantZoneDeliveryFees)
