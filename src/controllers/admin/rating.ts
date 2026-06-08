@@ -9,7 +9,7 @@ import { BadRequest } from "../../Errors/BadRequest";
 // 1. جلب كل التقييمات الخاصة بمطعمي
 // ==========================================
 export const getMyRestaurantRatings = async (req: Request, res: Response) => {
-    const restaurantId = req.user?.id;
+    const restaurantId = req.user?.id || req.user?.restaurantId ;
     if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
 
     const ratings = await db.select({
@@ -35,7 +35,7 @@ export const getMyRestaurantRatings = async (req: Request, res: Response) => {
 // 2. إحصائيات التقييمات (Rating Stats)
 // ==========================================
 export const getMyRestaurantRatingStats = async (req: Request, res: Response) => {
-    const restaurantId = req.user?.id;
+    const restaurantId = req.user?.id || req.user?.restaurantId;
     if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
 
     // إجمالي التقييمات والمتوسط
