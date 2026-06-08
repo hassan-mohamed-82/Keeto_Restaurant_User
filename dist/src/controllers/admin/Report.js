@@ -41,7 +41,7 @@ const getMyRestaurantReport = async (req, res) => {
         status: schema_1.orders.status,
         orderSource: schema_1.orders.orderSource,
         orderType: schema_1.orders.orderType,
-        paymentMethod: schema_1.orders.paymentMethod,
+        paymentMethod: schema_1.paymentMethods.name,
         subtotal: schema_1.orders.subtotal,
         deliveryFee: schema_1.orders.deliveryFee,
         serviceFee: schema_1.orders.serviceFee,
@@ -53,6 +53,7 @@ const getMyRestaurantReport = async (req, res) => {
     })
         .from(schema_1.orders)
         .leftJoin(schema_1.branches, (0, drizzle_orm_1.eq)(schema_1.orders.branchId, schema_1.branches.id))
+        .leftJoin(schema_1.paymentMethods, (0, drizzle_orm_1.eq)(schema_1.orders.paymentMethod, schema_1.paymentMethods.id))
         .where((0, drizzle_orm_1.and)(...conditions))
         .orderBy((0, drizzle_orm_1.desc)(schema_1.orders.createdAt));
     const statusSummary = {};

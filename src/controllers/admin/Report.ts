@@ -9,6 +9,7 @@ import {
     restaurantBusinessPlans,
     restaurantWallets,
     users,
+    paymentMethods,
 } from "../../models/schema";
 import { eq, and, desc, gte, lte, sql, inArray } from "drizzle-orm"; // 👈 تمت إضافة inArray
 import { SuccessResponse } from "../../utils/response";
@@ -54,7 +55,7 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
             status: orders.status,
             orderSource: orders.orderSource,
             orderType: orders.orderType,
-            paymentMethod: orders.paymentMethod,
+            paymentMethod: paymentMethods.name,
             subtotal: orders.subtotal,
             deliveryFee: orders.deliveryFee,
             serviceFee: orders.serviceFee,
@@ -66,6 +67,7 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
         })
         .from(orders)
         .leftJoin(branches, eq(orders.branchId, branches.id))
+        .leftJoin(paymentMethods, eq(orders.paymentMethod, paymentMethods.id))
         .where(and(...conditions))
         .orderBy(desc(orders.createdAt));
 
