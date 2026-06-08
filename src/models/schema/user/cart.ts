@@ -31,4 +31,7 @@ export const cartItems = mysqlTable("cart_items", {
 
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
+
+    note: varchar("note", { length: 500 }),
+
 });

@@ -56,6 +56,8 @@ export const orders = mysqlTable("orders", {
 
     // 👇 وده حقل سبب الإلغاء عشان المطعم يكتبه
     cancelReason: text("cancel_reason"),
+    note: text("note"),
+
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
     createdAt: timestamp("created_at").defaultNow(),
 });
@@ -81,4 +83,7 @@ export const orderItems = mysqlTable("order_items", {
     variationsPrice: decimal("variations_price", { precision: 10, scale: 2 }).default("0.00"),
 
     totalPrice: decimal("total_price", { precision: 10, scale: 2 }).notNull(),
+
+    note: text("note"),
+
 });

@@ -58,6 +58,7 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
         orderType: orders.orderType,
         totalAmount: orders.totalAmount,
         status: orders.status,
+        note: orders.note,
         createdAt: orders.createdAt,
     })
         .from(orders)
@@ -109,6 +110,7 @@ const getOrdersByStatus = async (req: Request, res: Response, status: "pending" 
         deliveryFee: orders.deliveryFee,
         totalAmount: orders.totalAmount,
         status: orders.status,
+        note: orders.note,
         branchName: branches.name,
         createdAt: orders.createdAt,
     })
@@ -184,6 +186,7 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
         basePrice: orderItems.basePrice,
         variationsPrice: orderItems.variationsPrice,
         totalPrice: orderItems.totalPrice,
+        note: orderItems.note,
         foodName: food.name,
         foodNameAr: food.nameAr,
         foodNameFr: food.nameFr,
@@ -203,6 +206,7 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             orderSource: orderDetail.order.orderSource,
             status: orderDetail.order.status,
             cancelReason: orderDetail.order.cancelReason,
+            note: orderDetail.order.note,
             subtotal: orderDetail.order.subtotal,
             deliveryFee: orderDetail.order.deliveryFee,
             serviceFee: orderDetail.order.serviceFee,

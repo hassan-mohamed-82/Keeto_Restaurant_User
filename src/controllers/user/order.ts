@@ -361,6 +361,7 @@ export const getActiveOrders = async (req: Request | any, res: Response) => {
             restaurantImage: restaurants.logo,
             totalAmount: orders.totalAmount,
             status: orders.status,
+            note: orders.note,
             createdAt: orders.createdAt,
             itemsCount: sql<number>`(SELECT COUNT(*) FROM order_items WHERE order_items.order_id = ${orders.id})`
         })
@@ -392,6 +393,7 @@ export const getOrderHistory = async (req: Request | any, res: Response) => {
             restaurantImage: restaurants.logo,
             totalAmount: orders.totalAmount,
             status: orders.status, 
+            note: orders.note,
             createdAt: orders.createdAt,
             itemsCount: sql<number>`(SELECT COUNT(*) FROM order_items WHERE order_items.order_id = ${orders.id})`
         })
@@ -425,6 +427,7 @@ export const getOrderDetails = async (req: Request | any, res: Response) => {
             createdAt: orders.createdAt,
             paymentMethod: orders.paymentMethod, // 👈 تم التعديل هنا (كانت orderItems بالخطأ)
             orderType: orders.orderType,
+            note: orders.note,
 
             subtotal: orders.subtotal,
             deliveryFee: orders.deliveryFee,
@@ -450,7 +453,8 @@ export const getOrderDetails = async (req: Request | any, res: Response) => {
             quantity: orderItems.quantity,
             basePrice: orderItems.basePrice,
             variationsPrice: orderItems.variationsPrice,
-            totalPrice: orderItems.totalPrice
+            totalPrice: orderItems.totalPrice,
+            note: orderItems.note
         })
         .from(orderItems)
         .leftJoin(food, eq(orderItems.foodId, food.id))
