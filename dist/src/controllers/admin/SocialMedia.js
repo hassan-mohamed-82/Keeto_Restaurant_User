@@ -46,7 +46,7 @@ const getSocialMediaById = async (req, res) => {
     if (!restaurantId) {
         throw new BadRequest_1.BadRequest("Restaurant ID is required");
     }
-    const socialMedia = await connection_1.db.select().from(SocialMedia_1.socialmedia).where((0, drizzle_orm_1.eq)(SocialMedia_1.socialmedia.restaurantid, restaurantId));
+    const socialMedia = await connection_1.db.select().from(SocialMedia_1.socialmedia).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(SocialMedia_1.socialmedia.id, id), (0, drizzle_orm_1.eq)(SocialMedia_1.socialmedia.restaurantid, restaurantId)));
     return (0, response_1.SuccessResponse)(res, { message: "Social media fetched successfully", data: socialMedia }, 200);
 };
 exports.getSocialMediaById = getSocialMediaById;
@@ -67,7 +67,7 @@ const updateSocialMedia = async (req, res) => {
     await connection_1.db.update(SocialMedia_1.socialmedia).set({
         link: link,
         icon: icon || iconUrl,
-    }).where((0, drizzle_orm_1.eq)(SocialMedia_1.socialmedia.restaurantid, restaurantId));
+    }).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(SocialMedia_1.socialmedia.id, id), (0, drizzle_orm_1.eq)(SocialMedia_1.socialmedia.restaurantid, restaurantId)));
     return (0, response_1.SuccessResponse)(res, { message: "Social media updated successfully", data: { id } }, 200);
 };
 exports.updateSocialMedia = updateSocialMedia;
@@ -77,7 +77,7 @@ const deleteSocialMedia = async (req, res) => {
     if (!restaurantId) {
         throw new BadRequest_1.BadRequest("Restaurant ID is required");
     }
-    await connection_1.db.delete(SocialMedia_1.socialmedia).where((0, drizzle_orm_1.eq)(SocialMedia_1.socialmedia.restaurantid, restaurantId));
+    await connection_1.db.delete(SocialMedia_1.socialmedia).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(SocialMedia_1.socialmedia.id, id), (0, drizzle_orm_1.eq)(SocialMedia_1.socialmedia.restaurantid, restaurantId)));
     return (0, response_1.SuccessResponse)(res, { message: "Social media deleted successfully", data: { id } }, 200);
 };
 exports.deleteSocialMedia = deleteSocialMedia;

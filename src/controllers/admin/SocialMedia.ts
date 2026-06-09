@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { socialmedia } from "../../models/schema/admin/SocialMedia";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors/NotFound";
@@ -50,7 +50,7 @@ export const getSocialMediaById = async (req: Request, res: Response) => {
     if (!restaurantId) {
         throw new BadRequest("Restaurant ID is required");
     }
-    const socialMedia = await db.select().from(socialmedia).where(eq(socialmedia.restaurantid, restaurantId));
+    const socialMedia = await db.select().from(socialmedia).where(and(eq(socialmedia.id, id), eq(socialmedia.restaurantid, restaurantId)));
     return SuccessResponse(res, { message: "Social media fetched successfully", data: socialMedia }, 200);
 
 };
@@ -74,7 +74,7 @@ export const updateSocialMedia = async (req: Request, res: Response) => {
     await db.update(socialmedia).set({
         link: link,
         icon: icon || iconUrl,
-    }).where(eq(socialmedia.restaurantid, restaurantId));
+    }).where(and(eq(socialmedia.id, id), eq(socialmedia.restaurantid, restaurantId)));
     return SuccessResponse(res, { message: "Social media updated successfully", data: { id } }, 200);
 };
 
@@ -85,6 +85,6 @@ export const deleteSocialMedia = async (req: Request, res: Response) => {
     if (!restaurantId) {
         throw new BadRequest("Restaurant ID is required");
     }
-    await db.delete(socialmedia).where(eq(socialmedia.restaurantid, restaurantId));
+    await db.delete(socialmedia).where(and(eq(socialmedia.id, id), eq(socialmedia.restaurantid, restaurantId)));
     return SuccessResponse(res, { message: "Social media deleted successfully", data: { id } }, 200);
 };
