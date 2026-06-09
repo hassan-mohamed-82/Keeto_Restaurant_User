@@ -26,4 +26,5 @@ exports.cartItems = (0, mysql_core_1.mysqlTable)("cart_items", {
     variations: (0, mysql_core_1.json)("variations"),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow().onUpdateNow(),
+    note: (0, mysql_core_1.varchar)("note", { length: 500 }),
 });

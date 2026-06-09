@@ -306,6 +306,7 @@ const getActiveOrders = async (req, res) => {
         restaurantImage: schema_1.restaurants.logo,
         totalAmount: schema_1.orders.totalAmount,
         status: schema_1.orders.status,
+        note: schema_1.orders.note,
         createdAt: schema_1.orders.createdAt,
         itemsCount: (0, drizzle_orm_1.sql) `(SELECT COUNT(*) FROM order_items WHERE order_items.order_id = ${schema_1.orders.id})`
     })
@@ -333,6 +334,7 @@ const getOrderHistory = async (req, res) => {
         restaurantImage: schema_1.restaurants.logo,
         totalAmount: schema_1.orders.totalAmount,
         status: schema_1.orders.status,
+        note: schema_1.orders.note,
         createdAt: schema_1.orders.createdAt,
         itemsCount: (0, drizzle_orm_1.sql) `(SELECT COUNT(*) FROM order_items WHERE order_items.order_id = ${schema_1.orders.id})`
     })
@@ -361,6 +363,7 @@ const getOrderDetails = async (req, res) => {
         createdAt: schema_1.orders.createdAt,
         paymentMethod: schema_1.orders.paymentMethod, // 👈 تم التعديل هنا (كانت orderItems بالخطأ)
         orderType: schema_1.orders.orderType,
+        note: schema_1.orders.note,
         subtotal: schema_1.orders.subtotal,
         deliveryFee: schema_1.orders.deliveryFee,
         serviceFee: schema_1.orders.serviceFee,
@@ -382,7 +385,8 @@ const getOrderDetails = async (req, res) => {
         quantity: schema_1.orderItems.quantity,
         basePrice: schema_1.orderItems.basePrice,
         variationsPrice: schema_1.orderItems.variationsPrice,
-        totalPrice: schema_1.orderItems.totalPrice
+        totalPrice: schema_1.orderItems.totalPrice,
+        note: schema_1.orderItems.note
     })
         .from(schema_1.orderItems)
         .leftJoin(schema_1.food, (0, drizzle_orm_1.eq)(schema_1.orderItems.foodId, schema_1.food.id))

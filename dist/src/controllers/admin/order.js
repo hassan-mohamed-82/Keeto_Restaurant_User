@@ -46,6 +46,7 @@ const getRestaurantOrders = async (req, res) => {
         orderType: schema_1.orders.orderType,
         totalAmount: schema_1.orders.totalAmount,
         status: schema_1.orders.status,
+        note: schema_1.orders.note,
         createdAt: schema_1.orders.createdAt,
     })
         .from(schema_1.orders)
@@ -91,6 +92,7 @@ const getOrdersByStatus = async (req, res, status) => {
         deliveryFee: schema_1.orders.deliveryFee,
         totalAmount: schema_1.orders.totalAmount,
         status: schema_1.orders.status,
+        note: schema_1.orders.note,
         branchName: schema_1.branches.name,
         createdAt: schema_1.orders.createdAt,
     })
@@ -168,6 +170,7 @@ const getRestaurantOrderById = async (req, res) => {
         basePrice: schema_1.orderItems.basePrice,
         variationsPrice: schema_1.orderItems.variationsPrice,
         totalPrice: schema_1.orderItems.totalPrice,
+        note: schema_1.orderItems.note,
         foodName: schema_1.food.name,
         foodNameAr: schema_1.food.nameAr,
         foodNameFr: schema_1.food.nameFr,
@@ -186,6 +189,7 @@ const getRestaurantOrderById = async (req, res) => {
             orderSource: orderDetail.order.orderSource,
             status: orderDetail.order.status,
             cancelReason: orderDetail.order.cancelReason,
+            note: orderDetail.order.note,
             subtotal: orderDetail.order.subtotal,
             deliveryFee: orderDetail.order.deliveryFee,
             serviceFee: orderDetail.order.serviceFee,

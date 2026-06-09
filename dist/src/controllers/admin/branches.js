@@ -14,7 +14,7 @@ const createBranch = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID missing");
-    const { name, address, phoneNumber, zoneId, nameAr, nameFr, addressAr, addressFr } = req.body;
+    const { name, address, phoneNumber, zoneId, nameAr, nameFr, addressAr, addressFr, deliveryRadiusKm, lat, lng } = req.body;
     if (!name || !address || !zoneId) {
         throw new BadRequest_1.BadRequest("Missing required fields (name, address, zoneId)");
     }
@@ -32,6 +32,9 @@ const createBranch = async (req, res) => {
         address,
         addressAr,
         addressFr,
+        deliveryRadiusKm,
+        lat,
+        lng,
         phoneNumber: phoneNumber || null,
         zoneId,
         status: "active"
@@ -51,6 +54,9 @@ const getMyBranches = async (req, res) => {
         address: schema_1.branches.address,
         addressAr: schema_1.branches.addressAr,
         addressFr: schema_1.branches.addressFr,
+        deliveryRadiusKm: schema_1.branches.deliveryRadiusKm,
+        lat: schema_1.branches.lat,
+        lng: schema_1.branches.lng,
         phoneNumber: schema_1.branches.phoneNumber,
         status: schema_1.branches.status,
         zone: {
@@ -79,6 +85,9 @@ const getBranchById = async (req, res) => {
         address: schema_1.branches.address,
         addressAr: schema_1.branches.addressAr,
         addressFr: schema_1.branches.addressFr,
+        deliveryRadiusKm: schema_1.branches.deliveryRadiusKm,
+        lat: schema_1.branches.lat,
+        lng: schema_1.branches.lng,
         phoneNumber: schema_1.branches.phoneNumber,
         status: schema_1.branches.status,
         zone: {
@@ -99,7 +108,7 @@ const getBranchById = async (req, res) => {
 exports.getBranchById = getBranchById;
 const updateBranch = async (req, res) => {
     const { id } = req.params;
-    const { name, address, phoneNumber, zoneId, status, nameAr, nameFr, addressAr, addressFr } = req.body;
+    const { name, address, phoneNumber, zoneId, status, nameAr, nameFr, addressAr, addressFr, deliveryRadiusKm, lat, lng } = req.body;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID missing");
@@ -125,6 +134,12 @@ const updateBranch = async (req, res) => {
         updateData.addressFr = addressFr;
     if (phoneNumber)
         updateData.phoneNumber = phoneNumber;
+    if (deliveryRadiusKm)
+        updateData.deliveryRadiusKm = deliveryRadiusKm;
+    if (lat)
+        updateData.lat = lat;
+    if (lng)
+        updateData.lng = lng;
     if (zoneId) {
         const zoneExists = await connection_1.db.select().from(schema_1.zones).where((0, drizzle_orm_1.eq)(schema_1.zones.id, zoneId)).limit(1);
         if (!zoneExists[0])
