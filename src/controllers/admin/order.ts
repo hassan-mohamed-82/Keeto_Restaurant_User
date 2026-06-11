@@ -585,7 +585,7 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
         .leftJoin(food, eq(orderItems.foodId, food.id))
         .where(eq(orderItems.orderId, orderId));
 
-    // ✅ تجهيز تفاصيل الفارييشنز وحساب السعر وربطه بالاسم
+    // تجهيز تفاصيل الفارييشنز وحساب السعر وربطه بالاسم
     const formattedItems = await Promise.all(items.map(async (item) => {
         let cleanVariations = item.variations;
         if (typeof cleanVariations === 'string') {
@@ -618,7 +618,7 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
         return {
             ...item,
             finalTotalPrice,
-            variationDetails: varDetails // هنحتفظ بالاسم والسعر مع بعض
+            variationDetails: varDetails 
         };
     }));
 
@@ -666,13 +666,17 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
     // Order Info
     doc.fontSize(10);
     doc.text(`Order #: ${orderDetail.order.orderNumber}`);
+    
     const orderDate = new Date(orderDetail.order.createdAt || new Date());
-    doc.text(`Date: ${orderDate.toISOString().split('T')[0]}`);
-    doc.text(`Time: ${orderDate.toLocaleTimeString()}`);
     
-    // ✅ إضافة اسم الفرع بشكل صريح
+    // ✅ تحويل الوقت والتاريخ لتوقيت القاهرة بشكل صريح
+    const cairoTimeStr = orderDate.toLocaleTimeString("en-US", { timeZone: "Africa/Cairo" });
+    const cairoDateStr = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo", year: "numeric", month: "2-digit", day: "2-digit" }).format(orderDate);
+
+    doc.text(`Date: ${cairoDateStr}`);
+    doc.text(`Time: ${cairoTimeStr}`);
+    
     doc.text(`Branch: ${orderDetail.branch?.name || 'N/A'}`);
-    
     doc.text(`Client: ${orderDetail.customer?.name || 'Guest'}`);
     doc.text(`Phone: ${orderDetail.customer?.phone || 'N/A'}`);
     doc.text(`Order Type: ${orderDetail.order.orderType}`);
@@ -723,13 +727,12 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
         
         doc.y = nextY;
 
-        // ✅ طباعة الفارييشنز تحت الصنف مع عرض السعر تحت عمود الـ Price
+        // طباعة الفارييشنز تحت الصنف مع عرض السعر
         if (item.variationDetails.length > 0) {
             doc.fontSize(8);
             for (const v of item.variationDetails) {
                 const vY = doc.y;
                 doc.text(`  + ${v.name}`, 10, vY, { width: 120 });
-                // لو الإضافة ليها سعر أكبر من 0، نطبع السعر
                 if (v.price > 0) {
                     doc.text(v.price.toFixed(2), 140, vY, { width: 45, align: 'right' });
                 }
@@ -765,6 +768,7 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
 
     doc.end();
 };
+
 export const getallnumbersoforders = async (req: Request, res: Response) => {
     const adminRestaurantId = req.user?.restaurantId || req.user?.id;
     if (!adminRestaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");

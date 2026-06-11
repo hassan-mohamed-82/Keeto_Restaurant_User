@@ -535,7 +535,7 @@ const generateOrderInvoicePDF = async (req, res) => {
         .from(schema_1.orderItems)
         .leftJoin(schema_1.food, (0, drizzle_orm_1.eq)(schema_1.orderItems.foodId, schema_1.food.id))
         .where((0, drizzle_orm_1.eq)(schema_1.orderItems.orderId, orderId));
-    // ✅ تجهيز تفاصيل الفارييشنز وحساب السعر وربطه بالاسم
+    // تجهيز تفاصيل الفارييشنز وحساب السعر وربطه بالاسم
     const formattedItems = await Promise.all(items.map(async (item) => {
         let cleanVariations = item.variations;
         if (typeof cleanVariations === 'string') {
@@ -566,7 +566,7 @@ const generateOrderInvoicePDF = async (req, res) => {
         return {
             ...item,
             finalTotalPrice,
-            variationDetails: varDetails // هنحتفظ بالاسم والسعر مع بعض
+            variationDetails: varDetails
         };
     }));
     // 3. جلب اسم وسيلة الدفع بدل الـ ID
@@ -617,9 +617,11 @@ const generateOrderInvoicePDF = async (req, res) => {
     doc.fontSize(10);
     doc.text(`Order #: ${orderDetail.order.orderNumber}`);
     const orderDate = new Date(orderDetail.order.createdAt || new Date());
-    doc.text(`Date: ${orderDate.toISOString().split('T')[0]}`);
-    doc.text(`Time: ${orderDate.toLocaleTimeString()}`);
-    // ✅ إضافة اسم الفرع بشكل صريح
+    // ✅ تحويل الوقت والتاريخ لتوقيت القاهرة بشكل صريح
+    const cairoTimeStr = orderDate.toLocaleTimeString("en-US", { timeZone: "Africa/Cairo" });
+    const cairoDateStr = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo", year: "numeric", month: "2-digit", day: "2-digit" }).format(orderDate);
+    doc.text(`Date: ${cairoDateStr}`);
+    doc.text(`Time: ${cairoTimeStr}`);
     doc.text(`Branch: ${orderDetail.branch?.name || 'N/A'}`);
     doc.text(`Client: ${orderDetail.customer?.name || 'Guest'}`);
     doc.text(`Phone: ${orderDetail.customer?.phone || 'N/A'}`);
@@ -662,13 +664,12 @@ const generateOrderInvoicePDF = async (req, res) => {
         doc.text(parseFloat(item.basePrice).toFixed(2), 140, currentY, { width: 45, align: 'right' });
         doc.text(item.finalTotalPrice.toFixed(2), 185, currentY, { width: 55, align: 'right' });
         doc.y = nextY;
-        // ✅ طباعة الفارييشنز تحت الصنف مع عرض السعر تحت عمود الـ Price
+        // طباعة الفارييشنز تحت الصنف مع عرض السعر
         if (item.variationDetails.length > 0) {
             doc.fontSize(8);
             for (const v of item.variationDetails) {
                 const vY = doc.y;
                 doc.text(`  + ${v.name}`, 10, vY, { width: 120 });
-                // لو الإضافة ليها سعر أكبر من 0، نطبع السعر
                 if (v.price > 0) {
                     doc.text(v.price.toFixed(2), 140, vY, { width: 45, align: 'right' });
                 }
