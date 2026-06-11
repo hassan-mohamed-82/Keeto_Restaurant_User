@@ -236,7 +236,7 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
                         optionName = optDb.optionName || optionName;
                         optionNameAr = optDb.optionNameAr || optionNameAr;
                         
-                        // 💰 جلب سعر الفارييشن مباشرة من الداتابيز (تأكد من اسم العمود عندك سواء price أو additionalPrice)
+                        // 💰 جلب سعر الفارييشن
                         const price = parseFloat((optDb as any).price || optDb.additionalPrice || "0");
                         totalCalculatedVarPrice += price;
                     }
@@ -252,7 +252,6 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             }));
         }
 
-        // لو السعر المحفوظ في الأوردر بـ 0، بنعرض السعر اللي حسبناه ديناميكياً من جدول الأوبشنز
         const finalVarPrice = parseFloat(item.variationsPrice || "0") > 0 ? parseFloat(item.variationsPrice || "0") : totalCalculatedVarPrice;
         const finalTotalPrice = (parseFloat(item.basePrice || "0") + finalVarPrice) * item.quantity;
 
@@ -270,29 +269,26 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
 
     if (pmValue && pmValue.length === 36) {
         try {
-            // ✅ نختار فقط الأعمدة الموجودة فعلاً في الداتابيز لتفادي الـ Crash بسبب الأعمدة الجديدة
+            // ✅ بنعمل Select للـ id والـ name والـ nameAr من الداتابيز مباشرة
             const [pm] = await db.select({
                 id: paymentMethods.id,
-                name: paymentMethods.name
+                name: paymentMethods.name,
+                nameAr: paymentMethods.nameAr 
             }).from(paymentMethods).where(eq(paymentMethods.id, pmValue)).limit(1);
             
             if (pm) {
-                let arabicName = pm.name;
-                if (pm.name.toLowerCase().includes("cash")) arabicName = "كاش";
-                else if (pm.name.toLowerCase().includes("visa") || pm.name.toLowerCase().includes("card")) arabicName = "بطاقة بنكية";
-                else if (pm.name.toLowerCase().includes("wallet")) arabicName = "محفظة";
-
+                // بنحفظ الأوبجكت كامل
                 pmDetails = {
                     id: pm.id,
                     name: pm.name,
-                    nameAr: arabicName,
+                    nameAr: pm.nameAr,
                 };
             } else {
                 pmDetails = { id: pmValue, name: "Unknown", nameAr: "غير معروف" };
             }
         } catch (error) {
             console.error("Error fetching payment method:", error);
-            pmDetails = { id: pmValue, name: "Cash", nameAr: "كاش" }; // Fallback to Cash instead of Error
+            pmDetails = { id: pmValue, name: "Unknown", nameAr: "غير معروف" };
         }
     } else {
         switch (pmValue) {
@@ -306,7 +302,8 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
                 pmDetails = { id: pmValue, name: "Wallet", nameAr: "محفظة", nameFr: "Portefeuille" };
                 break;
             default:
-                pmDetails = pmValue;
+                // Fallback لو مكنش UUID ومكنش من الـ Enum الأساسية
+                pmDetails = { id: pmValue, name: pmValue, nameAr: pmValue };
         }
     }
 
@@ -329,11 +326,8 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             updatedAt: orderDetail.order.updatedAt,
             customer: orderDetail.customer,
             
-            // ✅ الحل العبقري: نرجع paymentMethod كنص عادي زي ما الـ Frontend متعود عشان ميعملش كراش
-            // ونضيف الأسماء في حقول منفصلة علشان تستخدمها في الـ Frontend وقت ما تحب!
-            paymentMethod: typeof pmDetails === "object" && pmDetails !== null ? pmDetails.id : pmDetails,
-            paymentMethodName: typeof pmDetails === "object" && pmDetails !== null ? pmDetails.name : pmDetails,
-            paymentMethodNameAr: typeof pmDetails === "object" && pmDetails !== null ? pmDetails.nameAr : pmDetails,
+            // ✅ التعديل هنا: بنبعت أوبجكت الدفع كامل زي ما هو بدل ما نفكه
+            paymentMethod: pmDetails,
             
             branch: orderDetail.branch,
             restaurant: orderDetail.restaurant,
