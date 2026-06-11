@@ -57,6 +57,7 @@ const verifyFacebookToken = async (req, res) => {
                 fcmToken: null,
                 password: null,
                 isVerified: true,
+                status: "active",
                 createdAt: new Date()
             };
         }
