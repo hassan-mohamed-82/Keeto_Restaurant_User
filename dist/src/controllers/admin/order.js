@@ -125,8 +125,6 @@ exports.getRefundOrders = getRefundOrders;
 // ==========================================
 // 2. جلب تفاصيل أوردر معين بالـ ID (كامل)
 // ==========================================
-// ⚠️ متنساش تعمل Import لجداول الفارييشنز والأوبشنز بتاعتك من الـ Schema
-// import { foodVariations, foodVariationOptions } from "../../schema"; 
 const getRestaurantOrderById = async (req, res) => {
     const { id } = req.params;
     const adminRestaurantId = req.user?.restaurantId || req.user?.id;
@@ -183,10 +181,9 @@ const getRestaurantOrderById = async (req, res) => {
         .from(schema_1.orderItems)
         .leftJoin(schema_1.food, (0, drizzle_orm_1.eq)(schema_1.orderItems.foodId, schema_1.food.id))
         .where((0, drizzle_orm_1.eq)(schema_1.orderItems.orderId, id));
-    // ✅ 3. تنظيف الـ Variations وجلب الأسماء من الداتابيز
+    // ✅ 3. تنظيف الـ Variations وجلب الأسماء وحساب السعر ديناميكياً
     const formattedItems = await Promise.all(items.map(async (item) => {
         let cleanVariations = item.variations;
-        // أ. تحويل الـ String لـ JSON لو كان مبعوت كـ String
         if (typeof cleanVariations === 'string') {
             try {
                 cleanVariations = JSON.parse(cleanVariations);
@@ -198,14 +195,13 @@ const getRestaurantOrderById = async (req, res) => {
                 console.error("Error parsing variations for item ID:", item.id);
             }
         }
-        // ب. لو الفارييشنز عبارة عن مصفوفة، هنجيب أسماء كل فارييشن وأوبشن
+        let totalCalculatedVarPrice = 0;
         if (Array.isArray(cleanVariations) && cleanVariations.length > 0) {
             cleanVariations = await Promise.all(cleanVariations.map(async (v) => {
                 let variationName = "Unknown";
                 let variationNameAr = "غير معروف";
                 let optionName = "Unknown";
                 let optionNameAr = "غير معروف";
-                // استدعاء اسم الـ Variation (عدل اسم الجدول حسب اللي عندك)
                 if (v.variationId) {
                     const [varDb] = await connection_1.db.select().from(schema_1.foodVariations).where((0, drizzle_orm_1.eq)(schema_1.foodVariations.id, v.variationId)).limit(1);
                     if (varDb) {
@@ -213,12 +209,14 @@ const getRestaurantOrderById = async (req, res) => {
                         variationNameAr = varDb.nameAr || variationNameAr;
                     }
                 }
-                // استدعاء اسم الـ Option (عدل اسم الجدول حسب اللي عندك)
                 if (v.optionId) {
                     const [optDb] = await connection_1.db.select().from(schema_1.variationOptions).where((0, drizzle_orm_1.eq)(schema_1.variationOptions.id, v.optionId)).limit(1);
                     if (optDb) {
                         optionName = optDb.optionName || optionName;
                         optionNameAr = optDb.optionNameAr || optionNameAr;
+                        // 💰 جلب سعر الفارييشن مباشرة من الداتابيز (تأكد من اسم العمود عندك سواء price أو additionalPrice)
+                        const price = parseFloat(optDb.price || optDb.additionalPrice || "0");
+                        totalCalculatedVarPrice += price;
                     }
                 }
                 return {
@@ -230,8 +228,13 @@ const getRestaurantOrderById = async (req, res) => {
                 };
             }));
         }
+        // لو السعر المحفوظ في الأوردر بـ 0، بنعرض السعر اللي حسبناه ديناميكياً من جدول الأوبشنز
+        const finalVarPrice = parseFloat(item.variationsPrice || "0") > 0 ? parseFloat(item.variationsPrice || "0") : totalCalculatedVarPrice;
+        const finalTotalPrice = (parseFloat(item.basePrice || "0") + finalVarPrice) * item.quantity;
         return {
             ...item,
+            variationsPrice: finalVarPrice.toFixed(2),
+            totalPrice: finalTotalPrice.toFixed(2),
             variations: cleanVariations
         };
     }));
@@ -240,23 +243,23 @@ const getRestaurantOrderById = async (req, res) => {
     const pmValue = orderDetail.order.paymentMethod;
     if (pmValue && pmValue.length === 36) {
         try {
+            // 🚨 تأكد من عمل import لـ paymentMethods في أعلى هذا الملف
             const [pm] = await connection_1.db.select().from(schema_1.paymentMethods).where((0, drizzle_orm_1.eq)(schema_1.paymentMethods.id, pmValue)).limit(1);
             if (pm) {
                 pmDetails = {
                     id: pm.id,
                     name: pm.name,
                     nameAr: pm.nameAr || pm.name,
-                    nameFr: pm.nameFr || pm.name
                 };
             }
             else {
-                // لو مش موجود في الداتابيز، بيرجع الـ ID
-                pmDetails = pmValue;
+                // في حال لم يجد الـ ID في الداتابيز، بيرجع أوبجكت منسق بدل الـ String السادة
+                pmDetails = { id: pmValue, name: "Unknown Method", nameAr: "وسيلة دفع غير مسجلة" };
             }
         }
         catch (error) {
             console.error("Error fetching payment method:", error);
-            pmDetails = pmValue;
+            pmDetails = { id: pmValue, name: "Error Loading", nameAr: "خطأ في تحميل الوسيلة" };
         }
     }
     else {
@@ -295,7 +298,7 @@ const getRestaurantOrderById = async (req, res) => {
             paymentMethod: pmDetails,
             branch: orderDetail.branch,
             restaurant: orderDetail.restaurant,
-            items: formattedItems // ✅ استخدام المصفوفة بعد إضافة الأسماء
+            items: formattedItems
         }
     });
 };
