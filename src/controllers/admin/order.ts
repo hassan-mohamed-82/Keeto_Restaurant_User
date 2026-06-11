@@ -571,11 +571,13 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
         throw new BadRequest("Unauthorized: Order does not belong to your branch");
     }
 
-    // 2. جلب أصناف الأكل
+    // 2. جلب أصناف الأكل والتفاصيل (Variations)
     const items = await db.select({
         quantity: orderItems.quantity,
         basePrice: orderItems.basePrice,
+        variationsPrice: orderItems.variationsPrice,
         totalPrice: orderItems.totalPrice,
+        variations: orderItems.variations,
         foodName: food.name,
         foodNameAr: food.nameAr,
     })
@@ -583,8 +585,66 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
         .leftJoin(food, eq(orderItems.foodId, food.id))
         .where(eq(orderItems.orderId, orderId));
 
-    // 3. إنشاء الـ PDF (شكل إيصال حراري / فاتورة)
-    const doc = new PDFDocument({ margin: 20, size: [250, 600] }); // حجم إيصال حراري تقريبي
+    // تجهيز تفاصيل الفارييشنز وحساب السعر
+    const formattedItems = await Promise.all(items.map(async (item) => {
+        let cleanVariations = item.variations;
+        if (typeof cleanVariations === 'string') {
+            try {
+                cleanVariations = JSON.parse(cleanVariations);
+                if (typeof cleanVariations === 'string') cleanVariations = JSON.parse(cleanVariations);
+            } catch (error) {}
+        }
+
+        let varNames: string[] = [];
+        let totalCalculatedVarPrice = 0;
+
+        if (Array.isArray(cleanVariations) && cleanVariations.length > 0) {
+            await Promise.all(cleanVariations.map(async (v: any) => {
+                if (v.optionId) {
+                    const [optDb] = await db.select().from(variationOptions).where(eq(variationOptions.id, v.optionId)).limit(1);
+                    if (optDb) {
+                        varNames.push(optDb.optionName || "Extra");
+                        const price = parseFloat((optDb as any).price || optDb.additionalPrice || "0");
+                        totalCalculatedVarPrice += price;
+                    }
+                }
+            }));
+        }
+
+        const finalVarPrice = parseFloat(item.variationsPrice as string || "0") > 0 ? parseFloat(item.variationsPrice as string || "0") : totalCalculatedVarPrice;
+        const finalTotalPrice = (parseFloat(item.basePrice as string || "0") + finalVarPrice) * item.quantity;
+
+        return {
+            ...item,
+            finalTotalPrice,
+            variationTexts: varNames
+        };
+    }));
+
+    // 3. جلب اسم وسيلة الدفع بدل الـ ID
+    let paymentName = "Unknown";
+    const pmValue = orderDetail.order.paymentMethod;
+
+    if (pmValue && pmValue.length === 36) {
+        try {
+            const [pm] = await db.select({ name: paymentMethods.name }).from(paymentMethods).where(eq(paymentMethods.id, pmValue)).limit(1);
+            if (pm) paymentName = pm.name;
+            else paymentName = pmValue;
+        } catch (error) {
+            console.error("Error fetching payment method for PDF:", error);
+            paymentName = "Cash"; 
+        }
+    } else {
+        switch (pmValue) {
+            case "cash_on_delivery": paymentName = "Cash on Delivery"; break;
+            case "visa": paymentName = "Credit Card"; break;
+            case "wallet": paymentName = "Wallet"; break;
+            default: paymentName = pmValue || "Unknown";
+        }
+    }
+
+    // 4. إنشاء الـ PDF بحجم إيصال حراري
+    const doc = new PDFDocument({ margin: 20, size: [250, 600] });
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="Receipt_${orderDetail.order.orderNumber}.pdf"`);
@@ -611,7 +671,7 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
     doc.text(`Client: ${orderDetail.customer?.name || 'Guest'}`);
     doc.text(`Phone: ${orderDetail.customer?.phone || 'N/A'}`);
     doc.text(`Order Type: ${orderDetail.order.orderType}`);
-    doc.text(`Payment: ${orderDetail.order.paymentMethod}`);
+    doc.text(`Payment: ${paymentName}`);
     
     doc.moveDown(0.5);
     doc.moveTo(10, doc.y).lineTo(240, doc.y).dash(2, { space: 2 }).stroke();
@@ -645,13 +705,28 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
     doc.moveDown(0.5);
 
     // Items Loop
-    for (const item of items) {
-        const y = doc.y;
+    for (const item of formattedItems) {
+        const currentY = doc.y;
         const name = item.foodName || item.foodNameAr || 'Item';
-        doc.text(name, 10, y, { width: 100 });
-        doc.text(item.quantity.toString(), 110, y, { width: 30, align: 'right' });
-        doc.text(parseFloat(item.basePrice as string).toFixed(2), 140, y, { width: 45, align: 'right' });
-        doc.text(parseFloat(item.totalPrice as string).toFixed(2), 185, y, { width: 55, align: 'right' });
+        
+        doc.text(name, 10, currentY, { width: 100 });
+        const nextY = doc.y;
+        
+        doc.text(item.quantity.toString(), 110, currentY, { width: 30, align: 'right' });
+        doc.text(parseFloat(item.basePrice as string).toFixed(2), 140, currentY, { width: 45, align: 'right' });
+        doc.text(item.finalTotalPrice.toFixed(2), 185, currentY, { width: 55, align: 'right' });
+        
+        doc.y = nextY;
+
+        // طباعة الفارييشنز تحت الصنف بخط أصغر
+        if (item.variationTexts.length > 0) {
+            doc.fontSize(8);
+            for (const vText of item.variationTexts) {
+                doc.text(`  + ${vText}`, 10, doc.y, { width: 120 });
+            }
+            doc.fontSize(10);
+        }
+        
         doc.moveDown(0.5);
     }
 
@@ -660,13 +735,11 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
 
     // Totals
     const subtotal = parseFloat(orderDetail.order.subtotal as string).toFixed(2);
-    const tax = "0.00"; // Assuming 0 for now as tax isn't in DB currently
     const deliveryFee = parseFloat(orderDetail.order.deliveryFee as string).toFixed(2);
     const total = parseFloat(orderDetail.order.totalAmount as string).toFixed(2);
 
     doc.text(`Total Product Price`, 10, doc.y, { continued: true }).text(`${subtotal}`, { align: 'right' });
-    doc.text(`Tax %`, 10, doc.y, { continued: true }).text(`${tax}`, { align: 'right' });
-    doc.text(`Delivery Fee`, 10, doc.y, { continued: true }).text(`${deliveryFee}`, { align: 'right' });
+    doc.text(`Delivery Fee`, 10, doc.y, { continued: true }).text(`${deliveryFee}`, { align: 'right' }); // 👈 شلنا سطر الضريبة من هنا خالص
     
     doc.moveDown(0.5);
     doc.moveTo(10, doc.y).lineTo(240, doc.y).stroke();
@@ -676,11 +749,10 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
 
     doc.moveDown(1);
     doc.fontSize(10).text('Thank you for your order', { align: 'center' });
-    doc.fontSize(8).text('Powered by Keeto', { align: 'center' });
+    doc.fontSize(8).text('Powered by Systego', { align: 'center' });
 
     doc.end();
 };
-
 
 
 export const getallnumbersoforders = async (req: Request, res: Response) => {

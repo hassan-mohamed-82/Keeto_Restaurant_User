@@ -522,19 +522,84 @@ const generateOrderInvoicePDF = async (req, res) => {
     if (adminBranchId && orderDetail.order.branchId !== adminBranchId) {
         throw new BadRequest_1.BadRequest("Unauthorized: Order does not belong to your branch");
     }
-    // 2. جلب أصناف الأكل
+    // 2. جلب أصناف الأكل والتفاصيل (Variations)
     const items = await connection_1.db.select({
         quantity: schema_1.orderItems.quantity,
         basePrice: schema_1.orderItems.basePrice,
+        variationsPrice: schema_1.orderItems.variationsPrice,
         totalPrice: schema_1.orderItems.totalPrice,
+        variations: schema_1.orderItems.variations,
         foodName: schema_1.food.name,
         foodNameAr: schema_1.food.nameAr,
     })
         .from(schema_1.orderItems)
         .leftJoin(schema_1.food, (0, drizzle_orm_1.eq)(schema_1.orderItems.foodId, schema_1.food.id))
         .where((0, drizzle_orm_1.eq)(schema_1.orderItems.orderId, orderId));
-    // 3. إنشاء الـ PDF (شكل إيصال حراري / فاتورة)
-    const doc = new pdfkit_1.default({ margin: 20, size: [250, 600] }); // حجم إيصال حراري تقريبي
+    // تجهيز تفاصيل الفارييشنز وحساب السعر
+    const formattedItems = await Promise.all(items.map(async (item) => {
+        let cleanVariations = item.variations;
+        if (typeof cleanVariations === 'string') {
+            try {
+                cleanVariations = JSON.parse(cleanVariations);
+                if (typeof cleanVariations === 'string')
+                    cleanVariations = JSON.parse(cleanVariations);
+            }
+            catch (error) { }
+        }
+        let varNames = [];
+        let totalCalculatedVarPrice = 0;
+        if (Array.isArray(cleanVariations) && cleanVariations.length > 0) {
+            await Promise.all(cleanVariations.map(async (v) => {
+                if (v.optionId) {
+                    const [optDb] = await connection_1.db.select().from(schema_1.variationOptions).where((0, drizzle_orm_1.eq)(schema_1.variationOptions.id, v.optionId)).limit(1);
+                    if (optDb) {
+                        varNames.push(optDb.optionName || "Extra");
+                        const price = parseFloat(optDb.price || optDb.additionalPrice || "0");
+                        totalCalculatedVarPrice += price;
+                    }
+                }
+            }));
+        }
+        const finalVarPrice = parseFloat(item.variationsPrice || "0") > 0 ? parseFloat(item.variationsPrice || "0") : totalCalculatedVarPrice;
+        const finalTotalPrice = (parseFloat(item.basePrice || "0") + finalVarPrice) * item.quantity;
+        return {
+            ...item,
+            finalTotalPrice,
+            variationTexts: varNames
+        };
+    }));
+    // 3. جلب اسم وسيلة الدفع بدل الـ ID
+    let paymentName = "Unknown";
+    const pmValue = orderDetail.order.paymentMethod;
+    if (pmValue && pmValue.length === 36) {
+        try {
+            const [pm] = await connection_1.db.select({ name: schema_1.paymentMethods.name }).from(schema_1.paymentMethods).where((0, drizzle_orm_1.eq)(schema_1.paymentMethods.id, pmValue)).limit(1);
+            if (pm)
+                paymentName = pm.name;
+            else
+                paymentName = pmValue;
+        }
+        catch (error) {
+            console.error("Error fetching payment method for PDF:", error);
+            paymentName = "Cash";
+        }
+    }
+    else {
+        switch (pmValue) {
+            case "cash_on_delivery":
+                paymentName = "Cash on Delivery";
+                break;
+            case "visa":
+                paymentName = "Credit Card";
+                break;
+            case "wallet":
+                paymentName = "Wallet";
+                break;
+            default: paymentName = pmValue || "Unknown";
+        }
+    }
+    // 4. إنشاء الـ PDF بحجم إيصال حراري
+    const doc = new pdfkit_1.default({ margin: 20, size: [250, 600] });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="Receipt_${orderDetail.order.orderNumber}.pdf"`);
     doc.pipe(res);
@@ -556,7 +621,7 @@ const generateOrderInvoicePDF = async (req, res) => {
     doc.text(`Client: ${orderDetail.customer?.name || 'Guest'}`);
     doc.text(`Phone: ${orderDetail.customer?.phone || 'N/A'}`);
     doc.text(`Order Type: ${orderDetail.order.orderType}`);
-    doc.text(`Payment: ${orderDetail.order.paymentMethod}`);
+    doc.text(`Payment: ${paymentName}`);
     doc.moveDown(0.5);
     doc.moveTo(10, doc.y).lineTo(240, doc.y).dash(2, { space: 2 }).stroke();
     doc.undash();
@@ -585,32 +650,40 @@ const generateOrderInvoicePDF = async (req, res) => {
     doc.moveTo(10, doc.y).lineTo(240, doc.y).stroke();
     doc.moveDown(0.5);
     // Items Loop
-    for (const item of items) {
-        const y = doc.y;
+    for (const item of formattedItems) {
+        const currentY = doc.y;
         const name = item.foodName || item.foodNameAr || 'Item';
-        doc.text(name, 10, y, { width: 100 });
-        doc.text(item.quantity.toString(), 110, y, { width: 30, align: 'right' });
-        doc.text(parseFloat(item.basePrice).toFixed(2), 140, y, { width: 45, align: 'right' });
-        doc.text(parseFloat(item.totalPrice).toFixed(2), 185, y, { width: 55, align: 'right' });
+        doc.text(name, 10, currentY, { width: 100 });
+        const nextY = doc.y;
+        doc.text(item.quantity.toString(), 110, currentY, { width: 30, align: 'right' });
+        doc.text(parseFloat(item.basePrice).toFixed(2), 140, currentY, { width: 45, align: 'right' });
+        doc.text(item.finalTotalPrice.toFixed(2), 185, currentY, { width: 55, align: 'right' });
+        doc.y = nextY;
+        // طباعة الفارييشنز تحت الصنف بخط أصغر
+        if (item.variationTexts.length > 0) {
+            doc.fontSize(8);
+            for (const vText of item.variationTexts) {
+                doc.text(`  + ${vText}`, 10, doc.y, { width: 120 });
+            }
+            doc.fontSize(10);
+        }
         doc.moveDown(0.5);
     }
     doc.moveTo(10, doc.y).lineTo(240, doc.y).stroke();
     doc.moveDown(0.5);
     // Totals
     const subtotal = parseFloat(orderDetail.order.subtotal).toFixed(2);
-    const tax = "0.00"; // Assuming 0 for now as tax isn't in DB currently
     const deliveryFee = parseFloat(orderDetail.order.deliveryFee).toFixed(2);
     const total = parseFloat(orderDetail.order.totalAmount).toFixed(2);
     doc.text(`Total Product Price`, 10, doc.y, { continued: true }).text(`${subtotal}`, { align: 'right' });
-    doc.text(`Tax %`, 10, doc.y, { continued: true }).text(`${tax}`, { align: 'right' });
-    doc.text(`Delivery Fee`, 10, doc.y, { continued: true }).text(`${deliveryFee}`, { align: 'right' });
+    doc.text(`Delivery Fee`, 10, doc.y, { continued: true }).text(`${deliveryFee}`, { align: 'right' }); // 👈 شلنا سطر الضريبة من هنا خالص
     doc.moveDown(0.5);
     doc.moveTo(10, doc.y).lineTo(240, doc.y).stroke();
     doc.moveDown(0.5);
     doc.fontSize(14).text(`Grand Total`, 10, doc.y, { continued: true }).text(`${total}`, { align: 'right' });
     doc.moveDown(1);
     doc.fontSize(10).text('Thank you for your order', { align: 'center' });
-    doc.fontSize(8).text('Powered by Keeto', { align: 'center' });
+    doc.fontSize(8).text('Powered by Systego', { align: 'center' });
     doc.end();
 };
 exports.generateOrderInvoicePDF = generateOrderInvoicePDF;
