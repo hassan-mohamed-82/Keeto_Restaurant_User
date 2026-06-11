@@ -181,6 +181,26 @@ const getRestaurantOrderById = async (req, res) => {
         .from(schema_1.orderItems)
         .leftJoin(schema_1.food, (0, drizzle_orm_1.eq)(schema_1.orderItems.foodId, schema_1.food.id))
         .where((0, drizzle_orm_1.eq)(schema_1.orderItems.orderId, id));
+    // ✅ تنظيف وتعديل الـ Variations عشان ترجع JSON حقيقي بدل String
+    const formattedItems = items.map(item => {
+        let cleanVariations = item.variations;
+        if (typeof cleanVariations === 'string') {
+            try {
+                cleanVariations = JSON.parse(cleanVariations);
+                // معالجة الـ Double Stringify لو الفرونت إند باعتها متكررة
+                if (typeof cleanVariations === 'string') {
+                    cleanVariations = JSON.parse(cleanVariations);
+                }
+            }
+            catch (error) {
+                console.error("Error parsing variations for item ID:", item.id);
+            }
+        }
+        return {
+            ...item,
+            variations: cleanVariations
+        };
+    });
     // جلب بيانات وسيلة الدفع من جدول payment_methods إذا كانت UUID، أو تعيينها بناءً على الـ Enum
     let pmDetails = null;
     const pmValue = orderDetail.order.paymentMethod;
@@ -201,7 +221,6 @@ const getRestaurantOrderById = async (req, res) => {
         }
         catch (error) {
             console.error("Error fetching payment method:", error);
-            // Fallback in case table is missing or columns are out of sync
             pmDetails = pmValue;
         }
     }
@@ -238,11 +257,10 @@ const getRestaurantOrderById = async (req, res) => {
             createdAt: orderDetail.order.createdAt,
             updatedAt: orderDetail.order.updatedAt,
             customer: orderDetail.customer,
-            // ✅ التعديل هنا: هنقرأ الـ paymentMethod من الـ order مباشرة بناءً على التعديل في الداتا بيز
             paymentMethod: pmDetails,
             branch: orderDetail.branch,
             restaurant: orderDetail.restaurant,
-            items
+            items: formattedItems // ✅ استخدام المصفوفة بعد التنظيف
         }
     });
 };
