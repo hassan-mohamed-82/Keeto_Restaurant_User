@@ -10,7 +10,6 @@ import AddonRouter from "./addon";
 import FoodRouter from "./food";
 import walletsRouter from "./restaurant_wallets"
 import restaurantsettingRouter from "./restaurantsetting";
-import payment_methodsRouter from "./payment_methods";
 import branchesRouter from "./branches";
 import branchemenuRouter from "./branchemenu";
 import OrderRouter from "./order"

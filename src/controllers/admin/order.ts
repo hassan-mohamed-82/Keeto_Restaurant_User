@@ -270,21 +270,29 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
 
     if (pmValue && pmValue.length === 36) {
         try {
-            // 🚨 تأكد من عمل import لـ paymentMethods في أعلى هذا الملف
-            const [pm] = await db.select().from(paymentMethods).where(eq(paymentMethods.id, pmValue)).limit(1);
+            // ✅ نختار فقط الأعمدة الموجودة فعلاً في الداتابيز لتفادي الـ Crash بسبب الأعمدة الجديدة
+            const [pm] = await db.select({
+                id: paymentMethods.id,
+                name: paymentMethods.name
+            }).from(paymentMethods).where(eq(paymentMethods.id, pmValue)).limit(1);
+            
             if (pm) {
+                let arabicName = pm.name;
+                if (pm.name.toLowerCase().includes("cash")) arabicName = "كاش";
+                else if (pm.name.toLowerCase().includes("visa") || pm.name.toLowerCase().includes("card")) arabicName = "بطاقة بنكية";
+                else if (pm.name.toLowerCase().includes("wallet")) arabicName = "محفظة";
+
                 pmDetails = {
                     id: pm.id,
                     name: pm.name,
-                    nameAr: pm.nameAr || pm.name,
+                    nameAr: arabicName,
                 };
             } else {
-                // في حال لم يجد الـ ID في الداتابيز، بيرجع أوبجكت منسق بدل الـ String السادة
-                pmDetails = { id: pmValue, name: "Unknown Method", nameAr: "وسيلة دفع غير مسجلة" };
+                pmDetails = { id: pmValue, name: "Unknown", nameAr: "غير معروف" };
             }
         } catch (error) {
             console.error("Error fetching payment method:", error);
-            pmDetails = { id: pmValue, name: "Error Loading", nameAr: "خطأ في تحميل الوسيلة" };
+            pmDetails = { id: pmValue, name: "Cash", nameAr: "كاش" }; // Fallback to Cash instead of Error
         }
     } else {
         switch (pmValue) {
@@ -320,7 +328,13 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             createdAt: orderDetail.order.createdAt,
             updatedAt: orderDetail.order.updatedAt,
             customer: orderDetail.customer,
-            paymentMethod: pmDetails, 
+            
+            // ✅ الحل العبقري: نرجع paymentMethod كنص عادي زي ما الـ Frontend متعود عشان ميعملش كراش
+            // ونضيف الأسماء في حقول منفصلة علشان تستخدمها في الـ Frontend وقت ما تحب!
+            paymentMethod: typeof pmDetails === "object" && pmDetails !== null ? pmDetails.id : pmDetails,
+            paymentMethodName: typeof pmDetails === "object" && pmDetails !== null ? pmDetails.name : pmDetails,
+            paymentMethodNameAr: typeof pmDetails === "object" && pmDetails !== null ? pmDetails.nameAr : pmDetails,
+            
             branch: orderDetail.branch,
             restaurant: orderDetail.restaurant,
             items: formattedItems
