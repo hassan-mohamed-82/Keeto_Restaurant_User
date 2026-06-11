@@ -6,7 +6,7 @@ import {
     restaurantWallets, restaurantWalletTransactions, // 👈 ضفنا جداول محفظة المطعم
     restaurantZoneDeliveryFees, zoneDeliveryFees, restaurantSettings, 
     restaurantSchedules, cartItems, users, addresses, branches,
-    userWallets, userWalletTransactions 
+    userWallets, userWalletTransactions, foodVariations, variationOptions
 } from "../../models/schema";
 import { eq, and, inArray, sql, desc } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
@@ -124,25 +124,46 @@ export const checkout = async (req: Request | any, res: Response) => {
     const itemsToInsert: any[] = [];
 
     for (const item of userCart) {
-        const basePrice = parseFloat(item.unitPrice as string || "0");
         let varPrice = 0;
-
+        let finalVariationsSnapshot: any[] = [];
         const vars = typeof item.variations === 'string' ? JSON.parse(item.variations) : item.variations;
+        
         if (Array.isArray(vars)) {
-            varPrice = vars.reduce((sum, v) => sum + parseFloat(v.additionalPrice || "0"), 0);
+            for (const v of vars) {
+                if (!v.variationId || !v.optionId) continue;
+                const [variation] = await db.select().from(foodVariations).where(eq(foodVariations.id, v.variationId)).limit(1);
+                const [option] = await db.select().from(variationOptions).where(eq(variationOptions.id, v.optionId)).limit(1);
+                
+                if (variation && option) {
+                    const price = parseFloat(option.additionalPrice as string || "0");
+                    varPrice += price;
+                    finalVariationsSnapshot.push({
+                        variationId: variation.id,
+                        variationName: variation.name,
+                        variationNameAr: variation.nameAr,
+                        optionId: option.id,
+                        optionName: option.optionName,
+                        optionNameAr: option.optionNameAr,
+                        additionalPrice: price.toString()
+                    });
+                }
+            }
         }
 
-        const itemTotal = (basePrice + varPrice) * item.quantity;
+        const totalItemUnitPrice = parseFloat(item.unitPrice as string || "0");
+        // unitPrice in cart already includes variations, so real basePrice is unitPrice - varPrice
+        const realBasePrice = totalItemUnitPrice - varPrice;
+        const itemTotal = totalItemUnitPrice * item.quantity;
         subtotal += itemTotal;
 
         itemsToInsert.push({
             id: uuidv4(),
             foodId: item.foodId,
             quantity: item.quantity,
-            basePrice: basePrice.toString(),
+            basePrice: realBasePrice.toString(),
             variationsPrice: varPrice.toString(),
             totalPrice: itemTotal.toString(),
-            variations: vars
+            variations: JSON.stringify(finalVariationsSnapshot)
         });
     }
 

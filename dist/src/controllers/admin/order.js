@@ -200,6 +200,7 @@ const getRestaurantOrderById = async (req, res) => {
             }
         }
         catch (error) {
+            console.error("Error fetching payment method:", error);
             // Fallback in case table is missing or columns are out of sync
             pmDetails = pmValue;
         }

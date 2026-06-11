@@ -102,22 +102,43 @@ const checkout = async (req, res) => {
     let subtotal = 0;
     const itemsToInsert = [];
     for (const item of userCart) {
-        const basePrice = parseFloat(item.unitPrice || "0");
         let varPrice = 0;
+        let finalVariationsSnapshot = [];
         const vars = typeof item.variations === 'string' ? JSON.parse(item.variations) : item.variations;
         if (Array.isArray(vars)) {
-            varPrice = vars.reduce((sum, v) => sum + parseFloat(v.additionalPrice || "0"), 0);
+            for (const v of vars) {
+                if (!v.variationId || !v.optionId)
+                    continue;
+                const [variation] = await connection_1.db.select().from(schema_1.foodVariations).where((0, drizzle_orm_1.eq)(schema_1.foodVariations.id, v.variationId)).limit(1);
+                const [option] = await connection_1.db.select().from(schema_1.variationOptions).where((0, drizzle_orm_1.eq)(schema_1.variationOptions.id, v.optionId)).limit(1);
+                if (variation && option) {
+                    const price = parseFloat(option.additionalPrice || "0");
+                    varPrice += price;
+                    finalVariationsSnapshot.push({
+                        variationId: variation.id,
+                        variationName: variation.name,
+                        variationNameAr: variation.nameAr,
+                        optionId: option.id,
+                        optionName: option.optionName,
+                        optionNameAr: option.optionNameAr,
+                        additionalPrice: price.toString()
+                    });
+                }
+            }
         }
-        const itemTotal = (basePrice + varPrice) * item.quantity;
+        const totalItemUnitPrice = parseFloat(item.unitPrice || "0");
+        // unitPrice in cart already includes variations, so real basePrice is unitPrice - varPrice
+        const realBasePrice = totalItemUnitPrice - varPrice;
+        const itemTotal = totalItemUnitPrice * item.quantity;
         subtotal += itemTotal;
         itemsToInsert.push({
             id: (0, uuid_1.v4)(),
             foodId: item.foodId,
             quantity: item.quantity,
-            basePrice: basePrice.toString(),
+            basePrice: realBasePrice.toString(),
             variationsPrice: varPrice.toString(),
             totalPrice: itemTotal.toString(),
-            variations: vars
+            variations: JSON.stringify(finalVariationsSnapshot)
         });
     }
     const serviceFee = plan ? parseFloat(plan.serviceFee || "0") : 0;
