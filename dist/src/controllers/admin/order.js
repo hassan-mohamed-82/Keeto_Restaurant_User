@@ -674,9 +674,11 @@ const generateOrderInvoicePDF = async (req, res) => {
     // Totals
     const subtotal = parseFloat(orderDetail.order.subtotal).toFixed(2);
     const deliveryFee = parseFloat(orderDetail.order.deliveryFee).toFixed(2);
+    const serviceFee = parseFloat(orderDetail.order.serviceFee).toFixed(2); // 👈 جلب رسوم الخدمة
     const total = parseFloat(orderDetail.order.totalAmount).toFixed(2);
     doc.text(`Total Product Price`, 10, doc.y, { continued: true }).text(`${subtotal}`, { align: 'right' });
-    doc.text(`Delivery Fee`, 10, doc.y, { continued: true }).text(`${deliveryFee}`, { align: 'right' }); // 👈 شلنا سطر الضريبة من هنا خالص
+    doc.text(`Delivery Fee`, 10, doc.y, { continued: true }).text(`${deliveryFee}`, { align: 'right' });
+    doc.text(`Service Fee`, 10, doc.y, { continued: true }).text(`${serviceFee}`, { align: 'right' }); // 👈 إضافة سطر الـ Service Fee
     doc.moveDown(0.5);
     doc.moveTo(10, doc.y).lineTo(240, doc.y).stroke();
     doc.moveDown(0.5);

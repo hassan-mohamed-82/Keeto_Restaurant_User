@@ -736,10 +736,12 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
     // Totals
     const subtotal = parseFloat(orderDetail.order.subtotal as string).toFixed(2);
     const deliveryFee = parseFloat(orderDetail.order.deliveryFee as string).toFixed(2);
+    const serviceFee = parseFloat(orderDetail.order.serviceFee as string).toFixed(2); // 👈 جلب رسوم الخدمة
     const total = parseFloat(orderDetail.order.totalAmount as string).toFixed(2);
 
     doc.text(`Total Product Price`, 10, doc.y, { continued: true }).text(`${subtotal}`, { align: 'right' });
-    doc.text(`Delivery Fee`, 10, doc.y, { continued: true }).text(`${deliveryFee}`, { align: 'right' }); // 👈 شلنا سطر الضريبة من هنا خالص
+    doc.text(`Delivery Fee`, 10, doc.y, { continued: true }).text(`${deliveryFee}`, { align: 'right' });
+    doc.text(`Service Fee`, 10, doc.y, { continued: true }).text(`${serviceFee}`, { align: 'right' }); // 👈 إضافة سطر الـ Service Fee
     
     doc.moveDown(0.5);
     doc.moveTo(10, doc.y).lineTo(240, doc.y).stroke();
@@ -753,7 +755,6 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
 
     doc.end();
 };
-
 
 export const getallnumbersoforders = async (req: Request, res: Response) => {
     const adminRestaurantId = req.user?.restaurantId || req.user?.id;
