@@ -242,14 +242,12 @@ const getRestaurantOrderById = async (req, res) => {
     const pmValue = orderDetail.order.paymentMethod;
     if (pmValue && pmValue.length === 36) {
         try {
-            // ✅ بنعمل Select للـ id والـ name والـ nameAr من الداتابيز مباشرة
             const [pm] = await connection_1.db.select({
                 id: schema_1.paymentMethods.id,
                 name: schema_1.paymentMethods.name,
                 nameAr: schema_1.paymentMethods.nameAr
             }).from(schema_1.paymentMethods).where((0, drizzle_orm_1.eq)(schema_1.paymentMethods.id, pmValue)).limit(1);
             if (pm) {
-                // بنحفظ الأوبجكت كامل
                 pmDetails = {
                     id: pm.id,
                     name: pm.name,
@@ -271,13 +269,12 @@ const getRestaurantOrderById = async (req, res) => {
                 pmDetails = { id: pmValue, name: "Cash on Delivery", nameAr: "الدفع عند الاستلام", nameFr: "Paiement à la livraison" };
                 break;
             case "visa":
-                pmDetails = { id: pmValue, name: "Credit Card", nameAr: "بطاقة ائتمانية", nameFr: "Carte de crédit" };
+                pmDetails = { id: pmValue, name: "Credit Card", nameAr: "بطاقة", nameFr: "Carte de crédit" };
                 break;
             case "wallet":
-                pmDetails = { id: pmValue, name: "Wallet", nameAr: "محفظة", nameFr: "Portefeuille" };
+                pmDetails = { id: pmValue, name: "Wallet", nameAr: "محفظتي", nameFr: "Portefeuille" };
                 break;
             default:
-                // Fallback لو مكنش UUID ومكنش من الـ Enum الأساسية
                 pmDetails = { id: pmValue, name: pmValue, nameAr: pmValue };
         }
     }
@@ -299,8 +296,10 @@ const getRestaurantOrderById = async (req, res) => {
             createdAt: orderDetail.order.createdAt,
             updatedAt: orderDetail.order.updatedAt,
             customer: orderDetail.customer,
-            // ✅ التعديل هنا: بنبعت أوبجكت الدفع كامل زي ما هو بدل ما نفكه
-            paymentMethod: pmDetails,
+            // ✅ فصلنا الداتا عشان الرياكت ميضربش ويقرأ الـ ID زي ما هو متعود
+            paymentMethod: typeof pmDetails === "object" && pmDetails !== null ? pmDetails.id : pmDetails,
+            paymentMethodName: typeof pmDetails === "object" && pmDetails !== null ? pmDetails.name : pmDetails,
+            paymentMethodNameAr: typeof pmDetails === "object" && pmDetails !== null ? pmDetails.nameAr : pmDetails,
             branch: orderDetail.branch,
             restaurant: orderDetail.restaurant,
             items: formattedItems

@@ -269,7 +269,6 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
 
     if (pmValue && pmValue.length === 36) {
         try {
-            // ✅ بنعمل Select للـ id والـ name والـ nameAr من الداتابيز مباشرة
             const [pm] = await db.select({
                 id: paymentMethods.id,
                 name: paymentMethods.name,
@@ -277,7 +276,6 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             }).from(paymentMethods).where(eq(paymentMethods.id, pmValue)).limit(1);
             
             if (pm) {
-                // بنحفظ الأوبجكت كامل
                 pmDetails = {
                     id: pm.id,
                     name: pm.name,
@@ -296,13 +294,12 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
                 pmDetails = { id: pmValue, name: "Cash on Delivery", nameAr: "الدفع عند الاستلام", nameFr: "Paiement à la livraison" };
                 break;
             case "visa":
-                pmDetails = { id: pmValue, name: "Credit Card", nameAr: "بطاقة ائتمانية", nameFr: "Carte de crédit" };
+                pmDetails = { id: pmValue, name: "Credit Card", nameAr: "بطاقة", nameFr: "Carte de crédit" };
                 break;
             case "wallet":
-                pmDetails = { id: pmValue, name: "Wallet", nameAr: "محفظة", nameFr: "Portefeuille" };
+                pmDetails = { id: pmValue, name: "Wallet", nameAr: "محفظتي", nameFr: "Portefeuille" };
                 break;
             default:
-                // Fallback لو مكنش UUID ومكنش من الـ Enum الأساسية
                 pmDetails = { id: pmValue, name: pmValue, nameAr: pmValue };
         }
     }
@@ -326,8 +323,10 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             updatedAt: orderDetail.order.updatedAt,
             customer: orderDetail.customer,
             
-            // ✅ التعديل هنا: بنبعت أوبجكت الدفع كامل زي ما هو بدل ما نفكه
-            paymentMethod: pmDetails,
+            // ✅ فصلنا الداتا عشان الرياكت ميضربش ويقرأ الـ ID زي ما هو متعود
+            paymentMethod: typeof pmDetails === "object" && pmDetails !== null ? pmDetails.id : pmDetails,
+            paymentMethodName: typeof pmDetails === "object" && pmDetails !== null ? pmDetails.name : pmDetails,
+            paymentMethodNameAr: typeof pmDetails === "object" && pmDetails !== null ? pmDetails.nameAr : pmDetails,
             
             branch: orderDetail.branch,
             restaurant: orderDetail.restaurant,
