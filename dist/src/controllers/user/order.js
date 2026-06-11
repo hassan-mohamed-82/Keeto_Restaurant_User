@@ -197,6 +197,8 @@ const checkout = async (req, res) => {
     // ==========================================
     // 10. Execute Order (Transaction)
     // ==========================================
+    // ✅ توحيد الوقت في متغير واحد للداتابيز والإشعار والريسبونس
+    const now = new Date();
     await connection_1.db.transaction(async (tx) => {
         // أ. خصم محفظة العميل (لو الدفع محفظة)
         if (paymentMethod === "wallet" && userWallet) {
@@ -233,7 +235,8 @@ const checkout = async (req, res) => {
             serviceFee: serviceFee.toString(),
             appCommission: appCommission.toString(),
             totalAmount: totalAmount.toString(),
-            status: "pending"
+            status: "pending",
+            createdAt: now // ✅ إضافة الوقت الموحد للداتابيز
         });
         // ج. تفريغ الكارت وتسجيل الأصناف
         await tx.insert(schema_1.orderItems).values(itemsToInsert.map(i => ({ ...i, orderId })));
@@ -285,18 +288,27 @@ const checkout = async (req, res) => {
     // ==========================================
     // 11. Send Notification to Restaurant
     // ==========================================
+    // ✅ تحويل الوقت لتوقيت القاهرة عشان يظهر في نص الإشعار مضبوط
+    const cairoTimeFormatted = new Intl.DateTimeFormat("en-US", {
+        timeZone: "Africa/Cairo",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true
+    }).format(now);
     try {
         console.log(`[CHECKOUT] Sending notification to restaurant: ${restaurantId}, order: ${orderNumber}`);
         await (0, notifications_1.sendPushNotification)({
             recipientType: "restaurant",
             recipientId: restaurantId,
-            title: "New Order!",
-            body: `You have received a new order (${orderNumber}) for $${totalAmount.toFixed(2)}`,
+            title: "طلب جديد! 🛒",
+            body: `تم استلام طلب جديد #${orderNumber} بقيمة ${totalAmount.toFixed(2)} ج.م الساعة ${cairoTimeFormatted}.`,
             data: {
                 orderId,
                 orderNumber,
                 branchId: branchId || null,
-                type: "NEW_ORDER"
+                type: "new_order",
+                createdAt: now.toISOString() // ✅ توحيد الوقت في הـ Payload للفرونت إند
             }
         });
         console.log(`[CHECKOUT] Notification sent successfully for order: ${orderNumber}`);
@@ -307,7 +319,15 @@ const checkout = async (req, res) => {
     return (0, response_1.SuccessResponse)(res, {
         message: "Order created successfully",
         data: {
-            orderDetails: { orderId, orderNumber, subtotal, deliveryFee, serviceFee, totalAmount },
+            orderDetails: {
+                orderId,
+                orderNumber,
+                subtotal,
+                deliveryFee,
+                serviceFee,
+                totalAmount,
+                createdAt: now.toISOString() // ✅ إرسال نفس الوقت في الريسبونس
+            },
             customerDetails: userInfo
         }
     });
