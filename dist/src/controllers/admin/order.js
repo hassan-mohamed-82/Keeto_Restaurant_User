@@ -185,16 +185,22 @@ const getRestaurantOrderById = async (req, res) => {
     let pmDetails = null;
     const pmValue = orderDetail.order.paymentMethod;
     if (pmValue && pmValue.length === 36) {
-        const [pm] = await connection_1.db.select().from(schema_1.paymentMethods).where((0, drizzle_orm_1.eq)(schema_1.paymentMethods.id, pmValue)).limit(1);
-        if (pm) {
-            pmDetails = {
-                id: pm.id,
-                name: pm.name,
-                nameAr: pm.nameAr,
-                nameFr: pm.nameFr
-            };
+        try {
+            const [pm] = await connection_1.db.select().from(schema_1.paymentMethods).where((0, drizzle_orm_1.eq)(schema_1.paymentMethods.id, pmValue)).limit(1);
+            if (pm) {
+                pmDetails = {
+                    id: pm.id,
+                    name: pm.name,
+                    nameAr: pm.nameAr || pm.name,
+                    nameFr: pm.nameFr || pm.name
+                };
+            }
+            else {
+                pmDetails = pmValue;
+            }
         }
-        else {
+        catch (error) {
+            // Fallback in case table is missing or columns are out of sync
             pmDetails = pmValue;
         }
     }
