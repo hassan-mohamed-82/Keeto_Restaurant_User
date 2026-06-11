@@ -187,6 +187,7 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
         variationsPrice: orderItems.variationsPrice,
         totalPrice: orderItems.totalPrice,
         note: orderItems.note,
+        variations: orderItems.variations,
         foodName: food.name,
         foodNameAr: food.nameAr,
         foodNameFr: food.nameFr,
@@ -196,6 +197,38 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
         .from(orderItems)
         .leftJoin(food, eq(orderItems.foodId, food.id))
         .where(eq(orderItems.orderId, id));
+
+    // جلب بيانات وسيلة الدفع من جدول payment_methods إذا كانت UUID، أو تعيينها بناءً على الـ Enum
+    let pmDetails: any = null;
+    const pmValue = orderDetail.order.paymentMethod;
+
+    if (pmValue && pmValue.length === 36) {
+        const [pm] = await db.select().from(paymentMethods).where(eq(paymentMethods.id, pmValue)).limit(1);
+        if (pm) {
+            pmDetails = {
+                id: pm.id,
+                name: pm.name,
+                nameAr: pm.nameAr,
+                nameFr: pm.nameFr
+            };
+        } else {
+            pmDetails = pmValue;
+        }
+    } else {
+        switch (pmValue) {
+            case "cash_on_delivery":
+                pmDetails = { id: pmValue, name: "Cash on Delivery", nameAr: "الدفع عند الاستلام", nameFr: "Paiement à la livraison" };
+                break;
+            case "visa":
+                pmDetails = { id: pmValue, name: "Credit Card", nameAr: "بطاقة ائتمانية", nameFr: "Carte de crédit" };
+                break;
+            case "wallet":
+                pmDetails = { id: pmValue, name: "Wallet", nameAr: "محفظة", nameFr: "Portefeuille" };
+                break;
+            default:
+                pmDetails = pmValue;
+        }
+    }
 
     return SuccessResponse(res, {
         message: "Get order details success",
@@ -217,7 +250,7 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             customer: orderDetail.customer,
             
             // ✅ التعديل هنا: هنقرأ الـ paymentMethod من الـ order مباشرة بناءً على التعديل في الداتا بيز
-            paymentMethod: orderDetail.order.paymentMethod, 
+            paymentMethod: pmDetails, 
             
             branch: orderDetail.branch,
             restaurant: orderDetail.restaurant,

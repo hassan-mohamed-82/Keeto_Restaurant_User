@@ -116,7 +116,8 @@ const checkout = async (req, res) => {
             quantity: item.quantity,
             basePrice: basePrice.toString(),
             variationsPrice: varPrice.toString(),
-            totalPrice: itemTotal.toString()
+            totalPrice: itemTotal.toString(),
+            variations: vars
         });
     }
     const serviceFee = plan ? parseFloat(plan.serviceFee || "0") : 0;

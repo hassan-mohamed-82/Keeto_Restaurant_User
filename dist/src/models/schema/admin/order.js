@@ -67,5 +67,6 @@ exports.orderItems = (0, mysql_core_1.mysqlTable)("order_items", {
     basePrice: (0, mysql_core_1.decimal)("base_price", { precision: 10, scale: 2 }).notNull(),
     variationsPrice: (0, mysql_core_1.decimal)("variations_price", { precision: 10, scale: 2 }).default("0.00"),
     totalPrice: (0, mysql_core_1.decimal)("total_price", { precision: 10, scale: 2 }).notNull(),
+    variations: (0, mysql_core_1.json)("variations"),
     note: (0, mysql_core_1.text)("note"),
 });

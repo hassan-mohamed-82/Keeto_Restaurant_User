@@ -171,6 +171,7 @@ const getRestaurantOrderById = async (req, res) => {
         variationsPrice: schema_1.orderItems.variationsPrice,
         totalPrice: schema_1.orderItems.totalPrice,
         note: schema_1.orderItems.note,
+        variations: schema_1.orderItems.variations,
         foodName: schema_1.food.name,
         foodNameAr: schema_1.food.nameAr,
         foodNameFr: schema_1.food.nameFr,
@@ -180,6 +181,38 @@ const getRestaurantOrderById = async (req, res) => {
         .from(schema_1.orderItems)
         .leftJoin(schema_1.food, (0, drizzle_orm_1.eq)(schema_1.orderItems.foodId, schema_1.food.id))
         .where((0, drizzle_orm_1.eq)(schema_1.orderItems.orderId, id));
+    // جلب بيانات وسيلة الدفع من جدول payment_methods إذا كانت UUID، أو تعيينها بناءً على الـ Enum
+    let pmDetails = null;
+    const pmValue = orderDetail.order.paymentMethod;
+    if (pmValue && pmValue.length === 36) {
+        const [pm] = await connection_1.db.select().from(schema_1.paymentMethods).where((0, drizzle_orm_1.eq)(schema_1.paymentMethods.id, pmValue)).limit(1);
+        if (pm) {
+            pmDetails = {
+                id: pm.id,
+                name: pm.name,
+                nameAr: pm.nameAr,
+                nameFr: pm.nameFr
+            };
+        }
+        else {
+            pmDetails = pmValue;
+        }
+    }
+    else {
+        switch (pmValue) {
+            case "cash_on_delivery":
+                pmDetails = { id: pmValue, name: "Cash on Delivery", nameAr: "الدفع عند الاستلام", nameFr: "Paiement à la livraison" };
+                break;
+            case "visa":
+                pmDetails = { id: pmValue, name: "Credit Card", nameAr: "بطاقة ائتمانية", nameFr: "Carte de crédit" };
+                break;
+            case "wallet":
+                pmDetails = { id: pmValue, name: "Wallet", nameAr: "محفظة", nameFr: "Portefeuille" };
+                break;
+            default:
+                pmDetails = pmValue;
+        }
+    }
     return (0, response_1.SuccessResponse)(res, {
         message: "Get order details success",
         data: {
@@ -199,7 +232,7 @@ const getRestaurantOrderById = async (req, res) => {
             updatedAt: orderDetail.order.updatedAt,
             customer: orderDetail.customer,
             // ✅ التعديل هنا: هنقرأ الـ paymentMethod من الـ order مباشرة بناءً على التعديل في الداتا بيز
-            paymentMethod: orderDetail.order.paymentMethod,
+            paymentMethod: pmDetails,
             branch: orderDetail.branch,
             restaurant: orderDetail.restaurant,
             items

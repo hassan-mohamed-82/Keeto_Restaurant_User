@@ -1,4 +1,4 @@
-import { mysqlTable, varchar, char, timestamp, decimal, mysqlEnum, text, int } from "drizzle-orm/mysql-core";
+import { mysqlTable, varchar, char, timestamp, decimal, mysqlEnum, text, int, json } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
 import { restaurants } from "./restaurants";
 import { food } from "./food";
@@ -83,6 +83,8 @@ export const orderItems = mysqlTable("order_items", {
     variationsPrice: decimal("variations_price", { precision: 10, scale: 2 }).default("0.00"),
 
     totalPrice: decimal("total_price", { precision: 10, scale: 2 }).notNull(),
+
+    variations: json("variations"),
 
     note: text("note"),
 

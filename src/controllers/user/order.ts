@@ -141,7 +141,8 @@ export const checkout = async (req: Request | any, res: Response) => {
             quantity: item.quantity,
             basePrice: basePrice.toString(),
             variationsPrice: varPrice.toString(),
-            totalPrice: itemTotal.toString()
+            totalPrice: itemTotal.toString(),
+            variations: vars
         });
     }
 
