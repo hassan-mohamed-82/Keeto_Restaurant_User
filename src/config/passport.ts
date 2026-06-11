@@ -2,9 +2,9 @@ import { Request, Response } from "express";
 import { OAuth2Client } from "google-auth-library";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
-import { users } from "../models/schema";
+import { users, restaurant_users } from "../models/schema";
 import { db } from "../models/connection";
-import { eq, or } from "drizzle-orm";
+import { eq, or, and } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 
 dotenv.config();
@@ -12,7 +12,7 @@ dotenv.config();
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 export const verifyGoogleToken = async (req: Request, res: Response) => {
-  const { token } = req.body;
+  const { token, restaurantId } = req.body;
 
   try {
     const ticket = await client.verifyIdToken({
@@ -51,13 +51,28 @@ export const verifyGoogleToken = async (req: Request, res: Response) => {
         name,
         isVerified: true,
       });
-      user = { id: newId, name, email, googleId, phone: null, photo: null, fcmToken: null, password: null, isVerified: true, createdAt: new Date(),facebookId:null};
+      user = { id: newId, name, email, googleId, phone: null, photo: null, fcmToken: null, password: null, isVerified: true, status: "active", createdAt: new Date(), facebookId: null };
     } else {
       // 👤 Login (existing user)
       // لو المستخدم كان موجود بالإيميل بس ومفيش googleId نخزنه
       if (!user.googleId) {
         await db.update(users).set({ googleId }).where(eq(users.id, user.id));
         user.googleId = googleId;
+      }
+    }
+
+    // 🚫 Check if user is blocked
+    if (user.status === "blocked") {
+      return res.status(403).json({ success: false, message: "Your account has been blocked. Please contact support." });
+    }
+
+    // 🔗 Link to restaurant if restaurantId is provided
+    if (restaurantId) {
+      const existingLink = await db.select().from(restaurant_users)
+        .where(and(eq(restaurant_users.restaurantId, restaurantId), eq(restaurant_users.userId, user.id)))
+        .limit(1);
+      if (existingLink.length === 0) {
+        await db.insert(restaurant_users).values({ restaurantId, userId: user.id });
       }
     }
 

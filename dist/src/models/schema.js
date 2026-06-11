@@ -55,3 +55,4 @@ __exportStar(require("./schema/user/userAddHome"), exports);
 __exportStar(require("./schema/admin/popup"), exports);
 __exportStar(require("./schema/admin/notifications"), exports);
 __exportStar(require("./schema/admin/slider"), exports);
+__exportStar(require("./schema/admin/restraurant_user"), exports);
