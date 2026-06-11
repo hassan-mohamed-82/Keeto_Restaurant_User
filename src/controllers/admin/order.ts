@@ -138,6 +138,9 @@ export const getRefundOrders = async (req: Request, res: Response) => getOrdersB
 // ==========================================
 // 2. جلب تفاصيل أوردر معين بالـ ID (كامل)
 // ==========================================
+// ⚠️ متنساش تعمل Import لجداول الفارييشنز والأوبشنز بتاعتك من الـ Schema
+// import { foodVariations, foodVariationOptions } from "../../schema"; 
+
 export const getRestaurantOrderById = async (req: Request, res: Response) => {
     const { id } = req.params;
     const adminRestaurantId = req.user?.restaurantId || req.user?.id;
@@ -198,14 +201,14 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
         .leftJoin(food, eq(orderItems.foodId, food.id))
         .where(eq(orderItems.orderId, id));
 
-    // ✅ تنظيف وتعديل الـ Variations عشان ترجع JSON حقيقي بدل String
-    const formattedItems = items.map(item => {
+    // ✅ 3. تنظيف الـ Variations وجلب الأسماء من الداتابيز
+    const formattedItems = await Promise.all(items.map(async (item) => {
         let cleanVariations = item.variations;
         
+        // أ. تحويل الـ String لـ JSON لو كان مبعوت كـ String
         if (typeof cleanVariations === 'string') {
             try {
                 cleanVariations = JSON.parse(cleanVariations);
-                // معالجة الـ Double Stringify لو الفرونت إند باعتها متكررة
                 if (typeof cleanVariations === 'string') {
                     cleanVariations = JSON.parse(cleanVariations);
                 }
@@ -214,13 +217,49 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             }
         }
 
+        // ب. لو الفارييشنز عبارة عن مصفوفة، هنجيب أسماء كل فارييشن وأوبشن
+        if (Array.isArray(cleanVariations) && cleanVariations.length > 0) {
+            cleanVariations = await Promise.all(cleanVariations.map(async (v: any) => {
+                let variationName = "Unknown";
+                let variationNameAr = "غير معروف";
+                let optionName = "Unknown";
+                let optionNameAr = "غير معروف";
+
+                // استدعاء اسم الـ Variation (عدل اسم الجدول حسب اللي عندك)
+                if (v.variationId) {
+                    const [varDb] = await db.select().from(foodVariations).where(eq(foodVariations.id, v.variationId)).limit(1);
+                    if (varDb) {
+                        variationName = varDb.name || variationName;
+                        variationNameAr = varDb.nameAr || variationNameAr;
+                    }
+                }
+
+                // استدعاء اسم الـ Option (عدل اسم الجدول حسب اللي عندك)
+                if (v.optionId) {
+                    const [optDb] = await db.select().from(variationOptions).where(eq(variationOptions.id, v.optionId)).limit(1);
+                    if (optDb) {
+                        optionName = optDb.optionName || optionName;
+                        optionNameAr = optDb.optionNameAr || optionNameAr;
+                    }
+                }
+
+                return {
+                    ...v,
+                    variationName,
+                    variationNameAr,
+                    optionName,
+                    optionNameAr
+                };
+            }));
+        }
+
         return {
             ...item,
             variations: cleanVariations
         };
-    });
+    }));
 
-    // جلب بيانات وسيلة الدفع من جدول payment_methods إذا كانت UUID، أو تعيينها بناءً على الـ Enum
+    // 4. جلب بيانات وسيلة الدفع من جدول payment_methods
     let pmDetails: any = null;
     const pmValue = orderDetail.order.paymentMethod;
 
@@ -235,7 +274,8 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
                     nameFr: pm.nameFr || pm.name
                 };
             } else {
-                pmDetails = pmValue;
+                // لو مش موجود في الداتابيز، بيرجع الـ ID
+                pmDetails = pmValue; 
             }
         } catch (error) {
             console.error("Error fetching payment method:", error);
@@ -278,7 +318,7 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             paymentMethod: pmDetails, 
             branch: orderDetail.branch,
             restaurant: orderDetail.restaurant,
-            items: formattedItems // ✅ استخدام المصفوفة بعد التنظيف
+            items: formattedItems // ✅ استخدام المصفوفة بعد إضافة الأسماء
         }
     });
 };
