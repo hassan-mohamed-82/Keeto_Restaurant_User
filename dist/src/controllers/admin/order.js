@@ -535,7 +535,7 @@ const generateOrderInvoicePDF = async (req, res) => {
         .from(schema_1.orderItems)
         .leftJoin(schema_1.food, (0, drizzle_orm_1.eq)(schema_1.orderItems.foodId, schema_1.food.id))
         .where((0, drizzle_orm_1.eq)(schema_1.orderItems.orderId, orderId));
-    // تجهيز تفاصيل الفارييشنز وحساب السعر
+    // ✅ تجهيز تفاصيل الفارييشنز وحساب السعر وربطه بالاسم
     const formattedItems = await Promise.all(items.map(async (item) => {
         let cleanVariations = item.variations;
         if (typeof cleanVariations === 'string') {
@@ -546,15 +546,16 @@ const generateOrderInvoicePDF = async (req, res) => {
             }
             catch (error) { }
         }
-        let varNames = [];
+        let varDetails = [];
         let totalCalculatedVarPrice = 0;
         if (Array.isArray(cleanVariations) && cleanVariations.length > 0) {
             await Promise.all(cleanVariations.map(async (v) => {
                 if (v.optionId) {
                     const [optDb] = await connection_1.db.select().from(schema_1.variationOptions).where((0, drizzle_orm_1.eq)(schema_1.variationOptions.id, v.optionId)).limit(1);
                     if (optDb) {
-                        varNames.push(optDb.optionName || "Extra");
+                        const name = optDb.optionName || "Extra";
                         const price = parseFloat(optDb.price || optDb.additionalPrice || "0");
+                        varDetails.push({ name, price });
                         totalCalculatedVarPrice += price;
                     }
                 }
@@ -565,7 +566,7 @@ const generateOrderInvoicePDF = async (req, res) => {
         return {
             ...item,
             finalTotalPrice,
-            variationTexts: varNames
+            variationDetails: varDetails // هنحتفظ بالاسم والسعر مع بعض
         };
     }));
     // 3. جلب اسم وسيلة الدفع بدل الـ ID
@@ -618,6 +619,8 @@ const generateOrderInvoicePDF = async (req, res) => {
     const orderDate = new Date(orderDetail.order.createdAt || new Date());
     doc.text(`Date: ${orderDate.toISOString().split('T')[0]}`);
     doc.text(`Time: ${orderDate.toLocaleTimeString()}`);
+    // ✅ إضافة اسم الفرع بشكل صريح
+    doc.text(`Branch: ${orderDetail.branch?.name || 'N/A'}`);
     doc.text(`Client: ${orderDetail.customer?.name || 'Guest'}`);
     doc.text(`Phone: ${orderDetail.customer?.phone || 'N/A'}`);
     doc.text(`Order Type: ${orderDetail.order.orderType}`);
@@ -659,11 +662,16 @@ const generateOrderInvoicePDF = async (req, res) => {
         doc.text(parseFloat(item.basePrice).toFixed(2), 140, currentY, { width: 45, align: 'right' });
         doc.text(item.finalTotalPrice.toFixed(2), 185, currentY, { width: 55, align: 'right' });
         doc.y = nextY;
-        // طباعة الفارييشنز تحت الصنف بخط أصغر
-        if (item.variationTexts.length > 0) {
+        // ✅ طباعة الفارييشنز تحت الصنف مع عرض السعر تحت عمود الـ Price
+        if (item.variationDetails.length > 0) {
             doc.fontSize(8);
-            for (const vText of item.variationTexts) {
-                doc.text(`  + ${vText}`, 10, doc.y, { width: 120 });
+            for (const v of item.variationDetails) {
+                const vY = doc.y;
+                doc.text(`  + ${v.name}`, 10, vY, { width: 120 });
+                // لو الإضافة ليها سعر أكبر من 0، نطبع السعر
+                if (v.price > 0) {
+                    doc.text(v.price.toFixed(2), 140, vY, { width: 45, align: 'right' });
+                }
             }
             doc.fontSize(10);
         }
@@ -674,11 +682,11 @@ const generateOrderInvoicePDF = async (req, res) => {
     // Totals
     const subtotal = parseFloat(orderDetail.order.subtotal).toFixed(2);
     const deliveryFee = parseFloat(orderDetail.order.deliveryFee).toFixed(2);
-    const serviceFee = parseFloat(orderDetail.order.serviceFee).toFixed(2); // 👈 جلب رسوم الخدمة
+    const serviceFee = parseFloat(orderDetail.order.serviceFee).toFixed(2);
     const total = parseFloat(orderDetail.order.totalAmount).toFixed(2);
     doc.text(`Total Product Price`, 10, doc.y, { continued: true }).text(`${subtotal}`, { align: 'right' });
     doc.text(`Delivery Fee`, 10, doc.y, { continued: true }).text(`${deliveryFee}`, { align: 'right' });
-    doc.text(`Service Fee`, 10, doc.y, { continued: true }).text(`${serviceFee}`, { align: 'right' }); // 👈 إضافة سطر الـ Service Fee
+    doc.text(`Service Fee`, 10, doc.y, { continued: true }).text(`${serviceFee}`, { align: 'right' });
     doc.moveDown(0.5);
     doc.moveTo(10, doc.y).lineTo(240, doc.y).stroke();
     doc.moveDown(0.5);

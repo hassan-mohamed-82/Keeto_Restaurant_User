@@ -585,7 +585,7 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
         .leftJoin(food, eq(orderItems.foodId, food.id))
         .where(eq(orderItems.orderId, orderId));
 
-    // تجهيز تفاصيل الفارييشنز وحساب السعر
+    // ✅ تجهيز تفاصيل الفارييشنز وحساب السعر وربطه بالاسم
     const formattedItems = await Promise.all(items.map(async (item) => {
         let cleanVariations = item.variations;
         if (typeof cleanVariations === 'string') {
@@ -595,7 +595,7 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
             } catch (error) {}
         }
 
-        let varNames: string[] = [];
+        let varDetails: { name: string, price: number }[] = [];
         let totalCalculatedVarPrice = 0;
 
         if (Array.isArray(cleanVariations) && cleanVariations.length > 0) {
@@ -603,8 +603,9 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
                 if (v.optionId) {
                     const [optDb] = await db.select().from(variationOptions).where(eq(variationOptions.id, v.optionId)).limit(1);
                     if (optDb) {
-                        varNames.push(optDb.optionName || "Extra");
+                        const name = optDb.optionName || "Extra";
                         const price = parseFloat((optDb as any).price || optDb.additionalPrice || "0");
+                        varDetails.push({ name, price });
                         totalCalculatedVarPrice += price;
                     }
                 }
@@ -617,7 +618,7 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
         return {
             ...item,
             finalTotalPrice,
-            variationTexts: varNames
+            variationDetails: varDetails // هنحتفظ بالاسم والسعر مع بعض
         };
     }));
 
@@ -668,6 +669,10 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
     const orderDate = new Date(orderDetail.order.createdAt || new Date());
     doc.text(`Date: ${orderDate.toISOString().split('T')[0]}`);
     doc.text(`Time: ${orderDate.toLocaleTimeString()}`);
+    
+    // ✅ إضافة اسم الفرع بشكل صريح
+    doc.text(`Branch: ${orderDetail.branch?.name || 'N/A'}`);
+    
     doc.text(`Client: ${orderDetail.customer?.name || 'Guest'}`);
     doc.text(`Phone: ${orderDetail.customer?.phone || 'N/A'}`);
     doc.text(`Order Type: ${orderDetail.order.orderType}`);
@@ -718,11 +723,16 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
         
         doc.y = nextY;
 
-        // طباعة الفارييشنز تحت الصنف بخط أصغر
-        if (item.variationTexts.length > 0) {
+        // ✅ طباعة الفارييشنز تحت الصنف مع عرض السعر تحت عمود الـ Price
+        if (item.variationDetails.length > 0) {
             doc.fontSize(8);
-            for (const vText of item.variationTexts) {
-                doc.text(`  + ${vText}`, 10, doc.y, { width: 120 });
+            for (const v of item.variationDetails) {
+                const vY = doc.y;
+                doc.text(`  + ${v.name}`, 10, vY, { width: 120 });
+                // لو الإضافة ليها سعر أكبر من 0، نطبع السعر
+                if (v.price > 0) {
+                    doc.text(v.price.toFixed(2), 140, vY, { width: 45, align: 'right' });
+                }
             }
             doc.fontSize(10);
         }
@@ -736,12 +746,12 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
     // Totals
     const subtotal = parseFloat(orderDetail.order.subtotal as string).toFixed(2);
     const deliveryFee = parseFloat(orderDetail.order.deliveryFee as string).toFixed(2);
-    const serviceFee = parseFloat(orderDetail.order.serviceFee as string).toFixed(2); // 👈 جلب رسوم الخدمة
+    const serviceFee = parseFloat(orderDetail.order.serviceFee as string).toFixed(2);
     const total = parseFloat(orderDetail.order.totalAmount as string).toFixed(2);
 
     doc.text(`Total Product Price`, 10, doc.y, { continued: true }).text(`${subtotal}`, { align: 'right' });
     doc.text(`Delivery Fee`, 10, doc.y, { continued: true }).text(`${deliveryFee}`, { align: 'right' });
-    doc.text(`Service Fee`, 10, doc.y, { continued: true }).text(`${serviceFee}`, { align: 'right' }); // 👈 إضافة سطر الـ Service Fee
+    doc.text(`Service Fee`, 10, doc.y, { continued: true }).text(`${serviceFee}`, { align: 'right' }); 
     
     doc.moveDown(0.5);
     doc.moveTo(10, doc.y).lineTo(240, doc.y).stroke();
@@ -755,7 +765,6 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
 
     doc.end();
 };
-
 export const getallnumbersoforders = async (req: Request, res: Response) => {
     const adminRestaurantId = req.user?.restaurantId || req.user?.id;
     if (!adminRestaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
