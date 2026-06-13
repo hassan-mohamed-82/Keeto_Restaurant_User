@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { discounts, discountRestaurants } from "../../models/schema";
+import { discounts, discountRestaurants, discountFoods } from "../../models/schema";
 import { eq, and } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
@@ -18,7 +18,7 @@ export const createDiscount = async (req: Request, res: Response) => {
         name, nameAr, nameFr,
         discountType, discountValue,
         maxDiscount, minOrderAmount,
-        usageLimit, startDate, endDate, isActive
+        usageLimit, startDate, endDate, isActive, foodIds
     } = req.body;
 
     if (!name) throw new BadRequest("Discount name is required");
@@ -50,6 +50,16 @@ export const createDiscount = async (req: Request, res: Response) => {
         restaurantId: restaurantId
     });
 
+    // 3. إضافة المنتجات المحددة (إن وجدت)
+    if (foodIds && Array.isArray(foodIds) && foodIds.length > 0) {
+        const foodValues = foodIds.map((foodId: string) => ({
+            id: uuidv4(),
+            discountId: discountId,
+            foodId: foodId
+        }));
+        await db.insert(discountFoods).values(foodValues);
+    }
+
     return SuccessResponse(res, { message: "Discount created successfully", data: { id: discountId } }, 201);
 };
 
@@ -69,7 +79,17 @@ export const getAllDiscounts = async (req: Request, res: Response) => {
 
     const allDiscounts = rawData.map(row => row.discounts);
 
-    return SuccessResponse(res, { message: "Get all discounts success", data: allDiscounts });
+    const enrichedDiscounts = await Promise.all(allDiscounts.map(async (discount) => {
+        const foods = await db.select({ foodId: discountFoods.foodId })
+            .from(discountFoods)
+            .where(eq(discountFoods.discountId, discount.id));
+        return {
+            ...discount,
+            foodIds: foods.map(f => f.foodId)
+        };
+    }));
+
+    return SuccessResponse(res, { message: "Get all discounts success", data: enrichedDiscounts });
 };
 
 // ==========================================
@@ -95,7 +115,16 @@ export const getDiscountById = async (req: Request, res: Response) => {
 
     if (!rawData) throw new NotFound("Discount not found");
 
-    return SuccessResponse(res, { message: "Get discount success", data: rawData.discounts });
+    const foods = await db.select({ foodId: discountFoods.foodId })
+        .from(discountFoods)
+        .where(eq(discountFoods.discountId, rawData.discounts.id));
+
+    const result = {
+        ...rawData.discounts,
+        foodIds: foods.map(f => f.foodId)
+    };
+
+    return SuccessResponse(res, { message: "Get discount success", data: result });
 };
 
 // ==========================================
@@ -125,7 +154,7 @@ export const updateDiscount = async (req: Request, res: Response) => {
         name, nameAr, nameFr,
         discountType, discountValue,
         maxDiscount, minOrderAmount,
-        usageLimit, startDate, endDate, isActive
+        usageLimit, startDate, endDate, isActive, foodIds
     } = req.body;
 
     const updateData: any = { updatedAt: new Date() };
@@ -143,6 +172,22 @@ export const updateDiscount = async (req: Request, res: Response) => {
     if (isActive !== undefined) updateData.isActive = isActive;
 
     await db.update(discounts).set(updateData).where(eq(discounts.id, id));
+
+    // Update specific products (foods) if provided
+    if (foodIds !== undefined) {
+        // Remove existing associations
+        await db.delete(discountFoods).where(eq(discountFoods.discountId, id));
+
+        // Insert new ones if any
+        if (Array.isArray(foodIds) && foodIds.length > 0) {
+            const foodValues = foodIds.map((foodId: string) => ({
+                id: uuidv4(),
+                discountId: id,
+                foodId: foodId
+            }));
+            await db.insert(discountFoods).values(foodValues);
+        }
+    }
 
     return SuccessResponse(res, { message: "Discount updated successfully" });
 };
