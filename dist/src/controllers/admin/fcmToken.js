@@ -21,7 +21,7 @@ const updateFcmToken = async (req, res) => {
         // Main restaurant owner
         await connection_1.db.update(schema_1.restaurants)
             .set({ fcmToken })
-            .where((0, drizzle_orm_1.eq)(schema_1.restaurants.id, req.user.id));
+            .where((0, drizzle_orm_1.eq)(schema_1.restaurants.id, req.user.restaurantId));
     }
     else {
         // Sub-admin or branch manager

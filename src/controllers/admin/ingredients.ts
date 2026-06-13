@@ -13,7 +13,7 @@ import { v4 as uuidv4 } from "uuid";
 // 1. Create - إضافة مكون جديد
 export const createIngredient = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
-    const { name, categoryId } = req.body;
+    const { name, categoryId ,nameAr} = req.body;
 
     if (!restaurantId) throw new BadRequest("Unauthorized");
     if (!name || !categoryId) throw new BadRequest("Name and Category ID are required");
@@ -23,6 +23,7 @@ export const createIngredient = async (req: Request, res: Response) => {
         id, 
         restaurantId, 
         categoryId, 
+        nameAr,
         name, 
         inStock: true 
     });
@@ -38,6 +39,7 @@ export const getIngredients = async (req: Request, res: Response) => {
     const list = await db.select({
         id: ingredients.id,
         name: ingredients.name,
+        nameAr: ingredients.nameAr,
         inStock: ingredients.inStock,
         categoryId: ingredients.categoryId,
         categoryName: ingredientCategories.name
@@ -52,12 +54,13 @@ export const getIngredients = async (req: Request, res: Response) => {
 // 3. Update (Normal) - تعديل اسم المكون أو التصنيف بتاعه
 export const updateIngredient = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, categoryId } = req.body;
+    const { name, categoryId,nameAr } = req.body;
     const restaurantId = req.user?.restaurantId || req.user?.id;
 
     const updateData: any = { updatedAt: new Date() };
     if (name) updateData.name = name;
     if (categoryId) updateData.categoryId = categoryId;
+    if (nameAr) updateData.nameAr = nameAr;
 
     await db.update(ingredients)
         .set(updateData)

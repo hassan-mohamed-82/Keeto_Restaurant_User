@@ -43,8 +43,7 @@ export const food = mysqlTable("food", {
 
     is_Halal: boolean("is_Halal").default(false),
 
-    addonsId: char("addons_id", { length: 36 })
-        .references(() => addons.id),
+    addonsId: json("addons_ids").$type<string[]>().default([]),
 
     startTime: varchar("start_time", { length: 255 }).notNull(),
     endTime: varchar("end_time", { length: 255 }).notNull(),

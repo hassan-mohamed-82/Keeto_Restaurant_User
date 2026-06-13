@@ -6,6 +6,15 @@ import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors/NotFound";
 import { v4 as uuidv4 } from "uuid";
+import redis from "../../config/redis";
+
+// =============================================
+// Helper: مسح كاش الفرع والمطعم بعد أي تعديل
+// =============================================
+const invalidateBranchMenuCache = async (branchId: string, restaurantId: string) => {
+    await redis.del(`admin:branch_menu:${branchId}`);
+    await redis.del(`admin:branch_select:${restaurantId}`);
+};
 
 // =============================================
 // تعيين أكلة لفرع معين وتحديد سعرها ومخزونها
@@ -52,6 +61,7 @@ export const assignFoodToBranch = async (req: Request, res: Response) => {
             updatedAt: new Date()
         }).where(eq(branchMenuItems.id, existingBranchItem[0].id));
 
+        await invalidateBranchMenuCache(branchId, restaurantId);
         return SuccessResponse(res, { message: "Branch menu item updated successfully" });
     } else {
         // لو أول مرة تتضاف للفرع، نعمل Insert
@@ -66,6 +76,7 @@ export const assignFoodToBranch = async (req: Request, res: Response) => {
             status: status || "active",
         });
 
+        await invalidateBranchMenuCache(branchId, restaurantId);
         return SuccessResponse(res, { message: "Food assigned to branch successfully", data: { id: branchItemId } }, 201);
     }
 };
@@ -75,6 +86,13 @@ export const assignFoodToBranch = async (req: Request, res: Response) => {
 // =============================================
 export const getBranchMenu = async (req: Request, res: Response) => {
     const { branchId } = req.params;
+
+    // ✅ Redis Cache
+    const cacheKey = `admin:branch_menu:${branchId}`;
+    const cachedData = await redis.get(cacheKey);
+    if (cachedData) {
+        return SuccessResponse(res, { message: "Get branch menu success", data: JSON.parse(cachedData) });
+    }
 
     // هنجيب الداتا المتغيرة (السعر/الحالة) من جدول الفرع، وندمجها مع الداتا الثابتة من جدول الأكل
     const branchMenu = await db.select({
@@ -102,6 +120,9 @@ export const getBranchMenu = async (req: Request, res: Response) => {
     .innerJoin(food, eq(branchMenuItems.foodId, food.id)) 
     .leftJoin(categories, eq(food.categoryid, categories.id)) 
     .where(eq(branchMenuItems.branchId, branchId));
+
+    // ✅ Cache for 30 minutes
+    await redis.set(cacheKey, JSON.stringify(branchMenu), 'EX', 1800);
 
     return SuccessResponse(res, { message: "Get branch menu success", data: branchMenu });
 };
@@ -141,6 +162,9 @@ export const updateBranchMenuItem = async (req: Request, res: Response) => {
 
     await db.update(branchMenuItems).set(updateData).where(eq(branchMenuItems.id, id));
 
+    // ✅ Invalidate cache
+    await invalidateBranchMenuCache(existingItem[0].branchId, restaurantId);
+
     return SuccessResponse(res, { message: "Branch menu item updated successfully" });
 };
 
@@ -171,6 +195,9 @@ export const deleteBranchMenuItem = async (req: Request, res: Response) => {
     // 4. حذف العنصر
     await db.delete(branchMenuItems).where(eq(branchMenuItems.id, id));
 
+    // ✅ Invalidate cache
+    await invalidateBranchMenuCache(existingItem[0].branchId, restaurantId);
+
     return SuccessResponse(res, { message: "Branch menu item deleted successfully" });
 };
 
@@ -183,6 +210,13 @@ export const getRestaurantSelectData = async (req: Request, res: Response) => {
 
     if (!restaurantId) {
         throw new BadRequest("Restaurant context is missing or unauthorized");
+    }
+
+    // ✅ Redis Cache
+    const cacheKey = `admin:branch_select:${restaurantId}`;
+    const cachedData = await redis.get(cacheKey);
+    if (cachedData) {
+        return SuccessResponse(res, { message: "Select data fetched successfully", data: JSON.parse(cachedData) });
     }
 
     // تنفيذ الـ Queries في وقت واحد لسرعة الاستجابة
@@ -209,12 +243,14 @@ export const getRestaurantSelectData = async (req: Request, res: Response) => {
         .where(eq(food.restaurantid, restaurantId))
     ]);
 
+    const responseData = { branches: myBranches, foods: myFoods };
+
+    // ✅ Cache for 30 minutes
+    await redis.set(cacheKey, JSON.stringify(responseData), 'EX', 1800);
+
     return SuccessResponse(res, {
         message: "Select data fetched successfully",
-        data: {
-            branches: myBranches,
-            foods: myFoods
-        }
+        data: responseData
     });
 };
 
@@ -253,6 +289,11 @@ export const updateMasterFoodItem = async (req: Request, res: Response) => {
     await db.update(food)
         .set(updateData)
         .where(eq(food.id, id));
+
+    // ✅ Invalidate all branch menus that might contain this food
+    const branchMenuKeys = await redis.keys('admin:branch_menu:*');
+    if (branchMenuKeys.length > 0) await redis.del(...branchMenuKeys);
+    await redis.del(`admin:branch_select:${restaurantId}`);
 
     return SuccessResponse(res, { message: "Master food item updated successfully" });
 };

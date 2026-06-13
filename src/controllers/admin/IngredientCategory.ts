@@ -13,7 +13,7 @@ import { v4 as uuidv4 } from "uuid";
 // 1. Create - إضافة تصنيف جديد
 export const createIngredientCategory = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
-    const { name, status } = req.body;
+    const { name, status,nameAr } = req.body;
 
     if (!restaurantId) throw new BadRequest("Unauthorized");
     if (!name) throw new BadRequest("Category name is required");
@@ -23,6 +23,7 @@ export const createIngredientCategory = async (req: Request, res: Response) => {
         id, 
         restaurantId, 
         name, 
+        nameAr,
         status: status || "active" 
     });
 
@@ -44,12 +45,13 @@ export const getIngredientCategories = async (req: Request, res: Response) => {
 // 3. Update - تعديل اسم أو حالة التصنيف
 export const updateIngredientCategory = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, status } = req.body;
+    const { name, status,nameAr } = req.body;
     const restaurantId = req.user?.restaurantId || req.user?.id;
 
     const updateData: any = { updatedAt: new Date() };
     if (name) updateData.name = name;
-    if (status) updateData.status = status;
+    if (status !== undefined) updateData.status = status;
+    if (nameAr) updateData.nameAr = nameAr;
 
     await db.update(ingredientCategories)
         .set(updateData)

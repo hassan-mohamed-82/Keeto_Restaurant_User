@@ -14,7 +14,7 @@ const uuid_1 = require("uuid");
 dotenv_1.default.config();
 const client = new google_auth_library_1.OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 const verifyGoogleToken = async (req, res) => {
-    const { token } = req.body;
+    const { token, restaurantId } = req.body;
     try {
         const ticket = await client.verifyIdToken({
             idToken: token,
@@ -46,7 +46,7 @@ const verifyGoogleToken = async (req, res) => {
                 name,
                 isVerified: true,
             });
-            user = { id: newId, name, email, googleId, phone: null, photo: null, fcmToken: null, password: null, isVerified: true, createdAt: new Date(), facebookId: null };
+            user = { id: newId, name, email, googleId, phone: null, photo: null, fcmToken: null, password: null, isVerified: true, status: "active", createdAt: new Date(), facebookId: null };
         }
         else {
             // 👤 Login (existing user)
@@ -54,6 +54,19 @@ const verifyGoogleToken = async (req, res) => {
             if (!user.googleId) {
                 await connection_1.db.update(schema_1.users).set({ googleId }).where((0, drizzle_orm_1.eq)(schema_1.users.id, user.id));
                 user.googleId = googleId;
+            }
+        }
+        // 🚫 Check if user is blocked
+        if (user.status === "blocked") {
+            return res.status(403).json({ success: false, message: "Your account has been blocked. Please contact support." });
+        }
+        // 🔗 Link to restaurant if restaurantId is provided
+        if (restaurantId) {
+            const existingLink = await connection_1.db.select().from(schema_1.restaurant_users)
+                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.restaurant_users.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.restaurant_users.userId, user.id)))
+                .limit(1);
+            if (existingLink.length === 0) {
+                await connection_1.db.insert(schema_1.restaurant_users).values({ restaurantId, userId: user.id });
             }
         }
         // 🔑 Generate JWT

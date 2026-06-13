@@ -39,14 +39,18 @@ async function login(req, res) {
         throw new Errors_1.UnauthorizedError("Your account is deactivated. Please contact support.");
     }
     // 4. التحقق من حالة المطعم التابع له الحساب (لحماية السيستم إذا قام السوبر أدمن بحظر المطعم)
+    let restaurantName = null;
     if (user.restaurantId) {
         const [restaurant] = await connection_1.db
-            .select({ status: schema_1.restaurants.status })
+            .select({ status: schema_1.restaurants.status, name: schema_1.restaurants.name })
             .from(schema_1.restaurants)
             .where((0, drizzle_orm_1.eq)(schema_1.restaurants.id, user.restaurantId))
             .limit(1);
-        if (restaurant && restaurant.status === "inactive") {
-            throw new Errors_1.UnauthorizedError("The restaurant business is currently suspended.");
+        if (restaurant) {
+            if (restaurant.status === "inactive") {
+                throw new Errors_1.UnauthorizedError("The restaurant business is currently suspended.");
+            }
+            restaurantName = restaurant.name;
         }
     }
     // 5. جلب الـ Role إذا كان المستخدم موظفاً وله دور محدد
@@ -64,8 +68,9 @@ async function login(req, res) {
     const tokenPayload = {
         id: user.id,
         restaurantId: user.restaurantId,
-        branchId: user.branchId, // سيكون تلقائياً null في حالة الـ owner
         name: user.name,
+        restaurantName,
+        branchId: user.branchId, // سيكون تلقائياً null في حالة الـ owner
         type: user.type, // "owner" | "branch_manager" | "staff"
     };
     const token = (0, jwt_1.generateRestaurantAdminToken)(tokenPayload);
@@ -83,6 +88,7 @@ async function login(req, res) {
             status: user.status,
             type: user.type, // الـ الفرونت إند سيتعرف على المالك من خلال "owner"
             restaurantId: user.restaurantId,
+            restaurantName,
             branchId: user.branchId
         }
     }, 200);

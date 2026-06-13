@@ -13,13 +13,16 @@ import {
     getCancelledOrders,
     getRejectedOrders,
     getReasons,
-    getRefundOrders
+    getRefundOrders,
+    generateOrderInvoicePDF,
+    getallnumbersoforders
 } from "../../controllers/admin/order";
 
 const router = Router();
 
 // ✅ Get reasons - يحتاج صلاحية read
 router.get("/reasons", hasPermission("orders", "read"), catchAsync(getReasons));
+router.get("/numbers", hasPermission("orders", "read", true), catchAsync(getallnumbersoforders));
 
 // ✅ كل الأوردرات - يحتاج صلاحية read + التحقق من الفرع
 router.get("/", hasPermission("orders", "read", true), catchAsync(getRestaurantOrders));
@@ -37,7 +40,12 @@ router.get("/refund", hasPermission("orders", "read", true), catchAsync(getRefun
 // ✅ تفاصيل أوردر بالـ ID - يحتاج صلاحية read + التحقق من الفرع
 router.get("/:id", hasPermission("orders", "read", true), catchAsync(getRestaurantOrderById));
 
+// ✅ تحميل الفاتورة (Receipt PDF) للأوردر
+router.get("/:orderId/invoice", hasPermission("orders", "read", true), catchAsync(generateOrderInvoicePDF));
+
 // ✅ تحديث حالة الأوردر - يحتاج صلاحية update + التحقق من الفرع
 router.put("/:orderId", hasPermission("orders", "update", true), catchAsync(updateOrderStatus));
+
+// ✅ الحصول على أرقام جميع الأوردرات (عدادات حسب الحالة)
 
 export default router;

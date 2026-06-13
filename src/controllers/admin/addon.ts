@@ -9,8 +9,8 @@ import { v4 as uuidv4 } from "uuid";
 import { UnauthorizedError } from "../../Errors";
 
 export const createAddon = async (req: Request | any, res: Response) => {
-    if (!req.user) throw new UnauthorizedError("Unauthenticated");
-    const restaurantId = req.user.id; 
+      const restaurantId = req.user?.restaurantId || req.user?.id; 
+    if (!restaurantId) throw new BadRequest("Restaurant ID missing");
     const { name, price, stock_type, adonescategoryid, nameAr, nameFr } = req.body;
 
     if (!name || !price || !stock_type || !adonescategoryid) {
@@ -53,8 +53,8 @@ export const createAddon = async (req: Request | any, res: Response) => {
 };
 
 export const getAllAddons = async (req: Request, res: Response) => {
-    const restaurantId = req.user?.id;
-    if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
+      const restaurantId = req.user?.restaurantId || req.user?.id; 
+    if (!restaurantId) throw new BadRequest("Restaurant ID missing");
     const allAddons = await db
         .select({
             id: addons.id,
@@ -81,8 +81,8 @@ export const getAllAddons = async (req: Request, res: Response) => {
 };
 
 export const getAddonById = async (req: Request, res: Response) => {
-    const restaurantId = req.user?.id;
-    if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
+   const restaurantId = req.user?.restaurantId || req.user?.id; 
+    if (!restaurantId) throw new BadRequest("Restaurant ID missing");
     const { id } = req.params;
 
     const addon = await db
@@ -121,8 +121,10 @@ export const getAddonById = async (req: Request, res: Response) => {
 };
 
 export const updateAddon = async (req: Request, res: Response) => {
+      const restaurantId = req.user?.restaurantId || req.user?.id; 
+        if (!restaurantId) throw new BadRequest("Restaurant ID missing");
     const { id } = req.params;
-    const { name, price, stock_type, stock, adonescategoryid, restaurantid, nameAr, nameFr } = req.body;
+    const { name, price, stock_type, stock, adonescategoryid, nameAr, nameFr } = req.body;
 
     // Validate addon exists
     const existingAddon = await db
@@ -148,18 +150,7 @@ export const updateAddon = async (req: Request, res: Response) => {
         }
     }
 
-    // Validate restaurant exists if provided
-    if (restaurantid) {
-        const existingRestaurant = await db
-            .select()
-            .from(restaurants)
-            .where(eq(restaurants.id, restaurantid))
-            .limit(1);
 
-        if (!existingRestaurant[0]) {
-            throw new BadRequest("Restaurant not found");
-        }
-    }
 
     await db
         .update(addons)
@@ -170,7 +161,7 @@ export const updateAddon = async (req: Request, res: Response) => {
             price: price || existingAddon[0].price,
             stock_type: stock_type || existingAddon[0].stock_type,
             adonescategoryid: adonescategoryid || existingAddon[0].adonescategoryid,
-            restaurantid: restaurantid || existingAddon[0].restaurantid,
+            restaurantid: restaurantId,
         })
         .where(eq(addons.id, id));
 
@@ -178,6 +169,8 @@ export const updateAddon = async (req: Request, res: Response) => {
 };
 
 export const deleteAddon = async (req: Request, res: Response) => {
+      const restaurantId = req.user?.restaurantId || req.user?.id; 
+    if (!restaurantId) throw new BadRequest("Restaurant ID missing");
     const { id } = req.params;
 
     const existingAddon = await db

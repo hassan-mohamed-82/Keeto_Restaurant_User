@@ -1,4 +1,7 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.updateMasterFoodItem = exports.getRestaurantSelectData = exports.deleteBranchMenuItem = exports.updateBranchMenuItem = exports.getBranchMenu = exports.assignFoodToBranch = void 0;
 const connection_1 = require("../../models/connection");
@@ -8,6 +11,14 @@ const response_1 = require("../../utils/response");
 const BadRequest_1 = require("../../Errors/BadRequest");
 const NotFound_1 = require("../../Errors/NotFound");
 const uuid_1 = require("uuid");
+const redis_1 = __importDefault(require("../../config/redis"));
+// =============================================
+// Helper: مسح كاش الفرع والمطعم بعد أي تعديل
+// =============================================
+const invalidateBranchMenuCache = async (branchId, restaurantId) => {
+    await redis_1.default.del(`admin:branch_menu:${branchId}`);
+    await redis_1.default.del(`admin:branch_select:${restaurantId}`);
+};
 // =============================================
 // تعيين أكلة لفرع معين وتحديد سعرها ومخزونها
 // =============================================
@@ -47,6 +58,7 @@ const assignFoodToBranch = async (req, res) => {
             status: status || existingBranchItem[0].status,
             updatedAt: new Date()
         }).where((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.id, existingBranchItem[0].id));
+        await invalidateBranchMenuCache(branchId, restaurantId);
         return (0, response_1.SuccessResponse)(res, { message: "Branch menu item updated successfully" });
     }
     else {
@@ -61,6 +73,7 @@ const assignFoodToBranch = async (req, res) => {
             stockQty: stockQty || 0,
             status: status || "active",
         });
+        await invalidateBranchMenuCache(branchId, restaurantId);
         return (0, response_1.SuccessResponse)(res, { message: "Food assigned to branch successfully", data: { id: branchItemId } }, 201);
     }
 };
@@ -70,6 +83,12 @@ exports.assignFoodToBranch = assignFoodToBranch;
 // =============================================
 const getBranchMenu = async (req, res) => {
     const { branchId } = req.params;
+    // ✅ Redis Cache
+    const cacheKey = `admin:branch_menu:${branchId}`;
+    const cachedData = await redis_1.default.get(cacheKey);
+    if (cachedData) {
+        return (0, response_1.SuccessResponse)(res, { message: "Get branch menu success", data: JSON.parse(cachedData) });
+    }
     // هنجيب الداتا المتغيرة (السعر/الحالة) من جدول الفرع، وندمجها مع الداتا الثابتة من جدول الأكل
     const branchMenu = await connection_1.db.select({
         menuItemId: schema_1.branchMenuItems.id,
@@ -95,6 +114,8 @@ const getBranchMenu = async (req, res) => {
         .innerJoin(schema_1.food, (0, drizzle_orm_1.eq)(schema_1.branchMenuItems.foodId, schema_1.food.id))
         .leftJoin(schema_1.categories, (0, drizzle_orm_1.eq)(schema_1.food.categoryid, schema_1.categories.id))
         .where((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.branchId, branchId));
+    // ✅ Cache for 30 minutes
+    await redis_1.default.set(cacheKey, JSON.stringify(branchMenu), 'EX', 1800);
     return (0, response_1.SuccessResponse)(res, { message: "Get branch menu success", data: branchMenu });
 };
 exports.getBranchMenu = getBranchMenu;
@@ -131,6 +152,8 @@ const updateBranchMenuItem = async (req, res) => {
         updateData.status = status;
     updateData.updatedAt = new Date();
     await connection_1.db.update(schema_1.branchMenuItems).set(updateData).where((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.id, id));
+    // ✅ Invalidate cache
+    await invalidateBranchMenuCache(existingItem[0].branchId, restaurantId);
     return (0, response_1.SuccessResponse)(res, { message: "Branch menu item updated successfully" });
 };
 exports.updateBranchMenuItem = updateBranchMenuItem;
@@ -156,6 +179,8 @@ const deleteBranchMenuItem = async (req, res) => {
         throw new NotFound_1.NotFound("Branch not found");
     // 4. حذف العنصر
     await connection_1.db.delete(schema_1.branchMenuItems).where((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.id, id));
+    // ✅ Invalidate cache
+    await invalidateBranchMenuCache(existingItem[0].branchId, restaurantId);
     return (0, response_1.SuccessResponse)(res, { message: "Branch menu item deleted successfully" });
 };
 exports.deleteBranchMenuItem = deleteBranchMenuItem;
@@ -165,6 +190,12 @@ const getRestaurantSelectData = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) {
         throw new BadRequest_1.BadRequest("Restaurant context is missing or unauthorized");
+    }
+    // ✅ Redis Cache
+    const cacheKey = `admin:branch_select:${restaurantId}`;
+    const cachedData = await redis_1.default.get(cacheKey);
+    if (cachedData) {
+        return (0, response_1.SuccessResponse)(res, { message: "Select data fetched successfully", data: JSON.parse(cachedData) });
     }
     // تنفيذ الـ Queries في وقت واحد لسرعة الاستجابة
     const [myBranches, myFoods] = await Promise.all([
@@ -184,12 +215,12 @@ const getRestaurantSelectData = async (req, res) => {
             .from(schema_1.food)
             .where((0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId))
     ]);
+    const responseData = { branches: myBranches, foods: myFoods };
+    // ✅ Cache for 30 minutes
+    await redis_1.default.set(cacheKey, JSON.stringify(responseData), 'EX', 1800);
     return (0, response_1.SuccessResponse)(res, {
         message: "Select data fetched successfully",
-        data: {
-            branches: myBranches,
-            foods: myFoods
-        }
+        data: responseData
     });
 };
 exports.getRestaurantSelectData = getRestaurantSelectData;
@@ -223,6 +254,11 @@ const updateMasterFoodItem = async (req, res) => {
     await connection_1.db.update(schema_1.food)
         .set(updateData)
         .where((0, drizzle_orm_1.eq)(schema_1.food.id, id));
+    // ✅ Invalidate all branch menus that might contain this food
+    const branchMenuKeys = await redis_1.default.keys('admin:branch_menu:*');
+    if (branchMenuKeys.length > 0)
+        await redis_1.default.del(...branchMenuKeys);
+    await redis_1.default.del(`admin:branch_select:${restaurantId}`);
     return (0, response_1.SuccessResponse)(res, { message: "Master food item updated successfully" });
 };
 exports.updateMasterFoodItem = updateMasterFoodItem;

@@ -10,7 +10,7 @@ import { v4 as uuidv4 } from "uuid";
 import { saveBase64Image, handleImageUpdate } from "../../utils/handleImages";
 
 export const createImage = async (req: Request, res: Response) => {
-    const { img } = req.body;
+    const { img ,periorty} = req.body;
    const restaurantId = req.user?.restaurantId || req.user?.id;
 
     if (!restaurantId) {
@@ -31,13 +31,15 @@ export const createImage = async (req: Request, res: Response) => {
         id,
         restaurantid: restaurantId,
         img: result, // Use 'result' directly
+        periorty
     });
 
     return SuccessResponse(res, {
         message: "Image created successfully",
         data: {
             id,
-            img: result // Use 'result' directly
+            img: result ,// Use 'result' directly
+            periorty
         }
     }, 201);
 };
@@ -96,7 +98,7 @@ export const getImageById = async (req: Request, res: Response) => {
 
 export const updateImage = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { img } = req.body;
+    const { img,periorty } = req.body;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) {
         throw new BadRequest("Restaurant context is missing or unauthorized");
@@ -115,6 +117,7 @@ export const updateImage = async (req: Request, res: Response) => {
 
     await db.update(images).set({
         img: updatedUrl,
+        periorty:periorty,
     }).where(eq(images.id, id));
 
     return SuccessResponse(res, {

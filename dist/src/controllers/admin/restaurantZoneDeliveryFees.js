@@ -15,7 +15,7 @@ const createDeliveryFee = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
-    const { zoneId, deliveryFee, status } = req.body;
+    const { zoneId, deliveryFee, status, cityId } = req.body;
     if (!zoneId || deliveryFee === undefined) {
         throw new BadRequest_1.BadRequest("Zone ID and Delivery Fee are required");
     }
@@ -32,11 +32,15 @@ const createDeliveryFee = async (req, res) => {
     if (existingFee[0]) {
         throw new BadRequest_1.BadRequest("Delivery fee for this zone already exists for your restaurant");
     }
+    const existingCity = await connection_1.db.select().from(schema_1.cities).where((0, drizzle_orm_1.eq)(schema_1.cities.id, cityId)).limit(1);
+    if (!existingCity[0])
+        throw new BadRequest_1.BadRequest("City not found");
     const feeId = (0, uuid_1.v4)();
     await connection_1.db.insert(schema_1.restaurantZoneDeliveryFees).values({
         id: feeId,
         restaurantId, // ✅ إجبار إن الريكورد يتسجل باسم المطعم الحالي
         zoneId,
+        cityId,
         deliveryFee: deliveryFee.toString(), // يفضل تحويلها لـ string عشان الـ decimal في Drizzle
         status: status || "active",
     });
@@ -58,11 +62,18 @@ const getDeliveryFees = async (req, res) => {
         zone: {
             id: schema_1.zones.id,
             name: schema_1.zones.name, // بافتراض إن جدول الـ zones فيه حقل اسمه name
+            nameAr: schema_1.zones.nameAr
+        },
+        city: {
+            id: schema_1.cities.id,
+            name: schema_1.cities.name, // بافتراض إن جدول الـ cities فيه حقل اسمه name
+            nameAr: schema_1.cities.nameAr
         }
     })
         .from(schema_1.restaurantZoneDeliveryFees)
         // ✅ ربطنا بجدول الـ zones عشان نجيب بيانات المنطقة
         .leftJoin(schema_1.zones, (0, drizzle_orm_1.eq)(schema_1.restaurantZoneDeliveryFees.zoneId, schema_1.zones.id))
+        .leftJoin(schema_1.cities, (0, drizzle_orm_1.eq)(schema_1.restaurantZoneDeliveryFees.cityId, schema_1.cities.id))
         // ✅ فلترة: المطعم الحالي فقط
         .where((0, drizzle_orm_1.eq)(schema_1.restaurantZoneDeliveryFees.restaurantId, restaurantId));
     return (0, response_1.SuccessResponse)(res, {
@@ -87,10 +98,17 @@ const getDeliveryFeeById = async (req, res) => {
         zone: {
             id: schema_1.zones.id,
             name: schema_1.zones.name,
+            nameAr: schema_1.zones.nameAr
+        },
+        city: {
+            id: schema_1.cities.id,
+            name: schema_1.cities.name,
+            nameAr: schema_1.cities.nameAr
         }
     })
         .from(schema_1.restaurantZoneDeliveryFees)
         .leftJoin(schema_1.zones, (0, drizzle_orm_1.eq)(schema_1.restaurantZoneDeliveryFees.zoneId, schema_1.zones.id))
+        .leftJoin(schema_1.cities, (0, drizzle_orm_1.eq)(schema_1.restaurantZoneDeliveryFees.cityId, schema_1.cities.id))
         .where(
     // ✅ حماية: لازم الـ ID بتاع التسعيرة يطابق، ويكون تابع للمطعم الحالي
     (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.restaurantZoneDeliveryFees.id, id), (0, drizzle_orm_1.eq)(schema_1.restaurantZoneDeliveryFees.restaurantId, restaurantId)))
@@ -108,7 +126,7 @@ exports.getDeliveryFeeById = getDeliveryFeeById;
 // =============================================
 const updateDeliveryFee = async (req, res) => {
     const { id } = req.params;
-    const { deliveryFee, status } = req.body;
+    const { deliveryFee, status, cityId, zoneId } = req.body;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
@@ -120,11 +138,25 @@ const updateDeliveryFee = async (req, res) => {
         .limit(1);
     if (!existingFee[0])
         throw new NotFound_1.NotFound("Delivery fee not found or you don't have permission to edit it");
+    if (req.body.cityId) {
+        const existingCity = await connection_1.db.select().from(schema_1.cities).where((0, drizzle_orm_1.eq)(schema_1.cities.id, req.body.cityId)).limit(1);
+        if (!existingCity[0])
+            throw new BadRequest_1.BadRequest("City not found");
+    }
+    if (req.body.zoneId) {
+        const existingZone = await connection_1.db.select().from(schema_1.zones).where((0, drizzle_orm_1.eq)(schema_1.zones.id, req.body.zoneId)).limit(1);
+        if (!existingZone[0])
+            throw new BadRequest_1.BadRequest("Zone not found");
+    }
     const updateData = {};
     if (deliveryFee !== undefined)
         updateData.deliveryFee = deliveryFee.toString();
     if (status !== undefined)
         updateData.status = status;
+    if (cityId !== undefined)
+        updateData.cityId = cityId;
+    if (zoneId !== undefined)
+        updateData.zoneId = zoneId;
     await connection_1.db
         .update(schema_1.restaurantZoneDeliveryFees)
         .set(updateData)
@@ -156,9 +188,10 @@ const deleteDeliveryFee = async (req, res) => {
 exports.deleteDeliveryFee = deleteDeliveryFee;
 const select = async (req, res) => {
     const zonesselect = await connection_1.db.select().from(schema_1.zones).where((0, drizzle_orm_1.eq)(schema_1.zones.status, "active"));
+    const citiesselect = await connection_1.db.select().from(schema_1.cities).where((0, drizzle_orm_1.eq)(schema_1.cities.status, "active"));
     return (0, response_1.SuccessResponse)(res, {
         message: "Get delivery fees success",
-        data: zonesselect
+        data: { zonesselect, citiesselect }
     });
 };
 exports.select = select;

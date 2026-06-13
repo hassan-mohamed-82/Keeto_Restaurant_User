@@ -1,6 +1,6 @@
 import { mysqlTable, varchar, char, timestamp, mysqlEnum, json } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
-import { roles } from "./roles";
+import { role_restaurant } from "./role_restaurant";
 import { Permission } from "../../../types/custom";
 
 export const admins = mysqlTable("admins", {
@@ -10,7 +10,7 @@ export const admins = mysqlTable("admins", {
     type: mysqlEnum("type", ["super_admin", "admin"]).notNull().default("admin"),
     phoneNumber: varchar("phone_number", { length: 255 }).notNull(),
     password: varchar("password", { length: 255 }).notNull(),
-    roleId: char("role_id", { length: 36 }).references(() => roles.id),
+    roleId: char("role_id", { length: 36 }).references(() => role_restaurant.id),
     permissions: json("permissions").$type<Permission[]>().default([]),
     status: mysqlEnum("status", ["active", "inactive"]).notNull().default("active"),
     createdAt: timestamp("created_at").defaultNow(),

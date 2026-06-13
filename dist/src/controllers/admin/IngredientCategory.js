@@ -13,7 +13,7 @@ const uuid_1 = require("uuid");
 // 1. Create - إضافة تصنيف جديد
 const createIngredientCategory = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
-    const { name, status } = req.body;
+    const { name, status, nameAr } = req.body;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Unauthorized");
     if (!name)
@@ -23,6 +23,7 @@ const createIngredientCategory = async (req, res) => {
         id,
         restaurantId,
         name,
+        nameAr,
         status: status || "active"
     });
     return (0, response_1.SuccessResponse)(res, { message: "Category created successfully", data: { id } }, 201);
@@ -42,13 +43,15 @@ exports.getIngredientCategories = getIngredientCategories;
 // 3. Update - تعديل اسم أو حالة التصنيف
 const updateIngredientCategory = async (req, res) => {
     const { id } = req.params;
-    const { name, status } = req.body;
+    const { name, status, nameAr } = req.body;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     const updateData = { updatedAt: new Date() };
     if (name)
         updateData.name = name;
-    if (status)
+    if (status !== undefined)
         updateData.status = status;
+    if (nameAr)
+        updateData.nameAr = nameAr;
     await connection_1.db.update(schema_1.ingredientCategories)
         .set(updateData)
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.ingredientCategories.id, id), (0, drizzle_orm_1.eq)(schema_1.ingredientCategories.restaurantId, restaurantId)));

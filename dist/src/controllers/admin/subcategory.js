@@ -13,7 +13,8 @@ const createSubcategory = async (req, res) => {
     if (!restaurantId) {
         throw new BadRequest_1.BadRequest("Restaurant context is missing or unauthorized");
     }
-    const { name, categoryId, priority, status, nameAr, nameFr } = req.body;
+    // استقبلنا order_level و order_Level لدعم الحالتين
+    const { name, categoryId, priority, status, nameAr, nameFr, addonsIds, order_level, order_Level } = req.body;
     if (!name || !categoryId) {
         throw new BadRequest_1.BadRequest("Subcategory name and category ID are required");
     }
@@ -26,7 +27,16 @@ const createSubcategory = async (req, res) => {
     if (!existingCategory[0]) {
         throw new BadRequest_1.BadRequest("Category not found");
     }
-    // Check if subcategory already exists
+    // Validate addons
+    if (addonsIds && Array.isArray(addonsIds) && addonsIds.length > 0) {
+        const existingAddons = await connection_1.db
+            .select({ id: schema_1.addons.id })
+            .from(schema_1.addons)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.addons.restaurantid, restaurantId), (0, drizzle_orm_1.inArray)(schema_1.addons.id, addonsIds)));
+        if (existingAddons.length !== addonsIds.length) {
+            throw new BadRequest_1.BadRequest("One or more Addon IDs are invalid or do not belong to this restaurant");
+        }
+    }
     const id = (0, uuid_1.v4)();
     await connection_1.db.insert(schema_1.subcategories).values({
         id,
@@ -35,9 +45,13 @@ const createSubcategory = async (req, res) => {
         nameFr,
         categoryId,
         restaurantId: restaurantId,
+        addonsIds: addonsIds || [],
         priority: priority || "low",
+        order_Level: order_Level !== undefined ? order_Level : (order_level !== undefined ? order_level : 0),
         status: status || "active",
     });
+    // ❌ تم إزالة كود تحديث الأكل هنا لأن الـ subcategory لسه جديدة ومفيش أكل مربوط بيها لسه!
+    // الكود ده مكانه الصحيح هيكون في دالة الـ updateSubcategory
     return (0, response_1.SuccessResponse)(res, { message: "Create subcategory success", data: { id } }, 201);
 };
 exports.createSubcategory = createSubcategory;
@@ -53,7 +67,9 @@ const getAllSubcategories = async (req, res) => {
         nameAr: schema_1.subcategories.nameAr,
         nameFr: schema_1.subcategories.nameFr,
         categoryId: schema_1.subcategories.categoryId,
+        addonsIds: schema_1.subcategories.addonsIds,
         priority: schema_1.subcategories.priority,
+        order_level: schema_1.subcategories.order_Level, // إرجاعه باسم order_level
         status: schema_1.subcategories.status,
         createdAt: schema_1.subcategories.createdAt,
         updatedAt: schema_1.subcategories.updatedAt,
@@ -67,8 +83,30 @@ const getAllSubcategories = async (req, res) => {
     })
         .from(schema_1.subcategories)
         .where((0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId))
-        .leftJoin(schema_1.categories, (0, drizzle_orm_1.eq)(schema_1.subcategories.categoryId, schema_1.categories.id));
-    return (0, response_1.SuccessResponse)(res, { message: "Get all subcategories success", data: allSubcategories });
+        .leftJoin(schema_1.categories, (0, drizzle_orm_1.eq)(schema_1.subcategories.categoryId, schema_1.categories.id))
+        .orderBy((0, drizzle_orm_1.asc)(schema_1.subcategories.order_Level)); // الترتيب بناءً على orderLevel
+    // Fetch all addons for this restaurant to map them
+    const allAddons = await connection_1.db.select().from(schema_1.addons).where((0, drizzle_orm_1.eq)(schema_1.addons.restaurantid, restaurantId));
+    const dataWithAddons = allSubcategories.map(sub => {
+        let parsedAddonsIds = sub.addonsIds;
+        if (typeof sub.addonsIds === 'string') {
+            try {
+                parsedAddonsIds = JSON.parse(sub.addonsIds);
+            }
+            catch (e) {
+                parsedAddonsIds = [];
+            }
+        }
+        const subAddons = parsedAddonsIds && Array.isArray(parsedAddonsIds)
+            ? allAddons.filter(a => parsedAddonsIds.includes(a.id))
+            : [];
+        return {
+            ...sub,
+            addonsIds: parsedAddonsIds, // Ensure it's returned as an array in response
+            addons: subAddons
+        };
+    });
+    return (0, response_1.SuccessResponse)(res, { message: "Get all subcategories success", data: dataWithAddons });
 };
 exports.getAllSubcategories = getAllSubcategories;
 const getSubcategoryById = async (req, res) => {
@@ -84,7 +122,9 @@ const getSubcategoryById = async (req, res) => {
         nameAr: schema_1.subcategories.nameAr,
         nameFr: schema_1.subcategories.nameFr,
         categoryId: schema_1.subcategories.categoryId,
+        addonsIds: schema_1.subcategories.addonsIds,
         priority: schema_1.subcategories.priority,
+        order_level: schema_1.subcategories.order_Level, // إرجاعه باسم order_level
         status: schema_1.subcategories.status,
         createdAt: schema_1.subcategories.createdAt,
         updatedAt: schema_1.subcategories.updatedAt,
@@ -103,27 +143,47 @@ const getSubcategoryById = async (req, res) => {
     if (!subcategory[0]) {
         throw new NotFound_1.NotFound("Subcategory not found");
     }
-    return (0, response_1.SuccessResponse)(res, { message: "Get subcategory by id success", data: subcategory[0] });
+    const sub = subcategory[0];
+    let parsedAddonsIds = sub.addonsIds;
+    if (typeof sub.addonsIds === 'string') {
+        try {
+            parsedAddonsIds = JSON.parse(sub.addonsIds);
+        }
+        catch (e) {
+            parsedAddonsIds = [];
+        }
+    }
+    let subAddons = [];
+    if (parsedAddonsIds && Array.isArray(parsedAddonsIds) && parsedAddonsIds.length > 0) {
+        subAddons = await connection_1.db
+            .select()
+            .from(schema_1.addons)
+            .where((0, drizzle_orm_1.inArray)(schema_1.addons.id, parsedAddonsIds));
+    }
+    const dataWithAddons = {
+        ...sub,
+        addonsIds: parsedAddonsIds, // Ensure it's returned as an array in response
+        addons: subAddons
+    };
+    return (0, response_1.SuccessResponse)(res, { message: "Get subcategory by id success", data: dataWithAddons });
 };
 exports.getSubcategoryById = getSubcategoryById;
 const updateSubcategory = async (req, res) => {
-    // 1. استخراج ID المطعم
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) {
         throw new BadRequest_1.BadRequest("Restaurant context is missing or unauthorized");
     }
     const { id } = req.params;
-    const { name, categoryId, priority, status, nameAr, nameFr } = req.body;
-    // 2. التأكد إن الـ subcategory موجود ومملوك للمطعم ده
+    // استقبال order_level
+    const { name, categoryId, priority, status, nameAr, nameFr, addonsIds, order_level, order_Level } = req.body;
     const existingSubcategory = await connection_1.db
         .select()
         .from(schema_1.subcategories)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.id, id), (0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId))) // التعديل هنا
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.id, id), (0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId)))
         .limit(1);
     if (!existingSubcategory[0]) {
         throw new NotFound_1.NotFound("Subcategory not found or you don't have permission to edit it");
     }
-    // التأكد إن القسم الأساسي موجود (إذا تم تمريره)
     if (categoryId) {
         const existingCategory = await connection_1.db
             .select()
@@ -132,6 +192,15 @@ const updateSubcategory = async (req, res) => {
             .limit(1);
         if (!existingCategory[0]) {
             throw new BadRequest_1.BadRequest("Category not found");
+        }
+    }
+    if (addonsIds && Array.isArray(addonsIds) && addonsIds.length > 0) {
+        const existingAddons = await connection_1.db
+            .select({ id: schema_1.addons.id })
+            .from(schema_1.addons)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.addons.restaurantid, restaurantId), (0, drizzle_orm_1.inArray)(schema_1.addons.id, addonsIds)));
+        if (existingAddons.length !== addonsIds.length) {
+            throw new BadRequest_1.BadRequest("One or more Addon IDs are invalid or do not belong to this restaurant");
         }
     }
     const updateData = {
@@ -145,39 +214,46 @@ const updateSubcategory = async (req, res) => {
         updateData.nameFr = nameFr;
     if (categoryId)
         updateData.categoryId = categoryId;
+    if (addonsIds !== undefined)
+        updateData.addonsIds = addonsIds;
     if (priority)
         updateData.priority = priority;
+    const finalOrderLevel = order_Level !== undefined ? order_Level : order_level;
+    if (finalOrderLevel !== undefined)
+        updateData.order_Level = finalOrderLevel; // التحديث في حالة التمرير
     if (status)
         updateData.status = status;
     if (Object.keys(updateData).length === 1) {
         throw new BadRequest_1.BadRequest("No data to update");
     }
-    // 3. التحديث بشرط أن يكون الـ ID خاص بنفس المطعم
     await connection_1.db.update(schema_1.subcategories)
         .set(updateData)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.id, id), (0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId))); // التعديل هنا
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.id, id), (0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId)));
+    // ✅ لو الأدونز اتغيرت، ننشرها على كل الأكل الموجود في الساب كاتيجوري
+    if (addonsIds !== undefined) {
+        await connection_1.db.update(schema_1.food)
+            .set({ addonsId: addonsIds })
+            .where((0, drizzle_orm_1.eq)(schema_1.food.subcategoryid, id));
+    }
     return (0, response_1.SuccessResponse)(res, { message: "Update subcategory success" });
 };
 exports.updateSubcategory = updateSubcategory;
 const deleteSubcategory = async (req, res) => {
-    // 1. استخراج ID المطعم
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) {
         throw new BadRequest_1.BadRequest("Restaurant context is missing or unauthorized");
     }
     const { id } = req.params;
-    // 2. التأكد إن الـ subcategory موجود ومملوك للمطعم ده
     const existingSubcategory = await connection_1.db
         .select()
         .from(schema_1.subcategories)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.id, id), (0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId))) // التعديل هنا
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.id, id), (0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId)))
         .limit(1);
     if (!existingSubcategory[0]) {
         throw new NotFound_1.NotFound("Subcategory not found or you don't have permission to delete it");
     }
-    // 3. الحذف بشرط أن يكون الـ ID خاص بنفس المطعم
     await connection_1.db.delete(schema_1.subcategories)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.id, id), (0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId))); // التعديل هنا
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.id, id), (0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId)));
     return (0, response_1.SuccessResponse)(res, { message: "Delete subcategory success" });
 };
 exports.deleteSubcategory = deleteSubcategory;

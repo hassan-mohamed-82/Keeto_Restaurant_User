@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import PDFDocument from "pdfkit";
 import { db } from "../../models/connection";
 import {
     orders, orderItems, food, users, paymentMethods,
@@ -8,24 +9,34 @@ import {
     branches,
     restaurants,
     foodVariations,
-    variationOptions
+    variationOptions,
+    addresses,
+    zones
 } from "../../models/schema";
-import { eq, and, desc, inArray } from "drizzle-orm";
+import { eq, and, desc, inArray, sql } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors/NotFound";
 import { v4 as uuidv4 } from "uuid";
 import { selectReasons } from "../../models/schema/admin/selectReasons";
 import { sendPushNotification } from "../../utils/notifications";
+import { UnauthorizedError } from "../../Errors";
 
 // ==========================================
 // 1. جلب كل الأوردرات الخاصة بالمطعم/الفرع
 // ==========================================
 export const getRestaurantOrders = async (req: Request, res: Response) => {
-    const adminRestaurantId = req.user?.restaurantId || req.user?.id;
-    const adminBranchId = req.user?.branchId; // لو Null يبقى ده المالك
+    // ✅ التحقق من وجود req.user أولاً
+    if (!req.user) {
+        throw new UnauthorizedError("Not authenticated");
+    }
 
-    if (!adminRestaurantId) throw new BadRequest("Unauthorized");
+    const adminRestaurantId = req.user.restaurantId || req.user.id;
+    const adminBranchId = req.user.branchId; // لو Null يبقى ده المالك
+
+    if (!adminRestaurantId) {
+        throw new BadRequest("Restaurant ID not found");
+    }
 
     // بناء الـ Query الأساسي
     let queryConditions = eq(orders.restaurantId, adminRestaurantId);
@@ -35,7 +46,7 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
         queryConditions = and(queryConditions, eq(orders.branchId, adminBranchId)) as any;
     } 
     // لو ده المالك وبعت branchId في الـ Query عشان يفلتر بيه
-    else if (req.query.branchId) {
+    else if (req.query?.branchId) {
         queryConditions = and(queryConditions, eq(orders.branchId, req.query.branchId as string)) as any;
     }
 
@@ -47,6 +58,7 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
         orderType: orders.orderType,
         totalAmount: orders.totalAmount,
         status: orders.status,
+        note: orders.note,
         createdAt: orders.createdAt,
     })
         .from(orders)
@@ -61,10 +73,17 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
 // Helper: جلب أوردرات بحالة معينة
 // ==========================================
 const getOrdersByStatus = async (req: Request, res: Response, status: "pending" | "accepted" | "preparing" | "out_for_delivery" | "delivered" | "cancelled" | "rejected" | "refund") => {
-    const adminRestaurantId = req.user?.restaurantId || req.user?.id;
-    const adminBranchId = req.user?.branchId;
+    // ✅ التحقق من وجود req.user أولاً
+    if (!req.user) {
+        throw new UnauthorizedError("Not authenticated");
+    }
 
-    if (!adminRestaurantId) throw new BadRequest("Unauthorized");
+    const adminRestaurantId = req.user.restaurantId || req.user.id;
+    const adminBranchId = req.user.branchId;
+
+    if (!adminRestaurantId) {
+        throw new BadRequest("Restaurant ID not found");
+    }
 
     const conditions: any[] = [
         eq(orders.restaurantId, adminRestaurantId),
@@ -76,7 +95,7 @@ const getOrdersByStatus = async (req: Request, res: Response, status: "pending" 
         conditions.push(eq(orders.branchId, adminBranchId));
     } 
     // لو ده المالك وبعت branchId يفلتر بيه
-    else if (req.query.branchId) {
+    else if (req.query?.branchId) {
         conditions.push(eq(orders.branchId, req.query.branchId as string));
     }
 
@@ -91,6 +110,7 @@ const getOrdersByStatus = async (req: Request, res: Response, status: "pending" 
         deliveryFee: orders.deliveryFee,
         totalAmount: orders.totalAmount,
         status: orders.status,
+        note: orders.note,
         branchName: branches.name,
         createdAt: orders.createdAt,
     })
@@ -166,6 +186,8 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
         basePrice: orderItems.basePrice,
         variationsPrice: orderItems.variationsPrice,
         totalPrice: orderItems.totalPrice,
+        note: orderItems.note,
+        variations: orderItems.variations,
         foodName: food.name,
         foodNameAr: food.nameAr,
         foodNameFr: food.nameFr,
@@ -176,6 +198,112 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
         .leftJoin(food, eq(orderItems.foodId, food.id))
         .where(eq(orderItems.orderId, id));
 
+    // ✅ 3. تنظيف الـ Variations وجلب الأسماء وحساب السعر ديناميكياً
+    const formattedItems = await Promise.all(items.map(async (item) => {
+        let cleanVariations = item.variations;
+        
+        if (typeof cleanVariations === 'string') {
+            try {
+                cleanVariations = JSON.parse(cleanVariations);
+                if (typeof cleanVariations === 'string') {
+                    cleanVariations = JSON.parse(cleanVariations);
+                }
+            } catch (error) {
+                console.error("Error parsing variations for item ID:", item.id);
+            }
+        }
+
+        let totalCalculatedVarPrice = 0;
+
+        if (Array.isArray(cleanVariations) && cleanVariations.length > 0) {
+            cleanVariations = await Promise.all(cleanVariations.map(async (v: any) => {
+                let variationName = "Unknown";
+                let variationNameAr = "غير معروف";
+                let optionName = "Unknown";
+                let optionNameAr = "غير معروف";
+
+                if (v.variationId) {
+                    const [varDb] = await db.select().from(foodVariations).where(eq(foodVariations.id, v.variationId)).limit(1);
+                    if (varDb) {
+                        variationName = varDb.name || variationName;
+                        variationNameAr = varDb.nameAr || variationNameAr;
+                    }
+                }
+
+                if (v.optionId) {
+                    const [optDb] = await db.select().from(variationOptions).where(eq(variationOptions.id, v.optionId)).limit(1);
+                    if (optDb) {
+                        optionName = optDb.optionName || optionName;
+                        optionNameAr = optDb.optionNameAr || optionNameAr;
+                        
+                        // 💰 جلب سعر الفارييشن
+                        const price = parseFloat((optDb as any).price || optDb.additionalPrice || "0");
+                        totalCalculatedVarPrice += price;
+                    }
+                }
+
+                return {
+                    ...v,
+                    variationName,
+                    variationNameAr,
+                    optionName,
+                    optionNameAr
+                };
+            }));
+        }
+
+        const finalVarPrice = parseFloat(item.variationsPrice || "0") > 0 ? parseFloat(item.variationsPrice || "0") : totalCalculatedVarPrice;
+        const finalTotalPrice = (parseFloat(item.basePrice || "0") + finalVarPrice) * item.quantity;
+
+        return {
+            ...item,
+            variationsPrice: finalVarPrice.toFixed(2),
+            totalPrice: finalTotalPrice.toFixed(2),
+            variations: cleanVariations
+        };
+    }));
+
+    // 4. جلب بيانات وسيلة الدفع من جدول payment_methods
+    let pmDetails: any = null;
+    const pmValue = orderDetail.order.paymentMethod;
+
+    if (pmValue && pmValue.length === 36) {
+        try {
+            const [pm] = await db.select({
+                id: paymentMethods.id,
+                name: paymentMethods.name,
+                nameAr: paymentMethods.nameAr 
+            }).from(paymentMethods).where(eq(paymentMethods.id, pmValue)).limit(1);
+            
+            if (pm) {
+                pmDetails = {
+                    id: pm.id,
+                    name: pm.name,
+                    nameAr: pm.nameAr,
+                };
+            } else {
+                pmDetails = { id: pmValue, name: "Unknown", nameAr: "غير معروف" };
+            }
+        } catch (error) {
+            console.error("Error fetching payment method:", error);
+            pmDetails = { id: pmValue, name: "Unknown", nameAr: "غير معروف" };
+        }
+    } else {
+        switch (pmValue) {
+            case "cash_on_delivery":
+                pmDetails = { id: pmValue, name: "Cash on Delivery", nameAr: "الدفع عند الاستلام", nameFr: "Paiement à la livraison" };
+                break;
+            case "visa":
+                pmDetails = { id: pmValue, name: "Credit Card", nameAr: "بطاقة", nameFr: "Carte de crédit" };
+                break;
+            case "wallet":
+                pmDetails = { id: pmValue, name: "Wallet", nameAr: "محفظتي", nameFr: "Portefeuille" };
+                break;
+            default:
+                pmDetails = { id: pmValue, name: pmValue, nameAr: pmValue };
+        }
+    }
+
     return SuccessResponse(res, {
         message: "Get order details success",
         data: {
@@ -185,6 +313,7 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             orderSource: orderDetail.order.orderSource,
             status: orderDetail.order.status,
             cancelReason: orderDetail.order.cancelReason,
+            note: orderDetail.order.note,
             subtotal: orderDetail.order.subtotal,
             deliveryFee: orderDetail.order.deliveryFee,
             serviceFee: orderDetail.order.serviceFee,
@@ -194,12 +323,14 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             updatedAt: orderDetail.order.updatedAt,
             customer: orderDetail.customer,
             
-            // ✅ التعديل هنا: هنقرأ الـ paymentMethod من الـ order مباشرة بناءً على التعديل في الداتا بيز
-            paymentMethod: orderDetail.order.paymentMethod, 
+            // ✅ فصلنا الداتا عشان الرياكت ميضربش ويقرأ الـ ID زي ما هو متعود
+            paymentMethod: typeof pmDetails === "object" && pmDetails !== null ? pmDetails.id : pmDetails,
+            paymentMethodName: typeof pmDetails === "object" && pmDetails !== null ? pmDetails.name : pmDetails,
+            paymentMethodNameAr: typeof pmDetails === "object" && pmDetails !== null ? pmDetails.nameAr : pmDetails,
             
             branch: orderDetail.branch,
             restaurant: orderDetail.restaurant,
-            items
+            items: formattedItems
         }
     });
 };
@@ -227,12 +358,32 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
     if (existingOrder.restaurantId !== adminRestaurantId) throw new BadRequest("Unauthorized");
     if (adminBranchId && existingOrder.branchId !== adminBranchId) throw new BadRequest("Unauthorized");
 
-    // 🛡️ حماية مالية: منع تكرار العملية لو الطلب متسلم أو ملغي مسبقاً
-    if (existingOrder.status === "delivered" && status === "delivered") {
-        throw new BadRequest("Order is already delivered and settled");
+    const currentStatus = existingOrder.status as string;
+
+    // 🛡️ حماية ضد التغيير بعد الوصول لحالة نهائية
+    const finalStatuses = ["delivered", "cancelled", "rejected", "refund"];
+    if (finalStatuses.includes(currentStatus)) {
+        throw new BadRequest(`Order is already ${currentStatus} and cannot be changed`);
     }
-    if ((existingOrder.status === "cancelled" || existingOrder.status === "rejected") && (status === "cancelled" || status === "rejected")) {
-        throw new BadRequest("Order is already cancelled/rejected");
+
+    // 🛡️ حماية ضد الرجوع خطوة للوراء في مسار الطلب
+    const statusFlowOrder: Record<string, number> = {
+        "pending": 1,
+        "accepted": 2,
+        "preparing": 3,
+        "out_for_delivery": 4,
+        "delivered": 5,
+    };
+
+    if (statusFlowOrder[currentStatus] && statusFlowOrder[status]) {
+        if (statusFlowOrder[status] === statusFlowOrder[currentStatus]) {
+            throw new BadRequest(`Order is already ${currentStatus}`);
+        }
+        if (statusFlowOrder[status] < statusFlowOrder[currentStatus]) {
+            throw new BadRequest(`Cannot revert status from ${currentStatus} to ${status}`);
+        }
+    } else if (currentStatus === status) {
+        throw new BadRequest(`Order is already ${currentStatus}`);
     }
 
     // Transaction لتحديث الحالة وتنفيذ العمليات المالية
@@ -369,5 +520,282 @@ export const getReasons = async (req: Request, res: Response) => {
     return SuccessResponse(res, { 
         message: "Active reasons fetched successfully", 
         data: reasons 
+    });
+};
+
+// ==========================================
+// 5. إنشاء فاتورة (PDF) لطلب معين
+// ==========================================
+export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
+    const { orderId } = req.params;
+    const adminRestaurantId = req.user?.restaurantId || req.user?.id;
+    const adminBranchId = req.user?.branchId;
+
+    // 1. جلب البيانات الأساسية للأوردر
+    const [orderDetail] = await db.select({
+        order: orders,
+        customer: {
+            id: users.id,
+            name: users.name,
+            phone: users.phone,
+        },
+        branch: {
+            id: branches.id,
+            name: branches.name,
+        },
+        restaurant: {
+            id: restaurants.id,
+            name: restaurants.name,
+        },
+        address: addresses,
+        zone: {
+            name: zones.name
+        }
+    })
+        .from(orders)
+        .leftJoin(users, eq(orders.userId, users.id))
+        .leftJoin(branches, eq(orders.branchId, branches.id))
+        .leftJoin(restaurants, eq(orders.restaurantId, restaurants.id))
+        .leftJoin(addresses, eq(orders.addressId, addresses.id))
+        .leftJoin(zones, eq(addresses.zoneId, zones.id))
+        .where(eq(orders.id, orderId))
+        .limit(1);
+
+    if (!orderDetail) throw new NotFound("Order not found");
+
+    // 🛡️ حماية الصلاحيات
+    if (orderDetail.order.restaurantId !== adminRestaurantId) {
+        throw new BadRequest("Unauthorized: Order does not belong to your restaurant");
+    }
+    if (adminBranchId && orderDetail.order.branchId !== adminBranchId) {
+        throw new BadRequest("Unauthorized: Order does not belong to your branch");
+    }
+
+    // 2. جلب أصناف الأكل والتفاصيل (Variations)
+    const items = await db.select({
+        quantity: orderItems.quantity,
+        basePrice: orderItems.basePrice,
+        variationsPrice: orderItems.variationsPrice,
+        totalPrice: orderItems.totalPrice,
+        variations: orderItems.variations,
+        foodName: food.name,
+        foodNameAr: food.nameAr,
+    })
+        .from(orderItems)
+        .leftJoin(food, eq(orderItems.foodId, food.id))
+        .where(eq(orderItems.orderId, orderId));
+
+    // تجهيز تفاصيل الفارييشنز وحساب السعر وربطه بالاسم
+    const formattedItems = await Promise.all(items.map(async (item) => {
+        let cleanVariations = item.variations;
+        if (typeof cleanVariations === 'string') {
+            try {
+                cleanVariations = JSON.parse(cleanVariations);
+                if (typeof cleanVariations === 'string') cleanVariations = JSON.parse(cleanVariations);
+            } catch (error) {}
+        }
+
+        let varDetails: { name: string, price: number }[] = [];
+        let totalCalculatedVarPrice = 0;
+
+        if (Array.isArray(cleanVariations) && cleanVariations.length > 0) {
+            await Promise.all(cleanVariations.map(async (v: any) => {
+                if (v.optionId) {
+                    const [optDb] = await db.select().from(variationOptions).where(eq(variationOptions.id, v.optionId)).limit(1);
+                    if (optDb) {
+                        const name = optDb.optionName || "Extra";
+                        const price = parseFloat((optDb as any).price || optDb.additionalPrice || "0");
+                        varDetails.push({ name, price });
+                        totalCalculatedVarPrice += price;
+                    }
+                }
+            }));
+        }
+
+        const finalVarPrice = parseFloat(item.variationsPrice as string || "0") > 0 ? parseFloat(item.variationsPrice as string || "0") : totalCalculatedVarPrice;
+        const finalTotalPrice = (parseFloat(item.basePrice as string || "0") + finalVarPrice) * item.quantity;
+
+        return {
+            ...item,
+            finalTotalPrice,
+            variationDetails: varDetails 
+        };
+    }));
+
+    // 3. جلب اسم وسيلة الدفع بدل الـ ID
+    let paymentName = "Unknown";
+    const pmValue = orderDetail.order.paymentMethod;
+
+    if (pmValue && pmValue.length === 36) {
+        try {
+            const [pm] = await db.select({ name: paymentMethods.name }).from(paymentMethods).where(eq(paymentMethods.id, pmValue)).limit(1);
+            if (pm) paymentName = pm.name;
+            else paymentName = pmValue;
+        } catch (error) {
+            console.error("Error fetching payment method for PDF:", error);
+            paymentName = "Cash"; 
+        }
+    } else {
+        switch (pmValue) {
+            case "cash_on_delivery": paymentName = "Cash on Delivery"; break;
+            case "visa": paymentName = "Credit Card"; break;
+            case "wallet": paymentName = "Wallet"; break;
+            default: paymentName = pmValue || "Unknown";
+        }
+    }
+
+    // 4. إنشاء الـ PDF بحجم إيصال حراري
+    const doc = new PDFDocument({ margin: 20, size: [250, 600] });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="Receipt_${orderDetail.order.orderNumber}.pdf"`);
+
+    doc.pipe(res);
+
+    // Header
+    doc.fontSize(16).text(orderDetail.restaurant?.name || 'Restaurant', { align: 'center' });
+    if (orderDetail.branch?.name) {
+        doc.fontSize(12).text(orderDetail.branch.name, { align: 'center' });
+    }
+    
+    doc.moveDown(0.5);
+    doc.moveTo(10, doc.y).lineTo(240, doc.y).dash(2, { space: 2 }).stroke();
+    doc.undash();
+    doc.moveDown(0.5);
+
+    // Order Info
+    doc.fontSize(10);
+    doc.text(`Order #: ${orderDetail.order.orderNumber}`);
+    
+    const orderDate = new Date(orderDetail.order.createdAt || new Date());
+    
+    // ✅ تحويل الوقت والتاريخ لتوقيت القاهرة بشكل صريح
+    const cairoTimeStr = orderDate.toLocaleTimeString("en-US", { timeZone: "Africa/Cairo" });
+    const cairoDateStr = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo", year: "numeric", month: "2-digit", day: "2-digit" }).format(orderDate);
+
+    doc.text(`Date: ${cairoDateStr}`);
+    doc.text(`Time: ${cairoTimeStr}`);
+    
+    doc.text(`Branch: ${orderDetail.branch?.name || 'N/A'}`);
+    doc.text(`Client: ${orderDetail.customer?.name || 'Guest'}`);
+    doc.text(`Phone: ${orderDetail.customer?.phone || 'N/A'}`);
+    doc.text(`Order Type: ${orderDetail.order.orderType}`);
+    doc.text(`Payment: ${paymentName}`);
+    
+    doc.moveDown(0.5);
+    doc.moveTo(10, doc.y).lineTo(240, doc.y).dash(2, { space: 2 }).stroke();
+    doc.undash();
+    doc.moveDown(0.5);
+
+    // Delivery Address if applicable
+    if (orderDetail.order.orderType === 'delivery' && orderDetail.address) {
+        doc.text('Delivery Address:', { underline: true });
+        doc.text(`Zone: ${orderDetail.zone?.name || ''}`);
+        doc.text(`Street: ${orderDetail.address.street || ''}`);
+        let details = `Bldg: ${orderDetail.address.number || ''}`;
+        if (orderDetail.address.floor) details += ` | Floor: ${orderDetail.address.floor}`;
+        doc.text(details);
+        
+        doc.moveDown(0.5);
+        doc.moveTo(10, doc.y).lineTo(240, doc.y).dash(2, { space: 2 }).stroke();
+        doc.undash();
+        doc.moveDown(0.5);
+    }
+
+    // Items Header
+    const itemStartY = doc.y;
+    doc.text('Item', 10, itemStartY, { width: 100 });
+    doc.text('Qty', 110, itemStartY, { width: 30, align: 'right' });
+    doc.text('Price', 140, itemStartY, { width: 45, align: 'right' });
+    doc.text('Total', 185, itemStartY, { width: 55, align: 'right' });
+    doc.moveDown(0.2);
+    
+    doc.moveTo(10, doc.y).lineTo(240, doc.y).stroke();
+    doc.moveDown(0.5);
+
+    // Items Loop
+    for (const item of formattedItems) {
+        const currentY = doc.y;
+        const name = item.foodName || item.foodNameAr || 'Item';
+        
+        doc.text(name, 10, currentY, { width: 100 });
+        const nextY = doc.y;
+        
+        doc.text(item.quantity.toString(), 110, currentY, { width: 30, align: 'right' });
+        doc.text(parseFloat(item.basePrice as string).toFixed(2), 140, currentY, { width: 45, align: 'right' });
+        doc.text(item.finalTotalPrice.toFixed(2), 185, currentY, { width: 55, align: 'right' });
+        
+        doc.y = nextY;
+
+        // طباعة الفارييشنز تحت الصنف مع عرض السعر
+        if (item.variationDetails.length > 0) {
+            doc.fontSize(8);
+            for (const v of item.variationDetails) {
+                const vY = doc.y;
+                doc.text(`  + ${v.name}`, 10, vY, { width: 120 });
+                if (v.price > 0) {
+                    doc.text(v.price.toFixed(2), 140, vY, { width: 45, align: 'right' });
+                }
+            }
+            doc.fontSize(10);
+        }
+        
+        doc.moveDown(0.5);
+    }
+
+    doc.moveTo(10, doc.y).lineTo(240, doc.y).stroke();
+    doc.moveDown(0.5);
+
+    // Totals
+    const subtotal = parseFloat(orderDetail.order.subtotal as string).toFixed(2);
+    const deliveryFee = parseFloat(orderDetail.order.deliveryFee as string).toFixed(2);
+    const serviceFee = parseFloat(orderDetail.order.serviceFee as string).toFixed(2);
+    const total = parseFloat(orderDetail.order.totalAmount as string).toFixed(2);
+
+    doc.text(`Total Product Price`, 10, doc.y, { continued: true }).text(`${subtotal}`, { align: 'right' });
+    doc.text(`Delivery Fee`, 10, doc.y, { continued: true }).text(`${deliveryFee}`, { align: 'right' });
+    doc.text(`Service Fee`, 10, doc.y, { continued: true }).text(`${serviceFee}`, { align: 'right' }); 
+    
+    doc.moveDown(0.5);
+    doc.moveTo(10, doc.y).lineTo(240, doc.y).stroke();
+    doc.moveDown(0.5);
+
+    doc.fontSize(14).text(`Grand Total`, 10, doc.y, { continued: true }).text(`${total}`, { align: 'right' });
+
+    doc.moveDown(1);
+    doc.fontSize(10).text('Thank you for your order', { align: 'center' });
+    doc.fontSize(8).text('Powered by Systego', { align: 'center' });
+
+    doc.end();
+};
+
+export const getallnumbersoforders = async (req: Request, res: Response) => {
+    const adminRestaurantId = req.user?.restaurantId || req.user?.id;
+    if (!adminRestaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
+
+    const statusCountsResult = await db
+        .select({
+            status: orders.status,
+            count: sql<number>`count(${orders.id})`,
+        })
+        .from(orders)
+        .where(eq(orders.restaurantId, adminRestaurantId))
+        .groupBy(orders.status);
+
+    const totalOrders = statusCountsResult.reduce((acc, curr) => acc + Number(curr.count), 0);
+
+    // Format the status counts as an object for easier consumption
+    const statusCounts = statusCountsResult.reduce((acc, curr) => {
+        if (curr.status) {
+            acc[curr.status] = Number(curr.count);
+        }
+        return acc;
+    }, {} as Record<string, number>);
+
+    return SuccessResponse(res, { 
+        data: {
+            totalOrders,
+            statusCounts
+        } 
     });
 };

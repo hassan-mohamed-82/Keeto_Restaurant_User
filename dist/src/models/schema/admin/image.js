@@ -10,6 +10,7 @@ exports.images = (0, mysql_core_1.mysqlTable)("images", {
         .references(() => restaurants_1.restaurants.id)
         .notNull(),
     img: (0, mysql_core_1.varchar)("img", { length: 500 }).notNull(),
+    periorty: (0, mysql_core_1.int)("periorty").default(0),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow().onUpdateNow(),
 });

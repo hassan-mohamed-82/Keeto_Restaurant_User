@@ -15,6 +15,8 @@ router.get("/", hasPermission("admins", "read"), catchAsync(getAllStaff));
 // ✅ Update FCM token - لا يحتاج صلاحيات (كل واحد يقدر يحدث token بتاعه)
 router.put("/fcm-token", catchAsync(updateFcmToken));
 
+router.get("/:id", hasPermission("admins", "read"), catchAsync(getStaffById));
+
 // ✅ Update staff - يحتاج صلاحية update
 router.put("/:id", hasPermission("admins", "update"), catchAsync(updateStaff));
 

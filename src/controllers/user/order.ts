@@ -6,7 +6,7 @@ import {
     restaurantWallets, restaurantWalletTransactions, // 👈 ضفنا جداول محفظة المطعم
     restaurantZoneDeliveryFees, zoneDeliveryFees, restaurantSettings, 
     restaurantSchedules, cartItems, users, addresses, branches,
-    userWallets, userWalletTransactions 
+    userWallets, userWalletTransactions, foodVariations, variationOptions
 } from "../../models/schema";
 import { eq, and, inArray, sql, desc } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
@@ -124,24 +124,46 @@ export const checkout = async (req: Request | any, res: Response) => {
     const itemsToInsert: any[] = [];
 
     for (const item of userCart) {
-        const basePrice = parseFloat(item.unitPrice as string || "0");
         let varPrice = 0;
-
+        let finalVariationsSnapshot: any[] = [];
         const vars = typeof item.variations === 'string' ? JSON.parse(item.variations) : item.variations;
+        
         if (Array.isArray(vars)) {
-            varPrice = vars.reduce((sum, v) => sum + parseFloat(v.additionalPrice || "0"), 0);
+            for (const v of vars) {
+                if (!v.variationId || !v.optionId) continue;
+                const [variation] = await db.select().from(foodVariations).where(eq(foodVariations.id, v.variationId)).limit(1);
+                const [option] = await db.select().from(variationOptions).where(eq(variationOptions.id, v.optionId)).limit(1);
+                
+                if (variation && option) {
+                    const price = parseFloat(option.additionalPrice as string || "0");
+                    varPrice += price;
+                    finalVariationsSnapshot.push({
+                        variationId: variation.id,
+                        variationName: variation.name,
+                        variationNameAr: variation.nameAr,
+                        optionId: option.id,
+                        optionName: option.optionName,
+                        optionNameAr: option.optionNameAr,
+                        additionalPrice: price.toString()
+                    });
+                }
+            }
         }
 
-        const itemTotal = (basePrice + varPrice) * item.quantity;
+        const totalItemUnitPrice = parseFloat(item.unitPrice as string || "0");
+        // unitPrice in cart already includes variations, so real basePrice is unitPrice - varPrice
+        const realBasePrice = totalItemUnitPrice - varPrice;
+        const itemTotal = totalItemUnitPrice * item.quantity;
         subtotal += itemTotal;
 
         itemsToInsert.push({
             id: uuidv4(),
             foodId: item.foodId,
             quantity: item.quantity,
-            basePrice: basePrice.toString(),
+            basePrice: realBasePrice.toString(),
             variationsPrice: varPrice.toString(),
-            totalPrice: itemTotal.toString()
+            totalPrice: itemTotal.toString(),
+            variations: JSON.stringify(finalVariationsSnapshot)
         });
     }
 
@@ -220,6 +242,10 @@ export const checkout = async (req: Request | any, res: Response) => {
     // ==========================================
     // 10. Execute Order (Transaction)
     // ==========================================
+    
+    // ✅ توحيد الوقت في متغير واحد للداتابيز والإشعار والريسبونس
+    const now = new Date(); 
+
     await db.transaction(async (tx) => {
         
         // أ. خصم محفظة العميل (لو الدفع محفظة)
@@ -260,7 +286,8 @@ export const checkout = async (req: Request | any, res: Response) => {
             serviceFee: serviceFee.toString(),
             appCommission: appCommission.toString(),
             totalAmount: totalAmount.toString(),
-            status: "pending"
+            status: "pending",
+            createdAt: now // ✅ إضافة الوقت الموحد للداتابيز
         });
 
         // ج. تفريغ الكارت وتسجيل الأصناف
@@ -320,22 +347,50 @@ export const checkout = async (req: Request | any, res: Response) => {
     // ==========================================
     // 11. Send Notification to Restaurant
     // ==========================================
-    await sendPushNotification({
-        recipientType: "restaurant",
-        recipientId: restaurantId,
-        title: "New Order!",
-        body: `You have received a new order (${orderNumber}) for $${totalAmount.toFixed(2)}`,
-        data: {
-            orderId,
-            orderNumber,
-            type: "NEW_ORDER"
-        }
-    });
+    
+    // ✅ تحويل الوقت لتوقيت القاهرة عشان يظهر في نص الإشعار مضبوط
+    const cairoTimeFormatted = new Intl.DateTimeFormat("en-US", {
+        timeZone: "Africa/Cairo",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true
+    }).format(now);
+
+    try {
+        console.log(`[CHECKOUT] Sending notification to restaurant: ${restaurantId}, order: ${orderNumber}`);
+        
+        await sendPushNotification({
+            recipientType: "restaurant",
+            recipientId: restaurantId,
+            title: "طلب جديد! 🛒",
+            body: `تم استلام طلب جديد #${orderNumber} بقيمة ${totalAmount.toFixed(2)} ج.م الساعة ${cairoTimeFormatted}.`,
+            data: {
+                orderId,
+                orderNumber,
+                branchId: branchId || null,
+                type: "new_order",
+                createdAt: now.toISOString() // ✅ توحيد الوقت في הـ Payload للفرونت إند
+            }
+        });
+        
+        console.log(`[CHECKOUT] Notification sent successfully for order: ${orderNumber}`);
+    } catch (notifError) {
+        console.error(`[CHECKOUT] Failed to send notification for order ${orderNumber}:`, notifError);
+    }
 
     return SuccessResponse(res, {
         message: "Order created successfully",
         data: {
-            orderDetails: { orderId, orderNumber, subtotal, deliveryFee, serviceFee, totalAmount },
+            orderDetails: { 
+                orderId, 
+                orderNumber, 
+                subtotal, 
+                deliveryFee, 
+                serviceFee, 
+                totalAmount,
+                createdAt: now.toISOString() // ✅ إرسال نفس الوقت في الريسبونس
+            },
             customerDetails: userInfo
         }
     });
@@ -354,6 +409,7 @@ export const getActiveOrders = async (req: Request | any, res: Response) => {
             restaurantImage: restaurants.logo,
             totalAmount: orders.totalAmount,
             status: orders.status,
+            note: orders.note,
             createdAt: orders.createdAt,
             itemsCount: sql<number>`(SELECT COUNT(*) FROM order_items WHERE order_items.order_id = ${orders.id})`
         })
@@ -385,6 +441,7 @@ export const getOrderHistory = async (req: Request | any, res: Response) => {
             restaurantImage: restaurants.logo,
             totalAmount: orders.totalAmount,
             status: orders.status, 
+            note: orders.note,
             createdAt: orders.createdAt,
             itemsCount: sql<number>`(SELECT COUNT(*) FROM order_items WHERE order_items.order_id = ${orders.id})`
         })
@@ -418,6 +475,7 @@ export const getOrderDetails = async (req: Request | any, res: Response) => {
             createdAt: orders.createdAt,
             paymentMethod: orders.paymentMethod, // 👈 تم التعديل هنا (كانت orderItems بالخطأ)
             orderType: orders.orderType,
+            note: orders.note,
 
             subtotal: orders.subtotal,
             deliveryFee: orders.deliveryFee,
@@ -443,7 +501,8 @@ export const getOrderDetails = async (req: Request | any, res: Response) => {
             quantity: orderItems.quantity,
             basePrice: orderItems.basePrice,
             variationsPrice: orderItems.variationsPrice,
-            totalPrice: orderItems.totalPrice
+            totalPrice: orderItems.totalPrice,
+            note: orderItems.note
         })
         .from(orderItems)
         .leftJoin(food, eq(orderItems.foodId, food.id))

@@ -9,7 +9,7 @@ import {
 import { Permission } from "../../../types/custom";
 import { sql } from "drizzle-orm";
 
-export const roles = mysqlTable("roles", {
+export const role_restaurant = mysqlTable("role_restaurant", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
 
     name: varchar("name", { length: 100 }).notNull(),

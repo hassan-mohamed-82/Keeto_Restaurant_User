@@ -10,7 +10,6 @@ import AddonRouter from "./addon";
 import FoodRouter from "./food";
 import walletsRouter from "./restaurant_wallets"
 import restaurantsettingRouter from "./restaurantsetting";
-import payment_methodsRouter from "./payment_methods";
 import branchesRouter from "./branches";
 import branchemenuRouter from "./branchemenu";
 import OrderRouter from "./order"
@@ -24,16 +23,25 @@ import DiscountRouter from "./discount";
 import restQRRouter from "./restQR";
 import CouponRouter from "./coupon";
 import policyRouter from "./policy";
+import sliderRouter from "./slider";
 import PopupRouter from "./popup";
 import ReportRouter from "./report";
 import NotificationRouter from "./notification";
 import { authenticated } from "../../middlewares/authenticated";
 import { authorizeRoles } from "../../middlewares/authorized";
+import { invalidateCache } from "../../middlewares/invalidateCache";
+import SocialMediaRouter from "./SocialMedia";
+import ProfileRouter from "./profile";
+import RestaurantUserRouter from "./restraurant_user";
 const router = Router();
 
 router.use("/auth", authRouter);
 // ضفنا الـ Underscore هنا 👇
 router.use(authenticated, authorizeRoles("owner", "subadmin", "branch_manager", "staff"));
+
+// أضفنا ميدل وير لمسح الكاش تلقائياً عند أي تعديل من الأدمن
+router.use(invalidateCache);
+
 router.use("/restaurantadmin", AdmiRouter);
 router.use("/roles", RolesRouter);
 router.use("/subcategories", SubcategoryRouter);
@@ -49,6 +57,7 @@ router.use("/branches", branchesRouter);
 router.use("/ingredients", IngredientsRouter);
 router.use("/ingredientcategory", IngredientCategoryRouter);
 router.use("/ratings", RatingRouter);
+router.use("/slider", sliderRouter);
 router.use("/restQR", restQRRouter);
 router.use("/discounts", DiscountRouter);
 router.use("/coupons", CouponRouter);
@@ -56,4 +65,7 @@ router.use("/policy", policyRouter);
 router.use("/popups", PopupRouter);
 router.use("/report", ReportRouter);
 router.use("/notifications", NotificationRouter);
+router.use("/socialmedia", SocialMediaRouter);
+router.use("/profile", ProfileRouter);
+router.use("/restaurant-users", RestaurantUserRouter);
 export default router;

@@ -7,6 +7,7 @@ export const ingredientCategories = mysqlTable("ingredient_categories", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
     restaurantId: char("restaurant_id", { length: 36 }).references(() => restaurants.id).notNull(),
     name: varchar("name", { length: 255 }).notNull(),
+    nameAr: varchar("nameAr", { length: 255 }),
     status: mysqlEnum("status", ["active", "inactive"]).default("active"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
@@ -18,10 +19,8 @@ export const ingredients = mysqlTable("ingredients", {
     restaurantId: char("restaurant_id", { length: 36 }).references(() => restaurants.id).notNull(),
     categoryId: char("category_id", { length: 36 }).references(() => ingredientCategories.id).notNull(),
     name: varchar("name", { length: 255 }).notNull(),
-    
-    // 👇 ده "الزرار السحري" اللي هتقفله لما الفراولة تخلص
+    nameAr: varchar("nameAr", { length: 255 }),
     inStock: boolean("in_stock").default(true), 
-    
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
 });

@@ -15,6 +15,7 @@ const helmet_1 = __importDefault(require("helmet"));
 const http_1 = __importDefault(require("http"));
 const socket_io_1 = require("socket.io");
 const connection_1 = require("./models/connection");
+require("./config/redis");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 (0, connection_1.connectDB)();

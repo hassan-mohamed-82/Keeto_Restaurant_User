@@ -37,12 +37,11 @@ const createFood = async (req, res) => {
                 throw new Error("Subcategory not found");
             }
         }
-        if (addonsId) {
-            const existingAddon = await connection_1.db.select().from(schema_1.addons)
-                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.addons.id, addonsId), (0, drizzle_orm_1.eq)(schema_1.addons.restaurantid, restaurantId)))
-                .limit(1);
-            if (!existingAddon[0]) {
-                throw new Error("Addon not found");
+        if (addonsId && Array.isArray(addonsId) && addonsId.length > 0) {
+            const existingAddons = await connection_1.db.select({ id: schema_1.addons.id }).from(schema_1.addons)
+                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.addons.id, addonsId), (0, drizzle_orm_1.eq)(schema_1.addons.restaurantid, restaurantId)));
+            if (existingAddons.length !== addonsId.length) {
+                throw new Error("One or more Addon IDs are invalid");
             }
         }
         // 3. معالجة الصورة (خارج المعاملة لتجنب بطء قاعدة البيانات)
@@ -70,7 +69,7 @@ const createFood = async (req, res) => {
                 Nutrition: Nutrition || null,
                 allergen_ingredients: allergen_ingredients || null,
                 is_Halal: is_Halal ?? false,
-                addonsId: addonsId || null,
+                addonsId: addonsId || [],
                 startTime,
                 endTime,
                 search_tags: search_tags || null,
@@ -319,6 +318,7 @@ const updateFood = async (req, res) => {
         throw new NotFound_1.NotFound("Food not found or you don't have permission to edit it");
     }
     // ✅ الحقول المسموح بتحديثها فقط (Clean Code + Security)
+    // 💡 تم استبدال isAvailable بـ status لتتطابق مع الـ Schema
     const allowedFields = [
         "name",
         "nameAr",
@@ -327,13 +327,13 @@ const updateFood = async (req, res) => {
         "descriptionAr",
         "descriptionFr",
         "price",
-        "categoryId",
-        "isAvailable",
+        "status",
         "image"
     ];
     const updateData = {
         updatedAt: new Date(), // ✅ دايمًا Date object
     };
+    // 1️⃣ معالجة الحقول العادية والصورة
     for (const key of allowedFields) {
         if (data[key] !== undefined) {
             // 🖼️ معالجة الصورة
@@ -348,8 +348,22 @@ const updateFood = async (req, res) => {
             }
         }
     }
-    // ✅ تنفيذ التحديث
-    await connection_1.db.update(schema_1.food).set(updateData).where((0, drizzle_orm_1.eq)(schema_1.food.id, id));
+    // 2️⃣ معالجة الـ Categories بشكل مخصص 
+    // ندعم حالة الـ CamelCase (categoryId) والـ Lowercase (categoryid)
+    const incomingCategoryId = data.categoryid ?? data.categoryId;
+    if (incomingCategoryId !== undefined) {
+        // حقل categoryid مطلوب (notNull)، لذا نمرره كما هو
+        updateData.categoryid = incomingCategoryId;
+    }
+    const incomingSubcategoryId = data.subcategoryid ?? data.subcategoryId;
+    if (incomingSubcategoryId !== undefined) {
+        // حقل subcategoryid يقبل Null، لذلك لو تم إرساله كنص فارغ نجعله null في الداتابيز
+        updateData.subcategoryid = incomingSubcategoryId === "" ? null : incomingSubcategoryId;
+    }
+    // ✅ تنفيذ التحديث (نتأكد إن فيه بيانات للتحديث غير الـ updatedAt)
+    if (Object.keys(updateData).length > 1) {
+        await connection_1.db.update(schema_1.food).set(updateData).where((0, drizzle_orm_1.eq)(schema_1.food.id, id));
+    }
     // ===========================
     // ✅ Variations Update
     // ===========================
