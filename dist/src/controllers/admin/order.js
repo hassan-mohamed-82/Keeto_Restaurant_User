@@ -367,7 +367,7 @@ const updateOrderStatus = async (req, res) => {
         // 1. تحديث الحالة
         await tx.update(schema_1.orders)
             .set({
-            status: "cancelled",
+            status: status, // ✅ تم التعديل هنا ليأخذ الحالة المرسلة ديناميكياً بدلاً من "cancelled" الثابتة
             cancelReasonId: status === "cancelled" ? reason.id : null,
             cancelReason: status === "cancelled" ? reason.name : null,
             updatedAt: new Date()

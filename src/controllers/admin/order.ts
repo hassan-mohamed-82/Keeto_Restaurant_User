@@ -400,7 +400,7 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
         // 1. تحديث الحالة
         await tx.update(orders)
             .set({
-                status: "cancelled",
+                status: status, // ✅ تم التعديل هنا ليأخذ الحالة المرسلة ديناميكياً بدلاً من "cancelled" الثابتة
                 cancelReasonId: status === "cancelled" ? reason.id : null,
                 cancelReason: status === "cancelled" ? reason.name : null,
                 updatedAt: new Date()
@@ -561,7 +561,6 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
 
     return SuccessResponse(res, { message: `Order status successfully updated to ${status}` });
 };
-
 // جلب أسباب الإلغاء حسب النوع (user أو restaurant)
 export const getReasons = async (req: Request, res: Response) => {
     const type = req.query.type as string;
