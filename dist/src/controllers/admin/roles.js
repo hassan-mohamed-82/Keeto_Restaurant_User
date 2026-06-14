@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getAvailablePermissions = exports.toggleRoleStatus = exports.deleteRole = exports.updateRole = exports.createRole = exports.getRoleById = exports.getAllRoles = exports.getAdminPermissions = void 0;
 const connection_1 = require("../../models/connection");
-const schema_1 = require("../../models/schema");
+const role_restaurant_1 = require("../../models/schema/admin/role_restaurant");
 const drizzle_orm_1 = require("drizzle-orm");
 const response_1 = require("../../utils/response");
 const NotFound_1 = require("../../Errors/NotFound");
@@ -90,7 +90,7 @@ const getAdminPermissions = async (req, res) => {
 exports.getAdminPermissions = getAdminPermissions;
 // ✅ Get All Roles
 const getAllRoles = async (req, res) => {
-    const allRoles = await connection_1.db.select().from(schema_1.rolesadmin);
+    const allRoles = await connection_1.db.select().from(role_restaurant_1.role_restaurant);
     const formattedRoles = allRoles.map(formatRole);
     (0, response_1.SuccessResponse)(res, { roles: formattedRoles }, 200);
 };
@@ -100,8 +100,8 @@ const getRoleById = async (req, res) => {
     const { id } = req.params;
     const role = await connection_1.db
         .select()
-        .from(schema_1.rolesadmin)
-        .where((0, drizzle_orm_1.eq)(schema_1.rolesadmin.id, id))
+        .from(role_restaurant_1.role_restaurant)
+        .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.id, id))
         .limit(1);
     if (!role[0]) {
         throw new NotFound_1.NotFound("Role not found");
@@ -117,23 +117,23 @@ const createRole = async (req, res) => {
     }
     const existingRole = await connection_1.db
         .select()
-        .from(schema_1.rolesadmin)
-        .where((0, drizzle_orm_1.eq)(schema_1.rolesadmin.name, name))
+        .from(role_restaurant_1.role_restaurant)
+        .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.name, name))
         .limit(1);
     if (existingRole[0]) {
         throw new BadRequest_1.BadRequest("Role with this name already exists");
     }
     const permissionsWithIds = addIdsToPermissions(permissions || []);
     // ✅ ابعت array على طول - Drizzle هيتعامل معاه
-    await connection_1.db.insert(schema_1.rolesadmin).values({
+    await connection_1.db.insert(role_restaurant_1.role_restaurant).values({
         name,
         permissions: permissionsWithIds,
     });
     // جيب الـ role اللي اتعمل
     const createdRole = await connection_1.db
         .select()
-        .from(schema_1.rolesadmin)
-        .where((0, drizzle_orm_1.eq)(schema_1.rolesadmin.name, name))
+        .from(role_restaurant_1.role_restaurant)
+        .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.name, name))
         .limit(1);
     (0, response_1.SuccessResponse)(res, {
         message: "Role created successfully",
@@ -147,8 +147,8 @@ const updateRole = async (req, res) => {
     const { name, permissions, status } = req.body;
     const existingRole = await connection_1.db
         .select()
-        .from(schema_1.rolesadmin)
-        .where((0, drizzle_orm_1.eq)(schema_1.rolesadmin.id, id))
+        .from(role_restaurant_1.role_restaurant)
+        .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.id, id))
         .limit(1);
     if (!existingRole[0]) {
         throw new NotFound_1.NotFound("Role not found");
@@ -156,8 +156,8 @@ const updateRole = async (req, res) => {
     if (name && name !== existingRole[0].name) {
         const duplicateName = await connection_1.db
             .select()
-            .from(schema_1.rolesadmin)
-            .where((0, drizzle_orm_1.eq)(schema_1.rolesadmin.name, name))
+            .from(role_restaurant_1.role_restaurant)
+            .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.name, name))
             .limit(1);
         if (duplicateName[0]) {
             throw new BadRequest_1.BadRequest("Role with this name already exists");
@@ -169,17 +169,17 @@ const updateRole = async (req, res) => {
         : currentPermissions;
     // ✅ ابعت array على طول
     await connection_1.db
-        .update(schema_1.rolesadmin)
+        .update(role_restaurant_1.role_restaurant)
         .set({
         name: name ?? existingRole[0].name,
         permissions: updatedPermissions,
         status: status ?? existingRole[0].status,
     })
-        .where((0, drizzle_orm_1.eq)(schema_1.rolesadmin.id, id));
+        .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.id, id));
     const updatedRole = await connection_1.db
         .select()
-        .from(schema_1.rolesadmin)
-        .where((0, drizzle_orm_1.eq)(schema_1.rolesadmin.id, id))
+        .from(role_restaurant_1.role_restaurant)
+        .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.id, id))
         .limit(1);
     (0, response_1.SuccessResponse)(res, {
         message: "Role updated successfully",
@@ -192,13 +192,13 @@ const deleteRole = async (req, res) => {
     const { id } = req.params;
     const existingRole = await connection_1.db
         .select()
-        .from(schema_1.rolesadmin)
-        .where((0, drizzle_orm_1.eq)(schema_1.rolesadmin.id, id))
+        .from(role_restaurant_1.role_restaurant)
+        .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.id, id))
         .limit(1);
     if (!existingRole[0]) {
         throw new NotFound_1.NotFound("Role not found");
     }
-    await connection_1.db.delete(schema_1.rolesadmin).where((0, drizzle_orm_1.eq)(schema_1.rolesadmin.id, id));
+    await connection_1.db.delete(role_restaurant_1.role_restaurant).where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.id, id));
     (0, response_1.SuccessResponse)(res, { message: "Role deleted successfully" }, 200);
 };
 exports.deleteRole = deleteRole;
@@ -207,18 +207,18 @@ const toggleRoleStatus = async (req, res) => {
     const { id } = req.params;
     const existingRole = await connection_1.db
         .select()
-        .from(schema_1.rolesadmin)
-        .where((0, drizzle_orm_1.eq)(schema_1.rolesadmin.id, id))
+        .from(role_restaurant_1.role_restaurant)
+        .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.id, id))
         .limit(1);
     if (!existingRole[0]) {
         throw new NotFound_1.NotFound("Role not found");
     }
     const newStatus = existingRole[0].status === "active" ? "inactive" : "active";
-    await connection_1.db.update(schema_1.rolesadmin).set({ status: newStatus }).where((0, drizzle_orm_1.eq)(schema_1.rolesadmin.id, id));
+    await connection_1.db.update(role_restaurant_1.role_restaurant).set({ status: newStatus }).where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.id, id));
     const updatedRole = await connection_1.db
         .select()
-        .from(schema_1.rolesadmin)
-        .where((0, drizzle_orm_1.eq)(schema_1.rolesadmin.id, id))
+        .from(role_restaurant_1.role_restaurant)
+        .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.id, id))
         .limit(1);
     (0, response_1.SuccessResponse)(res, {
         message: `Role ${newStatus}`,
