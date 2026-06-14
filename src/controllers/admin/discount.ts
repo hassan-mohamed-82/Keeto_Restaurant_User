@@ -1,14 +1,14 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { discounts, discountRestaurants, discountFoods } from "../../models/schema";
-import { eq, and, or } from "drizzle-orm";
+import { discounts, discountRestaurants, discountFoods, food } from "../../models/schema";
+import { eq, and, or, inArray } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors/NotFound";
 import { v4 as uuidv4 } from "uuid";
 
 // ==========================================
-// 1. Create Discount (For this restaurant specifically)
+// 1. Create Discount (With Switch Logic)
 // ==========================================
 export const createDiscount = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
@@ -25,9 +25,30 @@ export const createDiscount = async (req: Request, res: Response) => {
     if (!discountType) throw new BadRequest("Discount type is required (percentage | fixed_amount)");
     if (discountValue === undefined || discountValue === null) throw new BadRequest("Discount value is required");
 
+    const shouldBeActive = isActive !== undefined ? isActive : true;
     const discountId = uuidv4();
 
-    // 1. إدخال العرض في الجدول الرئيسي (مع ضبط isGlobal على false لأن المطعم هو من ينشئه لنفسه)
+    // 💡 منطق الـ Switch: إذا كان الخصم الجديد نشطاً، نقوم بإطفاء كل الخصومات النشطة حالياً للمطعم
+    if (shouldBeActive) {
+        // أ) جلب الـ IDs الخاصة بخصومات هذا المطعم فقط
+        const myDiscounts = await db
+            .select({ id: discounts.id })
+            .from(discounts)
+            .innerJoin(discountRestaurants, eq(discounts.id, discountRestaurants.discountId))
+            .where(eq(discountRestaurants.restaurantId, restaurantId));
+
+        const myDiscountIds = myDiscounts.map(d => d.id);
+
+        // ب) إطفاء الخصومات السابقة إن وجدت
+        if (myDiscountIds.length > 0) {
+            await db
+                .update(discounts)
+                .set({ isActive: false, updatedAt: new Date() })
+                .where(and(inArray(discounts.id, myDiscountIds), eq(discounts.isActive, true)));
+        }
+    }
+
+    // 1. إدخال العرض الجديد في الجدول الرئيسي
     await db.insert(discounts).values({
         id: discountId,
         name,
@@ -40,11 +61,11 @@ export const createDiscount = async (req: Request, res: Response) => {
         usageLimit: usageLimit || null,
         startDate: startDate ? new Date(startDate) : null,
         endDate: endDate ? new Date(endDate) : null,
-        isActive: isActive !== undefined ? isActive : true,
-        isGlobal: false // عروض المطاعم ليست عامة تلقائياً
+        isActive: shouldBeActive,
+        isGlobal: false
     });
 
-    // 2. ربطه تلقائياً وبأمان بالمطعم الحالي من التوكن
+    // 2. ربطه بالمطعم الحالي
     await db.insert(discountRestaurants).values({
         id: uuidv4(),
         discountId: discountId,
@@ -61,7 +82,7 @@ export const createDiscount = async (req: Request, res: Response) => {
         await db.insert(discountFoods).values(foodValues);
     }
 
-    return SuccessResponse(res, { message: "Discount created successfully", data: { id: discountId } }, 201);
+    return SuccessResponse(res, { message: "Discount created successfully. Other active discounts turned off.", data: { id: discountId } }, 201);
 };
 
 // ==========================================
@@ -71,27 +92,34 @@ export const getAllDiscounts = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Unauthorized");
 
-    // جلب الخصومات المربوطة بهذا المطعم عبر الـ leftJoin + جلب العروض الـ Global التي تشمله
     const rawData = await db
         .selectDistinct({ discounts: discounts })
         .from(discounts)
         .leftJoin(discountRestaurants, eq(discounts.id, discountRestaurants.discountId))
         .where(
             or(
-                eq(discounts.isGlobal, true), // جلب العروض العامة التي تطبق على الجميع
-                eq(discountRestaurants.restaurantId, restaurantId) // جلب عروض المطعم الخاصة
+                eq(discounts.isGlobal, true), 
+                eq(discountRestaurants.restaurantId, restaurantId) 
             )
         );
 
     const allDiscounts = rawData.map(row => row.discounts);
 
     const enrichedDiscounts = await Promise.all(allDiscounts.map(async (discount) => {
-        const foods = await db.select({ foodId: discountFoods.foodId })
+        const foodsData = await db.select({
+                id: food.id,
+                name: food.name,
+                nameAr: food.nameAr,
+                nameFr: food.nameFr
+            })
             .from(discountFoods)
+            .innerJoin(food, eq(discountFoods.foodId, food.id))
             .where(eq(discountFoods.discountId, discount.id));
+            
         return {
             ...discount,
-            foodIds: foods.map(f => f.foodId)
+            foodIds: foodsData.map(f => f.id),
+            foods: foodsData
         };
     }));
 
@@ -99,14 +127,13 @@ export const getAllDiscounts = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 3. Get Discount by ID (Scoped to this restaurant or Global)
+// 3. Get Discount by ID
 // ==========================================
 export const getDiscountById = async (req: Request, res: Response) => {
     const { id } = req.params;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Unauthorized");
 
-    // التحقق من وجود الخصم وأنه إما مخصص للمطعم أو خصم عام متاح للجميع
     const [rawData] = await db
         .selectDistinct({ discounts: discounts })
         .from(discounts)
@@ -124,27 +151,33 @@ export const getDiscountById = async (req: Request, res: Response) => {
 
     if (!rawData) throw new NotFound("Discount not found");
 
-    const foods = await db.select({ foodId: discountFoods.foodId })
+    const foodsData = await db.select({
+            id: food.id,
+            name: food.name,
+            nameAr: food.nameAr,
+            nameFr: food.nameFr
+        })
         .from(discountFoods)
+        .innerJoin(food, eq(discountFoods.foodId, food.id))
         .where(eq(discountFoods.discountId, rawData.discounts.id));
 
     const result = {
         ...rawData.discounts,
-        foodIds: foods.map(f => f.foodId)
+        foodIds: foodsData.map(f => f.id),
+        foods: foodsData
     };
 
     return SuccessResponse(res, { message: "Get discount success", data: result });
 };
 
 // ==========================================
-// 4. Update Discount (Protected - Restrict editing global discounts)
+// 4. Update Discount 
 // ==========================================
 export const updateDiscount = async (req: Request, res: Response) => {
     const { id } = req.params;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Unauthorized");
 
-    // تأكيد ملكية المطعم للخصم، والتأكد أنه ليس خصماً عاماً (لأن المطعم لا يملك صلاحية تعديل خصومات الأدمن العامة)
     const [existing] = await db
         .select()
         .from(discounts)
@@ -153,7 +186,7 @@ export const updateDiscount = async (req: Request, res: Response) => {
             and(
                 eq(discounts.id, id),
                 eq(discountRestaurants.restaurantId, restaurantId),
-                eq(discounts.isGlobal, false) // حماية: لمنع تعديل عروض الـ Global من قبل الـ Vendor
+                eq(discounts.isGlobal, false) 
             )
         )
         .limit(1);
@@ -166,6 +199,24 @@ export const updateDiscount = async (req: Request, res: Response) => {
         maxDiscount, minOrderAmount,
         usageLimit, startDate, endDate, isActive, foodIds
     } = req.body;
+
+    // 💡 أيضاً في التحديث: إذا قام بتحويل الحالة إلى active، نطفئ باقي الخصومات
+    if (isActive === true && !existing.discounts.isActive) {
+        const myDiscounts = await db
+            .select({ id: discounts.id })
+            .from(discounts)
+            .innerJoin(discountRestaurants, eq(discounts.id, discountRestaurants.discountId))
+            .where(eq(discountRestaurants.restaurantId, restaurantId));
+
+        const myDiscountIds = myDiscounts.map(d => d.id);
+
+        if (myDiscountIds.length > 0) {
+            await db
+                .update(discounts)
+                .set({ isActive: false, updatedAt: new Date() })
+                .where(and(inArray(discounts.id, myDiscountIds), eq(discounts.isActive, true)));
+        }
+    }
 
     const updateData: any = { updatedAt: new Date() };
 
@@ -183,12 +234,8 @@ export const updateDiscount = async (req: Request, res: Response) => {
 
     await db.update(discounts).set(updateData).where(eq(discounts.id, id));
 
-    // Update specific products (foods) if provided
     if (foodIds !== undefined) {
-        // Remove existing associations
         await db.delete(discountFoods).where(eq(discountFoods.discountId, id));
-
-        // Insert new ones if any
         if (Array.isArray(foodIds) && foodIds.length > 0) {
             const foodValues = foodIds.map((foodId: string) => ({
                 id: uuidv4(),
@@ -203,14 +250,13 @@ export const updateDiscount = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 5. Delete Discount (Protected - Restrict deleting global discounts)
+// 5. Delete Discount
 // ==========================================
 export const deleteDiscount = async (req: Request, res: Response) => {
     const { id } = req.params;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Unauthorized");
 
-    // تأكيد ملكية المطعم للخصم وأنه ليس Global قبل الحذف
     const [existing] = await db
         .select()
         .from(discounts)
@@ -219,7 +265,7 @@ export const deleteDiscount = async (req: Request, res: Response) => {
             and(
                 eq(discounts.id, id),
                 eq(discountRestaurants.restaurantId, restaurantId),
-                eq(discounts.isGlobal, false) // حماية من الحذف لعروض الأدمن العامة
+                eq(discounts.isGlobal, false) 
             )
         )
         .limit(1);
@@ -232,7 +278,7 @@ export const deleteDiscount = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 6. Toggle Discount Status (Protected)
+// 6. Toggle Discount Status (With Switch Logic)
 // ==========================================
 export const toggleDiscountStatus = async (req: Request, res: Response) => {
     const { id } = req.params;
@@ -247,20 +293,43 @@ export const toggleDiscountStatus = async (req: Request, res: Response) => {
             and(
                 eq(discounts.id, id),
                 eq(discountRestaurants.restaurantId, restaurantId),
-                eq(discounts.isGlobal, false) // حماية لعدم تفعيل/تعطيل عروض الأدمن
+                eq(discounts.isGlobal, false) 
             )
         )
         .limit(1);
 
     if (!rawData) throw new NotFound("Discount not found or cannot be modified");
     const existingDiscount = rawData.discounts;
+    
+    const nextStatus = !existingDiscount.isActive;
 
+    // 💡 إذا كان صاحب المطعم يفتح الـ Switch (يحول الحالة لـ true)
+    if (nextStatus === true) {
+        // أ) جلب كل الخصومات التابعة للمطعم
+        const myDiscounts = await db
+            .select({ id: discounts.id })
+            .from(discounts)
+            .innerJoin(discountRestaurants, eq(discounts.id, discountRestaurants.discountId))
+            .where(eq(discountRestaurants.restaurantId, restaurantId));
+
+        const myDiscountIds = myDiscounts.map(d => d.id);
+
+        // ب) إيقاف أي خصم نشط آخر فوراً لضمان وجود خصم واحد نشط فقط
+        if (myDiscountIds.length > 0) {
+            await db
+                .update(discounts)
+                .set({ isActive: false, updatedAt: new Date() })
+                .where(and(inArray(discounts.id, myDiscountIds), eq(discounts.isActive, true)));
+        }
+    }
+
+    // ج) تحديث الخصم الحالي للحالة الجديدة
     await db.update(discounts)
-        .set({ isActive: !existingDiscount.isActive, updatedAt: new Date() })
+        .set({ isActive: nextStatus, updatedAt: new Date() })
         .where(eq(discounts.id, id));
 
     return SuccessResponse(res, {
-        message: `Discount ${!existingDiscount.isActive ? "activated" : "deactivated"} successfully`,
-        data: { isActive: !existingDiscount.isActive }
+        message: `Discount ${nextStatus ? "activated" : "deactivated"} successfully. Other active discounts turned off.`,
+        data: { isActive: nextStatus }
     });
 };
