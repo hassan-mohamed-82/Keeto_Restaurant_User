@@ -17,7 +17,6 @@ router.get("/preparing", (0, hasPermission_1.hasPermission)("orders", "read", tr
 router.get("/out-for-delivery", (0, hasPermission_1.hasPermission)("orders", "read", true), (0, catchAsync_1.catchAsync)(order_1.getOutForDeliveryOrders));
 router.get("/delivered", (0, hasPermission_1.hasPermission)("orders", "read", true), (0, catchAsync_1.catchAsync)(order_1.getDeliveredOrders));
 router.get("/cancelled", (0, hasPermission_1.hasPermission)("orders", "read", true), (0, catchAsync_1.catchAsync)(order_1.getCancelledOrders));
-router.get("/rejected", (0, hasPermission_1.hasPermission)("orders", "read", true), (0, catchAsync_1.catchAsync)(order_1.getRejectedOrders));
 router.get("/refund", (0, hasPermission_1.hasPermission)("orders", "read", true), (0, catchAsync_1.catchAsync)(order_1.getRefundOrders));
 // ✅ تفاصيل أوردر بالـ ID - يحتاج صلاحية read + التحقق من الفرع
 router.get("/:id", (0, hasPermission_1.hasPermission)("orders", "read", true), (0, catchAsync_1.catchAsync)(order_1.getRestaurantOrderById));

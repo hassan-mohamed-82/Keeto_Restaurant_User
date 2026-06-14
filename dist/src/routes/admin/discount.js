@@ -9,7 +9,6 @@ router.post("/", (0, catchAsync_1.catchAsync)(discount_1.createDiscount));
 router.get("/", (0, catchAsync_1.catchAsync)(discount_1.getAllDiscounts));
 router.get("/:id", (0, catchAsync_1.catchAsync)(discount_1.getDiscountById));
 router.put("/:id", (0, catchAsync_1.catchAsync)(discount_1.updateDiscount));
+router.put("/:id/toggle-status", (0, catchAsync_1.catchAsync)(discount_1.toggleDiscountStatus));
 router.delete("/:id", (0, catchAsync_1.catchAsync)(discount_1.deleteDiscount));
-// Toggle active/inactive
-router.patch("/:id/toggle-status", (0, catchAsync_1.catchAsync)(discount_1.toggleDiscountStatus));
 exports.default = router;
