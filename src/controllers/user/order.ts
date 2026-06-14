@@ -1,12 +1,18 @@
 // controllers/user/OrderController.ts
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { 
-    orders, orderItems, restaurantBusinessPlans, food, restaurants, 
-    restaurantWallets, restaurantWalletTransactions, // 👈 ضفنا جداول محفظة المطعم
-    restaurantZoneDeliveryFees, zoneDeliveryFees, restaurantSettings, 
+import {
+    restaurantWallets, restaurantWalletTransactions,
+    restaurantZoneDeliveryFees, zoneDeliveryFees, restaurantSettings,
     restaurantSchedules, cartItems, users, addresses, branches,
-    userWallets, userWalletTransactions, foodVariations, variationOptions
+    userWallets, userWalletTransactions, paymentMethods,
+    coupons, couponUsages, couponRestaurants, discounts, discountRestaurants, discountFoods,
+    selectReasons,
+    orders,
+    restaurants,
+    orderItems,
+    restaurantBusinessPlans,
+    food
 } from "../../models/schema";
 import { eq, and, inArray, sql, desc } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
@@ -15,15 +21,29 @@ import { NotFound } from "../../Errors/NotFound";
 import { v4 as uuidv4 } from "uuid";
 import { UnauthorizedError } from "../../Errors";
 import { sendPushNotification } from "../../utils/notifications";
+import { calculateDistance } from "../../utils/geo";
+
+// 👇 1. دالة تظبيط الوقت لتوقيت مصر عشان نص الإشعار
+const formatToEgyptTime = (date: Date) => {
+    return new Intl.DateTimeFormat("ar-EG", { // غيرتها لـ ar-EG عشان تطلع بالعربي لو حابة
+        timeZone: "Africa/Cairo",
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+    }).format(date);
+};
 
 // ==========================================
 // 1. إنشاء الطلب (Checkout)
 // ==========================================
 export const checkout = async (req: Request | any, res: Response) => {
     if (!req.user) throw new UnauthorizedError("Unauthenticated");
-    const userId = req.user.id; 
-    
-    const { orderSource, paymentMethod, orderType, idempotencyKey, userZoneId, branchId, addressId } = req.body;
+    const userId = req.user.id;
+
+    const { orderSource, paymentMethod, orderType, idempotencyKey, userZoneId, branchId, addressId, note, couponCode, discountId } = req.body;
 
     // ==========================================
     // 🛡️ 1. Validation (التحقق من المدخلات)
@@ -33,10 +53,14 @@ export const checkout = async (req: Request | any, res: Response) => {
         throw new BadRequest("Invalid order source");
     }
 
-    const validPaymentMethods = ["cash_on_delivery", "visa", "wallet"];
-    if (!validPaymentMethods.includes(paymentMethod)) {
-        throw new BadRequest("Invalid payment method");
+    const [selectedPayment] = await db.select().from(paymentMethods).where(eq(paymentMethods.id, paymentMethod)).limit(1);
+    if (!selectedPayment || !selectedPayment.isActive) {
+        throw new BadRequest("Invalid or inactive payment method");
     }
+    const paymentMethodName = selectedPayment.name;
+    const paymentMethodNameAr = selectedPayment.nameAr;
+    const isWalletPayment = paymentMethodName === "wallet" || paymentMethodNameAr === "محفظتى";
+    const isCashPayment = paymentMethodName === "cash_on_delivery" || paymentMethodNameAr === "الدفع عند الاستلام" || paymentMethodName === "cash";
 
     // ==========================================
     // 2. Idempotency Check
@@ -53,57 +77,6 @@ export const checkout = async (req: Request | any, res: Response) => {
     if (!userCart.length) throw new BadRequest("Your cart is empty");
 
     const restaurantId = userCart[0].restaurantId;
-
-    // ==========================================
-    // 🔒 3.5 Check Restaurant Settings
-    // ==========================================
-    const [settings] = await db
-        .select()
-        .from(restaurantSettings)
-        .where(eq(restaurantSettings.restaurantId, restaurantId))
-        .limit(1);
-
-    if (settings) {
-        // ✅ التحقق من نوع الأوردر
-        if (orderType === "delivery" && !settings.homeDelivery) {
-            throw new BadRequest("Delivery service is currently disabled for this restaurant");
-        }
-        if (orderType === "takeaway" && !settings.takeaway) {
-            throw new BadRequest("Takeaway service is currently disabled for this restaurant");
-        }
-        if (orderType === "dine_in" && !settings.dineIn) {
-            throw new BadRequest("Dine-in service is currently disabled for this restaurant");
-        }
-
-        // ✅ التحقق من مواعيد العمل (إذا لم يكن المطعم مفتوح دائماً)
-        if (!settings.isAlwaysOpen) {
-            const now = new Date();
-            const currentDay = now.getDay(); // 0 = Sunday, 1 = Monday, ...
-            const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-            const schedules = await db
-                .select()
-                .from(restaurantSchedules)
-                .where(eq(restaurantSchedules.restaurantId, restaurantId));
-
-            const todaySchedule = schedules.find(s => s.dayOfWeek === currentDay);
-
-            if (todaySchedule) {
-                if (todaySchedule.isOffDay) {
-                    throw new BadRequest("Restaurant is closed today");
-                }
-
-                // التحقق من الوقت
-                if (todaySchedule.openingTime && todaySchedule.closingTime) {
-                    if (currentTime < todaySchedule.openingTime || currentTime > todaySchedule.closingTime) {
-                        throw new BadRequest(
-                            `Restaurant is closed. Opening hours: ${todaySchedule.openingTime} - ${todaySchedule.closingTime}`
-                        );
-                    }
-                }
-            }
-        }
-    }
 
     // ==========================================
     // 4. Get Restaurant & Business Plan
@@ -124,46 +97,28 @@ export const checkout = async (req: Request | any, res: Response) => {
     const itemsToInsert: any[] = [];
 
     for (const item of userCart) {
+        const basePrice = parseFloat(item.unitPrice as string || "0");
         let varPrice = 0;
-        let finalVariationsSnapshot: any[] = [];
+
         const vars = typeof item.variations === 'string' ? JSON.parse(item.variations) : item.variations;
-        
+
+        // ⚠️ تأكد إن السعر في الفرونت إند اسمه additionalPrice، لو اسمه حاجة تانية غيرها هنا
         if (Array.isArray(vars)) {
-            for (const v of vars) {
-                if (!v.variationId || !v.optionId) continue;
-                const [variation] = await db.select().from(foodVariations).where(eq(foodVariations.id, v.variationId)).limit(1);
-                const [option] = await db.select().from(variationOptions).where(eq(variationOptions.id, v.optionId)).limit(1);
-                
-                if (variation && option) {
-                    const price = parseFloat(option.additionalPrice as string || "0");
-                    varPrice += price;
-                    finalVariationsSnapshot.push({
-                        variationId: variation.id,
-                        variationName: variation.name,
-                        variationNameAr: variation.nameAr,
-                        optionId: option.id,
-                        optionName: option.optionName,
-                        optionNameAr: option.optionNameAr,
-                        additionalPrice: price.toString()
-                    });
-                }
-            }
+            varPrice = vars.reduce((sum, v) => sum + parseFloat(v.additionalPrice || "0"), 0);
         }
 
-        const totalItemUnitPrice = parseFloat(item.unitPrice as string || "0");
-        // unitPrice in cart already includes variations, so real basePrice is unitPrice - varPrice
-        const realBasePrice = totalItemUnitPrice - varPrice;
-        const itemTotal = totalItemUnitPrice * item.quantity;
+        const itemTotal = (basePrice + varPrice) * item.quantity;
         subtotal += itemTotal;
 
         itemsToInsert.push({
             id: uuidv4(),
             foodId: item.foodId,
             quantity: item.quantity,
-            basePrice: realBasePrice.toString(),
+            basePrice: basePrice.toString(),
             variationsPrice: varPrice.toString(),
             totalPrice: itemTotal.toString(),
-            variations: JSON.stringify(finalVariationsSnapshot)
+            variations: vars, // ✅ التعديل هنا: إضافة الفارييشنز عشان متكونش null
+            note: item.note || null
         });
     }
 
@@ -171,23 +126,103 @@ export const checkout = async (req: Request | any, res: Response) => {
     let appCommission = orderSource === "food_aggregator" ? subtotal * (parseFloat(plan?.commissionRate as string || "0") / 100) : 0;
 
     // ==========================================
-    // 5.5 Check Minimum Order Amount
+    // 5.5 Check Coupons and Discounts
     // ==========================================
-    if (settings) {
-        const minOrderAmount = parseFloat(settings.minOrderAmount || "0");
-        if (subtotal < minOrderAmount) {
-            throw new BadRequest(
-                `Minimum order amount is ${minOrderAmount}. Your order subtotal is ${subtotal.toFixed(2)}`
-            );
+    const nowTemp = new Date();
+    let totalDiscount = 0;
+    let appliedCoupon: any = null;
+    let appliedDiscount: any = null;
+    let isFreeDelivery = false;
+
+    // 1. Check Discount (discountId)
+    if (discountId) {
+        const [discount] = await db.select().from(discounts).where(eq(discounts.id, discountId)).limit(1);
+        if (!discount || !discount.isActive) throw new BadRequest("Invalid or inactive discount");
+
+        if (discount.startDate && new Date(discount.startDate) > nowTemp) throw new BadRequest("Discount not yet active");
+        if (discount.endDate && new Date(discount.endDate) < nowTemp) throw new BadRequest("Discount expired");
+
+        if (discount.usageLimit && discount.usedCount! >= discount.usageLimit) throw new BadRequest("Discount usage limit reached");
+        if (parseFloat(discount.minOrderAmount as string || "0") > subtotal) throw new BadRequest(`Minimum order amount of ${discount.minOrderAmount} required for this discount`);
+
+        if (!discount.isGlobal) {
+            const [discRest] = await db.select().from(discountRestaurants)
+                .where(and(eq(discountRestaurants.discountId, discountId), eq(discountRestaurants.restaurantId, restaurantId))).limit(1);
+            if (!discRest) throw new BadRequest("Discount is not applicable to this restaurant");
         }
+
+        // Check specific foods
+        const specificFoods = await db.select().from(discountFoods).where(eq(discountFoods.discountId, discountId));
+        let applicableSubtotal = subtotal;
+        if (specificFoods.length > 0) {
+            const foodIds = specificFoods.map(f => f.foodId);
+            applicableSubtotal = itemsToInsert.filter(i => foodIds.includes(i.foodId)).reduce((sum, i) => sum + parseFloat(i.totalPrice), 0);
+            if (applicableSubtotal === 0) throw new BadRequest("Discount is not applicable to any items in your cart");
+        }
+
+        const value = parseFloat(discount.discountValue as string);
+        if (discount.discountType === "fixed_amount") {
+            totalDiscount += value;
+        } else if (discount.discountType === "percentage") {
+            let pDiscount = applicableSubtotal * (value / 100);
+            if (discount.maxDiscount) {
+                const max = parseFloat(discount.maxDiscount as string);
+                if (pDiscount > max) pDiscount = max;
+            }
+            totalDiscount += pDiscount;
+        }
+
+        appliedDiscount = discount;
+    }
+
+    // 2. Check Coupon (couponCode)
+    if (couponCode) {
+        const [coupon] = await db.select().from(coupons).where(eq(coupons.code, couponCode)).limit(1);
+        if (!coupon || !coupon.isActive) throw new BadRequest("Invalid or inactive coupon");
+
+        if (coupon.startDate && new Date(coupon.startDate) > nowTemp) throw new BadRequest("Coupon not yet active");
+        if (coupon.endDate && new Date(coupon.endDate) < nowTemp) throw new BadRequest("Coupon expired");
+
+        if (coupon.usageLimit && coupon.usedCount! >= coupon.usageLimit) throw new BadRequest("Coupon usage limit reached");
+        if (parseFloat(coupon.minOrderAmount as string || "0") > subtotal) throw new BadRequest(`Minimum order amount of ${coupon.minOrderAmount} required for this coupon`);
+
+        if (!coupon.isGlobal) {
+            const [coupRest] = await db.select().from(couponRestaurants)
+                .where(and(eq(couponRestaurants.couponId, coupon.id), eq(couponRestaurants.restaurantId, restaurantId))).limit(1);
+            if (!coupRest) throw new BadRequest("Coupon is not applicable to this restaurant");
+        }
+
+        // Check per-user limit
+        if (coupon.perUserLimit) {
+            const usages = await db.select({ count: sql<number>`count(*)` }).from(couponUsages)
+                .where(and(eq(couponUsages.couponId, coupon.id), eq(couponUsages.userId, userId)));
+            if (usages[0].count >= coupon.perUserLimit) throw new BadRequest("You have reached the usage limit for this coupon");
+        }
+
+        const value = parseFloat(coupon.discountValue as string);
+        if (coupon.discountType === "free_delivery") {
+            isFreeDelivery = true;
+        } else if (coupon.discountType === "fixed_amount") {
+            totalDiscount += value;
+        } else if (coupon.discountType === "percentage") {
+            let pDiscount = subtotal * (value / 100);
+            if (coupon.maxDiscount) {
+                const max = parseFloat(coupon.maxDiscount as string);
+                if (pDiscount > max) pDiscount = max;
+            }
+            totalDiscount += pDiscount;
+        }
+
+        appliedCoupon = coupon;
     }
 
     // ==========================================
-    // 6. Smart Delivery Logic
+    // 6. Smart Delivery Logic (Zone + Radius Hybrid)
     // ==========================================
     let deliveryFee = 0;
     if (orderType === "delivery") {
         if (!addressId) throw new BadRequest("Delivery address is required");
+        if (!branchId) throw new BadRequest("Branch is required for delivery orders");
 
         const [userAddress] = await db.select().from(addresses)
             .where(and(
@@ -196,6 +231,11 @@ export const checkout = async (req: Request | any, res: Response) => {
             )).limit(1);
 
         if (!userAddress) throw new BadRequest("Invalid delivery address");
+
+        const [branch] = await db.select().from(branches)
+            .where(eq(branches.id, branchId)).limit(1);
+
+        if (!branch) throw new BadRequest("Invalid branch selected");
 
         const resolvedZoneId = userZoneId || userAddress.zoneId;
 
@@ -210,7 +250,12 @@ export const checkout = async (req: Request | any, res: Response) => {
         deliveryFee = parseFloat(selfFee.deliveryFee as string || "0");
     }
 
-    const totalAmount = subtotal + deliveryFee + serviceFee;
+    if (isFreeDelivery) {
+        deliveryFee = 0;
+    }
+
+    let totalAmount = subtotal + deliveryFee + serviceFee - totalDiscount;
+    if (totalAmount < 0) totalAmount = 0;
     const orderId = uuidv4();
     const orderNumber = `ORD-${Date.now()}`;
 
@@ -224,7 +269,7 @@ export const checkout = async (req: Request | any, res: Response) => {
     // 🛡️ 8. فحص محفظة العميل
     // ==========================================
     let userWallet = null;
-    if (paymentMethod === "wallet") {
+    if (isWalletPayment) {
         const walletResult = await db.select().from(userWallets).where(eq(userWallets.userId, userId)).limit(1);
         userWallet = walletResult[0];
 
@@ -238,18 +283,14 @@ export const checkout = async (req: Request | any, res: Response) => {
     // 🛡️ 9. جلب محفظة المطعم 
     // ==========================================
     let [restaurantWallet] = await db.select().from(restaurantWallets).where(eq(restaurantWallets.restaurantId, restaurantId)).limit(1);
-    
+
     // ==========================================
     // 10. Execute Order (Transaction)
     // ==========================================
-    
-    // ✅ توحيد الوقت في متغير واحد للداتابيز والإشعار والريسبونس
-    const now = new Date(); 
+    const now = new Date();
 
     await db.transaction(async (tx) => {
-        
-        // أ. خصم محفظة العميل (لو الدفع محفظة)
-        if (paymentMethod === "wallet" && userWallet) {
+        if (isWalletPayment && userWallet) {
             const balanceBefore = parseFloat(userWallet.balance as string);
             const newBalance = balanceBefore - totalAmount;
 
@@ -260,41 +301,65 @@ export const checkout = async (req: Request | any, res: Response) => {
             await tx.insert(userWalletTransactions).values({
                 id: uuidv4(),
                 userId,
-                type: "debit", 
-                transactionType: "order_payment", 
+                type: "debit",
+                transactionType: "order_payment",
                 amount: totalAmount.toString(),
                 balanceBefore: balanceBefore.toString(),
                 reference: orderNumber,
-                status: "approved"
+                status: "approved",
+                createdAt: now
             });
         }
 
-        // ب. تسجيل بيانات الأوردر نفسه
+        // تسجيل بيانات الأوردر نفسه
         await tx.insert(orders).values({
             id: orderId,
             orderNumber,
             idempotencyKey,
             userId,
             restaurantId,
-            branchId, 
+            branchId,
             addressId: addressId || null,
             orderSource,
-            paymentMethod,
+            paymentMethod, // ✅ هيفضل بالـ ID زي ما طلبت
             orderType: orderType || "delivery",
             subtotal: subtotal.toString(),
             deliveryFee: deliveryFee.toString(),
             serviceFee: serviceFee.toString(),
             appCommission: appCommission.toString(),
+            discountAmount: totalDiscount.toString(),
+            couponCode: couponCode || null,
             totalAmount: totalAmount.toString(),
+            note: note || null,
             status: "pending",
-            createdAt: now // ✅ إضافة الوقت الموحد للداتابيز
+            createdAt: now
         });
 
-        // ج. تفريغ الكارت وتسجيل الأصناف
+        // تفريغ الكارت وتسجيل الأصناف
         await tx.insert(orderItems).values(itemsToInsert.map(i => ({ ...i, orderId })));
-        await tx.delete(cartItems).where(eq(cartItems.userId, userId)); 
+        await tx.delete(cartItems).where(eq(cartItems.userId, userId));
 
-        // د. تسويات محفظة المطعم
+        // تسجيل استخدام الكوبون والخصم
+        if (appliedCoupon) {
+            await tx.insert(couponUsages).values({
+                id: uuidv4(),
+                couponId: appliedCoupon.id,
+                userId,
+                orderId,
+                discountAmount: appliedCoupon.discountType === "free_delivery" ? deliveryFee.toString() : appliedCoupon.discountType === "fixed_amount" ? appliedCoupon.discountValue.toString() : totalDiscount.toString()
+            });
+            await tx.update(coupons)
+                .set({ usedCount: sql`used_count + 1` })
+                .where(eq(coupons.id, appliedCoupon.id));
+        }
+
+        if (appliedDiscount) {
+            await tx.update(discounts)
+                .set({ usedCount: sql`used_count + 1` })
+                .where(eq(discounts.id, appliedDiscount.id));
+        }
+
+        // تسويات محفظة المطعم
         if (!restaurantWallet) {
             await tx.insert(restaurantWallets).values({
                 id: uuidv4(),
@@ -311,85 +376,72 @@ export const checkout = async (req: Request | any, res: Response) => {
         const currentTotalEarning = parseFloat(restaurantWallet.totalEarning as string);
 
         const restaurantEarning = subtotal + deliveryFee - appCommission;
-        const appDues = appCommission + serviceFee; 
+        const appDues = appCommission + serviceFee;
 
         let newRestBalance = currentRestBalance;
         let newCollectedCash = currentCollectedCash;
 
-        if (paymentMethod === "cash_on_delivery") {
+        if (isCashPayment) {
             newRestBalance -= appDues;
-            newCollectedCash += totalAmount; 
+            newCollectedCash += totalAmount;
         } else {
             newRestBalance += restaurantEarning;
         }
 
         await tx.update(restaurantWallets)
-            .set({ 
+            .set({
                 balance: newRestBalance.toString(),
                 collectedCash: newCollectedCash.toString(),
                 totalEarning: (currentTotalEarning + restaurantEarning).toString()
             })
             .where(eq(restaurantWallets.restaurantId, restaurantId));
 
+        const isCash = isCashPayment;
         await tx.insert(restaurantWalletTransactions).values({
             id: uuidv4(),
             restaurantId,
             type: "order_payment",
-            amount: paymentMethod === "cash_on_delivery" ? `-${appDues}` : `${restaurantEarning}`,
+            amount: isCash ? `-${appDues}` : `${restaurantEarning}`,
             balanceBefore: currentRestBalance.toString(),
             balanceAfter: newRestBalance.toString(),
-            method: paymentMethod,
+            method: paymentMethodName,
             reference: orderNumber,
-            note: paymentMethod === "cash_on_delivery" ? "Commission deducted from cash order" : "Earnings added from digital payment"
+            note: isCash ? "Commission deducted from cash order" : "Earnings added from digital payment",
+            createdAt: now
         });
     });
 
     // ==========================================
     // 11. Send Notification to Restaurant
     // ==========================================
-    
-    // ✅ تحويل الوقت لتوقيت القاهرة عشان يظهر في نص الإشعار مضبوط
-    const cairoTimeFormatted = new Intl.DateTimeFormat("en-US", {
-        timeZone: "Africa/Cairo",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: true
-    }).format(now);
+    const cairoTimeFormatted = new Date(now).toLocaleTimeString("en-US", { timeZone: "Africa/Cairo" });
 
-    try {
-        console.log(`[CHECKOUT] Sending notification to restaurant: ${restaurantId}, order: ${orderNumber}`);
-        
-        await sendPushNotification({
-            recipientType: "restaurant",
-            recipientId: restaurantId,
-            title: "طلب جديد! 🛒",
-            body: `تم استلام طلب جديد #${orderNumber} بقيمة ${totalAmount.toFixed(2)} ج.م الساعة ${cairoTimeFormatted}.`,
-            data: {
-                orderId,
-                orderNumber,
-                branchId: branchId || null,
-                type: "new_order",
-                createdAt: now.toISOString() // ✅ توحيد الوقت في הـ Payload للفرونت إند
-            }
-        });
-        
-        console.log(`[CHECKOUT] Notification sent successfully for order: ${orderNumber}`);
-    } catch (notifError) {
-        console.error(`[CHECKOUT] Failed to send notification for order ${orderNumber}:`, notifError);
-    }
+    await sendPushNotification({
+        recipientType: "restaurant",
+        recipientId: restaurantId,
+        title: "طلب جديد! 🛒",
+        body: `تم استلام طلب جديد #${orderNumber} بقيمة ${totalAmount} ج.م الساعة ${cairoTimeFormatted}.`,
+        data: {
+            orderId,
+            orderNumber,
+            type: "new_order",
+            createdAt: now.toISOString()
+        }
+    });
 
     return SuccessResponse(res, {
         message: "Order created successfully",
-        data: {
-            orderDetails: { 
-                orderId, 
-                orderNumber, 
-                subtotal, 
-                deliveryFee, 
-                serviceFee, 
+        order_level: {
+            orderDetails: {
+                orderId,
+                orderNumber,
+                subtotal,
+                deliveryFee,
+                serviceFee,
+                discountAmount: totalDiscount,
+                couponCode: couponCode || null,
                 totalAmount,
-                createdAt: now.toISOString() // ✅ إرسال نفس الوقت في الريسبونس
+                createdAt: now.toISOString()
             },
             customerDetails: userInfo
         }
@@ -400,7 +452,9 @@ export const checkout = async (req: Request | any, res: Response) => {
 // ==========================================
 export const getActiveOrders = async (req: Request | any, res: Response) => {
     if (!req.user) throw new UnauthorizedError("Unauthenticated");
-    const userId = req.user.id; 
+    const userId = req.user.id;
+    const { restaurantId } = req.query;
+
     const activeOrders = await db
         .select({
             orderId: orders.id,
@@ -409,7 +463,6 @@ export const getActiveOrders = async (req: Request | any, res: Response) => {
             restaurantImage: restaurants.logo,
             totalAmount: orders.totalAmount,
             status: orders.status,
-            note: orders.note,
             createdAt: orders.createdAt,
             itemsCount: sql<number>`(SELECT COUNT(*) FROM order_items WHERE order_items.order_id = ${orders.id})`
         })
@@ -418,6 +471,7 @@ export const getActiveOrders = async (req: Request | any, res: Response) => {
         .where(
             and(
                 eq(orders.userId, userId),
+                restaurantId ? eq(orders.restaurantId, String(restaurantId)) : undefined,
                 // 🔥 تجلب فقط الطلبات التي لم تنتهِ بعد
                 inArray(orders.status, ["pending", "accepted", "preparing", "out_for_delivery"])
             )
@@ -432,7 +486,9 @@ export const getActiveOrders = async (req: Request | any, res: Response) => {
 // ==========================================
 export const getOrderHistory = async (req: Request | any, res: Response) => {
     if (!req.user) throw new UnauthorizedError("Unauthenticated");
-    const userId = req.user.id; 
+    const userId = req.user.id;
+    const { restaurantId } = req.query;
+
     const historyOrders = await db
         .select({
             orderId: orders.id,
@@ -440,8 +496,7 @@ export const getOrderHistory = async (req: Request | any, res: Response) => {
             restaurantName: restaurants.name,
             restaurantImage: restaurants.logo,
             totalAmount: orders.totalAmount,
-            status: orders.status, 
-            note: orders.note,
+            status: orders.status,
             createdAt: orders.createdAt,
             itemsCount: sql<number>`(SELECT COUNT(*) FROM order_items WHERE order_items.order_id = ${orders.id})`
         })
@@ -450,8 +505,9 @@ export const getOrderHistory = async (req: Request | any, res: Response) => {
         .where(
             and(
                 eq(orders.userId, userId),
-                // 🔥 تجلب فقط الطلبات التي انتهت (تم إضافة المرفوض والمسترجع)
-                inArray(orders.status, ["delivered", "cancelled", "rejected", "refund"])
+                restaurantId ? eq(orders.restaurantId, String(restaurantId)) : undefined,
+                // 🔥 تجلب فقط الطلبات التي انتهت (تم إضافة المسترجع والملغى)
+                inArray(orders.status, ["delivered", "cancelled", "refund"])
             )
         )
         .orderBy(desc(orders.createdAt));
@@ -464,7 +520,7 @@ export const getOrderHistory = async (req: Request | any, res: Response) => {
 // ==========================================
 export const getOrderDetails = async (req: Request | any, res: Response) => {
     if (!req.user) throw new UnauthorizedError("Unauthenticated");
-    const userId = req.user.id; 
+    const userId = req.user.id;
     const { orderId } = req.params;
 
     const orderInfo = await db
@@ -475,12 +531,15 @@ export const getOrderDetails = async (req: Request | any, res: Response) => {
             createdAt: orders.createdAt,
             paymentMethod: orders.paymentMethod, // 👈 تم التعديل هنا (كانت orderItems بالخطأ)
             orderType: orders.orderType,
-            note: orders.note,
 
             subtotal: orders.subtotal,
             deliveryFee: orders.deliveryFee,
             serviceFee: orders.serviceFee,
+            discountAmount: orders.discountAmount,
+            couponCode: orders.couponCode,
             totalAmount: orders.totalAmount,
+
+            note: orders.note,
 
             restaurantName: restaurants.name,
             restaurantImage: restaurants.logo
@@ -520,44 +579,148 @@ export const getOrderDetails = async (req: Request | any, res: Response) => {
 // 5. متطلبات الطلب المسبقة (Order Prerequisites)
 // ==========================================
 export const getOrderPrerequisites = async (req: Request | any, res: Response) => {
-    try {
-        if (!req.user) {
-            throw new UnauthorizedError("Unauthenticated: Token is missing or invalid");
-        }
-        const userId = req.user.id;
-        const restaurantId = req.query.restaurantId as string;
-
-        if (!restaurantId) {
-            throw new BadRequest("restaurantId is required");
-        }
-
-        // جلب البيانات المطلوبة من الداتا بيز
-        const [userAddresses, restaurantBranches] = await Promise.all([
-            // أ) عناوين اليوزر 
-            db.select().from(addresses).where(eq(addresses.userId, userId)),
-            
-            // ب) فروع المطعم
-            db.select().from(branches).where(eq(branches.restaurantId, restaurantId)),
-        ]);
-
-        // ج) طرق الدفع (بقت Static Array بدل الداتا بيز)
-        const activePaymentMethods = [
-            { id: "cash_on_delivery", name: "Cash on Delivery" },
-            { id: "visa", name: "Credit Card (Visa/Mastercard)" },
-            { id: "wallet", name: "My Wallet" }
-        ];
-
-        // تجميع الداتا وإرسالها
-        return SuccessResponse(res, { 
-            data: {
-                addresses: userAddresses,
-                branches: restaurantBranches,
-                paymentMethods: activePaymentMethods
-            }
-        });
-
-    } catch (error) {
-        console.error("Error fetching order prerequisites:", error);
-        return res.status(500).json({ success: false, message: "Internal server error" });
+    if (!req.user) {
+        throw new UnauthorizedError("Unauthenticated: Token is missing or invalid");
     }
+    const userId = req.user.id;
+    const restaurantId = req.query.restaurantId as string;
+
+    if (!restaurantId) {
+        throw new BadRequest("restaurantId is required");
+    }
+
+    // جلب البيانات المطلوبة من الداتا بيز
+    const [userAddresses, restaurantBranches] = await Promise.all([
+        // أ) عناوين اليوزر 
+        db.select().from(addresses).where(eq(addresses.userId, userId)),
+
+        // ب) فروع المطعم
+        db.select().from(branches).where(eq(branches.restaurantId, restaurantId)),
+    ]);
+
+    // ج) طرق الدفع 
+    const activePaymentMethods = await db.select({
+        id: paymentMethods.id,
+        name: paymentMethods.name,
+        nameAr: paymentMethods.nameAr
+    }).from(paymentMethods).where(eq(paymentMethods.isActive, true));
+
+    // تجميع الداتا وإرسالها
+    return SuccessResponse(res, {
+        data: {
+            addresses: userAddresses,
+            branches: restaurantBranches,
+            paymentMethods: activePaymentMethods
+        }
+    });
+};
+
+// ==========================================
+// 6. إلغاء الطلب من قبل المستخدم (Cancel Order)
+// ==========================================
+export const cancelOrder = async (req: Request | any, res: Response) => {
+    if (!req.user) throw new UnauthorizedError("Unauthenticated");
+    const userId = req.user.id;
+    const { orderId } = req.params;
+    const { cancelReasonId } = req.body;
+
+    if (!cancelReasonId) throw new BadRequest("Cancel reason ID is required");
+
+    // 1. جلب الطلب والتأكد أنه للمستخدم وأنه قابل للإلغاء
+    const [order] = await db.select().from(orders).where(and(eq(orders.id, orderId), eq(orders.userId, userId))).limit(1);
+    if (!order) throw new NotFound("Order not found");
+    if (!["pending", "accepted"].includes(order.status as string)) {
+        throw new BadRequest("Order cannot be cancelled at this stage");
+    }
+
+    // 2. التحقق من سبب الإلغاء
+    const [reason] = await db.select().from(selectReasons).where(and(eq(selectReasons.id, cancelReasonId), eq(selectReasons.type, "user"))).limit(1);
+    if (!reason) throw new BadRequest("Invalid cancel reason for user");
+
+    // 3. تحديث حالة الطلب وإرجاع المبالغ المالية (إلغاء أرباح المطعم والعمولة)
+    await db.transaction(async (tx) => {
+        // تحديث الطلب
+        await tx.update(orders)
+            .set({
+                status: "cancelled",
+                cancelReasonId: reason.id,
+                cancelReason: reason.name
+            })
+            .where(eq(orders.id, orderId));
+
+        // حسابات المبالغ التي تم دفعها أو خصمها
+        const totalAmount = parseFloat(order.totalAmount as string || "0");
+        const appCommission = parseFloat(order.appCommission as string || "0");
+        const serviceFee = parseFloat(order.serviceFee as string || "0");
+        const subtotal = parseFloat(order.subtotal as string || "0");
+        const deliveryFee = parseFloat(order.deliveryFee as string || "0");
+        const appDues = appCommission + serviceFee;
+        const restaurantEarning = subtotal + deliveryFee - appCommission;
+
+        const isCashPayment = order.paymentMethod === "cash_on_delivery" || order.paymentMethod === "cash"; // Assuming ID handling elsewhere or this is resolved
+
+        // إرجاع فلوس المستخدم لو دفع بالمحفظة
+        // note: paymentMethod stores UUID, so we check userWalletTransactions to know if it was a wallet payment
+        const [walletTx] = await tx.select().from(userWalletTransactions).where(and(eq(userWalletTransactions.reference, order.orderNumber), eq(userWalletTransactions.transactionType, "order_payment"))).limit(1);
+
+        if (walletTx) {
+            // Revert User Wallet
+            const [userWallet] = await tx.select().from(userWallets).where(eq(userWallets.userId, userId)).limit(1);
+            if (userWallet) {
+                const balanceBefore = parseFloat(userWallet.balance as string || "0");
+                const newBalance = balanceBefore + totalAmount;
+                await tx.update(userWallets).set({ balance: newBalance.toString() }).where(eq(userWallets.userId, userId));
+                await tx.insert(userWalletTransactions).values({
+                    id: uuidv4(),
+                    userId,
+                    type: "credit",
+                    transactionType: "refund",
+                    amount: totalAmount.toString(),
+                    balanceBefore: balanceBefore.toString(),
+                    reference: order.orderNumber,
+                    status: "approved"
+                });
+            }
+        }
+
+        // إرجاع الفلوس/العمولات من المطعم (حيث أن الإلغاء من المستخدم، المطعم لا يتحمل العمولة)
+        const [restaurantWallet] = await tx.select().from(restaurantWallets).where(eq(restaurantWallets.restaurantId, order.restaurantId)).limit(1);
+        if (restaurantWallet) {
+            let currentRestBalance = parseFloat(restaurantWallet.balance as string || "0");
+            let currentCollectedCash = parseFloat(restaurantWallet.collectedCash as string || "0");
+            let currentTotalEarning = parseFloat(restaurantWallet.totalEarning as string || "0");
+
+            if (isCashPayment) {
+                // نلغي خصم العمولة من رصيد المطعم، ونلغي الكاش المحصل
+                currentRestBalance += appDues;
+                currentCollectedCash -= totalAmount;
+            } else {
+                // نلغي الأرباح اللي انضافت للمطعم
+                currentRestBalance -= restaurantEarning;
+            }
+
+            await tx.update(restaurantWallets)
+                .set({
+                    balance: currentRestBalance.toString(),
+                    collectedCash: currentCollectedCash.toString(),
+                    totalEarning: (currentTotalEarning - restaurantEarning).toString()
+                })
+                .where(eq(restaurantWallets.restaurantId, order.restaurantId));
+
+            // تسجيل العملية
+            await tx.insert(restaurantWalletTransactions).values({
+                id: uuidv4(),
+                restaurantId: order.restaurantId,
+                type: "order_payment", // Or create a new type "refund"
+                amount: isCashPayment ? `${appDues}` : `-${restaurantEarning}`,
+                balanceBefore: restaurantWallet.balance as string,
+                balanceAfter: currentRestBalance.toString(),
+                method: order.paymentMethod,
+                reference: order.orderNumber,
+                note: "Refund/Revert due to user cancellation"
+            });
+        }
+    });
+
+    return SuccessResponse(res, { message: "Order cancelled successfully" });
 };

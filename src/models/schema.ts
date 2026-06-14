@@ -42,3 +42,4 @@ export * from "./schema/admin/popup";
 export * from "./schema/admin/notifications";
 export * from "./schema/admin/slider";
 export * from "./schema/admin/restraurant_user";
+export * from "./schema/admin/selectReasons";
