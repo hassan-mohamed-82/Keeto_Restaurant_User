@@ -16,9 +16,7 @@ router.post("/", catchAsync(createDiscount));
 router.get("/", catchAsync(getAllDiscounts));
 router.get("/:id", catchAsync(getDiscountById));
 router.put("/:id", catchAsync(updateDiscount));
+router.put("/:id/toggle-status", catchAsync(toggleDiscountStatus));
 router.delete("/:id", catchAsync(deleteDiscount));
-
-// Toggle active/inactive
-router.patch("/:id/toggle-status", catchAsync(toggleDiscountStatus));
 
 export default router;
