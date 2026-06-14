@@ -58,6 +58,7 @@ const getAllAddons = async (req, res) => {
         nameFr: schema_1.addons.nameFr,
         price: schema_1.addons.price,
         stock_type: schema_1.addons.stock_type,
+        status: schema_1.addons.status,
         adonescategoryid: schema_1.addons.adonescategoryid,
         createdAt: schema_1.addons.createdAt,
         updatedAt: schema_1.addons.updatedAt,
@@ -89,6 +90,7 @@ const getAddonById = async (req, res) => {
         stock_type: schema_1.addons.stock_type,
         adonescategoryid: schema_1.addons.adonescategoryid,
         createdAt: schema_1.addons.createdAt,
+        status: schema_1.addons.status,
         updatedAt: schema_1.addons.updatedAt,
         adonescategory: {
             id: schema_1.adonescategory.id,

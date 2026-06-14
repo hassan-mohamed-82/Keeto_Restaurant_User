@@ -63,6 +63,7 @@ export const getAllAddons = async (req: Request, res: Response) => {
             nameFr: addons.nameFr,
             price: addons.price,
             stock_type: addons.stock_type,
+            status: addons.status,
             adonescategoryid: addons.adonescategoryid,
             createdAt: addons.createdAt,
             updatedAt: addons.updatedAt,
@@ -95,6 +96,7 @@ export const getAddonById = async (req: Request, res: Response) => {
             stock_type: addons.stock_type,
             adonescategoryid: addons.adonescategoryid,
             createdAt: addons.createdAt,
+            status: addons.status,
             updatedAt: addons.updatedAt,
             adonescategory: {
                 id: adonescategory.id,
