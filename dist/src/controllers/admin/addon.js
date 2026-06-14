@@ -119,7 +119,7 @@ const updateAddon = async (req, res) => {
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID missing");
     const { id } = req.params;
-    const { name, price, stock_type, stock, adonescategoryid, nameAr, nameFr } = req.body;
+    const { name, price, stock_type, stock, adonescategoryid, nameAr, nameFr, status } = req.body;
     // Validate addon exists
     const existingAddon = await connection_1.db
         .select()
@@ -150,6 +150,7 @@ const updateAddon = async (req, res) => {
         stock_type: stock_type || existingAddon[0].stock_type,
         adonescategoryid: adonescategoryid || existingAddon[0].adonescategoryid,
         restaurantid: restaurantId,
+        status: status || existingAddon[0].status,
     })
         .where((0, drizzle_orm_1.eq)(schema_1.addons.id, id));
     return (0, response_1.SuccessResponse)(res, { message: "Update addon success", data: { id } });
