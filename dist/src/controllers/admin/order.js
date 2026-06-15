@@ -41,6 +41,7 @@ const getRestaurantOrders = async (req, res) => {
     const restaurantOrders = await connection_1.db.select({
         id: schema_1.orders.id,
         orderNumber: schema_1.orders.orderNumber,
+        dailyOrderNumber: schema_1.orders.dailyOrderNumber, // ✅ الرقم التسلسلي اليومي
         customerName: schema_1.users.name,
         customerPhone: schema_1.users.phone,
         orderType: schema_1.orders.orderType,
@@ -84,6 +85,7 @@ const getOrdersByStatus = async (req, res, status) => {
     const result = await connection_1.db.select({
         id: schema_1.orders.id,
         orderNumber: schema_1.orders.orderNumber,
+        dailyOrderNumber: schema_1.orders.dailyOrderNumber, // ✅ الرقم التسلسلي اليومي
         customerName: schema_1.users.name,
         customerPhone: schema_1.users.phone,
         orderType: schema_1.orders.orderType,
@@ -281,6 +283,7 @@ const getRestaurantOrderById = async (req, res) => {
         data: {
             id: orderDetail.order.id,
             orderNumber: orderDetail.order.orderNumber,
+            dailyOrderNumber: orderDetail.order.dailyOrderNumber, // ✅ الرقم التسلسلي اليومي
             orderType: orderDetail.order.orderType,
             orderSource: orderDetail.order.orderSource,
             status: orderDetail.order.status,
