@@ -284,15 +284,13 @@ export const checkout = async (req: Request | any, res: Response) => {
     // ==========================================
     let [restaurantWallet] = await db.select().from(restaurantWallets).where(eq(restaurantWallets.restaurantId, restaurantId)).limit(1);
 
-    // ==========================================
-    // 9.5 حساب الرقم التسلسلي اليومي للأوردر
-    // ==========================================
-    // ✅ توحيد الوقت في متغير واحد للداتابيز والإشعار والريسبونس
-    const now = new Date();
-
     ///////////////////////////////////////
 
-    // تحديد تاريخ ووقت القاهرة الحالي
+// ==========================================
+    // 9.5 حساب الرقم التسلسلي اليومي للأوردر (الـ Shift)
+    // ==========================================
+    const now = new Date();
+
     const cairoParts = new Intl.DateTimeFormat("en-US", {
         timeZone: "Africa/Cairo",
         year: "numeric", month: "2-digit", day: "2-digit",
@@ -307,9 +305,9 @@ export const checkout = async (req: Request | any, res: Response) => {
     const currentTimeStr = `${cairoHour === "24" ? "00" : cairoHour}:${cairoMinute}`;
     const cairoDayOfWeek = new Date(`${cairoYear}-${cairoMonth}-${cairoDay}T12:00:00`).getDay();
 
-    let shiftStartTime: Date;
+    // سنقوم بتركيب النص بصيغة YYYY-MM-DD HH:mm:ss متوافقة مع MySQL
+    let shiftStartStr: string;
 
-    // جلب إعدادات المطعم لتحديد بداية الشيفت (هل مفتوح دائماً أم له مواعيد؟)
     const [settings] = await db
         .select()
         .from(restaurantSettings)
@@ -325,38 +323,42 @@ export const checkout = async (req: Request | any, res: Response) => {
         const todaySchedule = allSchedules.find(s => s.dayOfWeek === cairoDayOfWeek);
 
         if (todaySchedule && todaySchedule.openingTime && !todaySchedule.isOffDay) {
-            // إذا كان الوقت الحالي قبل وقت الفتح، فنحن ما زلنا في شيفت الأمس
             if (currentTimeStr < todaySchedule.openingTime) {
                 const yesterday = new Date(`${cairoYear}-${cairoMonth}-${cairoDay}T12:00:00`);
                 yesterday.setDate(yesterday.getDate() - 1);
+                
+                const yYear = yesterday.getFullYear();
+                const yMonth = String(yesterday.getMonth() + 1).padStart(2, '0');
+                const yDay = String(yesterday.getDate()).padStart(2, '0');
+                
                 const yDayOfWeek = yesterday.getDay();
-                const yDateStr = yesterday.toISOString().slice(0, 10);
                 const ySchedule = allSchedules.find(s => s.dayOfWeek === yDayOfWeek);
                 const opTime = ySchedule?.openingTime || "00:00";
-                shiftStartTime = new Date(`${yDateStr}T${opTime}:00+02:00`);
+                
+                shiftStartStr = `${yYear}-${yMonth}-${yDay} ${opTime}:00`;
             } else {
-                shiftStartTime = new Date(`${cairoYear}-${cairoMonth}-${cairoDay}T${todaySchedule.openingTime}:00+02:00`);
+                shiftStartStr = `${cairoYear}-${cairoMonth}-${cairoDay} ${todaySchedule.openingTime}:00`;
             }
         } else {
-            // يوم إجازة أو لا يوجد جدول → بداية اليوم
-            shiftStartTime = new Date(`${cairoYear}-${cairoMonth}-${cairoDay}T00:00:00+02:00`);
+            shiftStartStr = `${cairoYear}-${cairoMonth}-${cairoDay} 00:00:00`;
         }
     } else {
-        // المطعم مفتوح دائماً → الرقم يتصفر مع منتصف الليل
-        shiftStartTime = new Date(`${cairoYear}-${cairoMonth}-${cairoDay}T00:00:00+02:00`);
+        shiftStartStr = `${cairoYear}-${cairoMonth}-${cairoDay} 00:00:00`;
     }
 
+    // 🌟 التعديل هنا: نستخدم sql لعمل مقارنة نصوص مباشرة داخل الـ DB لضمان الدقة
     const [ordersCountResult] = await db
         .select({ count: sql<number>`count(${orders.id})` })
         .from(orders)
         .where(
             and(
                 eq(orders.restaurantId, restaurantId),
-                gte(orders.createdAt, shiftStartTime)
+                sql`DATE_FORMAT(${orders.createdAt}, '%Y-%m-%d %H:%i:%s') >= ${shiftStartStr}`
             )
         );
 
     const dailyOrderNumber = Number(ordersCountResult?.count || 0) + 1;
+
     ///////////////////////////////////////
 
     await db.transaction(async (tx) => {
