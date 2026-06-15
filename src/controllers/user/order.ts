@@ -290,7 +290,7 @@ export const checkout = async (req: Request | any, res: Response) => {
 
     const now = new Date();
 
-    // 1. حساب الوقت الحالي في مصر بصيغة نصية واضحة وأرقام صريحة
+    // 1. حساب تاريخ ووقت القاهرة الحالي كنصوص صريحة
     const cairoFormatter = new Intl.DateTimeFormat("en-US", {
         timeZone: "Africa/Cairo",
         year: "numeric", month: "2-digit", day: "2-digit",
@@ -306,14 +306,16 @@ export const checkout = async (req: Request | any, res: Response) => {
     const cairoMinute = getPart("minute");
 
     const currentTimeStr = `${cairoHour === "24" ? "00" : cairoHour}:${cairoMinute}`;
-    
-    // حساب اليوم الحالي للأسبوع في مصر (0 = الأحد، 6 = السبت)
-    const cairoDateObj = new Date(`${cairoYear}-${cairoMonth}-${cairoDay}T12:00:00`);
+    const cairoDateStr = `${cairoYear}-${cairoMonth}-${cairoDay}`;
+
+    // حساب يوم الأسبوع (0 = الأحد، 6 = السبت)
+    const cairoDateObj = new Date(`${cairoDateStr}T12:00:00`);
     const cairoDOW = cairoDateObj.getDay();
 
-    let targetShiftDate = `${cairoYear}-${cairoMonth}-${cairoDay}`;
-    let shiftOpeningTime = "00:00";
+    let targetShiftDate = cairoDateStr;
+    let shiftOpeningTime = "00:00:00";
 
+    // جلب الإعدادات
     const [settings] = await db
         .select()
         .from(restaurantSettings)
@@ -329,43 +331,46 @@ export const checkout = async (req: Request | any, res: Response) => {
         const todaySchedule = allSchedules.find(s => s.dayOfWeek === cairoDOW);
 
         if (todaySchedule && !todaySchedule.isOffDay && todaySchedule.openingTime) {
-            // إذا كنا قبل ميعاد الفتح لليوم الحالي، إذن نحن نتبع شفت أمس
-            if (currentTimeStr < todaySchedule.openingTime) {
+            // تأمين النص ليحتوي على الثواني "HH:MM:SS"
+            const openTimeStr = todaySchedule.openingTime.length === 5 ? `${todaySchedule.openingTime}:00` : todaySchedule.openingTime;
+
+            if (currentTimeStr < todaySchedule.openingTime.slice(0, 5)) {
+                // لو قبل ميعاد الفتح، نرجع لشيفت أمبارح
                 const yesterday = new Date(cairoDateObj.getTime() - 86400000);
                 const yYear = yesterday.getFullYear();
                 const yMonth = String(yesterday.getMonth() + 1).padStart(2, '0');
                 const yDay = String(yesterday.getDate()).padStart(2, '0');
-                
                 targetShiftDate = `${yYear}-${yMonth}-${yDay}`;
-                
-                const yesterdayDOW = yesterday.getDay();
-                const yesterdaySchedule = allSchedules.find(s => s.dayOfWeek === yesterdayDOW);
-                shiftOpeningTime = yesterdaySchedule?.openingTime || "00:00";
+
+                const yesterdaySchedule = allSchedules.find(s => s.dayOfWeek === yesterday.getDay());
+                const yOpenTime = yesterdaySchedule?.openingTime || "00:00";
+                shiftOpeningTime = yOpenTime.length === 5 ? `${yOpenTime}:00` : yOpenTime;
             } else {
-                shiftOpeningTime = todaySchedule.openingTime;
-                targetShiftDate = `${cairoYear}-${cairoMonth}-${cairoDay}`;
+                shiftOpeningTime = openTimeStr;
+                targetShiftDate = cairoDateStr;
             }
         }
     }
 
-    // نص تاريخ ووقت بداية الشفت بتوقيت القاهرة (مثال: '2026-06-15 10:00:00')
-    const shiftStartCairoStr = `${targetShiftDate} ${shiftOpeningTime}:00`;
+    // نص بداية الشيفت النهائي (مثال: '2026-06-15 10:00:00')
+    const shiftStartCairoStr = `${targetShiftDate} ${shiftOpeningTime}`;
 
-    // 🌟 الاستعلام السحري: نقوم بتحويل وقت الأوردر في الـ DB إلى توقيت القاهرة ومقارنته بنص صريح
-    // الـ CONVERT_TZ تضمن معالجة فرق التوقيت بين السيرفر ومصر بشكل تلقائي داخل الـ DB
+
+    // 🌟 الاستعلام المعدل بدون دوال معقدة قد تسبب فشل الـ Driver
+    // نقوم بمقارنة التاريخ النصي مباشرة بعد تحويل وقت الأوردر لتوقيت القاهرة
     const [ordersCountResult] = await db
-        .select({ count: sql<number>`count(${orders.id})` })
+        .select({ count: sql<number>`CAST(COUNT(*) AS SIGNED)` })
         .from(orders)
         .where(
             and(
                 eq(orders.restaurantId, restaurantId),
-                sql`CONVERT_TZ(${orders.createdAt}, @@session.time_zone, '+03:00') >= STR_TO_DATE(${shiftStartCairoStr}, '%Y-%m-%d %H:%i:%s')`
+                sql`DATE_FORMAT(CONVERT_TZ(${orders.createdAt}, @@session.time_zone, '+03:00'), '%Y-%m-%d %H:%i:%s') >= ${shiftStartCairoStr}`
             )
         );
 
-    const dailyOrderNumber = Number(ordersCountResult?.count || 0) + 1;
+    const dailyOrderNumber = (ordersCountResult?.count ? Number(ordersCountResult.count) : 0) + 1;
 
-        // ==========================================
+    // ==========================================
 
 
     await db.transaction(async (tx) => {
