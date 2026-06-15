@@ -339,12 +339,15 @@ export const checkout = async (req: Request | any, res: Response) => {
         ));
     }
 
+    // UNIX timestamp مضمون 100% بغض النظر عن timezone سيرفر MySQL
+    const shiftStartUnix = Math.floor(shiftStartUTC.getTime() / 1000);
+
     const [ordersCountResult] = await db
-        .select({ count: sql<number>`count(${orders.id})` })
+        .select({ count: sql<number>`count(*)` })
         .from(orders)
         .where(and(
             eq(orders.restaurantId, restaurantId),
-            gte(orders.createdAt, shiftStartUTC)
+            sql`UNIX_TIMESTAMP(${orders.createdAt}) >= ${shiftStartUnix}`
         ));
 
     const dailyOrderNumber = Number(ordersCountResult?.count || 0) + 1;
