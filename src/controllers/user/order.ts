@@ -289,13 +289,88 @@ export const checkout = async (req: Request | any, res: Response) => {
 // ==========================================
     // 9.5 حساب الرقم التسلسلي اليومي للأوردر (الـ Shift)
     // ==========================================
+    // const now = new Date();
+
+    // const cairoParts = new Intl.DateTimeFormat("en-US", {
+    //     timeZone: "Africa/Cairo",
+    //     year: "numeric", month: "2-digit", day: "2-digit",
+    //     hour: "2-digit", minute: "2-digit", hour12: false
+    // }).formatToParts(now);
+    // const getP = (type: string) => cairoParts.find(p => p.type === type)?.value || "00";
+    // const cairoYear = getP("year");
+    // const cairoMonth = getP("month");
+    // const cairoDay = getP("day");
+    // const cairoHour = getP("hour");
+    // const cairoMinute = getP("minute");
+    // const currentTimeStr = `${cairoHour === "24" ? "00" : cairoHour}:${cairoMinute}`;
+    // const cairoDayOfWeek = new Date(`${cairoYear}-${cairoMonth}-${cairoDay}T12:00:00`).getDay();
+
+    // // سنقوم بتركيب النص بصيغة YYYY-MM-DD HH:mm:ss متوافقة مع MySQL
+    // let shiftStartStr: string;
+
+    // const [settings] = await db
+    //     .select()
+    //     .from(restaurantSettings)
+    //     .where(eq(restaurantSettings.restaurantId, restaurantId))
+    //     .limit(1);
+
+    // if (settings && !settings.isAlwaysOpen) {
+    //     const allSchedules = await db
+    //         .select()
+    //         .from(restaurantSchedules)
+    //         .where(eq(restaurantSchedules.restaurantId, restaurantId));
+
+    //     const todaySchedule = allSchedules.find(s => s.dayOfWeek === cairoDayOfWeek);
+
+    //     if (todaySchedule && todaySchedule.openingTime && !todaySchedule.isOffDay) {
+    //         if (currentTimeStr < todaySchedule.openingTime) {
+    //             const yesterday = new Date(`${cairoYear}-${cairoMonth}-${cairoDay}T12:00:00`);
+    //             yesterday.setDate(yesterday.getDate() - 1);
+                
+    //             const yYear = yesterday.getFullYear();
+    //             const yMonth = String(yesterday.getMonth() + 1).padStart(2, '0');
+    //             const yDay = String(yesterday.getDate()).padStart(2, '0');
+                
+    //             const yDayOfWeek = yesterday.getDay();
+    //             const ySchedule = allSchedules.find(s => s.dayOfWeek === yDayOfWeek);
+    //             const opTime = ySchedule?.openingTime || "00:00";
+                
+    //             shiftStartStr = `${yYear}-${yMonth}-${yDay} ${opTime}:00`;
+    //         } else {
+    //             shiftStartStr = `${cairoYear}-${cairoMonth}-${cairoDay} ${todaySchedule.openingTime}:00`;
+    //         }
+    //     } else {
+    //         shiftStartStr = `${cairoYear}-${cairoMonth}-${cairoDay} 00:00:00`;
+    //     }
+    // } else {
+    //     shiftStartStr = `${cairoYear}-${cairoMonth}-${cairoDay} 00:00:00`;
+    // }
+
+    // // 🌟 التعديل هنا: نستخدم sql لعمل مقارنة نصوص مباشرة داخل الـ DB لضمان الدقة
+    // const [ordersCountResult] = await db
+    //     .select({ count: sql<number>`count(${orders.id})` })
+    //     .from(orders)
+    //     .where(
+    //         and(
+    //             eq(orders.restaurantId, restaurantId),
+    //             sql`DATE_FORMAT(${orders.createdAt}, '%Y-%m-%d %H:%i:%s') >= ${shiftStartStr}`
+    //         )
+    //     );
+
+    // const dailyOrderNumber = Number(ordersCountResult?.count || 0) + 1;
+
+    // ==========================================
+    // 9.5 حساب الرقم التسلسلي اليومي للأوردر (الـ Shift)
+    // ==========================================
     const now = new Date();
 
+    // 1. جلب توقيت القاهرة الحالي كـ نصوص واضحة للاستخدام في الشفت
     const cairoParts = new Intl.DateTimeFormat("en-US", {
         timeZone: "Africa/Cairo",
         year: "numeric", month: "2-digit", day: "2-digit",
         hour: "2-digit", minute: "2-digit", hour12: false
     }).formatToParts(now);
+    
     const getP = (type: string) => cairoParts.find(p => p.type === type)?.value || "00";
     const cairoYear = getP("year");
     const cairoMonth = getP("month");
@@ -305,8 +380,19 @@ export const checkout = async (req: Request | any, res: Response) => {
     const currentTimeStr = `${cairoHour === "24" ? "00" : cairoHour}:${cairoMinute}`;
     const cairoDayOfWeek = new Date(`${cairoYear}-${cairoMonth}-${cairoDay}T12:00:00`).getDay();
 
-    // سنقوم بتركيب النص بصيغة YYYY-MM-DD HH:mm:ss متوافقة مع MySQL
-    let shiftStartStr: string;
+    // سنحدد تاريخ اليوم وتاريخ الأمس بصيغة نصية مجردة YYYY-MM-DD
+    const todayTargetDate = `${cairoYear}-${cairoMonth}-${cairoDay}`;
+    let yesterdayTargetDate = todayTargetDate;
+
+    const yesterday = new Date(`${cairoYear}-${cairoMonth}-${cairoDay}T12:00:00`);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yYear = yesterday.getFullYear();
+    const yMonth = String(yesterday.getMonth() + 1).padStart(2, '0');
+    const yDay = String(yesterday.getDate()).padStart(2, '0');
+    yesterdayTargetDate = `${yYear}-${yMonth}-${yDay}`;
+
+    let shiftOpeningTime = "00:00:00";
+    let targetShiftDate = todayTargetDate; // التاريخ الذي سنقارن بناءً عليه
 
     const [settings] = await db
         .select()
@@ -323,37 +409,38 @@ export const checkout = async (req: Request | any, res: Response) => {
         const todaySchedule = allSchedules.find(s => s.dayOfWeek === cairoDayOfWeek);
 
         if (todaySchedule && todaySchedule.openingTime && !todaySchedule.isOffDay) {
+            // إذا كنا قبل ميعاد فتح اليوم، إذن نحن تابعين لشيفت أمس
             if (currentTimeStr < todaySchedule.openingTime) {
-                const yesterday = new Date(`${cairoYear}-${cairoMonth}-${cairoDay}T12:00:00`);
-                yesterday.setDate(yesterday.getDate() - 1);
-                
-                const yYear = yesterday.getFullYear();
-                const yMonth = String(yesterday.getMonth() + 1).padStart(2, '0');
-                const yDay = String(yesterday.getDate()).padStart(2, '0');
-                
                 const yDayOfWeek = yesterday.getDay();
                 const ySchedule = allSchedules.find(s => s.dayOfWeek === yDayOfWeek);
-                const opTime = ySchedule?.openingTime || "00:00";
-                
-                shiftStartStr = `${yYear}-${yMonth}-${yDay} ${opTime}:00`;
+                shiftOpeningTime = `${ySchedule?.openingTime || "00:00"}:00`;
+                targetShiftDate = yesterdayTargetDate;
             } else {
-                shiftStartStr = `${cairoYear}-${cairoMonth}-${cairoDay} ${todaySchedule.openingTime}:00`;
+                shiftOpeningTime = `${todaySchedule.openingTime}:00`;
+                targetShiftDate = todayTargetDate;
             }
         } else {
-            shiftStartStr = `${cairoYear}-${cairoMonth}-${cairoDay} 00:00:00`;
+            shiftOpeningTime = "00:00:00";
+            targetShiftDate = todayTargetDate;
         }
     } else {
-        shiftStartStr = `${cairoYear}-${cairoMonth}-${cairoDay} 00:00:00`;
+        shiftOpeningTime = "00:00:00";
+        targetShiftDate = todayTargetDate;
     }
 
-    // 🌟 التعديل هنا: نستخدم sql لعمل مقارنة نصوص مباشرة داخل الـ DB لضمان الدقة
+    // النص الكامل لبداية ميعاد الشيفت بتوقيت القاهرة الفعلي
+    const exactShiftStartCairo = `${targetShiftDate} ${shiftOpeningTime}`;
+
+    // 🌟 التعديل السحري هنا:
+    // نقوم بتحويل حقل `created_at` المخزن بالـ DB من توقيت نظام السيرفر (أو الـ UTC) إلى توقيت القاهرة (+03:00) 
+    // ثم نقارنه بنص وقت بداية الشيفت كـ String صريح ومباشر ليتفادى مشاكل الملي ثانية والمناطق الزمنية.
     const [ordersCountResult] = await db
         .select({ count: sql<number>`count(${orders.id})` })
         .from(orders)
         .where(
             and(
                 eq(orders.restaurantId, restaurantId),
-                sql`DATE_FORMAT(${orders.createdAt}, '%Y-%m-%d %H:%i:%s') >= ${shiftStartStr}`
+                sql`DATE_FORMAT(CONVERT_TZ(${orders.createdAt}, @@session.time_zone, '+03:00'), '%Y-%m-%d %H:%i:%s') >= ${exactShiftStartCairo}`
             )
         );
 
