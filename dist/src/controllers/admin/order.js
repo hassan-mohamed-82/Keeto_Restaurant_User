@@ -145,12 +145,23 @@ const getRestaurantOrderById = async (req, res) => {
         restaurant: {
             id: schema_1.restaurants.id,
             name: schema_1.restaurants.name,
-        }
+        },
+        address: {
+            id: schema_1.addresses.id,
+            type: schema_1.addresses.type,
+            title: schema_1.addresses.title,
+            lat: schema_1.addresses.lat,
+            lng: schema_1.addresses.lng,
+            street: schema_1.addresses.street,
+            number: schema_1.addresses.number,
+            floor: schema_1.addresses.floor,
+        },
     })
         .from(schema_1.orders)
         .leftJoin(schema_1.users, (0, drizzle_orm_1.eq)(schema_1.orders.userId, schema_1.users.id))
         .leftJoin(schema_1.branches, (0, drizzle_orm_1.eq)(schema_1.orders.branchId, schema_1.branches.id))
         .leftJoin(schema_1.restaurants, (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, schema_1.restaurants.id))
+        .leftJoin(schema_1.addresses, (0, drizzle_orm_1.eq)(schema_1.orders.addressId, schema_1.addresses.id))
         .where((0, drizzle_orm_1.eq)(schema_1.orders.id, id))
         .limit(1);
     if (!orderDetail)
@@ -303,6 +314,7 @@ const getRestaurantOrderById = async (req, res) => {
             paymentMethodNameAr: typeof pmDetails === "object" && pmDetails !== null ? pmDetails.nameAr : pmDetails,
             branch: orderDetail.branch,
             restaurant: orderDetail.restaurant,
+            address: orderDetail.address,
             items: formattedItems
         }
     });

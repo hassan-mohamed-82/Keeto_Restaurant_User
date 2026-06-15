@@ -160,12 +160,23 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
         restaurant: {
             id: restaurants.id,
             name: restaurants.name,
-        }
+        },
+        address: {
+            id: addresses.id,
+            type: addresses.type,
+            title: addresses.title,
+            lat: addresses.lat,
+            lng: addresses.lng,
+            street: addresses.street,
+            number: addresses.number,
+            floor: addresses.floor,
+        },
     })
         .from(orders)
         .leftJoin(users, eq(orders.userId, users.id))
         .leftJoin(branches, eq(orders.branchId, branches.id))
         .leftJoin(restaurants, eq(orders.restaurantId, restaurants.id))
+        .leftJoin(addresses, eq(orders.addressId, addresses.id))
         .where(eq(orders.id, id))
         .limit(1);
 
@@ -332,6 +343,7 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             
             branch: orderDetail.branch,
             restaurant: orderDetail.restaurant,
+            address: orderDetail.address,
             items: formattedItems
         }
     });

@@ -250,25 +250,20 @@ const checkout = async (req, res) => {
     // 9.5 حساب الرقم التسلسلي اليومي للأوردر (الـ Shift)
     // ==========================================
     const now = new Date();
-    // 1. حساب الوقت الحالي في مصر بصيغة نصية واضحة وأرقام صريحة
-    const cairoFormatter = new Intl.DateTimeFormat("en-US", {
+    const cairoParts = new Intl.DateTimeFormat("en-US", {
         timeZone: "Africa/Cairo",
         year: "numeric", month: "2-digit", day: "2-digit",
         hour: "2-digit", minute: "2-digit", hour12: false
-    });
-    const parts = cairoFormatter.formatToParts(now);
-    const getPart = (type) => parts.find(p => p.type === type)?.value || "00";
-    const cairoYear = getPart("year");
-    const cairoMonth = getPart("month");
-    const cairoDay = getPart("day");
-    const cairoHour = getPart("hour");
-    const cairoMinute = getPart("minute");
+    }).formatToParts(now);
+    const getP = (type) => cairoParts.find(p => p.type === type)?.value || "00";
+    const cairoYear = getP("year");
+    const cairoMonth = getP("month");
+    const cairoDay = getP("day");
+    const cairoHour = getP("hour");
+    const cairoMinute = getP("minute");
     const currentTimeStr = `${cairoHour === "24" ? "00" : cairoHour}:${cairoMinute}`;
-    // حساب اليوم الحالي للأسبوع في مصر (0 = الأحد، 6 = السبت)
-    const cairoDateObj = new Date(`${cairoYear}-${cairoMonth}-${cairoDay}T12:00:00`);
-    const cairoDOW = cairoDateObj.getDay();
-    let targetShiftDate = `${cairoYear}-${cairoMonth}-${cairoDay}`;
-    let shiftOpeningTime = "00:00";
+    const cairoDayOfWeek = new Date(`${cairoYear}-${cairoMonth}-${cairoDay}T12:00:00`).getDay();
+    let shiftStartTime;
     const [settings] = await connection_1.db
         .select()
         .from(schema_1.restaurantSettings)
@@ -279,33 +274,33 @@ const checkout = async (req, res) => {
             .select()
             .from(schema_1.restaurantSchedules)
             .where((0, drizzle_orm_1.eq)(schema_1.restaurantSchedules.restaurantId, restaurantId));
-        const todaySchedule = allSchedules.find(s => s.dayOfWeek === cairoDOW);
-        if (todaySchedule && !todaySchedule.isOffDay && todaySchedule.openingTime) {
-            // إذا كنا قبل ميعاد الفتح لليوم الحالي، إذن نحن نتبع شفت أمس
+        const todaySchedule = allSchedules.find(s => s.dayOfWeek === cairoDayOfWeek);
+        if (todaySchedule && todaySchedule.openingTime && !todaySchedule.isOffDay) {
             if (currentTimeStr < todaySchedule.openingTime) {
-                const yesterday = new Date(cairoDateObj.getTime() - 86400000);
-                const yYear = yesterday.getFullYear();
-                const yMonth = String(yesterday.getMonth() + 1).padStart(2, '0');
-                const yDay = String(yesterday.getDate()).padStart(2, '0');
-                targetShiftDate = `${yYear}-${yMonth}-${yDay}`;
-                const yesterdayDOW = yesterday.getDay();
-                const yesterdaySchedule = allSchedules.find(s => s.dayOfWeek === yesterdayDOW);
-                shiftOpeningTime = yesterdaySchedule?.openingTime || "00:00";
+                const yesterday = new Date(`${cairoYear}-${cairoMonth}-${cairoDay}T12:00:00`);
+                yesterday.setDate(yesterday.getDate() - 1);
+                const yDayOfWeek = yesterday.getDay();
+                const yDateStr = yesterday.toISOString().slice(0, 10);
+                const ySchedule = allSchedules.find(s => s.dayOfWeek === yDayOfWeek);
+                const opTime = ySchedule?.openingTime || "00:00";
+                shiftStartTime = new Date(`${yDateStr}T${opTime}:00+02:00`);
             }
             else {
-                shiftOpeningTime = todaySchedule.openingTime;
-                targetShiftDate = `${cairoYear}-${cairoMonth}-${cairoDay}`;
+                shiftStartTime = new Date(`${cairoYear}-${cairoMonth}-${cairoDay}T${todaySchedule.openingTime}:00+02:00`);
             }
         }
+        else {
+            shiftStartTime = new Date(`${cairoYear}-${cairoMonth}-${cairoDay}T00:00:00+02:00`);
+        }
     }
-    // نص تاريخ ووقت بداية الشفت بتوقيت القاهرة (مثال: '2026-06-15 10:00:00')
-    const shiftStartCairoStr = `${targetShiftDate} ${shiftOpeningTime}:00`;
-    // 🌟 الاستعلام السحري: نقوم بتحويل وقت الأوردر في الـ DB إلى توقيت القاهرة ومقارنته بنص صريح
-    // الـ CONVERT_TZ تضمن معالجة فرق التوقيت بين السيرفر ومصر بشكل تلقائي داخل الـ DB
+    else {
+        shiftStartTime = new Date(`${cairoYear}-${cairoMonth}-${cairoDay}T00:00:00+02:00`);
+    }
     const [ordersCountResult] = await connection_1.db
         .select({ count: (0, drizzle_orm_1.sql) `count(${schema_1.orders.id})` })
         .from(schema_1.orders)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId), (0, drizzle_orm_1.sql) `CONVERT_TZ(${schema_1.orders.createdAt}, @@session.time_zone, '+03:00') >= STR_TO_DATE(${shiftStartCairoStr}, '%Y-%m-%d %H:%i:%s')`));
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId), (0, drizzle_orm_1.gte)(schema_1.orders.createdAt, shiftStartTime)));
+    // 🌟 هنا الرقم التسلسلي لليوم الحالي للشيفت
     const dailyOrderNumber = Number(ordersCountResult?.count || 0) + 1;
     // ==========================================
     await connection_1.db.transaction(async (tx) => {
