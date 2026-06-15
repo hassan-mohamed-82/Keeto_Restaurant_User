@@ -135,7 +135,7 @@ const createFood = async (req, res) => {
 };
 exports.createFood = createFood;
 // =============================================
-// GET ALL Foods (Optimized & Secured)
+// GET All Foods
 // =============================================
 const getAllFoods = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
@@ -192,7 +192,7 @@ const getAllFoods = async (req, res) => {
     const allOpts = allVarIds.length > 0
         ? await connection_1.db.select().from(schema_1.variationOptions).where((0, drizzle_orm_1.inArray)(schema_1.variationOptions.variationId, allVarIds))
         : [];
-    // 👇 التعديل كله حصل في الجزء ده 👇
+    // دمج الإضافات والخيارات مع الأكلات وإرجاع كافة الحقول
     const allFoods = rawFoods.map(f => {
         const foodVars = allVars.filter(v => v.foodId === f.id).map(v => ({
             ...v,
@@ -201,15 +201,30 @@ const getAllFoods = async (req, res) => {
         return {
             id: f.id,
             name: f.name,
-            nameAr: f.nameAr, // ✅ تم الإضافة
-            nameFr: f.nameFr, // ✅ تم الإضافة
+            nameAr: f.nameAr,
+            nameFr: f.nameFr,
             description: f.description,
-            descriptionAr: f.descriptionAr, // ✅ تم الإضافة
-            descriptionFr: f.descriptionFr, // ✅ تم الإضافة
+            descriptionAr: f.descriptionAr,
+            descriptionFr: f.descriptionFr,
             image: f.image,
             price: f.price,
-            status: f.status, // ✅ تم الإضافة عشان لو حبيت تعرض حالة الأكلة في الجدول
-            variations: foodVars, // ✅ تم إضافة variations
+            status: f.status,
+            // ✅ تم إضافة باقي الحقول لتظهر في الاستجابة
+            addonsId: f.addonsId,
+            foodtype: f.foodtype,
+            Nutrition: f.Nutrition,
+            allergen_ingredients: f.allergen_ingredients,
+            is_Halal: f.is_Halal,
+            startTime: f.startTime,
+            endTime: f.endTime,
+            search_tags: f.search_tags,
+            discount_type: f.discount_type,
+            discount_value: f.discount_value,
+            Maximum_Purchase: f.Maximum_Purchase,
+            stock_type: f.stock_type,
+            createdAt: f.createdAt,
+            updatedAt: f.updatedAt,
+            variations: foodVars,
             restaurant: f.restaurant,
             category: f.category_name ? { name: f.category_name, nameAr: f.category_nameAr, nameFr: f.category_nameFr } : null,
             subcategory: f.subcategory_name ? { name: f.subcategory_name, nameAr: f.subcategory_nameAr, nameFr: f.subcategory_nameFr } : null,
@@ -275,11 +290,10 @@ const getFoodById = async (req, res) => {
         },
     })
         .from(schema_1.food)
-        // ✅ تم تعديل الربط والفلترة
         .leftJoin(schema_1.restaurants, (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, schema_1.restaurants.id))
         .leftJoin(schema_1.categories, (0, drizzle_orm_1.eq)(schema_1.food.categoryid, schema_1.categories.id))
         .leftJoin(schema_1.subcategories, (0, drizzle_orm_1.eq)(schema_1.food.subcategoryid, schema_1.subcategories.id))
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.id, id), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId))) // ✅ يجب أن تكون الأكلة تخص المطعم
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.id, id), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId)))
         .limit(1);
     if (!foodItem[0])
         throw new NotFound_1.NotFound("Food not found");
