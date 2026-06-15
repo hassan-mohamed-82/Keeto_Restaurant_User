@@ -58,6 +58,7 @@ const getAllAddons = async (req, res) => {
         nameFr: schema_1.addons.nameFr,
         price: schema_1.addons.price,
         stock_type: schema_1.addons.stock_type,
+        status: schema_1.addons.status,
         adonescategoryid: schema_1.addons.adonescategoryid,
         createdAt: schema_1.addons.createdAt,
         updatedAt: schema_1.addons.updatedAt,
@@ -89,6 +90,7 @@ const getAddonById = async (req, res) => {
         stock_type: schema_1.addons.stock_type,
         adonescategoryid: schema_1.addons.adonescategoryid,
         createdAt: schema_1.addons.createdAt,
+        status: schema_1.addons.status,
         updatedAt: schema_1.addons.updatedAt,
         adonescategory: {
             id: schema_1.adonescategory.id,
@@ -117,7 +119,7 @@ const updateAddon = async (req, res) => {
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID missing");
     const { id } = req.params;
-    const { name, price, stock_type, stock, adonescategoryid, nameAr, nameFr } = req.body;
+    const { name, price, stock_type, stock, adonescategoryid, nameAr, nameFr, status } = req.body;
     // Validate addon exists
     const existingAddon = await connection_1.db
         .select()
@@ -148,6 +150,7 @@ const updateAddon = async (req, res) => {
         stock_type: stock_type || existingAddon[0].stock_type,
         adonescategoryid: adonescategoryid || existingAddon[0].adonescategoryid,
         restaurantid: restaurantId,
+        status: status || existingAddon[0].status,
     })
         .where((0, drizzle_orm_1.eq)(schema_1.addons.id, id));
     return (0, response_1.SuccessResponse)(res, { message: "Update addon success", data: { id } });

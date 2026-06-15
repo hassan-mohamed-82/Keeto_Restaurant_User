@@ -63,6 +63,7 @@ export const getAllAddons = async (req: Request, res: Response) => {
             nameFr: addons.nameFr,
             price: addons.price,
             stock_type: addons.stock_type,
+            status: addons.status,
             adonescategoryid: addons.adonescategoryid,
             createdAt: addons.createdAt,
             updatedAt: addons.updatedAt,
@@ -95,6 +96,7 @@ export const getAddonById = async (req: Request, res: Response) => {
             stock_type: addons.stock_type,
             adonescategoryid: addons.adonescategoryid,
             createdAt: addons.createdAt,
+            status: addons.status,
             updatedAt: addons.updatedAt,
             adonescategory: {
                 id: adonescategory.id,
@@ -124,7 +126,7 @@ export const updateAddon = async (req: Request, res: Response) => {
       const restaurantId = req.user?.restaurantId || req.user?.id; 
         if (!restaurantId) throw new BadRequest("Restaurant ID missing");
     const { id } = req.params;
-    const { name, price, stock_type, stock, adonescategoryid, nameAr, nameFr } = req.body;
+    const { name, price, stock_type, stock, adonescategoryid, nameAr, nameFr,status } = req.body;
 
     // Validate addon exists
     const existingAddon = await db
@@ -162,6 +164,7 @@ export const updateAddon = async (req: Request, res: Response) => {
             stock_type: stock_type || existingAddon[0].stock_type,
             adonescategoryid: adonescategoryid || existingAddon[0].adonescategoryid,
             restaurantid: restaurantId,
+            status: status || existingAddon[0].status,
         })
         .where(eq(addons.id, id));
 

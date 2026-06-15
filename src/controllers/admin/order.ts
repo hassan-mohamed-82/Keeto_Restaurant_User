@@ -73,7 +73,7 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
 // ==========================================
 // Helper: جلب أوردرات بحالة معينة
 // ==========================================
-const getOrdersByStatus = async (req: Request, res: Response, status: "pending" | "accepted" | "preparing" | "out_for_delivery" | "delivered" | "cancelled" | "rejected" | "refund") => {
+const getOrdersByStatus = async (req: Request, res: Response, status: "pending" | "accepted" | "preparing" | "out_for_delivery" | "delivered" | "cancelled" | "refund") => {
     // ✅ التحقق من وجود req.user أولاً
     if (!req.user) {
         throw new UnauthorizedError("Not authenticated");
@@ -134,7 +134,6 @@ export const getPreparingOrders = async (req: Request, res: Response) => getOrde
 export const getOutForDeliveryOrders = async (req: Request, res: Response) => getOrdersByStatus(req, res, "out_for_delivery");
 export const getDeliveredOrders = async (req: Request, res: Response) => getOrdersByStatus(req, res, "delivered");
 export const getCancelledOrders = async (req: Request, res: Response) => getOrdersByStatus(req, res, "cancelled");
-export const getRejectedOrders = async (req: Request, res: Response) => getOrdersByStatus(req, res, "rejected");
 export const getRefundOrders = async (req: Request, res: Response) => getOrdersByStatus(req, res, "refund");
 
 // ==========================================
@@ -338,20 +337,20 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
     });
 };
 // ==========================================
-// 3. تحديث حالة الأوردر (مع إرجاع الفلوس لو اترفض)
+// 3. تحديث حالة الأوردر (مع إرجاع الفلوس والعمولة لو المطعم كنسل)
 // ==========================================
 export const updateOrderStatus = async (req: Request, res: Response) => {
     const { orderId } = req.params;
-    const { status, cancelReason } = req.body;
+    const { status, cancelReasonId } = req.body;
 
     const adminRestaurantId = req.user?.restaurantId || req.user?.id;
     const adminBranchId = req.user?.branchId;
 
     if (!status) throw new BadRequest("Status is required");
 
-    // إجبار الموظف يكتب سبب لو كنسل الأوردر
-    if ((status === "rejected" || status === "cancelled") && !cancelReason) {
-        throw new BadRequest("Cancel reason is required when rejecting or cancelling an order");
+    // إجبار اختيار سبب من select_reasons لو كنسل
+    if (status === "cancelled" && !cancelReasonId) {
+        throw new BadRequest("Cancel reason ID is required when cancelling an order");
     }
 
     const [existingOrder] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
@@ -364,7 +363,7 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
     const currentStatus = existingOrder.status as string;
 
     // 🛡️ حماية ضد التغيير بعد الوصول لحالة نهائية
-    const finalStatuses = ["delivered", "cancelled", "rejected", "refund"];
+    const finalStatuses = ["delivered", "cancelled", "refund"];
     if (finalStatuses.includes(currentStatus)) {
         throw new BadRequest(`Order is already ${currentStatus} and cannot be changed`);
     }
@@ -389,23 +388,40 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
         throw new BadRequest(`Order is already ${currentStatus}`);
     }
 
+    // جلب سبب الإلغاء من select_reasons (نوع restaurant)
+    let reason: any = null;
+    if (status === "cancelled") {
+        const [found] = await db.select().from(selectReasons)
+            .where(and(eq(selectReasons.id, cancelReasonId), eq(selectReasons.type, "restaurant")))
+            .limit(1);
+        if (!found) throw new BadRequest("Invalid cancel reason for restaurant");
+        reason = found;
+    }
+
     // Transaction لتحديث الحالة وتنفيذ العمليات المالية
     await db.transaction(async (tx) => {
         // 1. تحديث الحالة
         await tx.update(orders)
             .set({
-                status,
-                cancelReason: (status === "rejected" || status === "cancelled") ? cancelReason : null,
+                status: status, // ✅ تم التعديل هنا ليأخذ الحالة المرسلة ديناميكياً بدلاً من "cancelled" الثابتة
+                cancelReasonId: status === "cancelled" ? reason.id : null,
+                cancelReason: status === "cancelled" ? reason.name : null,
                 updatedAt: new Date()
             })
             .where(eq(orders.id, orderId));
 
         // ==========================================
-        // 💰 2. الـ Refund (ترجيع الفلوس للعميل) لو الأوردر اتلغى
+        // 💰 2. الـ Refund (ترجيع الفلوس للعميل) لو المطعم كنسل
         // ==========================================
-        if (status === "rejected" || status === "cancelled") {
-            // Since paymentMethod is now an enum directly on the order:
-            if (existingOrder.paymentMethod === "wallet") {
+        if (status === "cancelled") {
+            // التحقق لو اليوزر دفع بالمحفظة عن طريق البحث في الترانزكشنز
+            const [walletTx] = await tx.select().from(userWalletTransactions)
+                .where(and(
+                    eq(userWalletTransactions.reference, existingOrder.orderNumber),
+                    eq(userWalletTransactions.transactionType, "order_payment")
+                )).limit(1);
+
+            if (walletTx) {
                 const [userWallet] = await tx.select().from(userWallets)
                     .where(eq(userWallets.userId, existingOrder.userId)).limit(1);
 
@@ -414,12 +430,10 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
                     const amountToRefund = parseFloat(existingOrder.totalAmount as string);
                     const newBalance = balanceBefore + amountToRefund;
 
-                    // إرجاع الفلوس
                     await tx.update(userWallets)
                         .set({ balance: newBalance.toString(), updatedAt: new Date() })
                         .where(eq(userWallets.id, userWallet.id));
 
-                    // تسجيل الحركة كـ Credit
                     await tx.insert(userWalletTransactions).values({
                         id: uuidv4(),
                         userId: existingOrder.userId,
@@ -432,18 +446,58 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
                     });
                 }
             }
+
+            // ==========================================
+            // 💰 3. خصم العمولة كغرامة من المطعم (لأن المطعم هو اللي كنسل)
+            // ==========================================
+            const appCommission = parseFloat(existingOrder.appCommission as string || "0");
+            const serviceFee = parseFloat(existingOrder.serviceFee as string || "0");
+            const appDues = appCommission + serviceFee;
+
+            if (appDues > 0) {
+                let [restWallet] = await tx.select().from(restaurantWallets)
+                    .where(eq(restaurantWallets.restaurantId, existingOrder.restaurantId)).limit(1);
+
+                if (!restWallet) {
+                    await tx.insert(restaurantWallets).values({ id: uuidv4(), restaurantId: existingOrder.restaurantId });
+                    [restWallet] = await tx.select().from(restaurantWallets)
+                        .where(eq(restaurantWallets.restaurantId, existingOrder.restaurantId)).limit(1);
+                }
+
+                const currentBalance = parseFloat(restWallet.balance as string);
+                const newBalance = currentBalance - appDues;
+
+                await tx.update(restaurantWallets)
+                    .set({
+                        balance: newBalance.toString(),
+                        updatedAt: new Date()
+                    })
+                    .where(eq(restaurantWallets.restaurantId, existingOrder.restaurantId));
+
+                await tx.insert(restaurantWalletTransactions).values({
+                    id: uuidv4(),
+                    restaurantId: existingOrder.restaurantId,
+                    type: "order_payment",
+                    amount: `-${appDues}`,
+                    balanceBefore: currentBalance.toString(),
+                    balanceAfter: newBalance.toString(),
+                    method: existingOrder.paymentMethod,
+                    reference: existingOrder.orderNumber,
+                    note: `Penalty: Restaurant cancelled order. Commission deducted: ${appDues}`,
+                    createdAt: new Date()
+                });
+            }
         }
 
         // ==========================================
-        // 📈 3. الـ Settlement (إضافة الأرباح للمطعم) لو الأوردر اتسلم
+        // 📈 4. الـ Settlement (إضافة الأرباح للمطعم) لو الأوردر اتسلم
         // ==========================================
         if (status === "delivered") {
             const restaurantId = existingOrder.restaurantId;
             const totalAmount = parseFloat(existingOrder.totalAmount as string);
             const appCommission = parseFloat(existingOrder.appCommission as string);
-            const netRestaurantEarning = totalAmount - appCommission; // الصافي للمطعم
+            const netRestaurantEarning = totalAmount - appCommission;
 
-            // جلب محفظة المطعم (أو إنشائها لو مش موجودة)
             let [restWallet] = await tx.select().from(restaurantWallets).where(eq(restaurantWallets.restaurantId, restaurantId)).limit(1);
             if (!restWallet) {
                 await tx.insert(restaurantWallets).values({ id: uuidv4(), restaurantId });
@@ -457,14 +511,12 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
             let newBalance = currentBalance;
             let newCollectedCash = currentCollectedCash;
 
-            // توجيه الأموال بناءً على طريقة الدفع
             if (existingOrder.paymentMethod === "cash_on_delivery") {
-                newCollectedCash = currentCollectedCash + totalAmount; // كاش في إيد المطعم
+                newCollectedCash = currentCollectedCash + totalAmount;
             } else {
-                newBalance = currentBalance + netRestaurantEarning; // أونلاين، نزود رصيد المطعم
+                newBalance = currentBalance + netRestaurantEarning;
             }
 
-            // تحديث محفظة المطعم
             await tx.update(restaurantWallets)
                 .set({
                     balance: newBalance.toString(),
@@ -474,7 +526,6 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
                 })
                 .where(eq(restaurantWallets.restaurantId, restaurantId));
 
-            // تسجيل ترانزكشن المطعم
             await tx.insert(restaurantWalletTransactions).values({
                 id: uuidv4(),
                 restaurantId: restaurantId,
@@ -491,11 +542,11 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
     });
 
     // ==========================================
-    // 4. Send Notification to User
+    // 5. Send Notification to User
     // ==========================================
     let messageBody = `Your order ${existingOrder.orderNumber} is now ${status}.`;
-    if (status === "cancelled" || status === "rejected") {
-        messageBody = `Your order ${existingOrder.orderNumber} was ${status}. Reason: ${cancelReason || "Not specified"}`;
+    if (status === "cancelled") {
+        messageBody = `Your order ${existingOrder.orderNumber} was cancelled. Reason: ${reason?.name || "Not specified"}`;
     }
 
     await sendPushNotification({
@@ -511,18 +562,25 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
         }
     });
 
-    return SuccessResponse(res, { message: `Order status successfully updated to ${status} and financials settled` });
+    return SuccessResponse(res, { message: `Order status successfully updated to ${status}` });
 };
-
+// جلب أسباب الإلغاء حسب النوع (user أو restaurant)
 export const getReasons = async (req: Request, res: Response) => {
+    const type = req.query.type as string;
+
+    const conditions: any[] = [eq(selectReasons.status, "active")];
+    if (type === "user" || type === "restaurant") {
+        conditions.push(eq(selectReasons.type, type));
+    }
+
     const reasons = await db
         .select()
         .from(selectReasons)
-        .where(eq(selectReasons.status, "active"));
+        .where(and(...conditions));
 
-    return SuccessResponse(res, { 
-        message: "Active reasons fetched successfully", 
-        data: reasons 
+    return SuccessResponse(res, {
+        message: "Active reasons fetched successfully",
+        data: reasons
     });
 };
 

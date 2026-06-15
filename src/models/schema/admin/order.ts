@@ -3,9 +3,9 @@ import { sql } from "drizzle-orm";
 import { restaurants } from "./restaurants";
 import { food } from "./food";
 import { users } from "../user/Users";
-// تم مسح الـ import الخاص بـ paymentMethods
 import { branches } from "../../schema";
 import { addresses } from "../user/address";
+import { selectReasons } from "./selectReasons";
 
 export const orders = mysqlTable("orders", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
@@ -20,19 +20,17 @@ export const orders = mysqlTable("orders", {
         .references(() => restaurants.id)
         .notNull(),
 
-    // 👇 ده الحقل اللي كان ناقص وعامل المشكلة
     branchId: char("branch_id", { length: 36 })
         .references(() => branches.id)
         .notNull(),
 
-    // 👇 عنوان التوصيل المختار من اليوزر
     addressId: char("address_id", { length: 36 })
         .references(() => addresses.id),
 
     orderSource: mysqlEnum("order_source", ["online_order", "food_aggregator"]).notNull(),
 
-    // 👇 التعديل هنا: شلنا الربط وخليناها Enum بتلات قيم بس
-    paymentMethod: mysqlEnum("payment_method", ["cash_on_delivery", "visa", "wallet"]).notNull(),
+    // ✅ التعديل هنا: رجعناها لـ varchar عشان تقبل الـ ID (UUID) اللي مبعوت من الـ Body
+    paymentMethod: varchar("payment_method", { length: 100 }).notNull(),
 
     orderType: mysqlEnum("order_type", ["delivery", "takeaway", "dine_in"]).default("delivery"),
 
@@ -40,9 +38,10 @@ export const orders = mysqlTable("orders", {
     deliveryFee: decimal("delivery_fee", { precision: 10, scale: 2 }).default("0.00"),
     serviceFee: decimal("service_fee", { precision: 10, scale: 2 }).default("0.00"),
     appCommission: decimal("app_commission", { precision: 10, scale: 2 }).default("0.00"),
+    discountAmount: decimal("discount_amount", { precision: 10, scale: 2 }).default("0.00"),
+    couponCode: varchar("coupon_code", { length: 50 }),
     totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull(),
 
-    // 👇 ضفنا حالة rejected هنا
     status: mysqlEnum("status", [
         "pending",
         "accepted",
@@ -50,11 +49,11 @@ export const orders = mysqlTable("orders", {
         "out_for_delivery",
         "delivered",
         "cancelled",
-        "rejected",
-        "refund" // 👈 ضيف الكلمة دي هنا
+        "refund" 
     ]).default("pending"),
 
-    // 👇 وده حقل سبب الإلغاء عشان المطعم يكتبه
+    cancelReasonId: char("cancel_reason_id", { length: 36 })
+        .references(() => selectReasons.id),
     cancelReason: text("cancel_reason"),
     note: text("note"),
     dailyOrderNumber: int("daily_order_number").default(1),
@@ -88,5 +87,4 @@ export const orderItems = mysqlTable("order_items", {
     variations: json("variations"),
 
     note: text("note"),
-
 });

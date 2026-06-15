@@ -169,7 +169,7 @@ const getMyRestaurantReport = async (req, res) => {
             branchSummary[bId].deliveredOrders++;
             branchSummary[bId].deliveredAmount += amount;
         }
-        if (status === "cancelled" || status === "rejected") {
+        if (status === "cancelled") {
             branchSummary[bId].cancelledOrders++;
         }
         if (order.createdAt) {

@@ -11,7 +11,6 @@ import {
     getOutForDeliveryOrders,
     getDeliveredOrders,
     getCancelledOrders,
-    getRejectedOrders,
     getReasons,
     getRefundOrders,
     generateOrderInvoicePDF,
@@ -34,7 +33,6 @@ router.get("/preparing", hasPermission("orders", "read", true), catchAsync(getPr
 router.get("/out-for-delivery", hasPermission("orders", "read", true), catchAsync(getOutForDeliveryOrders));
 router.get("/delivered", hasPermission("orders", "read", true), catchAsync(getDeliveredOrders));
 router.get("/cancelled", hasPermission("orders", "read", true), catchAsync(getCancelledOrders));
-router.get("/rejected", hasPermission("orders", "read", true), catchAsync(getRejectedOrders));
 router.get("/refund", hasPermission("orders", "read", true), catchAsync(getRefundOrders));
 
 // ✅ تفاصيل أوردر بالـ ID - يحتاج صلاحية read + التحقق من الفرع
