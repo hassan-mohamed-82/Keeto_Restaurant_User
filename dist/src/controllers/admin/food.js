@@ -247,18 +247,14 @@ const updateFood = async (req, res) => {
     if (!existingFood[0]) {
         throw new NotFound_1.NotFound("Food not found or you don't have permission to edit it");
     }
-    // ✅ الحقول المسموح بتحديثها فقط (Clean Code + Security)
-    // 💡 تم استبدال isAvailable بـ status لتتطابق مع الـ Schema
+    // ✅ الحقول المسموح بتحديثها (تم إضافة باقي حقول الـ Schema عشان الأبديت يشتغل بالكامل)
     const allowedFields = [
-        "name",
-        "nameAr",
-        "nameFr",
-        "description",
-        "descriptionAr",
-        "descriptionFr",
-        "price",
-        "status",
-        "image"
+        "name", "nameAr", "nameFr",
+        "description", "descriptionAr", "descriptionFr",
+        "price", "status", "image",
+        "foodtype", "Nutrition", "allergen_ingredients", "is_Halal",
+        "startTime", "endTime", "search_tags",
+        "discount_type", "discount_value", "Maximum_Purchase", "stock_type"
     ];
     const updateData = {
         updatedAt: new Date(), // ✅ دايمًا Date object
@@ -278,16 +274,35 @@ const updateFood = async (req, res) => {
             }
         }
     }
-    // 2️⃣ معالجة الـ Categories بشكل مخصص 
-    // ندعم حالة الـ CamelCase (categoryId) والـ Lowercase (categoryid)
+    // 2️⃣ معالجة الـ Addons بشكل مخصص وآمن 
+    if (data.addonsId !== undefined) {
+        let parsedAddons = data.addonsId;
+        if (typeof data.addonsId === "string") {
+            try {
+                parsedAddons = JSON.parse(data.addonsId);
+            }
+            catch (e) {
+                parsedAddons = [data.addonsId]; // لو مبعوت ID واحد كـ String
+            }
+        }
+        parsedAddons = Array.isArray(parsedAddons) ? parsedAddons : [];
+        // التأكد من صحة الـ IDs زي ما عملنا في الـ Create
+        if (parsedAddons.length > 0) {
+            const existingAddons = await connection_1.db.select({ id: schema_1.addons.id }).from(schema_1.addons)
+                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.addons.id, parsedAddons), (0, drizzle_orm_1.eq)(schema_1.addons.restaurantid, restaurantId)));
+            if (existingAddons.length !== parsedAddons.length) {
+                throw new BadRequest_1.BadRequest("One or more Addon IDs are invalid");
+            }
+        }
+        updateData.addonsId = parsedAddons; // إضافتها لبيانات التحديث
+    }
+    // 3️⃣ معالجة الـ Categories بشكل مخصص 
     const incomingCategoryId = data.categoryid ?? data.categoryId;
     if (incomingCategoryId !== undefined) {
-        // حقل categoryid مطلوب (notNull)، لذا نمرره كما هو
         updateData.categoryid = incomingCategoryId;
     }
     const incomingSubcategoryId = data.subcategoryid ?? data.subcategoryId;
     if (incomingSubcategoryId !== undefined) {
-        // حقل subcategoryid يقبل Null، لذلك لو تم إرساله كنص فارغ نجعله null في الداتابيز
         updateData.subcategoryid = incomingSubcategoryId === "" ? null : incomingSubcategoryId;
     }
     // ✅ تنفيذ التحديث (نتأكد إن فيه بيانات للتحديث غير الـ updatedAt)

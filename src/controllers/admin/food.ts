@@ -279,18 +279,14 @@ export const updateFood = async (req: Request, res: Response) => {
         throw new NotFound("Food not found or you don't have permission to edit it");
     }
 
-    // ✅ الحقول المسموح بتحديثها فقط (Clean Code + Security)
-    // 💡 تم استبدال isAvailable بـ status لتتطابق مع الـ Schema
+    // ✅ الحقول المسموح بتحديثها (تم إضافة باقي حقول الـ Schema عشان الأبديت يشتغل بالكامل)
     const allowedFields = [
-        "name",
-        "nameAr",
-        "nameFr",
-        "description",
-        "descriptionAr",
-        "descriptionFr",
-        "price",
-        "status", 
-        "image"
+        "name", "nameAr", "nameFr",
+        "description", "descriptionAr", "descriptionFr",
+        "price", "status", "image",
+        "foodtype", "Nutrition", "allergen_ingredients", "is_Halal",
+        "startTime", "endTime", "search_tags",
+        "discount_type", "discount_value", "Maximum_Purchase", "stock_type"
     ];
 
     const updateData: any = {
@@ -319,17 +315,44 @@ export const updateFood = async (req: Request, res: Response) => {
         }
     }
 
-    // 2️⃣ معالجة الـ Categories بشكل مخصص 
-    // ندعم حالة الـ CamelCase (categoryId) والـ Lowercase (categoryid)
+    // 2️⃣ معالجة الـ Addons بشكل مخصص وآمن 
+    if (data.addonsId !== undefined) {
+        let parsedAddons = data.addonsId;
+        
+        if (typeof data.addonsId === "string") {
+            try {
+                parsedAddons = JSON.parse(data.addonsId);
+            } catch (e) {
+                parsedAddons = [data.addonsId]; // لو مبعوت ID واحد كـ String
+            }
+        }
+        
+        parsedAddons = Array.isArray(parsedAddons) ? parsedAddons : [];
+
+        // التأكد من صحة الـ IDs زي ما عملنا في الـ Create
+        if (parsedAddons.length > 0) {
+            const existingAddons = await db.select({ id: addons.id }).from(addons)
+                .where(and(
+                    inArray(addons.id, parsedAddons),
+                    eq(addons.restaurantid, restaurantId)
+                ));
+
+            if (existingAddons.length !== parsedAddons.length) {
+                throw new BadRequest("One or more Addon IDs are invalid");
+            }
+        }
+        
+        updateData.addonsId = parsedAddons; // إضافتها لبيانات التحديث
+    }
+
+    // 3️⃣ معالجة الـ Categories بشكل مخصص 
     const incomingCategoryId = data.categoryid ?? data.categoryId;
     if (incomingCategoryId !== undefined) {
-        // حقل categoryid مطلوب (notNull)، لذا نمرره كما هو
         updateData.categoryid = incomingCategoryId;
     }
 
     const incomingSubcategoryId = data.subcategoryid ?? data.subcategoryId;
     if (incomingSubcategoryId !== undefined) {
-        // حقل subcategoryid يقبل Null، لذلك لو تم إرساله كنص فارغ نجعله null في الداتابيز
         updateData.subcategoryid = incomingSubcategoryId === "" ? null : incomingSubcategoryId;
     }
 
