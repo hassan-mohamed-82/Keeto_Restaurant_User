@@ -284,29 +284,16 @@ export const checkout = async (req: Request | any, res: Response) => {
     // ==========================================
     let [restaurantWallet] = await db.select().from(restaurantWallets).where(eq(restaurantWallets.restaurantId, restaurantId)).limit(1);
 
-    ///////////////////////////////////////
-
-// ==========================================
+    // ==========================================
     // 9.5 حساب الرقم التسلسلي اليومي للأوردر (الـ Shift)
     // ==========================================
     const now = new Date();
 
-    const cairoParts = new Intl.DateTimeFormat("en-US", {
-        timeZone: "Africa/Cairo",
-        year: "numeric", month: "2-digit", day: "2-digit",
-        hour: "2-digit", minute: "2-digit", hour12: false
-    }).formatToParts(now);
-    const getP = (type: string) => cairoParts.find(p => p.type === type)?.value || "00";
-    const cairoYear = getP("year");
-    const cairoMonth = getP("month");
-    const cairoDay = getP("day");
-    const cairoHour = getP("hour");
-    const cairoMinute = getP("minute");
-    const currentTimeStr = `${cairoHour === "24" ? "00" : cairoHour}:${cairoMinute}`;
-    const cairoDayOfWeek = new Date(`${cairoYear}-${cairoMonth}-${cairoDay}T12:00:00`).getDay();
-
-    // سنقوم بتركيب النص بصيغة YYYY-MM-DD HH:mm:ss متوافقة مع MySQL
-    let shiftStartStr: string;
+    // مصر UTC+2 ثابتة → نضيف 2 ساعات على UTC للحصول على وقت القاهرة
+    const CAIRO_OFFSET = 2 * 60 * 60 * 1000;
+    const nowCairo = new Date(now.getTime() + CAIRO_OFFSET);
+    const cairoHHMM = nowCairo.toISOString().slice(11, 16); // "14:30"
+    const cairoDOW  = nowCairo.getUTCDay(); // 0=Sun .. 6=Sat
 
     const [settings] = await db
         .select()
@@ -314,59 +301,54 @@ export const checkout = async (req: Request | any, res: Response) => {
         .where(eq(restaurantSettings.restaurantId, restaurantId))
         .limit(1);
 
+    let shiftStartUTC: Date;
+
     if (settings && !settings.isAlwaysOpen) {
         const allSchedules = await db
             .select()
             .from(restaurantSchedules)
             .where(eq(restaurantSchedules.restaurantId, restaurantId));
 
-        const todaySchedule = allSchedules.find(s => s.dayOfWeek === cairoDayOfWeek);
+        const todaySchedule = allSchedules.find(s => s.dayOfWeek === cairoDOW);
 
-        if (todaySchedule && todaySchedule.openingTime && !todaySchedule.isOffDay) {
-            if (currentTimeStr < todaySchedule.openingTime) {
-                const yesterday = new Date(`${cairoYear}-${cairoMonth}-${cairoDay}T12:00:00`);
-                yesterday.setDate(yesterday.getDate() - 1);
-                
-                const yYear = yesterday.getFullYear();
-                const yMonth = String(yesterday.getMonth() + 1).padStart(2, '0');
-                const yDay = String(yesterday.getDate()).padStart(2, '0');
-                
-                const yDayOfWeek = yesterday.getDay();
-                const ySchedule = allSchedules.find(s => s.dayOfWeek === yDayOfWeek);
-                const opTime = ySchedule?.openingTime || "00:00";
-                
-                shiftStartStr = `${yYear}-${yMonth}-${yDay} ${opTime}:00`;
-            } else {
-                shiftStartStr = `${cairoYear}-${cairoMonth}-${cairoDay} ${todaySchedule.openingTime}:00`;
-            }
+        if (todaySchedule && !todaySchedule.isOffDay && todaySchedule.openingTime) {
+            // هل الوقت الحالي بعد ميعاد الفتح؟ → شيفت اليوم، غير كده → شيفت الأمس
+            const isAfterOpen = cairoHHMM >= todaySchedule.openingTime;
+            const targetCairo  = isAfterOpen ? nowCairo : new Date(nowCairo.getTime() - 86400000);
+            const openHHMM     = isAfterOpen
+                ? todaySchedule.openingTime
+                : (allSchedules.find(s => s.dayOfWeek === (cairoDOW + 6) % 7)?.openingTime ?? "00:00");
+
+            const [h, m] = openHHMM.split(':').map(Number);
+            shiftStartUTC = new Date(Date.UTC(
+                targetCairo.getUTCFullYear(), targetCairo.getUTCMonth(), targetCairo.getUTCDate(),
+                h - 2, m, 0  // Cairo → UTC
+            ));
         } else {
-            shiftStartStr = `${cairoYear}-${cairoMonth}-${cairoDay} 00:00:00`;
+            // يوم إجازة أو لا يوجد جدول → بداية اليوم بتوقيت القاهرة
+            shiftStartUTC = new Date(Date.UTC(
+                nowCairo.getUTCFullYear(), nowCairo.getUTCMonth(), nowCairo.getUTCDate(),
+                -2, 0, 0  // 00:00 Cairo → 22:00 UTC previous day
+            ));
         }
     } else {
-        shiftStartStr = `${cairoYear}-${cairoMonth}-${cairoDay} 00:00:00`;
+        // مفتوح دائماً → يتصفر منتصف الليل بتوقيت القاهرة
+        shiftStartUTC = new Date(Date.UTC(
+            nowCairo.getUTCFullYear(), nowCairo.getUTCMonth(), nowCairo.getUTCDate(),
+            -2, 0, 0
+        ));
     }
-
-    // ✅ تحويل shiftStartStr من توقيت القاهرة (UTC+2) إلى UTC لمقارنة صحيحة مع قاعدة البيانات
-    // مصر دائماً UTC+2 (بدون Daylight Saving)
-    const [datePart, timePart] = shiftStartStr.split(' ');
-    const [sYear, sMonth, sDay] = datePart.split('-').map(Number);
-    const [sHour, sMin, sSec] = timePart.split(':').map(Number);
-    // نطرح 2 ساعة عشان نحول من Cairo إلى UTC
-    const shiftStartUTC = new Date(Date.UTC(sYear, sMonth - 1, sDay, sHour - 2, sMin, sSec));
 
     const [ordersCountResult] = await db
         .select({ count: sql<number>`count(${orders.id})` })
         .from(orders)
-        .where(
-            and(
-                eq(orders.restaurantId, restaurantId),
-                gte(orders.createdAt, shiftStartUTC)
-            )
-        );
+        .where(and(
+            eq(orders.restaurantId, restaurantId),
+            gte(orders.createdAt, shiftStartUTC)
+        ));
 
     const dailyOrderNumber = Number(ordersCountResult?.count || 0) + 1;
 
-    ///////////////////////////////////////
 
     await db.transaction(async (tx) => {
         if (isWalletPayment && userWallet) {
