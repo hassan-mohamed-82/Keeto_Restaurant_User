@@ -16,12 +16,15 @@ const handleImages_1 = require("../../utils/handleImages");
 const createFood = async (req, res) => {
     try {
         const restaurantId = req.user?.restaurantId || req.user?.id;
-        if (!restaurantId)
+        if (!restaurantId) {
             throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
+        }
         const { name, description, image, categoryid, subcategoryid, foodtype, Nutrition, allergen_ingredients, is_Halal, addonsId, startTime, endTime, search_tags, price, discount_type, discount_value, Maximum_Purchase, stock_type, status, variations, nameAr, nameFr, descriptionAr, descriptionFr } = req.body;
+        // 1. التحقق من الحقول المطلوبة
         if (!name || !description || !image || !categoryid || !startTime || !endTime || !price) {
             throw new BadRequest_1.BadRequest("Missing required fields");
         }
+        // 2. التحقق من وجود العلاقات
         const existingCategory = await connection_1.db.select().from(schema_1.categories).where((0, drizzle_orm_1.eq)(schema_1.categories.id, categoryid)).limit(1);
         if (!existingCategory[0])
             throw new BadRequest_1.BadRequest("Category not found");
@@ -30,29 +33,40 @@ const createFood = async (req, res) => {
             if (!existingSub[0])
                 throw new BadRequest_1.BadRequest("Subcategory not found");
         }
-        // ✅ 1. معالجة الإضافات لضمان تحويلها إلى Array لو كانت String
+        // ==========================================
+        // ✅ 3. معالجة الإضافات (Addons) بشكل آمن
+        // ==========================================
         let parsedAddons = addonsId;
         if (typeof addonsId === "string") {
             try {
                 parsedAddons = JSON.parse(addonsId);
             }
             catch (e) {
-                parsedAddons = [addonsId]; // لو مبعوت ID واحد كـ String
+                parsedAddons = [addonsId];
             }
         }
         parsedAddons = Array.isArray(parsedAddons) ? parsedAddons : [];
-        if (parsedAddons.length > 0) {
+        // 🔥 استخراج الـ ID لو الفرونت إند باعت Objects بدل Strings
+        const finalAddonsIds = parsedAddons.map((item) => {
+            if (typeof item === 'object' && item !== null) {
+                return item.id || item.value || item.addonId;
+            }
+            return item;
+        }).filter((id) => typeof id === 'string' && id.trim() !== '');
+        if (finalAddonsIds.length > 0) {
             const existingAddons = await connection_1.db.select({ id: schema_1.addons.id }).from(schema_1.addons)
-                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.addons.id, parsedAddons), (0, drizzle_orm_1.eq)(schema_1.addons.restaurantid, restaurantId)));
-            if (existingAddons.length !== parsedAddons.length) {
+                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.addons.id, finalAddonsIds), (0, drizzle_orm_1.eq)(schema_1.addons.restaurantid, restaurantId)));
+            if (existingAddons.length !== finalAddonsIds.length) {
                 throw new BadRequest_1.BadRequest("One or more Addon IDs are invalid");
             }
         }
+        // 4. معالجة الصورة
         let imageUrl = image;
         if (image && image.startsWith("data:image")) {
             imageUrl = await (0, handleImages_1.saveBase64Image)(image, req, "foods");
         }
         const foodId = (0, uuid_1.v4)();
+        // 5. بدء المعاملة (Transaction) لحفظ البيانات
         await connection_1.db.transaction(async (tx) => {
             await tx.insert(schema_1.food).values({
                 id: foodId,
@@ -66,12 +80,13 @@ const createFood = async (req, res) => {
                 Nutrition: Nutrition || null,
                 allergen_ingredients: allergen_ingredients || null,
                 is_Halal: is_Halal ?? false,
-                addonsId: parsedAddons, // ✅ إدخال المصفوفة بعد التأكد منها
+                addonsId: finalAddonsIds, // ✅ حفظ المصفوفة النظيفة
                 startTime, endTime, search_tags: search_tags || null,
                 price, discount_type: discount_type || "percentage",
                 discount_value: discount_value || null, Maximum_Purchase: Maximum_Purchase || null,
                 stock_type: stock_type || "unlimited", status: status || "active",
             });
+            // إدخال الخيارات (Variations) إن وجدت
             if (variations && Array.isArray(variations) && variations.length > 0) {
                 for (const variation of variations) {
                     const variationId = (0, uuid_1.v4)();
@@ -96,7 +111,10 @@ const createFood = async (req, res) => {
                 }
             }
         });
-        return (0, response_1.SuccessResponse)(res, { message: "Create food success", data: { id: foodId } });
+        return (0, response_1.SuccessResponse)(res, {
+            message: "Create food success",
+            data: { id: foodId }
+        });
     }
     catch (error) {
         console.error("🔥 DATABASE ERROR DETAILED:", error.sqlMessage || error.message || error);
@@ -247,7 +265,7 @@ const updateFood = async (req, res) => {
     if (!existingFood[0]) {
         throw new NotFound_1.NotFound("Food not found or you don't have permission to edit it");
     }
-    // ✅ الحقول المسموح بتحديثها (تم إضافة باقي حقول الـ Schema عشان الأبديت يشتغل بالكامل)
+    // ✅ الحقول المسموح بتحديثها
     const allowedFields = [
         "name", "nameAr", "nameFr",
         "description", "descriptionAr", "descriptionFr",
@@ -257,7 +275,7 @@ const updateFood = async (req, res) => {
         "discount_type", "discount_value", "Maximum_Purchase", "stock_type"
     ];
     const updateData = {
-        updatedAt: new Date(), // ✅ دايمًا Date object
+        updatedAt: new Date(),
     };
     // 1️⃣ معالجة الحقول العادية والصورة
     for (const key of allowedFields) {
@@ -274,7 +292,9 @@ const updateFood = async (req, res) => {
             }
         }
     }
+    // ==========================================
     // 2️⃣ معالجة الـ Addons بشكل مخصص وآمن 
+    // ==========================================
     if (data.addonsId !== undefined) {
         let parsedAddons = data.addonsId;
         if (typeof data.addonsId === "string") {
@@ -282,19 +302,25 @@ const updateFood = async (req, res) => {
                 parsedAddons = JSON.parse(data.addonsId);
             }
             catch (e) {
-                parsedAddons = [data.addonsId]; // لو مبعوت ID واحد كـ String
+                parsedAddons = [data.addonsId];
             }
         }
         parsedAddons = Array.isArray(parsedAddons) ? parsedAddons : [];
-        // التأكد من صحة الـ IDs زي ما عملنا في الـ Create
-        if (parsedAddons.length > 0) {
+        // 🔥 استخراج الـ ID لو الفرونت إند باعت Objects بدل Strings
+        const finalAddonsIds = parsedAddons.map((item) => {
+            if (typeof item === 'object' && item !== null) {
+                return item.id || item.value || item.addonId;
+            }
+            return item;
+        }).filter((id) => typeof id === 'string' && id.trim() !== '');
+        if (finalAddonsIds.length > 0) {
             const existingAddons = await connection_1.db.select({ id: schema_1.addons.id }).from(schema_1.addons)
-                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.addons.id, parsedAddons), (0, drizzle_orm_1.eq)(schema_1.addons.restaurantid, restaurantId)));
-            if (existingAddons.length !== parsedAddons.length) {
+                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.addons.id, finalAddonsIds), (0, drizzle_orm_1.eq)(schema_1.addons.restaurantid, restaurantId)));
+            if (existingAddons.length !== finalAddonsIds.length) {
                 throw new BadRequest_1.BadRequest("One or more Addon IDs are invalid");
             }
         }
-        updateData.addonsId = parsedAddons; // إضافتها لبيانات التحديث
+        updateData.addonsId = finalAddonsIds; // ✅ تحديث البيانات بالمصفوفة النظيفة
     }
     // 3️⃣ معالجة الـ Categories بشكل مخصص 
     const incomingCategoryId = data.categoryid ?? data.categoryId;
@@ -305,7 +331,7 @@ const updateFood = async (req, res) => {
     if (incomingSubcategoryId !== undefined) {
         updateData.subcategoryid = incomingSubcategoryId === "" ? null : incomingSubcategoryId;
     }
-    // ✅ تنفيذ التحديث (نتأكد إن فيه بيانات للتحديث غير الـ updatedAt)
+    // ✅ تنفيذ التحديث الرئيسي للأكلة
     if (Object.keys(updateData).length > 1) {
         await connection_1.db.update(schema_1.food).set(updateData).where((0, drizzle_orm_1.eq)(schema_1.food.id, id));
     }
@@ -348,9 +374,7 @@ const updateFood = async (req, res) => {
                         optionName: option.optionName,
                         optionNameAr: option.optionNameAr,
                         optionNameFr: option.optionNameFr,
-                        additionalPrice: option.additionalPrice
-                            ? option.additionalPrice.toString()
-                            : "0",
+                        additionalPrice: option.additionalPrice ? option.additionalPrice.toString() : "0",
                     });
                 }
             }

@@ -26,7 +26,9 @@ import { saveBase64Image, handleImageUpdate } from "../../utils/handleImages";
 export const createFood = async (req: Request, res: Response) => {
     try {
         const restaurantId = req.user?.restaurantId || req.user?.id;
-        if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
+        if (!restaurantId) {
+            throw new BadRequest("Restaurant ID missing or unauthorized");
+        }
 
         const {
             name, description, image,
@@ -38,10 +40,12 @@ export const createFood = async (req: Request, res: Response) => {
             nameAr, nameFr, descriptionAr, descriptionFr
         } = req.body;
 
+        // 1. التحقق من الحقول المطلوبة
         if (!name || !description || !image || !categoryid || !startTime || !endTime || !price) {
             throw new BadRequest("Missing required fields");
         }
 
+        // 2. التحقق من وجود العلاقات
         const existingCategory = await db.select().from(categories).where(eq(categories.id, categoryid)).limit(1);
         if (!existingCategory[0]) throw new BadRequest("Category not found");
 
@@ -50,29 +54,40 @@ export const createFood = async (req: Request, res: Response) => {
             if (!existingSub[0]) throw new BadRequest("Subcategory not found");
         }
 
-        // ✅ 1. معالجة الإضافات لضمان تحويلها إلى Array لو كانت String
+        // ==========================================
+        // ✅ 3. معالجة الإضافات (Addons) بشكل آمن
+        // ==========================================
         let parsedAddons = addonsId;
         if (typeof addonsId === "string") {
             try {
                 parsedAddons = JSON.parse(addonsId);
             } catch (e) {
-                parsedAddons = [addonsId]; // لو مبعوت ID واحد كـ String
+                parsedAddons = [addonsId];
             }
         }
         parsedAddons = Array.isArray(parsedAddons) ? parsedAddons : [];
 
-        if (parsedAddons.length > 0) {
+        // 🔥 استخراج الـ ID لو الفرونت إند باعت Objects بدل Strings
+        const finalAddonsIds = parsedAddons.map((item: any) => {
+            if (typeof item === 'object' && item !== null) {
+                return item.id || item.value || item.addonId; 
+            }
+            return item; 
+        }).filter((id: any) => typeof id === 'string' && id.trim() !== '');
+
+        if (finalAddonsIds.length > 0) {
             const existingAddons = await db.select({ id: addons.id }).from(addons)
                 .where(and(
-                    inArray(addons.id, parsedAddons),
+                    inArray(addons.id, finalAddonsIds),
                     eq(addons.restaurantid, restaurantId)
                 ));
 
-            if (existingAddons.length !== parsedAddons.length) {
+            if (existingAddons.length !== finalAddonsIds.length) {
                 throw new BadRequest("One or more Addon IDs are invalid");
             }
         }
 
+        // 4. معالجة الصورة
         let imageUrl = image;
         if (image && image.startsWith("data:image")) {
             imageUrl = await saveBase64Image(image, req, "foods");
@@ -80,6 +95,7 @@ export const createFood = async (req: Request, res: Response) => {
 
         const foodId = uuidv4();
 
+        // 5. بدء المعاملة (Transaction) لحفظ البيانات
         await db.transaction(async (tx) => {
             await tx.insert(food).values({
                 id: foodId,
@@ -93,16 +109,18 @@ export const createFood = async (req: Request, res: Response) => {
                 Nutrition: Nutrition || null,
                 allergen_ingredients: allergen_ingredients || null,
                 is_Halal: is_Halal ?? false,
-                addonsId: parsedAddons, // ✅ إدخال المصفوفة بعد التأكد منها
+                addonsId: finalAddonsIds, // ✅ حفظ المصفوفة النظيفة
                 startTime, endTime, search_tags: search_tags || null,
                 price, discount_type: discount_type || "percentage",
                 discount_value: discount_value || null, Maximum_Purchase: Maximum_Purchase || null,
                 stock_type: stock_type || "unlimited", status: status || "active",
             });
 
+            // إدخال الخيارات (Variations) إن وجدت
             if (variations && Array.isArray(variations) && variations.length > 0) {
                 for (const variation of variations) {
                     const variationId = uuidv4();
+
                     await tx.insert(foodVariations).values({
                         id: variationId,
                         foodId,
@@ -118,6 +136,7 @@ export const createFood = async (req: Request, res: Response) => {
                             optionName: option.optionName, optionNameAr: option.optionNameAr, optionNameFr: option.optionNameFr,
                             additionalPrice: option.additionalPrice?.toString() || "0",
                         }));
+                        
                         if (optionsToInsert.length > 0) {
                             await tx.insert(variationOptions).values(optionsToInsert);
                         }
@@ -126,13 +145,16 @@ export const createFood = async (req: Request, res: Response) => {
             }
         });
 
-        return SuccessResponse(res, { message: "Create food success", data: { id: foodId } });
+        return SuccessResponse(res, {
+            message: "Create food success",
+            data: { id: foodId }
+        });
+
     } catch (error: any) {
         console.error("🔥 DATABASE ERROR DETAILED:", error.sqlMessage || error.message || error);
         throw new BadRequest(error.sqlMessage || error.message || "Failed to create food item");
     }
 };
-
 // =============================================
 // GET All Foods
 // =============================================
@@ -279,7 +301,7 @@ export const updateFood = async (req: Request, res: Response) => {
         throw new NotFound("Food not found or you don't have permission to edit it");
     }
 
-    // ✅ الحقول المسموح بتحديثها (تم إضافة باقي حقول الـ Schema عشان الأبديت يشتغل بالكامل)
+    // ✅ الحقول المسموح بتحديثها
     const allowedFields = [
         "name", "nameAr", "nameFr",
         "description", "descriptionAr", "descriptionFr",
@@ -290,7 +312,7 @@ export const updateFood = async (req: Request, res: Response) => {
     ];
 
     const updateData: any = {
-        updatedAt: new Date(), // ✅ دايمًا Date object
+        updatedAt: new Date(),
     };
 
     // 1️⃣ معالجة الحقول العادية والصورة
@@ -315,7 +337,9 @@ export const updateFood = async (req: Request, res: Response) => {
         }
     }
 
+    // ==========================================
     // 2️⃣ معالجة الـ Addons بشكل مخصص وآمن 
+    // ==========================================
     if (data.addonsId !== undefined) {
         let parsedAddons = data.addonsId;
         
@@ -323,26 +347,33 @@ export const updateFood = async (req: Request, res: Response) => {
             try {
                 parsedAddons = JSON.parse(data.addonsId);
             } catch (e) {
-                parsedAddons = [data.addonsId]; // لو مبعوت ID واحد كـ String
+                parsedAddons = [data.addonsId]; 
             }
         }
         
         parsedAddons = Array.isArray(parsedAddons) ? parsedAddons : [];
 
-        // التأكد من صحة الـ IDs زي ما عملنا في الـ Create
-        if (parsedAddons.length > 0) {
+        // 🔥 استخراج الـ ID لو الفرونت إند باعت Objects بدل Strings
+        const finalAddonsIds = parsedAddons.map((item: any) => {
+            if (typeof item === 'object' && item !== null) {
+                return item.id || item.value || item.addonId;
+            }
+            return item; 
+        }).filter((id: any) => typeof id === 'string' && id.trim() !== '');
+
+        if (finalAddonsIds.length > 0) {
             const existingAddons = await db.select({ id: addons.id }).from(addons)
                 .where(and(
-                    inArray(addons.id, parsedAddons),
+                    inArray(addons.id, finalAddonsIds),
                     eq(addons.restaurantid, restaurantId)
                 ));
 
-            if (existingAddons.length !== parsedAddons.length) {
+            if (existingAddons.length !== finalAddonsIds.length) {
                 throw new BadRequest("One or more Addon IDs are invalid");
             }
         }
         
-        updateData.addonsId = parsedAddons; // إضافتها لبيانات التحديث
+        updateData.addonsId = finalAddonsIds; // ✅ تحديث البيانات بالمصفوفة النظيفة
     }
 
     // 3️⃣ معالجة الـ Categories بشكل مخصص 
@@ -356,7 +387,7 @@ export const updateFood = async (req: Request, res: Response) => {
         updateData.subcategoryid = incomingSubcategoryId === "" ? null : incomingSubcategoryId;
     }
 
-    // ✅ تنفيذ التحديث (نتأكد إن فيه بيانات للتحديث غير الـ updatedAt)
+    // ✅ تنفيذ التحديث الرئيسي للأكلة
     if (Object.keys(updateData).length > 1) {
         await db.update(food).set(updateData).where(eq(food.id, id));
     }
@@ -407,9 +438,7 @@ export const updateFood = async (req: Request, res: Response) => {
                         optionName: option.optionName,
                         optionNameAr: option.optionNameAr,
                         optionNameFr: option.optionNameFr,
-                        additionalPrice: option.additionalPrice
-                            ? option.additionalPrice.toString()
-                            : "0",
+                        additionalPrice: option.additionalPrice ? option.additionalPrice.toString() : "0",
                     });
                 }
             }
