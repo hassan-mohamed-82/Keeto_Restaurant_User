@@ -8,7 +8,7 @@ import {
     restaurantSchedules, cartItems, users, addresses, branches,
     userWallets, userWalletTransactions, foodVariations, variationOptions
 } from "../../models/schema";
-import { eq, and, inArray, sql, desc } from "drizzle-orm";
+import { eq, and, inArray, sql, desc, gte } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors/NotFound";
@@ -238,13 +238,74 @@ export const checkout = async (req: Request | any, res: Response) => {
     // 🛡️ 9. جلب محفظة المطعم 
     // ==========================================
     let [restaurantWallet] = await db.select().from(restaurantWallets).where(eq(restaurantWallets.restaurantId, restaurantId)).limit(1);
-    
+
     // ==========================================
-    // 10. Execute Order (Transaction)
+    // 9.5 حساب الرقم التسلسلي اليومي للأوردر
     // ==========================================
-    
     // ✅ توحيد الوقت في متغير واحد للداتابيز والإشعار والريسبونس
-    const now = new Date(); 
+    const now = new Date();
+
+    ///////////////////////////////////////
+
+    // تحديد تاريخ ووقت القاهرة الحالي
+    const cairoParts = new Intl.DateTimeFormat("en-US", {
+        timeZone: "Africa/Cairo",
+        year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", hour12: false
+    }).formatToParts(now);
+    const getP = (type: string) => cairoParts.find(p => p.type === type)?.value || "00";
+    const cairoYear = getP("year");
+    const cairoMonth = getP("month");
+    const cairoDay = getP("day");
+    const cairoHour = getP("hour");
+    const cairoMinute = getP("minute");
+    const currentTimeStr = `${cairoHour === "24" ? "00" : cairoHour}:${cairoMinute}`;
+    const cairoDayOfWeek = new Date(`${cairoYear}-${cairoMonth}-${cairoDay}T12:00:00`).getDay();
+
+    let shiftStartTime: Date;
+
+    if (settings && !settings.isAlwaysOpen) {
+        const allSchedules = await db
+            .select()
+            .from(restaurantSchedules)
+            .where(eq(restaurantSchedules.restaurantId, restaurantId));
+
+        const todaySchedule = allSchedules.find(s => s.dayOfWeek === cairoDayOfWeek);
+
+        if (todaySchedule && todaySchedule.openingTime && !todaySchedule.isOffDay) {
+            // إذا كان الوقت الحالي قبل وقت الفتح، فنحن ما زلنا في شيفت الأمس
+            if (currentTimeStr < todaySchedule.openingTime) {
+                const yesterday = new Date(`${cairoYear}-${cairoMonth}-${cairoDay}T12:00:00`);
+                yesterday.setDate(yesterday.getDate() - 1);
+                const yDayOfWeek = yesterday.getDay();
+                const yDateStr = yesterday.toISOString().slice(0, 10);
+                const ySchedule = allSchedules.find(s => s.dayOfWeek === yDayOfWeek);
+                const opTime = ySchedule?.openingTime || "00:00";
+                shiftStartTime = new Date(`${yDateStr}T${opTime}:00+02:00`);
+            } else {
+                shiftStartTime = new Date(`${cairoYear}-${cairoMonth}-${cairoDay}T${todaySchedule.openingTime}:00+02:00`);
+            }
+        } else {
+            // يوم إجازة أو لا يوجد جدول → بداية اليوم
+            shiftStartTime = new Date(`${cairoYear}-${cairoMonth}-${cairoDay}T00:00:00+02:00`);
+        }
+    } else {
+        // المطعم مفتوح دائماً → الرقم يتصفر مع منتصف الليل
+        shiftStartTime = new Date(`${cairoYear}-${cairoMonth}-${cairoDay}T00:00:00+02:00`);
+    }
+
+    const [ordersCountResult] = await db
+        .select({ count: sql<number>`count(${orders.id})` })
+        .from(orders)
+        .where(
+            and(
+                eq(orders.restaurantId, restaurantId),
+                gte(orders.createdAt, shiftStartTime)
+            )
+        );
+
+    const dailyOrderNumber = Number(ordersCountResult?.count || 0) + 1;
+    ///////////////////////////////////////
 
     await db.transaction(async (tx) => {
         
@@ -287,6 +348,7 @@ export const checkout = async (req: Request | any, res: Response) => {
             appCommission: appCommission.toString(),
             totalAmount: totalAmount.toString(),
             status: "pending",
+            dailyOrderNumber, // ✅ الرقم التسلسلي اليومي
             createdAt: now // ✅ إضافة الوقت الموحد للداتابيز
         });
 
@@ -384,7 +446,8 @@ export const checkout = async (req: Request | any, res: Response) => {
         data: {
             orderDetails: { 
                 orderId, 
-                orderNumber, 
+                orderNumber,
+                dailyOrderNumber, // ✅ الرقم التسلسلي اليومي للعرض في الفرونت
                 subtotal, 
                 deliveryFee, 
                 serviceFee, 

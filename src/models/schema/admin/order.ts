@@ -57,6 +57,7 @@ export const orders = mysqlTable("orders", {
     // 👇 وده حقل سبب الإلغاء عشان المطعم يكتبه
     cancelReason: text("cancel_reason"),
     note: text("note"),
+    dailyOrderNumber: int("daily_order_number").default(1),
 
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
     createdAt: timestamp("created_at").defaultNow(),
