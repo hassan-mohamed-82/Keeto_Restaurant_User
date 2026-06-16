@@ -34,11 +34,13 @@ export const createFood = async (req: Request, res: Response) => {
             name, description, image,
             categoryid, subcategoryid,
             foodtype, Nutrition, allergen_ingredients, is_Halal,
-            addonsId, startTime, endTime, search_tags,
+            startTime, endTime, search_tags,
             price, discount_type, discount_value, Maximum_Purchase, stock_type,
             status, variations,
             nameAr, nameFr, descriptionAr, descriptionFr
         } = req.body;
+
+        const incomingAddons = req.body.addonsId ?? req.body.addons ?? req.body.addonIds ?? req.body['addonsId[]'] ?? req.body['addons[]'];
 
         // 1. التحقق من الحقول المطلوبة
         if (!name || !description || !image || !categoryid || !startTime || !endTime || !price) {
@@ -57,12 +59,16 @@ export const createFood = async (req: Request, res: Response) => {
         // ==========================================
         // ✅ 3. معالجة الإضافات (Addons) بشكل آمن
         // ==========================================
-        let parsedAddons = addonsId;
-        if (typeof addonsId === "string") {
+        let parsedAddons = incomingAddons;
+        if (typeof incomingAddons === "string") {
             try {
-                parsedAddons = JSON.parse(addonsId);
+                parsedAddons = JSON.parse(incomingAddons);
             } catch (e) {
-                parsedAddons = [addonsId];
+                if (incomingAddons.includes(",")) {
+                    parsedAddons = incomingAddons.split(",");
+                } else {
+                    parsedAddons = [incomingAddons];
+                }
             }
         }
         parsedAddons = Array.isArray(parsedAddons) ? parsedAddons : [];
@@ -70,7 +76,7 @@ export const createFood = async (req: Request, res: Response) => {
         // 🔥 استخراج الـ ID لو الفرونت إند باعت Objects بدل Strings
         const finalAddonsIds = parsedAddons.map((item: any) => {
             if (typeof item === 'object' && item !== null) {
-                return item.id || item.value || item.addonId; 
+                return item.id || item.value || item.addonId || item._id; 
             }
             return item; 
         }).filter((id: any) => typeof id === 'string' && id.trim() !== '');
@@ -202,12 +208,13 @@ export const getAllFoods = async (req: Request, res: Response) => {
         if (typeof safeAddons === 'string') {
             try { safeAddons = JSON.parse(safeAddons); } catch(e) { safeAddons = []; }
         }
+        const cleanAddonsArray = Array.isArray(safeAddons) ? safeAddons.filter((id: any) => typeof id === 'string' && id.trim() !== '') : [];
 
         return {
             id: f.id, name: f.name, nameAr: f.nameAr, nameFr: f.nameFr,
             description: f.description, descriptionAr: f.descriptionAr, descriptionFr: f.descriptionFr,
             image: f.image, price: f.price, status: f.status,
-            addonsId: Array.isArray(safeAddons) ? safeAddons : [], // ✅ إرجاع الـ Array نظيفة
+            addonsId: cleanAddonsArray, // ✅ إرجاع الـ Array نظيفة
             foodtype: f.foodtype, Nutrition: f.Nutrition, allergen_ingredients: f.allergen_ingredients,
             is_Halal: f.is_Halal, startTime: f.startTime, endTime: f.endTime, search_tags: f.search_tags,
             discount_type: f.discount_type, discount_value: f.discount_value, Maximum_Purchase: f.Maximum_Purchase,
@@ -262,17 +269,18 @@ export const getFoodById = async (req: Request, res: Response) => {
         try { safeAddons = JSON.parse(safeAddons); } catch(e) { safeAddons = []; }
     }
     const addonsArray = Array.isArray(safeAddons) ? safeAddons : [];
+    const cleanAddonsArray = addonsArray.filter((id: any) => typeof id === 'string' && id.trim() !== '');
 
     let addonsDetails: any[] = [];
-    if (addonsArray.length > 0) {
-        addonsDetails = await db.select().from(addons).where(inArray(addons.id, addonsArray));
+    if (cleanAddonsArray.length > 0) {
+        addonsDetails = await db.select().from(addons).where(inArray(addons.id, cleanAddonsArray));
     }
 
     return SuccessResponse(res, {
         message: "Get food by id success",
         data: { 
             ...foodItem[0], 
-            addonsId: addonsArray,        // هيرجع الـ IDs زي ما هي
+            addonsId: cleanAddonsArray,        // هيرجع الـ IDs زي ما هي
             addonsDetails: addonsDetails, // 🔥 تم إضافة بيانات الإضافة نفسها (اسمها وسعرها)
             variations 
         }
@@ -340,14 +348,19 @@ export const updateFood = async (req: Request, res: Response) => {
     // ==========================================
     // 2️⃣ معالجة الـ Addons بشكل مخصص وآمن 
     // ==========================================
-    if (data.addonsId !== undefined) {
-        let parsedAddons = data.addonsId;
+    const incomingAddons = data.addonsId ?? data.addons ?? data.addonIds ?? data['addonsId[]'] ?? data['addons[]'];
+    if (incomingAddons !== undefined) {
+        let parsedAddons = incomingAddons;
         
-        if (typeof data.addonsId === "string") {
+        if (typeof incomingAddons === "string") {
             try {
-                parsedAddons = JSON.parse(data.addonsId);
+                parsedAddons = JSON.parse(incomingAddons);
             } catch (e) {
-                parsedAddons = [data.addonsId]; 
+                if (incomingAddons.includes(",")) {
+                    parsedAddons = incomingAddons.split(",");
+                } else {
+                    parsedAddons = [incomingAddons];
+                }
             }
         }
         
@@ -356,7 +369,7 @@ export const updateFood = async (req: Request, res: Response) => {
         // 🔥 استخراج الـ ID لو الفرونت إند باعت Objects بدل Strings
         const finalAddonsIds = parsedAddons.map((item: any) => {
             if (typeof item === 'object' && item !== null) {
-                return item.id || item.value || item.addonId;
+                return item.id || item.value || item.addonId || item._id;
             }
             return item; 
         }).filter((id: any) => typeof id === 'string' && id.trim() !== '');

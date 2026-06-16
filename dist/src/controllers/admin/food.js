@@ -19,7 +19,8 @@ const createFood = async (req, res) => {
         if (!restaurantId) {
             throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
         }
-        const { name, description, image, categoryid, subcategoryid, foodtype, Nutrition, allergen_ingredients, is_Halal, addonsId, startTime, endTime, search_tags, price, discount_type, discount_value, Maximum_Purchase, stock_type, status, variations, nameAr, nameFr, descriptionAr, descriptionFr } = req.body;
+        const { name, description, image, categoryid, subcategoryid, foodtype, Nutrition, allergen_ingredients, is_Halal, startTime, endTime, search_tags, price, discount_type, discount_value, Maximum_Purchase, stock_type, status, variations, nameAr, nameFr, descriptionAr, descriptionFr } = req.body;
+        const incomingAddons = req.body.addonsId ?? req.body.addons ?? req.body.addonIds ?? req.body['addonsId[]'] ?? req.body['addons[]'];
         // 1. التحقق من الحقول المطلوبة
         if (!name || !description || !image || !categoryid || !startTime || !endTime || !price) {
             throw new BadRequest_1.BadRequest("Missing required fields");
@@ -36,20 +37,25 @@ const createFood = async (req, res) => {
         // ==========================================
         // ✅ 3. معالجة الإضافات (Addons) بشكل آمن
         // ==========================================
-        let parsedAddons = addonsId;
-        if (typeof addonsId === "string") {
+        let parsedAddons = incomingAddons;
+        if (typeof incomingAddons === "string") {
             try {
-                parsedAddons = JSON.parse(addonsId);
+                parsedAddons = JSON.parse(incomingAddons);
             }
             catch (e) {
-                parsedAddons = [addonsId];
+                if (incomingAddons.includes(",")) {
+                    parsedAddons = incomingAddons.split(",");
+                }
+                else {
+                    parsedAddons = [incomingAddons];
+                }
             }
         }
         parsedAddons = Array.isArray(parsedAddons) ? parsedAddons : [];
         // 🔥 استخراج الـ ID لو الفرونت إند باعت Objects بدل Strings
         const finalAddonsIds = parsedAddons.map((item) => {
             if (typeof item === 'object' && item !== null) {
-                return item.id || item.value || item.addonId;
+                return item.id || item.value || item.addonId || item._id;
             }
             return item;
         }).filter((id) => typeof id === 'string' && id.trim() !== '');
@@ -170,11 +176,12 @@ const getAllFoods = async (req, res) => {
                 safeAddons = [];
             }
         }
+        const cleanAddonsArray = Array.isArray(safeAddons) ? safeAddons.filter((id) => typeof id === 'string' && id.trim() !== '') : [];
         return {
             id: f.id, name: f.name, nameAr: f.nameAr, nameFr: f.nameFr,
             description: f.description, descriptionAr: f.descriptionAr, descriptionFr: f.descriptionFr,
             image: f.image, price: f.price, status: f.status,
-            addonsId: Array.isArray(safeAddons) ? safeAddons : [], // ✅ إرجاع الـ Array نظيفة
+            addonsId: cleanAddonsArray, // ✅ إرجاع الـ Array نظيفة
             foodtype: f.foodtype, Nutrition: f.Nutrition, allergen_ingredients: f.allergen_ingredients,
             is_Halal: f.is_Halal, startTime: f.startTime, endTime: f.endTime, search_tags: f.search_tags,
             discount_type: f.discount_type, discount_value: f.discount_value, Maximum_Purchase: f.Maximum_Purchase,
@@ -231,15 +238,16 @@ const getFoodById = async (req, res) => {
         }
     }
     const addonsArray = Array.isArray(safeAddons) ? safeAddons : [];
+    const cleanAddonsArray = addonsArray.filter((id) => typeof id === 'string' && id.trim() !== '');
     let addonsDetails = [];
-    if (addonsArray.length > 0) {
-        addonsDetails = await connection_1.db.select().from(schema_1.addons).where((0, drizzle_orm_1.inArray)(schema_1.addons.id, addonsArray));
+    if (cleanAddonsArray.length > 0) {
+        addonsDetails = await connection_1.db.select().from(schema_1.addons).where((0, drizzle_orm_1.inArray)(schema_1.addons.id, cleanAddonsArray));
     }
     return (0, response_1.SuccessResponse)(res, {
         message: "Get food by id success",
         data: {
             ...foodItem[0],
-            addonsId: addonsArray, // هيرجع الـ IDs زي ما هي
+            addonsId: cleanAddonsArray, // هيرجع الـ IDs زي ما هي
             addonsDetails: addonsDetails, // 🔥 تم إضافة بيانات الإضافة نفسها (اسمها وسعرها)
             variations
         }
@@ -295,21 +303,27 @@ const updateFood = async (req, res) => {
     // ==========================================
     // 2️⃣ معالجة الـ Addons بشكل مخصص وآمن 
     // ==========================================
-    if (data.addonsId !== undefined) {
-        let parsedAddons = data.addonsId;
-        if (typeof data.addonsId === "string") {
+    const incomingAddons = data.addonsId ?? data.addons ?? data.addonIds ?? data['addonsId[]'] ?? data['addons[]'];
+    if (incomingAddons !== undefined) {
+        let parsedAddons = incomingAddons;
+        if (typeof incomingAddons === "string") {
             try {
-                parsedAddons = JSON.parse(data.addonsId);
+                parsedAddons = JSON.parse(incomingAddons);
             }
             catch (e) {
-                parsedAddons = [data.addonsId];
+                if (incomingAddons.includes(",")) {
+                    parsedAddons = incomingAddons.split(",");
+                }
+                else {
+                    parsedAddons = [incomingAddons];
+                }
             }
         }
         parsedAddons = Array.isArray(parsedAddons) ? parsedAddons : [];
         // 🔥 استخراج الـ ID لو الفرونت إند باعت Objects بدل Strings
         const finalAddonsIds = parsedAddons.map((item) => {
             if (typeof item === 'object' && item !== null) {
-                return item.id || item.value || item.addonId;
+                return item.id || item.value || item.addonId || item._id;
             }
             return item;
         }).filter((id) => typeof id === 'string' && id.trim() !== '');
