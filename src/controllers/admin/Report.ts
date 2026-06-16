@@ -11,6 +11,9 @@ import {
     users,
     paymentMethods,
     selectReasons,
+    addresses,
+    zones,
+    restaurantRatings,
 } from "../../models/schema";
 import { eq, and, desc, gte, lte, sql, inArray } from "drizzle-orm"; // 👈 تمت إضافة inArray
 import { SuccessResponse } from "../../utils/response";
@@ -432,4 +435,246 @@ export const getMyInvoices = async (req: Request | any, res: Response) => {
         .orderBy(desc(invoices.createdAt));
 
     return SuccessResponse(res, { data: myInvoices });
+};
+
+// =============================================
+// Dashboard Analytics APIs
+// =============================================
+export const getDashboardReports = async (req: Request | any, res: Response) => {
+    if (!req.user) throw new UnauthorizedError("Unauthenticated");
+
+    const restaurantId = req.user.restaurantId || req.user.id;
+    if (!restaurantId) throw new BadRequest("Restaurant ID not found");
+
+    const { startDate, endDate, branchId } = req.query;
+
+    const conditions: any[] = [eq(orders.restaurantId, restaurantId)];
+
+    if (startDate) conditions.push(gte(orders.createdAt, new Date(startDate as string)));
+    if (endDate) {
+        const end = new Date(endDate as string);
+        end.setHours(23, 59, 59, 999);
+        conditions.push(lte(orders.createdAt, end));
+    }
+    if (branchId) conditions.push(eq(orders.branchId, branchId as string));
+    if (req.user.branchId) conditions.push(eq(orders.branchId, req.user.branchId));
+
+    const rawOrders = await db
+        .select({
+            orderId: orders.id,
+            status: orders.status,
+            totalAmount: orders.totalAmount,
+            subtotal: orders.subtotal,
+            discountAmount: orders.discountAmount,
+            couponCode: orders.couponCode,
+            orderSource: orders.orderSource,
+            createdAt: orders.createdAt,
+            cancelReasonType: selectReasons.type,
+            branchName: branches.name,
+            zoneName: zones.name,
+        })
+        .from(orders)
+        .leftJoin(selectReasons, eq(orders.cancelReasonId, selectReasons.id))
+        .leftJoin(branches, eq(orders.branchId, branches.id))
+        .leftJoin(addresses, eq(orders.addressId, addresses.id))
+        .leftJoin(zones, eq(addresses.zoneId, zones.id))
+        .where(and(...conditions));
+
+    // Cards
+    let totalRevenue = 0;
+    let numberOfOrders = 0;
+
+    // Peak Hours
+    const peakHoursObj: Record<string, number> = {};
+    for (let i = 0; i < 24; i++) {
+        const hourLabel = i < 10 ? `0${i}:00` : `${i}:00`;
+        peakHoursObj[hourLabel] = 0;
+    }
+
+    // Peak Days
+    const peakDaysObj: Record<string, number> = {
+        "Sunday": 0, "Monday": 0, "Tuesday": 0, "Wednesday": 0, "Thursday": 0, "Friday": 0, "Saturday": 0
+    };
+    const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+    // Cancellation
+    let userCancellations = 0;
+    let restaurantCancellations = 0;
+
+    // Discount Effectiveness (Scatter plot: [discount%, revenue])
+    const discountEffectiveness: { discountPercent: string, revenue: number, count: number }[] = [];
+
+    // Branches Net Sales
+    const branchesNetSales: Record<string, number> = {};
+
+    // App vs Website (Placeholder using orderSource for now)
+    let appOrders = 0;
+    let websiteOrders = 0;
+
+    // Revenue Before/After Coupon
+    const couponAnalysis: Record<string, { before: number, after: number }> = {};
+
+    const orderIds: string[] = [];
+    const geoMapObj: Record<string, number> = {};
+
+    for (const o of rawOrders) {
+        orderIds.push(o.orderId);
+
+        const amount = parseFloat(o.totalAmount as string || "0");
+        const sub = parseFloat(o.subtotal as string || "0");
+        const disc = parseFloat(o.discountAmount as string || "0");
+        
+        if (o.status !== "cancelled" && o.status !== "refund") {
+            totalRevenue += amount;
+            numberOfOrders++;
+
+            // Peak hours & Days
+            if (o.createdAt) {
+                const date = new Date(o.createdAt);
+                const h = date.getHours();
+                const hourLabel = h < 10 ? `0${h}:00` : `${h}:00`;
+                peakHoursObj[hourLabel]++;
+                peakDaysObj[dayNames[date.getDay()]] += amount;
+            }
+
+            // Branches
+            const bName = o.branchName || "Unknown Branch";
+            branchesNetSales[bName] = (branchesNetSales[bName] || 0) + amount;
+
+            // App vs Website (Using orderSource as approximation: food_aggregator vs online_order)
+            if (o.orderSource === "food_aggregator") {
+                websiteOrders++;
+            } else {
+                appOrders++;
+            }
+
+            // Geographic Map
+            const zName = o.zoneName || "Unknown Zone";
+            geoMapObj[zName] = (geoMapObj[zName] || 0) + amount;
+        }
+
+        if (o.status === "cancelled") {
+            if (o.cancelReasonType === "user") userCancellations++;
+            else restaurantCancellations++; 
+        }
+
+        // Coupon analysis & Discount Effectiveness
+        if (o.couponCode && o.status !== "cancelled") {
+            if (!couponAnalysis[o.couponCode]) couponAnalysis[o.couponCode] = { before: 0, after: 0 };
+            couponAnalysis[o.couponCode].before += sub;
+            couponAnalysis[o.couponCode].after += amount;
+            
+            const discountPct = sub > 0 ? ((disc / sub) * 100).toFixed(2) : "0.00";
+            discountEffectiveness.push({
+                discountPercent: discountPct,
+                revenue: amount,
+                count: 1 
+            });
+        }
+    }
+
+    // Top 5 Products & Market Basket
+    let topProducts: any[] = [];
+    const combosObj: Record<string, number> = {};
+    const productSales: Record<string, { name: string, rev: number, count: number }> = {};
+
+    if (orderIds.length > 0) {
+        const batchSize = 500;
+        for (let i = 0; i < orderIds.length; i += batchSize) {
+            const batch = orderIds.slice(i, i + batchSize);
+            const oItems = await db
+                .select({
+                    orderId: orderItems.orderId,
+                    foodId: orderItems.foodId,
+                    totalPrice: orderItems.totalPrice,
+                    foodName: food.name,
+                })
+                .from(orderItems)
+                .leftJoin(food, eq(orderItems.foodId, food.id))
+                .where(inArray(orderItems.orderId, batch));
+
+            const itemsByOrder: Record<string, { id: string, name: string }[]> = {};
+            
+            for (const item of oItems) {
+                const fName = item.foodName || "Unknown";
+                const fId = item.foodId;
+                const price = parseFloat(item.totalPrice as string || "0");
+
+                if (!productSales[fId]) productSales[fId] = { name: fName, rev: 0, count: 0 };
+                productSales[fId].rev += price;
+                productSales[fId].count++;
+
+                if (!itemsByOrder[item.orderId]) itemsByOrder[item.orderId] = [];
+                itemsByOrder[item.orderId].push({ id: fId, name: fName });
+            }
+
+            // Market Basket combos
+            for (const oId in itemsByOrder) {
+                const items = itemsByOrder[oId];
+                for (let j = 0; j < items.length; j++) {
+                    for (let k = j + 1; k < items.length; k++) {
+                        const comboNames = [items[j].name, items[k].name].sort();
+                        const key = comboNames.join(" + ");
+                        combosObj[key] = (combosObj[key] || 0) + 1;
+                    }
+                }
+            }
+        }
+
+        topProducts = Object.values(productSales)
+            .sort((a, b) => b.rev - a.rev)
+            .slice(0, 5)
+            .map(p => ({ productName: p.name, revenue: p.rev.toFixed(2) }));
+    }
+
+    const marketBasket = Object.entries(combosObj)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([name, count]) => {
+            const confidence = numberOfOrders > 0 ? ((count / numberOfOrders) * 100).toFixed(2) : "0.00";
+            return { comboName: name, confidencePercent: confidence };
+        });
+
+    // Rating
+    const ratings = await db.select({ rating: restaurantRatings.rating })
+        .from(restaurantRatings)
+        .where(eq(restaurantRatings.restaurantId, restaurantId));
+    
+    let avgRating = "0.00";
+    if (ratings.length > 0) {
+        const sum = ratings.reduce((acc, r) => acc + r.rating, 0);
+        avgRating = (sum / ratings.length).toFixed(2);
+    }
+
+    return SuccessResponse(res, {
+        message: "Dashboard reports generated",
+        data: {
+            cards: {
+                totalRevenue: totalRevenue.toFixed(2),
+                numberOfOrders,
+                averageOrderValue: numberOfOrders > 0 ? (totalRevenue / numberOfOrders).toFixed(2) : "0.00",
+            },
+            peakHours: Object.entries(peakHoursObj).map(([hour, orders]) => ({ hour, orders })),
+            peakDays: Object.entries(peakDaysObj).map(([day, rev]) => ({ day, revenue: rev.toFixed(2) })),
+            topProducts,
+            cancellations: [
+                { type: "User", orders: userCancellations },
+                { type: "Restaurant", orders: restaurantCancellations }
+            ],
+            discountEffectiveness,
+            branchesNetSales: Object.entries(branchesNetSales).map(([b, rev]) => ({ branch: b, netSales: rev.toFixed(2) })),
+            appVsWebsite: [
+                { platform: "App", orders: appOrders },
+                { platform: "Website", orders: websiteOrders }
+            ],
+            rating: avgRating,
+            geographicMap: Object.entries(geoMapObj).map(([z, rev]) => ({ zone: z, revenue: rev.toFixed(2) })),
+            marketBasket,
+            couponAnalysis: Object.entries(couponAnalysis).map(([code, revs]) => ({
+                couponName: code,
+                revenueBeforeDiscount: revs.before.toFixed(2),
+                revenueAfterDiscount: revs.after.toFixed(2)
+            }))
+        }
+    });
 };

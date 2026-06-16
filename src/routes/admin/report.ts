@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { catchAsync } from "../../utils/catchAsync";
-import { getMyRestaurantReport,downloadSavedInvoicePDF,getMyInvoices } from "../../controllers/admin/Report";
+import { getMyRestaurantReport,downloadSavedInvoicePDF,getMyInvoices, getDashboardReports } from "../../controllers/admin/Report";
 
 const router = Router();
 
@@ -14,6 +14,10 @@ router.get("/my-restaurant", catchAsync(getMyRestaurantReport));
 router.get("/my-restaurant/:invoiceId/invoice", catchAsync(downloadSavedInvoicePDF));
 
 router.get("/my-invoices", catchAsync(getMyInvoices));
+
+// Dashboard Analytics
+// GET /report/dashboard?startDate=2026-01-01&endDate=2026-05-19&branchId=xxx
+router.get("/dashboard", catchAsync(getDashboardReports));
 // // تقرير تفصيلي لكل المطاعم (للسوبر أدمن)
 // // GET /report/all?startDate=2026-01-01&endDate=2026-05-19
 // router.get("/all", catchAsync(getDetailedRestaurantReport));

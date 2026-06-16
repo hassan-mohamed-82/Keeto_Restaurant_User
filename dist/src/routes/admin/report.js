@@ -11,6 +11,9 @@ router.get("/my-restaurant", (0, catchAsync_1.catchAsync)(Report_1.getMyRestaura
 //GET /report/my-restaurant/invoice?startDate=2026-01-01&endDate=2026-05-19
 router.get("/my-restaurant/:invoiceId/invoice", (0, catchAsync_1.catchAsync)(Report_1.downloadSavedInvoicePDF));
 router.get("/my-invoices", (0, catchAsync_1.catchAsync)(Report_1.getMyInvoices));
+// Dashboard Analytics
+// GET /report/dashboard?startDate=2026-01-01&endDate=2026-05-19&branchId=xxx
+router.get("/dashboard", (0, catchAsync_1.catchAsync)(Report_1.getDashboardReports));
 // // تقرير تفصيلي لكل المطاعم (للسوبر أدمن)
 // // GET /report/all?startDate=2026-01-01&endDate=2026-05-19
 // router.get("/all", catchAsync(getDetailedRestaurantReport));
