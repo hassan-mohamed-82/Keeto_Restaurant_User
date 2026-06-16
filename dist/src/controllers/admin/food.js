@@ -37,44 +37,28 @@ const createFood = async (req, res) => {
         // ==========================================
         // ✅ 3. معالجة الإضافات (Addons) بشكل آمن
         // ==========================================
-        const extractedIds = [];
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        const findUuids = (obj) => {
-            if (typeof obj === 'string') {
-                const clean = obj.trim();
-                if (uuidRegex.test(clean))
-                    extractedIds.push(clean);
+        let parsedAddons = incomingAddons;
+        if (typeof incomingAddons === "string") {
+            try {
+                parsedAddons = JSON.parse(incomingAddons);
             }
-            else if (Array.isArray(obj)) {
-                obj.forEach(findUuids);
-            }
-            else if (typeof obj === 'object' && obj !== null) {
-                Object.values(obj).forEach(findUuids);
-            }
-        };
-        if (incomingAddons !== undefined) {
-            let parsedAddons = incomingAddons;
-            if (typeof incomingAddons === "string") {
-                try {
-                    parsedAddons = JSON.parse(incomingAddons);
+            catch (e) {
+                if (incomingAddons.includes(",")) {
+                    parsedAddons = incomingAddons.split(",");
                 }
-                catch (e) {
-                    if (incomingAddons.includes(","))
-                        parsedAddons = incomingAddons.split(",");
-                    else
-                        parsedAddons = [incomingAddons];
-                }
-            }
-            findUuids(parsedAddons);
-        }
-        else {
-            for (const key of Object.keys(req.body)) {
-                if (key.toLowerCase().includes('addon')) {
-                    findUuids(req.body[key]);
+                else {
+                    parsedAddons = [incomingAddons];
                 }
             }
         }
-        const finalAddonsIds = Array.from(new Set(extractedIds));
+        parsedAddons = Array.isArray(parsedAddons) ? parsedAddons : [];
+        // 🔥 استخراج الـ ID لو الفرونت إند باعت Objects بدل Strings
+        const finalAddonsIds = parsedAddons.map((item) => {
+            if (typeof item === 'object' && item !== null) {
+                return item.id || item.value || item.addonId || item._id;
+            }
+            return item;
+        }).filter((id) => typeof id === 'string' && id.trim() !== '');
         if (finalAddonsIds.length > 0) {
             const existingAddons = await connection_1.db.select({ id: schema_1.addons.id }).from(schema_1.addons)
                 .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.addons.id, finalAddonsIds), (0, drizzle_orm_1.eq)(schema_1.addons.restaurantid, restaurantId)));
@@ -178,6 +162,25 @@ const getAllFoods = async (req, res) => {
     const allOpts = allVarIds.length > 0
         ? await connection_1.db.select().from(schema_1.variationOptions).where((0, drizzle_orm_1.inArray)(schema_1.variationOptions.variationId, allVarIds))
         : [];
+    const allAddonsIdsToFetch = new Set();
+    rawFoods.forEach(f => {
+        let safeAddons = f.addonsId;
+        if (typeof safeAddons === 'string') {
+            try {
+                safeAddons = JSON.parse(safeAddons);
+            }
+            catch (e) {
+                safeAddons = [];
+            }
+        }
+        const cleanAddonsArray = Array.isArray(safeAddons) ? safeAddons.filter((id) => typeof id === 'string' && id.trim() !== '') : [];
+        cleanAddonsArray.forEach(id => allAddonsIdsToFetch.add(id));
+    });
+    const uniqueAddonsIds = Array.from(allAddonsIdsToFetch);
+    let allAddonsDetails = [];
+    if (uniqueAddonsIds.length > 0) {
+        allAddonsDetails = await connection_1.db.select().from(schema_1.addons).where((0, drizzle_orm_1.inArray)(schema_1.addons.id, uniqueAddonsIds));
+    }
     const allFoods = rawFoods.map(f => {
         const foodVars = allVars.filter(v => v.foodId === f.id).map(v => ({
             ...v, options: allOpts.filter(o => o.variationId === v.id)
@@ -193,11 +196,13 @@ const getAllFoods = async (req, res) => {
             }
         }
         const cleanAddonsArray = Array.isArray(safeAddons) ? safeAddons.filter((id) => typeof id === 'string' && id.trim() !== '') : [];
+        const foodAddonsDetails = allAddonsDetails.filter(a => cleanAddonsArray.includes(a.id));
         return {
             id: f.id, name: f.name, nameAr: f.nameAr, nameFr: f.nameFr,
             description: f.description, descriptionAr: f.descriptionAr, descriptionFr: f.descriptionFr,
             image: f.image, price: f.price, status: f.status,
             addonsId: cleanAddonsArray, // ✅ إرجاع الـ Array نظيفة
+            addonsDetails: foodAddonsDetails, // 🔥 تفاصيل الإضافات
             foodtype: f.foodtype, Nutrition: f.Nutrition, allergen_ingredients: f.allergen_ingredients,
             is_Halal: f.is_Halal, startTime: f.startTime, endTime: f.endTime, search_tags: f.search_tags,
             discount_type: f.discount_type, discount_value: f.discount_value, Maximum_Purchase: f.Maximum_Purchase,
@@ -320,54 +325,29 @@ const updateFood = async (req, res) => {
     // 2️⃣ معالجة الـ Addons بشكل مخصص وآمن 
     // ==========================================
     const incomingAddons = data.addonsId ?? data.addons ?? data.addonIds ?? data['addonsId[]'] ?? data['addons[]'];
-    let hasAddonsKey = incomingAddons !== undefined;
-    if (!hasAddonsKey) {
-        for (const key of Object.keys(data)) {
-            if (key.toLowerCase().includes('addon')) {
-                hasAddonsKey = true;
-                break;
+    if (incomingAddons !== undefined) {
+        let parsedAddons = incomingAddons;
+        if (typeof incomingAddons === "string") {
+            try {
+                parsedAddons = JSON.parse(incomingAddons);
             }
-        }
-    }
-    if (hasAddonsKey) {
-        const extractedIds = [];
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        const findUuids = (obj) => {
-            if (typeof obj === 'string') {
-                const clean = obj.trim();
-                if (uuidRegex.test(clean))
-                    extractedIds.push(clean);
-            }
-            else if (Array.isArray(obj)) {
-                obj.forEach(findUuids);
-            }
-            else if (typeof obj === 'object' && obj !== null) {
-                Object.values(obj).forEach(findUuids);
-            }
-        };
-        if (incomingAddons !== undefined) {
-            let parsedAddons = incomingAddons;
-            if (typeof incomingAddons === "string") {
-                try {
-                    parsedAddons = JSON.parse(incomingAddons);
+            catch (e) {
+                if (incomingAddons.includes(",")) {
+                    parsedAddons = incomingAddons.split(",");
                 }
-                catch (e) {
-                    if (incomingAddons.includes(","))
-                        parsedAddons = incomingAddons.split(",");
-                    else
-                        parsedAddons = [incomingAddons];
-                }
-            }
-            findUuids(parsedAddons);
-        }
-        else {
-            for (const key of Object.keys(data)) {
-                if (key.toLowerCase().includes('addon')) {
-                    findUuids(data[key]);
+                else {
+                    parsedAddons = [incomingAddons];
                 }
             }
         }
-        const finalAddonsIds = Array.from(new Set(extractedIds));
+        parsedAddons = Array.isArray(parsedAddons) ? parsedAddons : [];
+        // 🔥 استخراج الـ ID لو الفرونت إند باعت Objects بدل Strings
+        const finalAddonsIds = parsedAddons.map((item) => {
+            if (typeof item === 'object' && item !== null) {
+                return item.id || item.value || item.addonId || item._id;
+            }
+            return item;
+        }).filter((id) => typeof id === 'string' && id.trim() !== '');
         if (finalAddonsIds.length > 0) {
             const existingAddons = await connection_1.db.select({ id: schema_1.addons.id }).from(schema_1.addons)
                 .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.addons.id, finalAddonsIds), (0, drizzle_orm_1.eq)(schema_1.addons.restaurantid, restaurantId)));
