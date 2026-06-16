@@ -59,27 +59,39 @@ export const createFood = async (req: Request, res: Response) => {
         // ==========================================
         // ✅ 3. معالجة الإضافات (Addons) بشكل آمن
         // ==========================================
-        let parsedAddons = incomingAddons;
-        if (typeof incomingAddons === "string") {
-            try {
-                parsedAddons = JSON.parse(incomingAddons);
-            } catch (e) {
-                if (incomingAddons.includes(",")) {
-                    parsedAddons = incomingAddons.split(",");
-                } else {
-                    parsedAddons = [incomingAddons];
+        const extractedIds: string[] = [];
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+        const findUuids = (obj: any) => {
+            if (typeof obj === 'string') {
+                const clean = obj.trim();
+                if (uuidRegex.test(clean)) extractedIds.push(clean);
+            } else if (Array.isArray(obj)) {
+                obj.forEach(findUuids);
+            } else if (typeof obj === 'object' && obj !== null) {
+                Object.values(obj).forEach(findUuids);
+            }
+        };
+
+        if (incomingAddons !== undefined) {
+            let parsedAddons = incomingAddons;
+            if (typeof incomingAddons === "string") {
+                try { parsedAddons = JSON.parse(incomingAddons); }
+                catch (e) {
+                    if (incomingAddons.includes(",")) parsedAddons = incomingAddons.split(",");
+                    else parsedAddons = [incomingAddons];
+                }
+            }
+            findUuids(parsedAddons);
+        } else {
+            for (const key of Object.keys(req.body)) {
+                if (key.toLowerCase().includes('addon')) {
+                    findUuids(req.body[key]);
                 }
             }
         }
-        parsedAddons = Array.isArray(parsedAddons) ? parsedAddons : [];
 
-        // 🔥 استخراج الـ ID لو الفرونت إند باعت Objects بدل Strings
-        const finalAddonsIds = parsedAddons.map((item: any) => {
-            if (typeof item === 'object' && item !== null) {
-                return item.id || item.value || item.addonId || item._id; 
-            }
-            return item; 
-        }).filter((id: any) => typeof id === 'string' && id.trim() !== '');
+        const finalAddonsIds = Array.from(new Set(extractedIds));
 
         if (finalAddonsIds.length > 0) {
             const existingAddons = await db.select({ id: addons.id }).from(addons)
@@ -349,30 +361,51 @@ export const updateFood = async (req: Request, res: Response) => {
     // 2️⃣ معالجة الـ Addons بشكل مخصص وآمن 
     // ==========================================
     const incomingAddons = data.addonsId ?? data.addons ?? data.addonIds ?? data['addonsId[]'] ?? data['addons[]'];
-    if (incomingAddons !== undefined) {
-        let parsedAddons = incomingAddons;
-        
-        if (typeof incomingAddons === "string") {
-            try {
-                parsedAddons = JSON.parse(incomingAddons);
-            } catch (e) {
-                if (incomingAddons.includes(",")) {
-                    parsedAddons = incomingAddons.split(",");
-                } else {
-                    parsedAddons = [incomingAddons];
+    
+    let hasAddonsKey = incomingAddons !== undefined;
+    if (!hasAddonsKey) {
+        for (const key of Object.keys(data)) {
+            if (key.toLowerCase().includes('addon')) {
+                hasAddonsKey = true;
+                break;
+            }
+        }
+    }
+
+    if (hasAddonsKey) {
+        const extractedIds: string[] = [];
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+        const findUuids = (obj: any) => {
+            if (typeof obj === 'string') {
+                const clean = obj.trim();
+                if (uuidRegex.test(clean)) extractedIds.push(clean);
+            } else if (Array.isArray(obj)) {
+                obj.forEach(findUuids);
+            } else if (typeof obj === 'object' && obj !== null) {
+                Object.values(obj).forEach(findUuids);
+            }
+        };
+
+        if (incomingAddons !== undefined) {
+            let parsedAddons = incomingAddons;
+            if (typeof incomingAddons === "string") {
+                try { parsedAddons = JSON.parse(incomingAddons); }
+                catch (e) {
+                    if (incomingAddons.includes(",")) parsedAddons = incomingAddons.split(",");
+                    else parsedAddons = [incomingAddons];
+                }
+            }
+            findUuids(parsedAddons);
+        } else {
+            for (const key of Object.keys(data)) {
+                if (key.toLowerCase().includes('addon')) {
+                    findUuids(data[key]);
                 }
             }
         }
-        
-        parsedAddons = Array.isArray(parsedAddons) ? parsedAddons : [];
 
-        // 🔥 استخراج الـ ID لو الفرونت إند باعت Objects بدل Strings
-        const finalAddonsIds = parsedAddons.map((item: any) => {
-            if (typeof item === 'object' && item !== null) {
-                return item.id || item.value || item.addonId || item._id;
-            }
-            return item; 
-        }).filter((id: any) => typeof id === 'string' && id.trim() !== '');
+        const finalAddonsIds = Array.from(new Set(extractedIds));
 
         if (finalAddonsIds.length > 0) {
             const existingAddons = await db.select({ id: addons.id }).from(addons)
