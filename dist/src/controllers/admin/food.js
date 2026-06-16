@@ -11,6 +11,47 @@ const BadRequest_1 = require("../../Errors/BadRequest");
 const uuid_1 = require("uuid");
 const handleImages_1 = require("../../utils/handleImages");
 // =============================================
+// 🛠️ دالة مساعدة لاستخراج الإضافات بأي شكل (FormData أو JSON)
+// =============================================
+const extractAddons = (body) => {
+    // 1. تجميع كل الـ Keys اللي ممكن يكون فيها الإضافات
+    const addonKeys = Object.keys(body).filter(k => k === 'addonsId' || k === 'addons' || k === 'addonIds' ||
+        k.startsWith('addonsId[') || k.startsWith('addons['));
+    if (addonKeys.length === 0) {
+        return { isProvided: false, ids: [] };
+    }
+    let parsedAddons = [];
+    // 2. معالجة القيم واستخراجها
+    for (const key of addonKeys) {
+        const val = body[key];
+        if (typeof val === 'string') {
+            if (val.trim() === '')
+                continue; // لو مبعوتة فاضية (عشان يمسح الإضافات)
+            try {
+                const parsed = JSON.parse(val);
+                Array.isArray(parsed) ? parsedAddons.push(...parsed) : parsedAddons.push(parsed);
+            }
+            catch {
+                val.includes(',') ? parsedAddons.push(...val.split(',')) : parsedAddons.push(val);
+            }
+        }
+        else if (Array.isArray(val)) {
+            parsedAddons.push(...val);
+        }
+        else {
+            parsedAddons.push(val);
+        }
+    }
+    // 3. تنظيف البيانات، استخراج הـ IDs فقط، وإزالة التكرار
+    const ids = [...new Set(parsedAddons.map((item) => {
+            if (typeof item === 'object' && item !== null) {
+                return item.id || item.value || item.addonId || item._id;
+            }
+            return item;
+        }).filter((id) => typeof id === 'string' && id.trim() !== ''))];
+    return { isProvided: true, ids };
+};
+// =============================================
 // CREATE Food
 // =============================================
 const createFood = async (req, res) => {
@@ -20,7 +61,6 @@ const createFood = async (req, res) => {
             throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
         }
         const { name, description, image, categoryid, subcategoryid, foodtype, Nutrition, allergen_ingredients, is_Halal, startTime, endTime, search_tags, price, discount_type, discount_value, Maximum_Purchase, stock_type, status, variations, nameAr, nameFr, descriptionAr, descriptionFr } = req.body;
-        const incomingAddons = req.body.addonsId ?? req.body.addons ?? req.body.addonIds ?? req.body['addonsId[]'] ?? req.body['addons[]'];
         // 1. التحقق من الحقول المطلوبة
         if (!name || !description || !image || !categoryid || !startTime || !endTime || !price) {
             throw new BadRequest_1.BadRequest("Missing required fields");
@@ -35,30 +75,9 @@ const createFood = async (req, res) => {
                 throw new BadRequest_1.BadRequest("Subcategory not found");
         }
         // ==========================================
-        // ✅ 3. معالجة الإضافات (Addons) بشكل آمن
+        // ✅ 3. معالجة الإضافات (Addons) بالدالة الجديدة
         // ==========================================
-        let parsedAddons = incomingAddons;
-        if (typeof incomingAddons === "string") {
-            try {
-                parsedAddons = JSON.parse(incomingAddons);
-            }
-            catch (e) {
-                if (incomingAddons.includes(",")) {
-                    parsedAddons = incomingAddons.split(",");
-                }
-                else {
-                    parsedAddons = [incomingAddons];
-                }
-            }
-        }
-        parsedAddons = Array.isArray(parsedAddons) ? parsedAddons : [];
-        // 🔥 استخراج الـ ID لو الفرونت إند باعت Objects بدل Strings
-        const finalAddonsIds = parsedAddons.map((item) => {
-            if (typeof item === 'object' && item !== null) {
-                return item.id || item.value || item.addonId || item._id;
-            }
-            return item;
-        }).filter((id) => typeof id === 'string' && id.trim() !== '');
+        const { ids: finalAddonsIds } = extractAddons(req.body);
         if (finalAddonsIds.length > 0) {
             const existingAddons = await connection_1.db.select({ id: schema_1.addons.id }).from(schema_1.addons)
                 .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.addons.id, finalAddonsIds), (0, drizzle_orm_1.eq)(schema_1.addons.restaurantid, restaurantId)));
@@ -324,30 +343,8 @@ const updateFood = async (req, res) => {
     // ==========================================
     // 2️⃣ معالجة الـ Addons بشكل مخصص وآمن 
     // ==========================================
-    const incomingAddons = data.addonsId ?? data.addons ?? data.addonIds ?? data['addonsId[]'] ?? data['addons[]'];
-    if (incomingAddons !== undefined) {
-        let parsedAddons = incomingAddons;
-        if (typeof incomingAddons === "string") {
-            try {
-                parsedAddons = JSON.parse(incomingAddons);
-            }
-            catch (e) {
-                if (incomingAddons.includes(",")) {
-                    parsedAddons = incomingAddons.split(",");
-                }
-                else {
-                    parsedAddons = [incomingAddons];
-                }
-            }
-        }
-        parsedAddons = Array.isArray(parsedAddons) ? parsedAddons : [];
-        // 🔥 استخراج الـ ID لو الفرونت إند باعت Objects بدل Strings
-        const finalAddonsIds = parsedAddons.map((item) => {
-            if (typeof item === 'object' && item !== null) {
-                return item.id || item.value || item.addonId || item._id;
-            }
-            return item;
-        }).filter((id) => typeof id === 'string' && id.trim() !== '');
+    const { isProvided, ids: finalAddonsIds } = extractAddons(data);
+    if (isProvided) {
         if (finalAddonsIds.length > 0) {
             const existingAddons = await connection_1.db.select({ id: schema_1.addons.id }).from(schema_1.addons)
                 .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.addons.id, finalAddonsIds), (0, drizzle_orm_1.eq)(schema_1.addons.restaurantid, restaurantId)));
@@ -445,33 +442,27 @@ exports.deleteFood = deleteFood;
 // GET Food Select Data (For Dropdowns)
 // =============================================
 const getFoodSelectData = async (req, res) => {
-    // ✅ استخدام نفس الطريقة اللي في subcategory.ts
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
-    // ✅ جلب الأقسام الخاصة بالمطعم فقط (بافتراض إن الجدول يحتوي على restaurantid)
-    // ✅ Categories - عام لجميع المطاعم (لأن الجدول ليس له restaurantId)
     const myCategories = await connection_1.db
         .select({ id: schema_1.categories.id, name: schema_1.categories.name })
         .from(schema_1.categories)
         .where((0, drizzle_orm_1.eq)(schema_1.categories.status, "active"));
-    // ✅ Subcategories - الخاصة بالمطعم أو العامة (restaurantId = null)
     const mySubcategories = await connection_1.db
         .select({
         id: schema_1.subcategories.id,
         name: schema_1.subcategories.name,
         categoryId: schema_1.subcategories.categoryId,
-        restaurantId: schema_1.subcategories.restaurantId, // ✅ للتأكد من القيمة
-        status: schema_1.subcategories.status // ✅ للتأكد من القيمة
+        restaurantId: schema_1.subcategories.restaurantId,
+        status: schema_1.subcategories.status
     })
         .from(schema_1.subcategories)
         .where((0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId), (0, drizzle_orm_1.isNull)(schema_1.subcategories.restaurantId)));
-    // ✅ Addons - فقط الخاصة بالمطعم
     const myAddons = await connection_1.db
         .select({ id: schema_1.addons.id, name: schema_1.addons.name })
         .from(schema_1.addons)
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.addons.status, "active"), (0, drizzle_orm_1.eq)(schema_1.addons.restaurantid, restaurantId)));
-    // ✅ جلب المكونات الخاصة بالمطعم فقط
     const list = await connection_1.db.select({
         id: schema_1.ingredients.id,
         name: schema_1.ingredients.name,
@@ -603,7 +594,6 @@ const changeFoodStatus = async (req, res) => {
     const existingFood = await connection_1.db.select().from(schema_1.food).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.id, id), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId))).limit(1);
     if (!existingFood[0])
         throw new NotFound_1.NotFound("Food not found or does not belong to you");
-    await connection_1.db.update(schema_1.food).set({ status }).where((0, drizzle_orm_1.eq)(schema_1.food.id, id));
     if (status == "active") {
         await connection_1.db.update(schema_1.food).set({ status: "active" }).where((0, drizzle_orm_1.eq)(schema_1.food.id, id));
     }

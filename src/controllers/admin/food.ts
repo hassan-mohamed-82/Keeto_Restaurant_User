@@ -21,6 +21,53 @@ import { v4 as uuidv4 } from "uuid";
 import { saveBase64Image, handleImageUpdate } from "../../utils/handleImages";
 
 // =============================================
+// 🛠️ دالة مساعدة لاستخراج الإضافات بأي شكل (FormData أو JSON)
+// =============================================
+const extractAddons = (body: any): { isProvided: boolean, ids: string[] } => {
+    // 1. تجميع كل الـ Keys اللي ممكن يكون فيها الإضافات
+    const addonKeys = Object.keys(body).filter(k => 
+        k === 'addonsId' || k === 'addons' || k === 'addonIds' || 
+        k.startsWith('addonsId[') || k.startsWith('addons[')
+    );
+
+    if (addonKeys.length === 0) {
+        return { isProvided: false, ids: [] };
+    }
+
+    let parsedAddons: any[] = [];
+    
+    // 2. معالجة القيم واستخراجها
+    for (const key of addonKeys) {
+        const val = body[key];
+        if (typeof val === 'string') {
+            if (val.trim() === '') continue; // لو مبعوتة فاضية (عشان يمسح الإضافات)
+            try {
+                const parsed = JSON.parse(val);
+                Array.isArray(parsed) ? parsedAddons.push(...parsed) : parsedAddons.push(parsed);
+            } catch {
+                val.includes(',') ? parsedAddons.push(...val.split(',')) : parsedAddons.push(val);
+            }
+        } else if (Array.isArray(val)) {
+            parsedAddons.push(...val);
+        } else {
+            parsedAddons.push(val);
+        }
+    }
+
+    // 3. تنظيف البيانات، استخراج הـ IDs فقط، وإزالة التكرار
+    const ids = [...new Set(
+        parsedAddons.map((item: any) => {
+            if (typeof item === 'object' && item !== null) {
+                return item.id || item.value || item.addonId || item._id;
+            }
+            return item;
+        }).filter((id: any) => typeof id === 'string' && id.trim() !== '')
+    )];
+
+    return { isProvided: true, ids };
+};
+
+// =============================================
 // CREATE Food
 // =============================================
 export const createFood = async (req: Request, res: Response) => {
@@ -40,8 +87,6 @@ export const createFood = async (req: Request, res: Response) => {
             nameAr, nameFr, descriptionAr, descriptionFr
         } = req.body;
 
-        const incomingAddons = req.body.addonsId ?? req.body.addons ?? req.body.addonIds ?? req.body['addonsId[]'] ?? req.body['addons[]'];
-
         // 1. التحقق من الحقول المطلوبة
         if (!name || !description || !image || !categoryid || !startTime || !endTime || !price) {
             throw new BadRequest("Missing required fields");
@@ -57,29 +102,9 @@ export const createFood = async (req: Request, res: Response) => {
         }
 
         // ==========================================
-        // ✅ 3. معالجة الإضافات (Addons) بشكل آمن
+        // ✅ 3. معالجة الإضافات (Addons) بالدالة الجديدة
         // ==========================================
-        let parsedAddons = incomingAddons;
-        if (typeof incomingAddons === "string") {
-            try {
-                parsedAddons = JSON.parse(incomingAddons);
-            } catch (e) {
-                if (incomingAddons.includes(",")) {
-                    parsedAddons = incomingAddons.split(",");
-                } else {
-                    parsedAddons = [incomingAddons];
-                }
-            }
-        }
-        parsedAddons = Array.isArray(parsedAddons) ? parsedAddons : [];
-
-        // 🔥 استخراج الـ ID لو الفرونت إند باعت Objects بدل Strings
-        const finalAddonsIds = parsedAddons.map((item: any) => {
-            if (typeof item === 'object' && item !== null) {
-                return item.id || item.value || item.addonId || item._id;
-            }
-            return item;
-        }).filter((id: any) => typeof id === 'string' && id.trim() !== '');
+        const { ids: finalAddonsIds } = extractAddons(req.body);
 
         if (finalAddonsIds.length > 0) {
             const existingAddons = await db.select({ id: addons.id }).from(addons)
@@ -161,6 +186,7 @@ export const createFood = async (req: Request, res: Response) => {
         throw new BadRequest(error.sqlMessage || error.message || "Failed to create food item");
     }
 };
+
 // =============================================
 // GET All Foods
 // =============================================
@@ -304,6 +330,7 @@ export const getFoodById = async (req: Request, res: Response) => {
         }
     });
 };
+
 // =============================================
 // UPDATE Food
 // =============================================
@@ -366,32 +393,9 @@ export const updateFood = async (req: Request, res: Response) => {
     // ==========================================
     // 2️⃣ معالجة الـ Addons بشكل مخصص وآمن 
     // ==========================================
-    const incomingAddons = data.addonsId ?? data.addons ?? data.addonIds ?? data['addonsId[]'] ?? data['addons[]'];
-    if (incomingAddons !== undefined) {
-        let parsedAddons = incomingAddons;
+    const { isProvided, ids: finalAddonsIds } = extractAddons(data);
 
-        if (typeof incomingAddons === "string") {
-            try {
-                parsedAddons = JSON.parse(incomingAddons);
-            } catch (e) {
-                if (incomingAddons.includes(",")) {
-                    parsedAddons = incomingAddons.split(",");
-                } else {
-                    parsedAddons = [incomingAddons];
-                }
-            }
-        }
-
-        parsedAddons = Array.isArray(parsedAddons) ? parsedAddons : [];
-
-        // 🔥 استخراج الـ ID لو الفرونت إند باعت Objects بدل Strings
-        const finalAddonsIds = parsedAddons.map((item: any) => {
-            if (typeof item === 'object' && item !== null) {
-                return item.id || item.value || item.addonId || item._id;
-            }
-            return item;
-        }).filter((id: any) => typeof id === 'string' && id.trim() !== '');
-
+    if (isProvided) {
         if (finalAddonsIds.length > 0) {
             const existingAddons = await db.select({ id: addons.id }).from(addons)
                 .where(and(
@@ -403,7 +407,6 @@ export const updateFood = async (req: Request, res: Response) => {
                 throw new BadRequest("One or more Addon IDs are invalid");
             }
         }
-
         updateData.addonsId = finalAddonsIds; // ✅ تحديث البيانات بالمصفوفة النظيفة
     }
 
@@ -480,6 +483,7 @@ export const updateFood = async (req: Request, res: Response) => {
         message: "Update food success",
     });
 };
+
 // =============================================
 // DELETE Food
 // =============================================
@@ -504,32 +508,25 @@ export const deleteFood = async (req: Request, res: Response) => {
     return SuccessResponse(res, { message: "Delete food success" });
 };
 
-
-
 // =============================================
 // GET Food Select Data (For Dropdowns)
 // =============================================
 export const getFoodSelectData = async (req: Request, res: Response) => {
-    // ✅ استخدام نفس الطريقة اللي في subcategory.ts
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
 
-
-    // ✅ جلب الأقسام الخاصة بالمطعم فقط (بافتراض إن الجدول يحتوي على restaurantid)
-    // ✅ Categories - عام لجميع المطاعم (لأن الجدول ليس له restaurantId)
     const myCategories = await db
         .select({ id: categories.id, name: categories.name })
         .from(categories)
         .where(eq(categories.status, "active"));
 
-    // ✅ Subcategories - الخاصة بالمطعم أو العامة (restaurantId = null)
     const mySubcategories = await db
         .select({
             id: subcategories.id,
             name: subcategories.name,
             categoryId: subcategories.categoryId,
-            restaurantId: subcategories.restaurantId, // ✅ للتأكد من القيمة
-            status: subcategories.status // ✅ للتأكد من القيمة
+            restaurantId: subcategories.restaurantId,
+            status: subcategories.status
         })
         .from(subcategories)
         .where(
@@ -539,7 +536,6 @@ export const getFoodSelectData = async (req: Request, res: Response) => {
             )
         );
 
-    // ✅ Addons - فقط الخاصة بالمطعم
     const myAddons = await db
         .select({ id: addons.id, name: addons.name })
         .from(addons)
@@ -548,7 +544,6 @@ export const getFoodSelectData = async (req: Request, res: Response) => {
             eq(addons.restaurantid, restaurantId)
         ));
 
-    // ✅ جلب المكونات الخاصة بالمطعم فقط
     const list = await db.select({
         id: ingredients.id,
         name: ingredients.name,
@@ -560,7 +555,6 @@ export const getFoodSelectData = async (req: Request, res: Response) => {
         .leftJoin(ingredientCategories, eq(ingredients.categoryId, ingredientCategories.id))
         .where(eq(ingredients.restaurantId, restaurantId));
 
-
     return SuccessResponse(res, {
         message: "Get food select data success",
         data: {
@@ -571,10 +565,6 @@ export const getFoodSelectData = async (req: Request, res: Response) => {
         }
     });
 };
-
-
-
-
 
 // =========================================================
 // 🍳 إدارة الوصفة (Recipe / Food Ingredients)
@@ -686,7 +676,6 @@ export const toggleVariationOptionStatus = async (req: Request, res: Response) =
     return SuccessResponse(res, { message: "Variation option status updated successfully" });
 };
 
-
 export const changeFoodStatus = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { status } = req.body;
@@ -697,8 +686,6 @@ export const changeFoodStatus = async (req: Request, res: Response) => {
     const existingFood = await db.select().from(food).where(and(eq(food.id, id), eq(food.restaurantid, restaurantId))).limit(1);
     if (!existingFood[0]) throw new NotFound("Food not found or does not belong to you");
 
-    await db.update(food).set({ status }).where(eq(food.id, id));
-
     if (status == "active") {
         await db.update(food).set({ status: "active" }).where(eq(food.id, id));
     } else if (status == "inactive") {
@@ -706,4 +693,4 @@ export const changeFoodStatus = async (req: Request, res: Response) => {
     }
 
     return SuccessResponse(res, { message: "Food status updated successfully" });
-};  
+};
