@@ -448,6 +448,7 @@ export const getDashboardReports = async (req: Request | any, res: Response) => 
 
     const { startDate, endDate, branchId } = req.query;
 
+    // 1. بناء فلاتر البحث الديناميكية
     const conditions: any[] = [eq(orders.restaurantId, restaurantId)];
 
     if (startDate) conditions.push(gte(orders.createdAt, new Date(startDate as string)));
@@ -459,6 +460,7 @@ export const getDashboardReports = async (req: Request | any, res: Response) => 
     if (branchId) conditions.push(eq(orders.branchId, branchId as string));
     if (req.user.branchId) conditions.push(eq(orders.branchId, req.user.branchId));
 
+    // 2. سحب بيانات الطلبات الأساسية مع الـ Joins المطابقة للـ Schemas
     const rawOrders = await db
         .select({
             orderId: orders.id,
@@ -476,59 +478,51 @@ export const getDashboardReports = async (req: Request | any, res: Response) => 
         .from(orders)
         .leftJoin(selectReasons, eq(orders.cancelReasonId, selectReasons.id))
         .leftJoin(branches, eq(orders.branchId, branches.id))
-        .leftJoin(addresses, eq(orders.addressId, addresses.id))
+        .leftJoin(addresses, eq(orders.addressId, addresses.id)) // للوصول للـ Zone
         .leftJoin(zones, eq(addresses.zoneId, zones.id))
         .where(and(...conditions));
 
-    // Cards
+    // ==========================================
+    // تجهيز المتغيرات للإحصائيات
+    // ==========================================
     let totalRevenue = 0;
     let numberOfOrders = 0;
-
-    // Peak Hours
-    const peakHoursObj: Record<string, number> = {};
-    for (let i = 0; i < 24; i++) {
-        const hourLabel = i < 10 ? `0${i}:00` : `${i}:00`;
-        peakHoursObj[hourLabel] = 0;
-    }
-
-    // Peak Days
+    
+    const peakHoursObj: Record<string, number> = Object.fromEntries(
+        Array.from({ length: 24 }, (_, i) => [i < 10 ? `0${i}:00` : `${i}:00`, 0])
+    );
+    
     const peakDaysObj: Record<string, number> = {
         "Sunday": 0, "Monday": 0, "Tuesday": 0, "Wednesday": 0, "Thursday": 0, "Friday": 0, "Saturday": 0
     };
     const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-    // Cancellation
     let userCancellations = 0;
     let restaurantCancellations = 0;
-
-    // Discount Effectiveness (Scatter plot: [discount%, revenue])
-    const discountEffectiveness: { discountPercent: string, revenue: number, count: number }[] = [];
-
-    // Branches Net Sales
-    const branchesNetSales: Record<string, number> = {};
-
-    // App vs Website (Placeholder using orderSource for now)
     let appOrders = 0;
     let websiteOrders = 0;
 
-    // Revenue Before/After Coupon
+    const discountEffectiveness: { discountPercent: string, revenue: number, count: number }[] = [];
+    const branchesNetSales: Record<string, number> = {};
     const couponAnalysis: Record<string, { before: number, after: number }> = {};
-
-    const orderIds: string[] = [];
     const geoMapObj: Record<string, number> = {};
+    const orderIds: string[] = [];
 
+    // ==========================================
+    // معالجة بيانات الطلبات (Loop)
+    // ==========================================
     for (const o of rawOrders) {
         orderIds.push(o.orderId);
 
-        const amount = parseFloat(o.totalAmount as string || "0");
-        const sub = parseFloat(o.subtotal as string || "0");
-        const disc = parseFloat(o.discountAmount as string || "0");
+        const amount = parseFloat((o.totalAmount as string) || "0");
+        const sub = parseFloat((o.subtotal as string) || "0");
+        const disc = parseFloat((o.discountAmount as string) || "0");
         
         if (o.status !== "cancelled" && o.status !== "refund") {
             totalRevenue += amount;
             numberOfOrders++;
 
-            // Peak hours & Days
+            // أوقات وأيام الذروة
             if (o.createdAt) {
                 const date = new Date(o.createdAt);
                 const h = date.getHours();
@@ -537,28 +531,29 @@ export const getDashboardReports = async (req: Request | any, res: Response) => 
                 peakDaysObj[dayNames[date.getDay()]] += amount;
             }
 
-            // Branches
+            // مبيعات الفروع
             const bName = o.branchName || "Unknown Branch";
             branchesNetSales[bName] = (branchesNetSales[bName] || 0) + amount;
 
-            // App vs Website (Using orderSource as approximation: food_aggregator vs online_order)
+            // مصادر الطلب (Order Source)
             if (o.orderSource === "food_aggregator") {
                 websiteOrders++;
             } else {
                 appOrders++;
             }
 
-            // Geographic Map
+            // الخريطة الجغرافية
             const zName = o.zoneName || "Unknown Zone";
             geoMapObj[zName] = (geoMapObj[zName] || 0) + amount;
         }
 
+        // الإلغاءات
         if (o.status === "cancelled") {
             if (o.cancelReasonType === "user") userCancellations++;
-            else restaurantCancellations++; 
+            else if (o.cancelReasonType === "restaurant") restaurantCancellations++; 
         }
 
-        // Coupon analysis & Discount Effectiveness
+        // تحليل الكوبونات
         if (o.couponCode && o.status !== "cancelled") {
             if (!couponAnalysis[o.couponCode]) couponAnalysis[o.couponCode] = { before: 0, after: 0 };
             couponAnalysis[o.couponCode].before += sub;
@@ -573,13 +568,15 @@ export const getDashboardReports = async (req: Request | any, res: Response) => 
         }
     }
 
-    // Top 5 Products & Market Basket
+    // ==========================================
+    // جلب أصناف الطلبات (Order Items) للـ Top Products & Market Basket
+    // ==========================================
     let topProducts: any[] = [];
     const combosObj: Record<string, number> = {};
     const productSales: Record<string, { name: string, rev: number, count: number }> = {};
 
     if (orderIds.length > 0) {
-        const batchSize = 500;
+        const batchSize = 500; // تقسيم الطلبات عشان الـ Query ما تضربش Limit
         for (let i = 0; i < orderIds.length; i += batchSize) {
             const batch = orderIds.slice(i, i + batchSize);
             const oItems = await db
@@ -598,7 +595,7 @@ export const getDashboardReports = async (req: Request | any, res: Response) => 
             for (const item of oItems) {
                 const fName = item.foodName || "Unknown";
                 const fId = item.foodId;
-                const price = parseFloat(item.totalPrice as string || "0");
+                const price = parseFloat((item.totalPrice as string) || "0");
 
                 if (!productSales[fId]) productSales[fId] = { name: fName, rev: 0, count: 0 };
                 productSales[fId].rev += price;
@@ -608,7 +605,7 @@ export const getDashboardReports = async (req: Request | any, res: Response) => 
                 itemsByOrder[item.orderId].push({ id: fId, name: fName });
             }
 
-            // Market Basket combos
+            // Market Basket Analysis (Combos)
             for (const oId in itemsByOrder) {
                 const items = itemsByOrder[oId];
                 for (let j = 0; j < items.length; j++) {
@@ -635,18 +632,24 @@ export const getDashboardReports = async (req: Request | any, res: Response) => 
             return { comboName: name, confidencePercent: confidence };
         });
 
-    // Rating
+    // ==========================================
+    // جلب التقييمات (Rating)
+    // ==========================================
     const ratings = await db.select({ rating: restaurantRatings.rating })
         .from(restaurantRatings)
         .where(eq(restaurantRatings.restaurantId, restaurantId));
     
     let avgRating = "0.00";
     if (ratings.length > 0) {
-        const sum = ratings.reduce((acc, r) => acc + r.rating, 0);
+        const sum = ratings.reduce((acc, r) => acc + (r.rating || 0), 0);
         avgRating = (sum / ratings.length).toFixed(2);
     }
 
-    return SuccessResponse(res, {
+    // ==========================================
+    // إرسال الـ Response
+    // ==========================================
+    return res.status(200).json({
+        success: true,
         message: "Dashboard reports generated",
         data: {
             cards: {
