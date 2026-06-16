@@ -20,7 +20,6 @@ import PDFDocument from "pdfkit";
 import { invoices } from "../../models/schema/admin/invoices";
 
 type OrderStatus = "pending" | "accepted" | "preparing" | "out_for_delivery" | "delivered" | "cancelled" | "rejected" | "refund";
-type PaymentMethod = "cash_on_delivery" | "visa" | "wallet" | "الدفع عند الاستلام" | "بطاقة" | "محفظتى";
 
 export const getMyRestaurantReport = async (req: Request | any, res: Response) => {
     if (!req.user) throw new UnauthorizedError("Unauthenticated");
@@ -41,6 +40,9 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
     if (branchId) conditions.push(eq(orders.branchId, branchId as string));
     if (req.user.branchId) conditions.push(eq(orders.branchId, req.user.branchId));
 
+    // ==========================================
+    // 1. جلب كل الأوردرات مع ربط الجداول المطلوبة
+    // ==========================================
     const allOrders = await db
         .select({
             orderId: orders.id,
@@ -48,7 +50,11 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
             status: orders.status,
             orderSource: orders.orderSource,
             orderType: orders.orderType,
-            paymentMethod: orders.paymentMethod, // 👈 قراءة مباشرة بما إنها varchar
+            
+            // 👇 التعديل هنا: جلب اسم طريقة الدفع بدل الـ UUID
+            paymentMethodId: orders.paymentMethod, 
+            paymentMethodName: paymentMethods.name, 
+            
             subtotal: orders.subtotal,
             deliveryFee: orders.deliveryFee,
             serviceFee: orders.serviceFee,
@@ -57,14 +63,18 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
             branchId: orders.branchId,
             branchName: branches.name,
             createdAt: orders.createdAt,
-            cancelReasonType: selectReasons.type, // 👈 نوع الإلغاء
+            cancelReasonType: selectReasons.type, // نوع الإلغاء
         })
         .from(orders)
         .leftJoin(branches, eq(orders.branchId, branches.id))
         .leftJoin(selectReasons, eq(orders.cancelReasonId, selectReasons.id))
+        .leftJoin(paymentMethods, eq(orders.paymentMethod, paymentMethods.id)) // 👈 الربط مع جدول طرق الدفع
         .where(and(...conditions))
         .orderBy(desc(orders.createdAt));
 
+    // ==========================================
+    // 2. تهيئة المتغيرات للإحصائيات
+    // ==========================================
     const statusSummary: Record<string, { count: number; totalAmount: number }> = {};
     const allStatuses: OrderStatus[] = ["pending", "accepted", "preparing", "out_for_delivery", "delivered", "cancelled", "rejected", "refund"];
     for (const s of allStatuses) statusSummary[s] = { count: 0, totalAmount: 0 };
@@ -89,8 +99,8 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
     const branchSummary: Record<string, any> = {};
     const dailyTrend: Record<string, { date: string; orders: number; revenue: number }> = {};
 
-    let totalOrders = 0; // إجمالي كل الطلبات للإحصائيات فقط
-    let validOrdersForFinancials = 0; // إجمالي الطلبات اللي دخلت الحسبة المالية
+    let totalOrders = 0; 
+    let validOrdersForFinancials = 0; 
     
     // متغيرات الفلوس
     let totalRevenue = 0; 
@@ -107,29 +117,28 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
     let totalCashServiceFees = 0;
     let totalDigitalServiceFees = 0;
 
-    const validOrderIdsForItems: string[] = []; // هنحفظ فيها الـ IDs بتاعت الأوردرات الصالحة للـ Top Selling
+    const validOrderIdsForItems: string[] = []; 
 
+    // ==========================================
+    // 3. حساب الفلوس وتصفية الأوردرات (The Magic Loop)
+    // ==========================================
     for (const order of allOrders) {
-        totalOrders++; // بنعد كل الأوردرات للإحصائيات العامة
+        totalOrders++; 
         
         const status = order.status || "pending";
         const cancelReasonType = order.cancelReasonType;
 
-        // 🛑 الفلتر السحري
+        // 🛑 الفلتر السحري: هل اليوزر كنسل الطلب؟
         const isCancelledByUser = status === "cancelled" && cancelReasonType === "user";
         
-        // لو اليوزر لغاه، هنحسبه بس في إحصائيات الـ status ونعمل continue للفلوس
         if (isCancelledByUser) {
             if (statusSummary[status]) {
                 statusSummary[status].count++;
-                // متعمد مش هضيف totalAmount هنا عشان المبالغ الملغية متلخبطش الحسابات
             }
             continue; 
         }
 
-        // =====================================
         // ✅ الأوردر صالح ماليًا
-        // =====================================
         validOrdersForFinancials++;
         validOrderIdsForItems.push(order.orderId);
 
@@ -139,7 +148,8 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
         const svcFee = parseFloat(order.serviceFee as string || "0");
         const commission = parseFloat(order.appCommission as string || "0");
         
-        const payment = (order.paymentMethod || "").toLowerCase();
+        // 👇 الاعتماد على الاسم بدل الـ ID
+        const payment = (order.paymentMethodName || "").toLowerCase();
         const isCash = payment.includes("cash") || payment.includes("استلام");
         
         const oType = order.orderType || "delivery";
@@ -161,13 +171,13 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
             totalDigitalServiceFees += svcFee;
         }
 
-        // --- تجميعات الإحصائيات (للأوردرات الصالحة فقط) ---
+        // --- تجميعات الإحصائيات ---
         if (statusSummary[status]) {
             statusSummary[status].count++;
             statusSummary[status].totalAmount += amount;
         }
 
-        const standardPayment = isCash ? "cash_on_delivery" : (payment.includes("محفظ") ? "wallet" : "visa");
+        const standardPayment = isCash ? "cash_on_delivery" : (payment.includes("محفظ") || payment.includes("wallet") ? "wallet" : "visa");
         if (paymentSummary[standardPayment]) {
             paymentSummary[standardPayment].count++;
             paymentSummary[standardPayment].totalAmount += amount;
@@ -210,7 +220,9 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
         }
     }
 
-    // جلب المنتجات الأكثر مبيعاً (للأوردرات الصالحة مالياً فقط)
+    // ==========================================
+    // 4. جلب المنتجات الأكثر مبيعاً
+    // ==========================================
     let topSellingItems: any[] = [];
     if (validOrderIdsForItems.length > 0) {
         const batchSize = 500;
@@ -250,18 +262,21 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
             }));
     }
 
+    // ==========================================
+    // 5. جلب باقي بيانات المطعم والتسويات
+    // ==========================================
     const [wallet] = await db.select().from(restaurantWallets).where(eq(restaurantWallets.restaurantId, restaurantId)).limit(1);
     const businessPlans = await db.select().from(restaurantBusinessPlans).where(eq(restaurantBusinessPlans.restaurantId, restaurantId));
     const [restaurantInfo] = await db.select({ id: restaurants.id, name: restaurants.name, logo: restaurants.logo, status: restaurants.status }).from(restaurants).where(eq(restaurants.id, restaurantId)).limit(1);
 
     const netRevenue = totalRevenue - totalAppCommission - totalServiceFees;
     
-    // حساب المديونيات الدقيق (نفس اللوجيك بتاع السوبر أدمن)
+    // حساب المديونيات الدقيق
     const restaurantOwesPlatform = totalCashCommission + totalCashServiceFees;
     const platformOwesRestaurant = totalDigitalCollected - (totalDigitalCommission + totalDigitalServiceFees);
     const netBalance = platformOwesRestaurant - restaurantOwesPlatform;
 
-    // نسب الإلغاء (بناء على كل الطلبات)
+    // نسب الإلغاء 
     const cancelledCount = (statusSummary["cancelled"]?.count || 0) + (statusSummary["rejected"]?.count || 0);
     const cancellationRate = totalOrders > 0 ? ((cancelledCount / totalOrders) * 100).toFixed(2) : "0.00";
     const avgOrderValue = validOrdersForFinancials > 0 ? (totalRevenue / validOrdersForFinancials).toFixed(2) : "0.00";
@@ -280,7 +295,7 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
             },
 
             financials: {
-                totalRevenue: totalRevenue.toFixed(2), // ده الإيراد من كل الأوردرات الصالحة
+                totalRevenue: totalRevenue.toFixed(2),
                 totalSubtotal: totalSubtotal.toFixed(2),
                 totalDeliveryFees: totalDeliveryFees.toFixed(2),
                 totalServiceFees: totalServiceFees.toFixed(2),
@@ -339,7 +354,6 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
         },
     });
 };
-
 export const downloadSavedInvoicePDF = async (req: Request | any, res: Response) => {
     if (!req.user) throw new UnauthorizedError("Unauthenticated");
     

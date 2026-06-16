@@ -31,6 +31,9 @@ const getMyRestaurantReport = async (req, res) => {
         conditions.push((0, drizzle_orm_1.eq)(schema_1.orders.branchId, branchId));
     if (req.user.branchId)
         conditions.push((0, drizzle_orm_1.eq)(schema_1.orders.branchId, req.user.branchId));
+    // ==========================================
+    // 1. جلب كل الأوردرات مع ربط الجداول المطلوبة
+    // ==========================================
     const allOrders = await connection_1.db
         .select({
         orderId: schema_1.orders.id,
@@ -38,7 +41,9 @@ const getMyRestaurantReport = async (req, res) => {
         status: schema_1.orders.status,
         orderSource: schema_1.orders.orderSource,
         orderType: schema_1.orders.orderType,
-        paymentMethod: schema_1.orders.paymentMethod, // 👈 قراءة مباشرة بما إنها varchar
+        // 👇 التعديل هنا: جلب اسم طريقة الدفع بدل الـ UUID
+        paymentMethodId: schema_1.orders.paymentMethod,
+        paymentMethodName: schema_1.paymentMethods.name,
         subtotal: schema_1.orders.subtotal,
         deliveryFee: schema_1.orders.deliveryFee,
         serviceFee: schema_1.orders.serviceFee,
@@ -47,13 +52,17 @@ const getMyRestaurantReport = async (req, res) => {
         branchId: schema_1.orders.branchId,
         branchName: schema_1.branches.name,
         createdAt: schema_1.orders.createdAt,
-        cancelReasonType: schema_1.selectReasons.type, // 👈 نوع الإلغاء
+        cancelReasonType: schema_1.selectReasons.type, // نوع الإلغاء
     })
         .from(schema_1.orders)
         .leftJoin(schema_1.branches, (0, drizzle_orm_1.eq)(schema_1.orders.branchId, schema_1.branches.id))
         .leftJoin(schema_1.selectReasons, (0, drizzle_orm_1.eq)(schema_1.orders.cancelReasonId, schema_1.selectReasons.id))
+        .leftJoin(schema_1.paymentMethods, (0, drizzle_orm_1.eq)(schema_1.orders.paymentMethod, schema_1.paymentMethods.id)) // 👈 الربط مع جدول طرق الدفع
         .where((0, drizzle_orm_1.and)(...conditions))
         .orderBy((0, drizzle_orm_1.desc)(schema_1.orders.createdAt));
+    // ==========================================
+    // 2. تهيئة المتغيرات للإحصائيات
+    // ==========================================
     const statusSummary = {};
     const allStatuses = ["pending", "accepted", "preparing", "out_for_delivery", "delivered", "cancelled", "rejected", "refund"];
     for (const s of allStatuses)
@@ -74,8 +83,8 @@ const getMyRestaurantReport = async (req, res) => {
     };
     const branchSummary = {};
     const dailyTrend = {};
-    let totalOrders = 0; // إجمالي كل الطلبات للإحصائيات فقط
-    let validOrdersForFinancials = 0; // إجمالي الطلبات اللي دخلت الحسبة المالية
+    let totalOrders = 0;
+    let validOrdersForFinancials = 0;
     // متغيرات الفلوس
     let totalRevenue = 0;
     let totalSubtotal = 0;
@@ -88,24 +97,23 @@ const getMyRestaurantReport = async (req, res) => {
     let totalDigitalCommission = 0;
     let totalCashServiceFees = 0;
     let totalDigitalServiceFees = 0;
-    const validOrderIdsForItems = []; // هنحفظ فيها الـ IDs بتاعت الأوردرات الصالحة للـ Top Selling
+    const validOrderIdsForItems = [];
+    // ==========================================
+    // 3. حساب الفلوس وتصفية الأوردرات (The Magic Loop)
+    // ==========================================
     for (const order of allOrders) {
-        totalOrders++; // بنعد كل الأوردرات للإحصائيات العامة
+        totalOrders++;
         const status = order.status || "pending";
         const cancelReasonType = order.cancelReasonType;
-        // 🛑 الفلتر السحري
+        // 🛑 الفلتر السحري: هل اليوزر كنسل الطلب؟
         const isCancelledByUser = status === "cancelled" && cancelReasonType === "user";
-        // لو اليوزر لغاه، هنحسبه بس في إحصائيات الـ status ونعمل continue للفلوس
         if (isCancelledByUser) {
             if (statusSummary[status]) {
                 statusSummary[status].count++;
-                // متعمد مش هضيف totalAmount هنا عشان المبالغ الملغية متلخبطش الحسابات
             }
             continue;
         }
-        // =====================================
         // ✅ الأوردر صالح ماليًا
-        // =====================================
         validOrdersForFinancials++;
         validOrderIdsForItems.push(order.orderId);
         const amount = parseFloat(order.totalAmount || "0");
@@ -113,7 +121,8 @@ const getMyRestaurantReport = async (req, res) => {
         const dlvFee = parseFloat(order.deliveryFee || "0");
         const svcFee = parseFloat(order.serviceFee || "0");
         const commission = parseFloat(order.appCommission || "0");
-        const payment = (order.paymentMethod || "").toLowerCase();
+        // 👇 الاعتماد على الاسم بدل الـ ID
+        const payment = (order.paymentMethodName || "").toLowerCase();
         const isCash = payment.includes("cash") || payment.includes("استلام");
         const oType = order.orderType || "delivery";
         const oSource = order.orderSource || "online_order";
@@ -132,12 +141,12 @@ const getMyRestaurantReport = async (req, res) => {
             totalDigitalCommission += commission;
             totalDigitalServiceFees += svcFee;
         }
-        // --- تجميعات الإحصائيات (للأوردرات الصالحة فقط) ---
+        // --- تجميعات الإحصائيات ---
         if (statusSummary[status]) {
             statusSummary[status].count++;
             statusSummary[status].totalAmount += amount;
         }
-        const standardPayment = isCash ? "cash_on_delivery" : (payment.includes("محفظ") ? "wallet" : "visa");
+        const standardPayment = isCash ? "cash_on_delivery" : (payment.includes("محفظ") || payment.includes("wallet") ? "wallet" : "visa");
         if (paymentSummary[standardPayment]) {
             paymentSummary[standardPayment].count++;
             paymentSummary[standardPayment].totalAmount += amount;
@@ -175,7 +184,9 @@ const getMyRestaurantReport = async (req, res) => {
             dailyTrend[dayKey].revenue += amount;
         }
     }
-    // جلب المنتجات الأكثر مبيعاً (للأوردرات الصالحة مالياً فقط)
+    // ==========================================
+    // 4. جلب المنتجات الأكثر مبيعاً
+    // ==========================================
     let topSellingItems = [];
     if (validOrderIdsForItems.length > 0) {
         const batchSize = 500;
@@ -211,15 +222,18 @@ const getMyRestaurantReport = async (req, res) => {
             totalRevenue: item.totalRevenue.toFixed(2),
         }));
     }
+    // ==========================================
+    // 5. جلب باقي بيانات المطعم والتسويات
+    // ==========================================
     const [wallet] = await connection_1.db.select().from(schema_1.restaurantWallets).where((0, drizzle_orm_1.eq)(schema_1.restaurantWallets.restaurantId, restaurantId)).limit(1);
     const businessPlans = await connection_1.db.select().from(schema_1.restaurantBusinessPlans).where((0, drizzle_orm_1.eq)(schema_1.restaurantBusinessPlans.restaurantId, restaurantId));
     const [restaurantInfo] = await connection_1.db.select({ id: schema_1.restaurants.id, name: schema_1.restaurants.name, logo: schema_1.restaurants.logo, status: schema_1.restaurants.status }).from(schema_1.restaurants).where((0, drizzle_orm_1.eq)(schema_1.restaurants.id, restaurantId)).limit(1);
     const netRevenue = totalRevenue - totalAppCommission - totalServiceFees;
-    // حساب المديونيات الدقيق (نفس اللوجيك بتاع السوبر أدمن)
+    // حساب المديونيات الدقيق
     const restaurantOwesPlatform = totalCashCommission + totalCashServiceFees;
     const platformOwesRestaurant = totalDigitalCollected - (totalDigitalCommission + totalDigitalServiceFees);
     const netBalance = platformOwesRestaurant - restaurantOwesPlatform;
-    // نسب الإلغاء (بناء على كل الطلبات)
+    // نسب الإلغاء 
     const cancelledCount = (statusSummary["cancelled"]?.count || 0) + (statusSummary["rejected"]?.count || 0);
     const cancellationRate = totalOrders > 0 ? ((cancelledCount / totalOrders) * 100).toFixed(2) : "0.00";
     const avgOrderValue = validOrdersForFinancials > 0 ? (totalRevenue / validOrdersForFinancials).toFixed(2) : "0.00";
@@ -235,7 +249,7 @@ const getMyRestaurantReport = async (req, res) => {
                 avgOrderValue,
             },
             financials: {
-                totalRevenue: totalRevenue.toFixed(2), // ده الإيراد من كل الأوردرات الصالحة
+                totalRevenue: totalRevenue.toFixed(2),
                 totalSubtotal: totalSubtotal.toFixed(2),
                 totalDeliveryFees: totalDeliveryFees.toFixed(2),
                 totalServiceFees: totalServiceFees.toFixed(2),
