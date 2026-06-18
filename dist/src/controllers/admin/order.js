@@ -330,25 +330,21 @@ const updateOrderStatus = async (req, res) => {
     const adminBranchId = req.user?.branchId;
     if (!status)
         throw new BadRequest_1.BadRequest("Status is required");
-    // إجبار اختيار سبب من select_reasons لو كنسل
     if (status === "cancelled" && !cancelReasonId) {
         throw new BadRequest_1.BadRequest("Cancel reason ID is required when cancelling an order");
     }
     const [existingOrder] = await connection_1.db.select().from(schema_1.orders).where((0, drizzle_orm_1.eq)(schema_1.orders.id, orderId)).limit(1);
     if (!existingOrder)
         throw new NotFound_1.NotFound("Order not found");
-    // 🛡️ حماية الصلاحيات
     if (existingOrder.restaurantId !== adminRestaurantId)
         throw new BadRequest_1.BadRequest("Unauthorized");
     if (adminBranchId && existingOrder.branchId !== adminBranchId)
         throw new BadRequest_1.BadRequest("Unauthorized");
     const currentStatus = existingOrder.status;
-    // 🛡️ حماية ضد التغيير بعد الوصول لحالة نهائية
     const finalStatuses = ["delivered", "cancelled", "refund"];
     if (finalStatuses.includes(currentStatus)) {
         throw new BadRequest_1.BadRequest(`Order is already ${currentStatus} and cannot be changed`);
     }
-    // 🛡️ حماية ضد الرجوع خطوة للوراء في مسار الطلب
     const statusFlowOrder = {
         "pending": 1,
         "accepted": 2,
@@ -367,7 +363,6 @@ const updateOrderStatus = async (req, res) => {
     else if (currentStatus === status) {
         throw new BadRequest_1.BadRequest(`Order is already ${currentStatus}`);
     }
-    // جلب سبب الإلغاء من select_reasons (نوع restaurant)
     let reason = null;
     if (status === "cancelled") {
         const [found] = await connection_1.db.select().from(selectReasons_1.selectReasons)
@@ -377,22 +372,20 @@ const updateOrderStatus = async (req, res) => {
             throw new BadRequest_1.BadRequest("Invalid cancel reason for restaurant");
         reason = found;
     }
-    // Transaction لتحديث الحالة وتنفيذ العمليات المالية
     await connection_1.db.transaction(async (tx) => {
         // 1. تحديث الحالة
         await tx.update(schema_1.orders)
             .set({
-            status: status, // ✅ تم التعديل هنا ليأخذ الحالة المرسلة ديناميكياً بدلاً من "cancelled" الثابتة
+            status: status,
             cancelReasonId: status === "cancelled" ? reason.id : null,
             cancelReason: status === "cancelled" ? reason.name : null,
             updatedAt: new Date()
         })
             .where((0, drizzle_orm_1.eq)(schema_1.orders.id, orderId));
         // ==========================================
-        // 💰 2. الـ Refund (ترجيع الفلوس للعميل) لو المطعم كنسل
+        // 💰 2. الـ Refund للعميل (لو كان دافع بالمحفظة)
         // ==========================================
-        if (status === "cancelled") {
-            // التحقق لو اليوزر دفع بالمحفظة عن طريق البحث في الترانزكشنز
+        if (status === "cancelled" || status === "rejected") {
             const [walletTx] = await tx.select().from(schema_1.userWalletTransactions)
                 .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.userWalletTransactions.reference, existingOrder.orderNumber), (0, drizzle_orm_1.eq)(schema_1.userWalletTransactions.transactionType, "order_payment"))).limit(1);
             if (walletTx) {
@@ -413,94 +406,73 @@ const updateOrderStatus = async (req, res) => {
                         amount: amountToRefund.toString(),
                         balanceBefore: balanceBefore.toString(),
                         reference: existingOrder.orderNumber,
-                        status: "approved"
+                        status: "approved",
+                        createdAt: new Date()
                     });
                 }
             }
             // ==========================================
-            // 💰 3. خصم العمولة كغرامة من المطعم (لأن المطعم هو اللي كنسل)
+            // 💰 3. التسوية العكسية للمطعم (Reversal) + خصم الغرامة
             // ==========================================
+            // أ. نجيب طريقة الدفع عشان نعرف نعكس الحسبة إزاي
+            const [payment] = await tx.select().from(schema_1.paymentMethods).where((0, drizzle_orm_1.eq)(schema_1.paymentMethods.id, existingOrder.paymentMethod)).limit(1);
+            const pmName = (payment?.name || "").toLowerCase();
+            const isCashPayment = pmName.includes("cash") || pmName.includes("استلام");
+            // ب. تجهيز الأرقام اللي اتحسبت وقت الـ Checkout
             const appCommission = parseFloat(existingOrder.appCommission || "0");
             const serviceFee = parseFloat(existingOrder.serviceFee || "0");
-            const appDues = appCommission + serviceFee;
-            if (appDues > 0) {
-                let [restWallet] = await tx.select().from(schema_1.restaurantWallets)
-                    .where((0, drizzle_orm_1.eq)(schema_1.restaurantWallets.restaurantId, existingOrder.restaurantId)).limit(1);
-                if (!restWallet) {
-                    await tx.insert(schema_1.restaurantWallets).values({ id: (0, uuid_1.v4)(), restaurantId: existingOrder.restaurantId });
-                    [restWallet] = await tx.select().from(schema_1.restaurantWallets)
-                        .where((0, drizzle_orm_1.eq)(schema_1.restaurantWallets.restaurantId, existingOrder.restaurantId)).limit(1);
-                }
-                const currentBalance = parseFloat(restWallet.balance);
-                const newBalance = currentBalance - appDues;
-                await tx.update(schema_1.restaurantWallets)
-                    .set({
-                    balance: newBalance.toString(),
-                    updatedAt: new Date()
-                })
-                    .where((0, drizzle_orm_1.eq)(schema_1.restaurantWallets.restaurantId, existingOrder.restaurantId));
-                await tx.insert(schema_1.restaurantWalletTransactions).values({
-                    id: (0, uuid_1.v4)(),
-                    restaurantId: existingOrder.restaurantId,
-                    type: "order_payment",
-                    amount: `-${appDues}`,
-                    balanceBefore: currentBalance.toString(),
-                    balanceAfter: newBalance.toString(),
-                    method: existingOrder.paymentMethod,
-                    reference: existingOrder.orderNumber,
-                    note: `Penalty: Restaurant cancelled order. Commission deducted: ${appDues}`,
-                    createdAt: new Date()
-                });
-            }
-        }
-        // ==========================================
-        // 📈 4. الـ Settlement (إضافة الأرباح للمطعم) لو الأوردر اتسلم
-        // ==========================================
-        if (status === "delivered") {
-            const restaurantId = existingOrder.restaurantId;
-            const totalAmount = parseFloat(existingOrder.totalAmount);
-            const appCommission = parseFloat(existingOrder.appCommission);
-            const netRestaurantEarning = totalAmount - appCommission;
-            let [restWallet] = await tx.select().from(schema_1.restaurantWallets).where((0, drizzle_orm_1.eq)(schema_1.restaurantWallets.restaurantId, restaurantId)).limit(1);
+            const totalAmount = parseFloat(existingOrder.totalAmount || "0");
+            const subtotal = parseFloat(existingOrder.subtotal || "0");
+            const deliveryFee = parseFloat(existingOrder.deliveryFee || "0");
+            const appDues = appCommission + serviceFee; // الغرامة أو فلوس المنصة
+            const restaurantEarning = subtotal + deliveryFee - appCommission; // الربح اللي كان داخل للمطعم
+            // ج. نجيب محفظة المطعم
+            let [restWallet] = await tx.select().from(schema_1.restaurantWallets)
+                .where((0, drizzle_orm_1.eq)(schema_1.restaurantWallets.restaurantId, existingOrder.restaurantId)).limit(1);
             if (!restWallet) {
-                await tx.insert(schema_1.restaurantWallets).values({ id: (0, uuid_1.v4)(), restaurantId });
-                [restWallet] = await tx.select().from(schema_1.restaurantWallets).where((0, drizzle_orm_1.eq)(schema_1.restaurantWallets.restaurantId, restaurantId)).limit(1);
+                await tx.insert(schema_1.restaurantWallets).values({ id: (0, uuid_1.v4)(), restaurantId: existingOrder.restaurantId });
+                [restWallet] = await tx.select().from(schema_1.restaurantWallets)
+                    .where((0, drizzle_orm_1.eq)(schema_1.restaurantWallets.restaurantId, existingOrder.restaurantId)).limit(1);
             }
-            const currentBalance = parseFloat(restWallet.balance);
-            const currentCollectedCash = parseFloat(restWallet.collectedCash);
-            const currentTotalEarning = parseFloat(restWallet.totalEarning);
-            let newBalance = currentBalance;
-            let newCollectedCash = currentCollectedCash;
-            if (existingOrder.paymentMethod === "cash_on_delivery") {
-                newCollectedCash = currentCollectedCash + totalAmount;
+            let currentBalance = parseFloat(restWallet.balance);
+            let currentCollectedCash = parseFloat(restWallet.collectedCash);
+            let currentTotalEarning = parseFloat(restWallet.totalEarning);
+            // د. عكس العمليات اللي تمت في الـ Checkout
+            if (isCashPayment) {
+                currentBalance += appDues; // نرجع فلوس العمولة اللي اتخصمت منه مقدماً
+                currentCollectedCash -= totalAmount; // نطرح الكاش اللي كان المفروض يستلمه ومستلموش
             }
             else {
-                newBalance = currentBalance + netRestaurantEarning;
+                currentBalance -= restaurantEarning; // نطرح الأرباح اللي ضفناها في حسابه
             }
+            currentTotalEarning -= restaurantEarning; // تقليل إجمالي الأرباح
+            // هـ. تطبيق الغرامة (لأنه لغى الأوردر)
+            const balanceAfterPenalty = currentBalance - appDues;
             await tx.update(schema_1.restaurantWallets)
                 .set({
-                balance: newBalance.toString(),
-                collectedCash: newCollectedCash.toString(),
-                totalEarning: (currentTotalEarning + netRestaurantEarning).toString(),
+                balance: balanceAfterPenalty.toString(),
+                collectedCash: currentCollectedCash.toString(),
+                totalEarning: currentTotalEarning.toString(),
                 updatedAt: new Date()
             })
-                .where((0, drizzle_orm_1.eq)(schema_1.restaurantWallets.restaurantId, restaurantId));
+                .where((0, drizzle_orm_1.eq)(schema_1.restaurantWallets.restaurantId, existingOrder.restaurantId));
+            // و. تسجيل حركة الغرامة في السجل
             await tx.insert(schema_1.restaurantWalletTransactions).values({
                 id: (0, uuid_1.v4)(),
-                restaurantId: restaurantId,
-                type: (existingOrder.paymentMethod === "cash_on_delivery") ? "cash_collection" : "order_payment",
-                amount: (existingOrder.paymentMethod === "cash_on_delivery") ? totalAmount.toString() : netRestaurantEarning.toString(),
-                balanceBefore: (existingOrder.paymentMethod === "cash_on_delivery") ? currentCollectedCash.toString() : currentBalance.toString(),
-                balanceAfter: (existingOrder.paymentMethod === "cash_on_delivery") ? newCollectedCash.toString() : newBalance.toString(),
+                restaurantId: existingOrder.restaurantId,
+                type: "order_payment",
+                amount: `-${appDues}`,
+                balanceBefore: currentBalance.toString(), // الرصيد بعد عملية العكس وقبل الغرامة
+                balanceAfter: balanceAfterPenalty.toString(),
                 method: existingOrder.paymentMethod,
                 reference: existingOrder.orderNumber,
-                note: `Order ${existingOrder.orderNumber} delivered. Commission deducted: ${appCommission}`,
+                note: `Order Reversal & Penalty: Cancelled by restaurant. Commission deducted: ${appDues}`,
                 createdAt: new Date()
             });
         }
     });
     // ==========================================
-    // 5. Send Notification to User
+    // 4. إرسال الإشعارات للعميل
     // ==========================================
     let messageBody = `Your order ${existingOrder.orderNumber} is now ${status}.`;
     if (status === "cancelled") {
