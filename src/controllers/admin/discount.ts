@@ -285,6 +285,7 @@ export const toggleDiscountStatus = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Unauthorized");
 
+    // 1. جلب الخصم الحالي للتأكد من ملكيته للمطعم
     const [rawData] = await db
         .select()
         .from(discounts)
@@ -301,35 +302,50 @@ export const toggleDiscountStatus = async (req: Request, res: Response) => {
     if (!rawData) throw new NotFound("Discount not found or cannot be modified");
     const existingDiscount = rawData.discounts;
     
-    const nextStatus = !existingDiscount.isActive;
+    // 💡 التحويل الصريح لـ Boolean (لأن MySQL أحياناً بترجع 1 أو 0)
+    const currentStatus = existingDiscount.isActive === true || existingDiscount.isActive === 1 as any;
+    const nextStatus = !currentStatus;
 
-    // 💡 إذا كان صاحب المطعم يفتح الـ Switch (يحول الحالة لـ true)
-    if (nextStatus === true) {
-        // أ) جلب كل الخصومات التابعة للمطعم
-        const myDiscounts = await db
-            .select({ id: discounts.id })
-            .from(discounts)
-            .innerJoin(discountRestaurants, eq(discounts.id, discountRestaurants.discountId))
-            .where(eq(discountRestaurants.restaurantId, restaurantId));
+    // 2. استخدام Transaction لضمان تنفيذ العمليتين معاً بدون تداخل
+    await db.transaction(async (tx) => {
+        
+        // 💡 إذا كان صاحب المطعم يفتح الـ Switch (يحول الحالة لـ true)
+        if (nextStatus === true) {
+            // أ) جلب الخصومات التابعة للمطعم (النشطة فقط)
+            const activeDiscounts = await tx
+                .select({ id: discounts.id })
+                .from(discounts)
+                .innerJoin(discountRestaurants, eq(discounts.id, discountRestaurants.discountId))
+                .where(
+                    and(
+                        eq(discountRestaurants.restaurantId, restaurantId),
+                        eq(discounts.isActive, true)
+                    )
+                );
 
-        const myDiscountIds = myDiscounts.map(d => d.id);
+            // ب) استخراج الـ IDs (مع استبعاد الخصم الحالي عشان منقفلوش ونرجع نفتحه في نفس اللحظة)
+            const activeIdsToDeactivate = activeDiscounts
+                .map(d => d.id)
+                .filter(dId => dId !== id);
 
-        // ب) إيقاف أي خصم نشط آخر فوراً لضمان وجود خصم واحد نشط فقط
-        if (myDiscountIds.length > 0) {
-            await db
-                .update(discounts)
-                .set({ isActive: false, updatedAt: new Date() })
-                .where(and(inArray(discounts.id, myDiscountIds), eq(discounts.isActive, true)));
+            // ج) إيقاف أي خصم نشط آخر
+            if (activeIdsToDeactivate.length > 0) {
+                await tx
+                    .update(discounts)
+                    .set({ isActive: false })
+                    .where(inArray(discounts.id, activeIdsToDeactivate));
+            }
         }
-    }
 
-    // ج) تحديث الخصم الحالي للحالة الجديدة
-    await db.update(discounts)
-        .set({ isActive: nextStatus, updatedAt: new Date() })
-        .where(eq(discounts.id, id));
+        // د) تحديث الخصم الحالي للحالة الجديدة
+        await tx
+            .update(discounts)
+            .set({ isActive: nextStatus })
+            .where(eq(discounts.id, id));
+    });
 
     return SuccessResponse(res, {
-        message: `Discount ${nextStatus ? "activated" : "deactivated"} successfully. Other active discounts turned off.`,
+        message: `Discount ${nextStatus ? "activated" : "deactivated"} successfully.`,
         data: { isActive: nextStatus }
     });
 };

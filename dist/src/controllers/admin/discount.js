@@ -238,6 +238,7 @@ const toggleDiscountStatus = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Unauthorized");
+    // 1. جلب الخصم الحالي للتأكد من ملكيته للمطعم
     const [rawData] = await connection_1.db
         .select()
         .from(schema_1.discounts)
@@ -247,30 +248,39 @@ const toggleDiscountStatus = async (req, res) => {
     if (!rawData)
         throw new NotFound_1.NotFound("Discount not found or cannot be modified");
     const existingDiscount = rawData.discounts;
-    const nextStatus = !existingDiscount.isActive;
-    // 💡 إذا كان صاحب المطعم يفتح الـ Switch (يحول الحالة لـ true)
-    if (nextStatus === true) {
-        // أ) جلب كل الخصومات التابعة للمطعم
-        const myDiscounts = await connection_1.db
-            .select({ id: schema_1.discounts.id })
-            .from(schema_1.discounts)
-            .innerJoin(schema_1.discountRestaurants, (0, drizzle_orm_1.eq)(schema_1.discounts.id, schema_1.discountRestaurants.discountId))
-            .where((0, drizzle_orm_1.eq)(schema_1.discountRestaurants.restaurantId, restaurantId));
-        const myDiscountIds = myDiscounts.map(d => d.id);
-        // ب) إيقاف أي خصم نشط آخر فوراً لضمان وجود خصم واحد نشط فقط
-        if (myDiscountIds.length > 0) {
-            await connection_1.db
-                .update(schema_1.discounts)
-                .set({ isActive: false, updatedAt: new Date() })
-                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.discounts.id, myDiscountIds), (0, drizzle_orm_1.eq)(schema_1.discounts.isActive, true)));
+    // 💡 التحويل الصريح لـ Boolean (لأن MySQL أحياناً بترجع 1 أو 0)
+    const currentStatus = existingDiscount.isActive === true || existingDiscount.isActive === 1;
+    const nextStatus = !currentStatus;
+    // 2. استخدام Transaction لضمان تنفيذ العمليتين معاً بدون تداخل
+    await connection_1.db.transaction(async (tx) => {
+        // 💡 إذا كان صاحب المطعم يفتح الـ Switch (يحول الحالة لـ true)
+        if (nextStatus === true) {
+            // أ) جلب الخصومات التابعة للمطعم (النشطة فقط)
+            const activeDiscounts = await tx
+                .select({ id: schema_1.discounts.id })
+                .from(schema_1.discounts)
+                .innerJoin(schema_1.discountRestaurants, (0, drizzle_orm_1.eq)(schema_1.discounts.id, schema_1.discountRestaurants.discountId))
+                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.discountRestaurants.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.discounts.isActive, true)));
+            // ب) استخراج الـ IDs (مع استبعاد الخصم الحالي عشان منقفلوش ونرجع نفتحه في نفس اللحظة)
+            const activeIdsToDeactivate = activeDiscounts
+                .map(d => d.id)
+                .filter(dId => dId !== id);
+            // ج) إيقاف أي خصم نشط آخر
+            if (activeIdsToDeactivate.length > 0) {
+                await tx
+                    .update(schema_1.discounts)
+                    .set({ isActive: false })
+                    .where((0, drizzle_orm_1.inArray)(schema_1.discounts.id, activeIdsToDeactivate));
+            }
         }
-    }
-    // ج) تحديث الخصم الحالي للحالة الجديدة
-    await connection_1.db.update(schema_1.discounts)
-        .set({ isActive: nextStatus, updatedAt: new Date() })
-        .where((0, drizzle_orm_1.eq)(schema_1.discounts.id, id));
+        // د) تحديث الخصم الحالي للحالة الجديدة
+        await tx
+            .update(schema_1.discounts)
+            .set({ isActive: nextStatus })
+            .where((0, drizzle_orm_1.eq)(schema_1.discounts.id, id));
+    });
     return (0, response_1.SuccessResponse)(res, {
-        message: `Discount ${nextStatus ? "activated" : "deactivated"} successfully. Other active discounts turned off.`,
+        message: `Discount ${nextStatus ? "activated" : "deactivated"} successfully.`,
         data: { isActive: nextStatus }
     });
 };
