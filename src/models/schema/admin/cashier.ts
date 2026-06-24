@@ -7,7 +7,8 @@ import {
     mysqlEnum
 } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
-import { branches, paymentMethods, restaurants } from "../../schema";
+import { branches, restaurants } from "../../schema";
+import { FinancialAccounts } from "../../schema";
 
 export const cashiers = mysqlTable("cashiers", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
@@ -21,7 +22,7 @@ export const cashiers = mysqlTable("cashiers", {
     
     cashier_active: boolean("cashier_active").default(true),
     
-    paymentmethodid: char("payment_method_id", { length: 36 }).references(() => paymentMethods.id).notNull(),
+    financialAccountId: char("financial_account_id", { length: 36 }).references(() => FinancialAccounts.id).notNull(),
     
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),

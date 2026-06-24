@@ -2,7 +2,7 @@ import { mysqlTable, varchar, char, decimal, timestamp, text } from "drizzle-orm
 import { sql } from "drizzle-orm";
 import { expensscategory } from "./expensscategory";
 import { restrauntadmin } from "../admin/restrauntadmin";
-import { paymentMethods } from "../admin/payment_methodes";
+import { FinancialAccounts } from "../../schema";
 import { restaurants } from "./restaurants";
 
 export const expenss = mysqlTable("expensses", {
@@ -25,8 +25,8 @@ export const expenss = mysqlTable("expensses", {
         
     note: text("note"),
     
-    paymentmethodId: char("paymentmethod_id", { length: 36 })
-        .references(() => paymentMethods.id),
+    financialAccountId: char("financial_account_id", { length: 36 })
+        .references(() => FinancialAccounts.id),
 
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),

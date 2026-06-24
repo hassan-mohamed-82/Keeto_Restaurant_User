@@ -10,7 +10,10 @@ const createExpense = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new Errors_1.BadRequest("Restaurant context missing");
-    const { name, amount, categoryId, shiftId, cashierId, cashiermanId, note, paymentmethodId } = req.body;
+    const { name, amount, categoryId, shiftId, cashierId, note, financialAccountId } = req.body;
+    const cashiermanId = req.user?.id;
+    if (!cashiermanId)
+        throw new Errors_1.BadRequest("User context missing");
     await connection_1.db.insert(schema_1.expenss).values({
         restrauntid: restaurantId,
         name,
@@ -20,7 +23,7 @@ const createExpense = async (req, res) => {
         cashierId,
         cashiermanId,
         note,
-        paymentmethodId
+        financialAccountId
     });
     return (0, response_1.SuccessResponse)(res, { message: "Expense created successfully" }, 201);
 };
@@ -30,7 +33,8 @@ const getAllExpenses = async (req, res) => {
     if (!restaurantId)
         throw new Errors_1.BadRequest("Restaurant context missing");
     const expenses = await connection_1.db.select().from(schema_1.expenss)
-        .where((0, drizzle_orm_1.eq)(schema_1.expenss.restrauntid, restaurantId));
+        .where((0, drizzle_orm_1.eq)(schema_1.expenss.restrauntid, restaurantId))
+        .innerJoin(schema_1.FinancialAccounts, (0, drizzle_orm_1.eq)(schema_1.expenss.financialAccountId, schema_1.FinancialAccounts.id));
     return (0, response_1.SuccessResponse)(res, { message: "Expenses fetched successfully", data: expenses });
 };
 exports.getAllExpenses = getAllExpenses;
@@ -41,6 +45,7 @@ const getExpenseById = async (req, res) => {
     const { id } = req.params;
     const [expense] = await connection_1.db.select().from(schema_1.expenss)
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.expenss.id, id), (0, drizzle_orm_1.eq)(schema_1.expenss.restrauntid, restaurantId)))
+        .innerJoin(schema_1.FinancialAccounts, (0, drizzle_orm_1.eq)(schema_1.expenss.financialAccountId, schema_1.FinancialAccounts.id))
         .limit(1);
     if (!expense)
         throw new Errors_1.NotFound("Expense not found");
@@ -52,7 +57,7 @@ const updateExpense = async (req, res) => {
     if (!restaurantId)
         throw new Errors_1.BadRequest("Restaurant context missing");
     const { id } = req.params;
-    const { name, amount, categoryId, shiftId, cashierId, cashiermanId, note, paymentmethodId } = req.body;
+    const { name, amount, categoryId, shiftId, cashierId, note, paymentmethodId } = req.body;
     const [existing] = await connection_1.db.select().from(schema_1.expenss)
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.expenss.id, id), (0, drizzle_orm_1.eq)(schema_1.expenss.restrauntid, restaurantId)))
         .limit(1);
@@ -69,8 +74,6 @@ const updateExpense = async (req, res) => {
         updateData.shiftId = shiftId;
     if (cashierId !== undefined)
         updateData.cashierId = cashierId;
-    if (cashiermanId !== undefined)
-        updateData.cashiermanId = cashiermanId;
     if (note !== undefined)
         updateData.note = note;
     if (paymentmethodId !== undefined)

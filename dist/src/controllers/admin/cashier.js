@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteCashier = exports.updateCashier = exports.getCashierById = exports.getCashiers = exports.createCashier = void 0;
+exports.getActiveCashiers = exports.deleteCashier = exports.updateCashier = exports.getCashierById = exports.getCashiers = exports.createCashier = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -10,8 +10,8 @@ const createCashier = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new Errors_1.BadRequest("Restaurant context missing");
-    const { name, ar_name, status, branchid, cashier_active, paymentmethodid } = req.body;
-    if (!name || !branchid || !paymentmethodid) {
+    const { name, ar_name, status, branchid, cashier_active, financialAccountId } = req.body;
+    if (!name || !branchid || !financialAccountId) {
         throw new Errors_1.BadRequest("Missing required fields: name, branchid, paymentmethodid");
     }
     await connection_1.db.insert(schema_1.cashiers).values({
@@ -21,7 +21,7 @@ const createCashier = async (req, res) => {
         status: status || "active",
         branchid,
         cashier_active: cashier_active !== undefined ? cashier_active : true,
-        paymentmethodid,
+        financialAccountId,
     });
     return (0, response_1.SuccessResponse)(res, { message: "Cashier created successfully" }, 201);
 };
@@ -31,7 +31,8 @@ const getCashiers = async (req, res) => {
     if (!restaurantId)
         throw new Errors_1.BadRequest("Restaurant context missing");
     const allCashiers = await connection_1.db.select().from(schema_1.cashiers)
-        .where((0, drizzle_orm_1.eq)(schema_1.cashiers.restaurantid, restaurantId));
+        .where((0, drizzle_orm_1.eq)(schema_1.cashiers.restaurantid, restaurantId))
+        .innerJoin(schema_1.FinancialAccounts, (0, drizzle_orm_1.eq)(schema_1.cashiers.financialAccountId, schema_1.FinancialAccounts.id));
     return (0, response_1.SuccessResponse)(res, { message: "Cashiers fetched successfully", data: allCashiers });
 };
 exports.getCashiers = getCashiers;
@@ -42,6 +43,7 @@ const getCashierById = async (req, res) => {
     const { id } = req.params;
     const [cashier] = await connection_1.db.select().from(schema_1.cashiers)
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.cashiers.id, id), (0, drizzle_orm_1.eq)(schema_1.cashiers.restaurantid, restaurantId)))
+        .innerJoin(schema_1.FinancialAccounts, (0, drizzle_orm_1.eq)(schema_1.cashiers.financialAccountId, schema_1.FinancialAccounts.id))
         .limit(1);
     if (!cashier)
         throw new Errors_1.NotFound("Cashier not found");
@@ -90,3 +92,14 @@ const deleteCashier = async (req, res) => {
     return (0, response_1.SuccessResponse)(res, { message: "Cashier deleted successfully" });
 };
 exports.deleteCashier = deleteCashier;
+const getActiveCashiers = async (req, res) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId)
+        throw new Errors_1.BadRequest("Restaurant context missing");
+    const allCashiers = await connection_1.db.select().from(schema_1.cashiers)
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.cashiers.restaurantid, restaurantId), (0, drizzle_orm_1.eq)(schema_1.cashiers.status, "active")));
+    const activefinicialaccounts = await connection_1.db.select().from(schema_1.FinancialAccounts)
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.FinancialAccounts.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.FinancialAccounts.isActive, true)));
+    return (0, response_1.SuccessResponse)(res, { message: "Cashiers fetched successfully", data: { allCashiers, activefinicialaccounts } });
+};
+exports.getActiveCashiers = getActiveCashiers;

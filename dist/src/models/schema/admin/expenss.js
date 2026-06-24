@@ -5,7 +5,7 @@ const mysql_core_1 = require("drizzle-orm/mysql-core");
 const drizzle_orm_1 = require("drizzle-orm");
 const expensscategory_1 = require("./expensscategory");
 const restrauntadmin_1 = require("../admin/restrauntadmin");
-const payment_methodes_1 = require("../admin/payment_methodes");
+const schema_1 = require("../../schema");
 const restaurants_1 = require("./restaurants");
 exports.expenss = (0, mysql_core_1.mysqlTable)("expensses", {
     id: (0, mysql_core_1.char)("id", { length: 36 }).primaryKey().default((0, drizzle_orm_1.sql) `(UUID())`),
@@ -21,8 +21,8 @@ exports.expenss = (0, mysql_core_1.mysqlTable)("expensses", {
         .references(() => restrauntadmin_1.restrauntadmin.id)
         .notNull(),
     note: (0, mysql_core_1.text)("note"),
-    paymentmethodId: (0, mysql_core_1.char)("paymentmethod_id", { length: 36 })
-        .references(() => payment_methodes_1.paymentMethods.id),
+    financialAccountId: (0, mysql_core_1.char)("financial_account_id", { length: 36 })
+        .references(() => schema_1.FinancialAccounts.id),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow().onUpdateNow(),
 });

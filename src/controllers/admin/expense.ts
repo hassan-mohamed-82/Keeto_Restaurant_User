@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { db } from "../../models/connection";
-import { expenss } from "../../models/schema";
+import { expenss, FinancialAccounts } from "../../models/schema";
 import { eq, and } from "drizzle-orm";
 import { BadRequest, NotFound } from "../../Errors";
 import { SuccessResponse } from "../../utils/response";
@@ -9,7 +9,10 @@ export const createExpense = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Restaurant context missing");
 
-    const { name, amount, categoryId, shiftId, cashierId, cashiermanId, note, paymentmethodId } = req.body;
+    const { name, amount, categoryId, shiftId, cashierId, note, financialAccountId } = req.body;
+    const cashiermanId = req.user?.id;
+
+    if (!cashiermanId) throw new BadRequest("User context missing");
 
     await db.insert(expenss).values({
         restrauntid: restaurantId,
@@ -20,7 +23,7 @@ export const createExpense = async (req: Request, res: Response) => {
         cashierId,
         cashiermanId,
         note,
-        paymentmethodId
+        financialAccountId
     });
 
     return SuccessResponse(res, { message: "Expense created successfully" }, 201);
@@ -31,7 +34,8 @@ export const getAllExpenses = async (req: Request, res: Response) => {
     if (!restaurantId) throw new BadRequest("Restaurant context missing");
 
     const expenses = await db.select().from(expenss)
-        .where(eq(expenss.restrauntid, restaurantId));
+        .where(eq(expenss.restrauntid, restaurantId))
+        .innerJoin(FinancialAccounts, eq(expenss.financialAccountId, FinancialAccounts.id))
 
     return SuccessResponse(res, { message: "Expenses fetched successfully", data: expenses });
 };
@@ -43,6 +47,7 @@ export const getExpenseById = async (req: Request, res: Response) => {
     const { id } = req.params;
     const [expense] = await db.select().from(expenss)
         .where(and(eq(expenss.id, id), eq(expenss.restrauntid, restaurantId)))
+        .innerJoin(FinancialAccounts, eq(expenss.financialAccountId, FinancialAccounts.id))
         .limit(1);
 
     if (!expense) throw new NotFound("Expense not found");
@@ -55,7 +60,7 @@ export const updateExpense = async (req: Request, res: Response) => {
     if (!restaurantId) throw new BadRequest("Restaurant context missing");
 
     const { id } = req.params;
-    const { name, amount, categoryId, shiftId, cashierId, cashiermanId, note, paymentmethodId } = req.body;
+    const { name, amount, categoryId, shiftId, cashierId, note, paymentmethodId } = req.body;
 
     const [existing] = await db.select().from(expenss)
         .where(and(eq(expenss.id, id), eq(expenss.restrauntid, restaurantId)))
@@ -68,7 +73,6 @@ export const updateExpense = async (req: Request, res: Response) => {
     if (categoryId !== undefined) updateData.categoryId = categoryId;
     if (shiftId !== undefined) updateData.shiftId = shiftId;
     if (cashierId !== undefined) updateData.cashierId = cashierId;
-    if (cashiermanId !== undefined) updateData.cashiermanId = cashiermanId;
     if (note !== undefined) updateData.note = note;
     if (paymentmethodId !== undefined) updateData.paymentmethodId = paymentmethodId;
 
