@@ -1,0 +1,91 @@
+import { Request,Response } from "express";
+import{FinancialAccounts,branches}from "../../models/schema";
+import { db } from "../../models/connection";
+import { eq } from "drizzle-orm";
+import { NotFound } from "../../Errors";
+import { BadRequest } from "../../Errors";
+import { SuccessResponse } from "../../utils/response";
+import { saveBase64Image, handleImageUpdate } from "../../utils/handleImages";
+import { UnauthorizedError } from "../../Errors";
+
+export const createFinancialAccount = async (req: Request, res: Response) => {
+    const restaurantId = req.user?.restaurantId;
+        if (!restaurantId) throw new UnauthorizedError("Unauthorized");
+    
+    const { name, branchId, isActive, imageUrl, balance, in_POS } = req.body;
+
+    if (!name || !restaurantId || !branchId ) {
+        throw new BadRequest("Missing required fields");
+    }
+    let FinalImage = imageUrl;
+    if (imageUrl && imageUrl.startsWith("data:image")) {
+        FinalImage = await saveBase64Image(imageUrl, req, "financialAccounts");
+    }
+
+        const financialAccount = await db.insert(FinancialAccounts).values({
+            name,
+            restaurantId,
+            branchId,
+            isActive: isActive ?? true,
+            imageUrl: FinalImage,
+            balance: balance ?? 0,
+            in_POS: in_POS ?? true
+        });
+        SuccessResponse(res, financialAccount);
+}
+
+export const updateFinancialAccount = async (req: Request, res: Response) => {
+    const restaurantId = req.user?.restaurantId;
+        if (!restaurantId) throw new UnauthorizedError("Unauthorized");
+    const { id, name, branchId, isActive, imageUrl, balance, in_POS } = req.body;
+
+    if (!id || !name || !branchId ) {
+        throw new BadRequest("Missing required fields");
+    }
+    let FinalImage = imageUrl;
+    if (imageUrl && imageUrl.startsWith("data:image")) {
+        FinalImage = await saveBase64Image(imageUrl, req, "financialAccounts");
+    }
+
+        const financialAccount = await db.update(FinancialAccounts).set({
+            name,
+            branchId,
+            isActive: isActive ?? true,
+            imageUrl: FinalImage,
+            balance: balance ?? 0,
+            in_POS: in_POS ?? true
+        }).where(eq(FinancialAccounts.id, id));
+        SuccessResponse(res, financialAccount);
+}
+
+export const getAllFinancialAccounts = async (req: Request, res: Response) => {
+    const restaurantId = req.user?.restaurantId;
+        if (!restaurantId) throw new UnauthorizedError("Unauthorized");
+    
+    const financialAccounts = await db.select().from(FinancialAccounts).where(eq(FinancialAccounts.restaurantId, restaurantId));
+    SuccessResponse(res, financialAccounts);
+}
+
+export const getFinancialAccount = async (req: Request, res: Response) => {
+    const restaurantId = req.user?.restaurantId;
+    if (!restaurantId) throw new UnauthorizedError("Unauthorized");
+    
+    const { id } = req.params;
+    const financialAccount = await db.select().from(FinancialAccounts).where(eq(FinancialAccounts.id, id));
+    SuccessResponse(res, financialAccount);
+}
+
+export const deleteFinancialAccount = async (req: Request, res: Response) => {
+    const restaurantId = req.user?.restaurantId;
+    if (!restaurantId) throw new UnauthorizedError("Unauthorized");
+    const { id } = req.params;
+    const financialAccount = await db.delete(FinancialAccounts).where(eq(FinancialAccounts.id, id));
+    SuccessResponse(res, financialAccount);
+}
+
+export const selectbranch= async (req: Request, res: Response) => {
+    const restaurantId = req.user?.restaurantId;
+    if (!restaurantId) throw new UnauthorizedError("Unauthorized");
+    const branch = await db.select().from(branches).where(eq(branches.restaurantId, restaurantId));
+    SuccessResponse(res, branch);
+}

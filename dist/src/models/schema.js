@@ -57,3 +57,7 @@ __exportStar(require("./schema/admin/notifications"), exports);
 __exportStar(require("./schema/admin/slider"), exports);
 __exportStar(require("./schema/admin/restraurant_user"), exports);
 __exportStar(require("./schema/admin/selectReasons"), exports);
+__exportStar(require("./schema/admin/expenss"), exports);
+__exportStar(require("./schema/admin/expensscategory"), exports);
+__exportStar(require("./schema/admin/cashier"), exports);
+__exportStar(require("./schema/admin/FinancialAccount"), exports);
