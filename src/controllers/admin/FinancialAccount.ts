@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { FinancialAccounts, branches } from "../../models/schema";
+import { FinancialAccounts, branches, restaurants } from "../../models/schema";
 import { db } from "../../models/connection";
 import { eq, and } from "drizzle-orm"; // تم إضافة and هنا
 import { NotFound } from "../../Errors";
@@ -68,33 +68,48 @@ export const updateFinancialAccount = async (req: Request, res: Response) => {
     
     SuccessResponse(res, financialAccount);
 }
-
 export const getAllFinancialAccounts = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id; 
     if (!restaurantId) throw new UnauthorizedError("Unauthorized");
     
-    const financialAccounts = await db.select().from(FinancialAccounts).where(eq(FinancialAccounts.restaurantId, restaurantId));
+    const financialAccounts = await db
+        .select({
+            account: FinancialAccounts,
+            branch: branches,
+            restaurant: restaurants
+        })
+        .from(FinancialAccounts)
+        .leftJoin(branches, eq(FinancialAccounts.branchId, branches.id))
+        .leftJoin(restaurants, eq(FinancialAccounts.restaurantId, restaurants.id))
+        .where(eq(FinancialAccounts.restaurantId, restaurantId));
+        
     SuccessResponse(res, financialAccounts);
 }
 
 export const getFinancialAccount = async (req: Request, res: Response) => {
-    // تم توحيد طريقة جلب الآي دي هنا
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new UnauthorizedError("Unauthorized");
     
     const { id } = req.params;
     
-    // تم إضافة شرط and للتأكد من ملكية المطعم
-    const financialAccount = await db.select().from(FinancialAccounts).where(
-        and(
-            eq(FinancialAccounts.id, id),
-            eq(FinancialAccounts.restaurantId, restaurantId)
-        )
-    );
+    const financialAccount = await db
+        .select({
+            account: FinancialAccounts,
+            branch: branches,
+            restaurant: restaurants
+        })
+        .from(FinancialAccounts)
+        .leftJoin(branches, eq(FinancialAccounts.branchId, branches.id))
+        .leftJoin(restaurants, eq(FinancialAccounts.restaurantId, restaurants.id))
+        .where(
+            and(
+                eq(FinancialAccounts.id, id),
+                eq(FinancialAccounts.restaurantId, restaurantId)
+            )
+        );
     
     SuccessResponse(res, financialAccount);
 }
-
 export const deleteFinancialAccount = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id; 
     if (!restaurantId) throw new UnauthorizedError("Unauthorized");

@@ -60,18 +60,34 @@ const getAllFinancialAccounts = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new Errors_2.UnauthorizedError("Unauthorized");
-    const financialAccounts = await connection_1.db.select().from(schema_1.FinancialAccounts).where((0, drizzle_orm_1.eq)(schema_1.FinancialAccounts.restaurantId, restaurantId));
+    const financialAccounts = await connection_1.db
+        .select({
+        account: schema_1.FinancialAccounts,
+        branch: schema_1.branches,
+        restaurant: schema_1.restaurants
+    })
+        .from(schema_1.FinancialAccounts)
+        .leftJoin(schema_1.branches, (0, drizzle_orm_1.eq)(schema_1.FinancialAccounts.branchId, schema_1.branches.id))
+        .leftJoin(schema_1.restaurants, (0, drizzle_orm_1.eq)(schema_1.FinancialAccounts.restaurantId, schema_1.restaurants.id))
+        .where((0, drizzle_orm_1.eq)(schema_1.FinancialAccounts.restaurantId, restaurantId));
     (0, response_1.SuccessResponse)(res, financialAccounts);
 };
 exports.getAllFinancialAccounts = getAllFinancialAccounts;
 const getFinancialAccount = async (req, res) => {
-    // تم توحيد طريقة جلب الآي دي هنا
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new Errors_2.UnauthorizedError("Unauthorized");
     const { id } = req.params;
-    // تم إضافة شرط and للتأكد من ملكية المطعم
-    const financialAccount = await connection_1.db.select().from(schema_1.FinancialAccounts).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.FinancialAccounts.id, id), (0, drizzle_orm_1.eq)(schema_1.FinancialAccounts.restaurantId, restaurantId)));
+    const financialAccount = await connection_1.db
+        .select({
+        account: schema_1.FinancialAccounts,
+        branch: schema_1.branches,
+        restaurant: schema_1.restaurants
+    })
+        .from(schema_1.FinancialAccounts)
+        .leftJoin(schema_1.branches, (0, drizzle_orm_1.eq)(schema_1.FinancialAccounts.branchId, schema_1.branches.id))
+        .leftJoin(schema_1.restaurants, (0, drizzle_orm_1.eq)(schema_1.FinancialAccounts.restaurantId, schema_1.restaurants.id))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.FinancialAccounts.id, id), (0, drizzle_orm_1.eq)(schema_1.FinancialAccounts.restaurantId, restaurantId)));
     (0, response_1.SuccessResponse)(res, financialAccount);
 };
 exports.getFinancialAccount = getFinancialAccount;
