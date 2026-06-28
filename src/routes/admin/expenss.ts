@@ -4,12 +4,14 @@ import {
     getAllExpenses, 
     getExpenseById, 
     updateExpense, 
-    deleteExpense 
+    deleteExpense,
+    selectdata
 } from "../../controllers/admin/expense";
 import { catchAsync } from "../../utils/catchAsync";
 
 const router = Router();
 
+router.get("/select", catchAsync(selectdata));
 router.post("/", catchAsync(createExpense));
 router.get("/", catchAsync(getAllExpenses));
 router.get("/:id", catchAsync(getExpenseById));

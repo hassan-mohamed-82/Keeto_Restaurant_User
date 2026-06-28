@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { db } from "../../models/connection";
-import { expenss, FinancialAccounts } from "../../models/schema";
+import { expenss, expensscategory, FinancialAccounts } from "../../models/schema";
 import { eq, and } from "drizzle-orm";
 import { BadRequest, NotFound } from "../../Errors";
 import { SuccessResponse } from "../../utils/response";
@@ -100,3 +100,14 @@ export const deleteExpense = async (req: Request, res: Response) => {
 
     return SuccessResponse(res, { message: "Expense deleted successfully" });
 };
+
+
+export const selectdata =async (req: Request, res: Response) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId) throw new BadRequest("Restaurant context missing");
+
+    const expensecategories = await db.select().from(expensscategory).where(eq(expensscategory.restaurantid, restaurantId));
+    const financialAccounts = await db.select().from(FinancialAccounts).where(eq(FinancialAccounts.restaurantId, restaurantId));
+    
+    return SuccessResponse(res, { message: "Data selected successfully", data: { expensecategories, financialAccounts } });
+}

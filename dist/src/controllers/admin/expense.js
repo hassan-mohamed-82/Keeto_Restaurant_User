@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteExpense = exports.updateExpense = exports.getExpenseById = exports.getAllExpenses = exports.createExpense = void 0;
+exports.selectdata = exports.deleteExpense = exports.updateExpense = exports.getExpenseById = exports.getAllExpenses = exports.createExpense = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -100,3 +100,12 @@ const deleteExpense = async (req, res) => {
     return (0, response_1.SuccessResponse)(res, { message: "Expense deleted successfully" });
 };
 exports.deleteExpense = deleteExpense;
+const selectdata = async (req, res) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId)
+        throw new Errors_1.BadRequest("Restaurant context missing");
+    const expensecategories = await connection_1.db.select().from(schema_1.expensscategory).where((0, drizzle_orm_1.eq)(schema_1.expensscategory.restaurantid, restaurantId));
+    const financialAccounts = await connection_1.db.select().from(schema_1.FinancialAccounts).where((0, drizzle_orm_1.eq)(schema_1.FinancialAccounts.restaurantId, restaurantId));
+    return (0, response_1.SuccessResponse)(res, { message: "Data selected successfully", data: { expensecategories, financialAccounts } });
+};
+exports.selectdata = selectdata;
