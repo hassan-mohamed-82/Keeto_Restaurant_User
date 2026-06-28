@@ -14,7 +14,7 @@ export const createFinancialAccount = async (req: Request, res: Response) => {
     
     const { name, branchId, isActive, imageUrl, balance, in_POS } = req.body;
 
-    if (!name || !restaurantId ) {
+    if (!name || !restaurantId ||!branchId) {
         throw new BadRequest("Missing required fields");
     }
     let FinalImage = imageUrl;

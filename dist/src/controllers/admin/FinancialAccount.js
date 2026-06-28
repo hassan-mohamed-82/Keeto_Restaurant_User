@@ -13,7 +13,7 @@ const createFinancialAccount = async (req, res) => {
     if (!restaurantId)
         throw new Errors_2.UnauthorizedError("Unauthorized");
     const { name, branchId, isActive, imageUrl, balance, in_POS } = req.body;
-    if (!name || !restaurantId) {
+    if (!name || !restaurantId || !branchId) {
         throw new Errors_1.BadRequest("Missing required fields");
     }
     let FinalImage = imageUrl;
