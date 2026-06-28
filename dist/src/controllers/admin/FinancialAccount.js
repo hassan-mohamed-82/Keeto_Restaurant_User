@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.selectbranch = exports.deleteFinancialAccount = exports.getFinancialAccount = exports.getAllFinancialAccounts = exports.updateFinancialAccount = exports.createFinancialAccount = void 0;
 const schema_1 = require("../../models/schema");
 const connection_1 = require("../../models/connection");
-const drizzle_orm_1 = require("drizzle-orm");
+const drizzle_orm_1 = require("drizzle-orm"); // تم إضافة and هنا
 const Errors_1 = require("../../Errors");
 const response_1 = require("../../utils/response");
 const handleImages_1 = require("../../utils/handleImages");
@@ -44,6 +44,7 @@ const updateFinancialAccount = async (req, res) => {
     if (imageUrl && imageUrl.startsWith("data:image")) {
         FinalImage = await (0, handleImages_1.saveBase64Image)(imageUrl, req, "financialAccounts");
     }
+    // تم إضافة شرط and للتأكد من ملكية المطعم
     const financialAccount = await connection_1.db.update(schema_1.FinancialAccounts).set({
         name,
         branchId,
@@ -51,7 +52,7 @@ const updateFinancialAccount = async (req, res) => {
         imageUrl: FinalImage,
         balance: balance ?? 0,
         in_POS: in_POS ?? true
-    }).where((0, drizzle_orm_1.eq)(schema_1.FinancialAccounts.id, id));
+    }).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.FinancialAccounts.id, id), (0, drizzle_orm_1.eq)(schema_1.FinancialAccounts.restaurantId, restaurantId)));
     (0, response_1.SuccessResponse)(res, financialAccount);
 };
 exports.updateFinancialAccount = updateFinancialAccount;
@@ -64,11 +65,13 @@ const getAllFinancialAccounts = async (req, res) => {
 };
 exports.getAllFinancialAccounts = getAllFinancialAccounts;
 const getFinancialAccount = async (req, res) => {
-    const restaurantId = req.user?.restaurantId;
+    // تم توحيد طريقة جلب الآي دي هنا
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new Errors_2.UnauthorizedError("Unauthorized");
     const { id } = req.params;
-    const financialAccount = await connection_1.db.select().from(schema_1.FinancialAccounts).where((0, drizzle_orm_1.eq)(schema_1.FinancialAccounts.id, id));
+    // تم إضافة شرط and للتأكد من ملكية المطعم
+    const financialAccount = await connection_1.db.select().from(schema_1.FinancialAccounts).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.FinancialAccounts.id, id), (0, drizzle_orm_1.eq)(schema_1.FinancialAccounts.restaurantId, restaurantId)));
     (0, response_1.SuccessResponse)(res, financialAccount);
 };
 exports.getFinancialAccount = getFinancialAccount;
@@ -77,7 +80,8 @@ const deleteFinancialAccount = async (req, res) => {
     if (!restaurantId)
         throw new Errors_2.UnauthorizedError("Unauthorized");
     const { id } = req.params;
-    const financialAccount = await connection_1.db.delete(schema_1.FinancialAccounts).where((0, drizzle_orm_1.eq)(schema_1.FinancialAccounts.id, id));
+    // تم إضافة شرط and للتأكد من ملكية المطعم
+    const financialAccount = await connection_1.db.delete(schema_1.FinancialAccounts).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.FinancialAccounts.id, id), (0, drizzle_orm_1.eq)(schema_1.FinancialAccounts.restaurantId, restaurantId)));
     (0, response_1.SuccessResponse)(res, financialAccount);
 };
 exports.deleteFinancialAccount = deleteFinancialAccount;
