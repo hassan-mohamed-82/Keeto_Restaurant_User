@@ -12,7 +12,7 @@ export const createCashier = async (req: Request, res: Response) => {
     const { name, ar_name, status, branchid, cashier_active, financialAccountId } = req.body;
 
     if (!name || !branchid || !financialAccountId) {
-        throw new BadRequest("Missing required fields: name, branchid, paymentmethodid");
+        throw new BadRequest("Missing required fields: name, branchid, financialAccountId");
     }
 
     await db.insert(cashiers).values({

@@ -12,7 +12,7 @@ const createCashier = async (req, res) => {
         throw new Errors_1.BadRequest("Restaurant context missing");
     const { name, ar_name, status, branchid, cashier_active, financialAccountId } = req.body;
     if (!name || !branchid || !financialAccountId) {
-        throw new Errors_1.BadRequest("Missing required fields: name, branchid, paymentmethodid");
+        throw new Errors_1.BadRequest("Missing required fields: name, branchid, financialAccountId");
     }
     await connection_1.db.insert(schema_1.cashiers).values({
         restaurantid: restaurantId,

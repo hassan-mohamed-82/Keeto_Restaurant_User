@@ -14,6 +14,10 @@ const createExpense = async (req, res) => {
     const cashiermanId = req.user?.id;
     if (!cashiermanId)
         throw new Errors_1.BadRequest("User context missing");
+    // === التعديل هنا: إضافة سطر الحماية للتأكد من وجود الحقول الإجبارية ===
+    if (!name || !amount || !categoryId) {
+        throw new Errors_1.BadRequest("Missing required fields: name, amount, or categoryId");
+    }
     await connection_1.db.insert(schema_1.expenss).values({
         restrauntid: restaurantId,
         name,

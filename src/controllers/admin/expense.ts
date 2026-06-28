@@ -14,6 +14,11 @@ export const createExpense = async (req: Request, res: Response) => {
 
     if (!cashiermanId) throw new BadRequest("User context missing");
 
+    // === التعديل هنا: إضافة سطر الحماية للتأكد من وجود الحقول الإجبارية ===
+    if (!name || !amount || !categoryId) {
+        throw new BadRequest("Missing required fields: name, amount, or categoryId");
+    }
+
     await db.insert(expenss).values({
         restrauntid: restaurantId,
         name,
@@ -28,7 +33,6 @@ export const createExpense = async (req: Request, res: Response) => {
 
     return SuccessResponse(res, { message: "Expense created successfully" }, 201);
 };
-
 export const getAllExpenses = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Restaurant context missing");
