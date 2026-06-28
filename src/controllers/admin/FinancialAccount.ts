@@ -9,7 +9,7 @@ import { saveBase64Image, handleImageUpdate } from "../../utils/handleImages";
 import { UnauthorizedError } from "../../Errors";
 
 export const createFinancialAccount = async (req: Request, res: Response) => {
-    const restaurantId = req.user?.restaurantId;
+      const restaurantId = req.user?.restaurantId || req.user?.id; 
         if (!restaurantId) throw new UnauthorizedError("Unauthorized");
     
     const { name, branchId, isActive, imageUrl, balance, in_POS } = req.body;
@@ -35,7 +35,7 @@ export const createFinancialAccount = async (req: Request, res: Response) => {
 }
 
 export const updateFinancialAccount = async (req: Request, res: Response) => {
-    const restaurantId = req.user?.restaurantId;
+      const restaurantId = req.user?.restaurantId || req.user?.id; 
         if (!restaurantId) throw new UnauthorizedError("Unauthorized");
     const { id, name, branchId, isActive, imageUrl, balance, in_POS } = req.body;
 
@@ -59,7 +59,7 @@ export const updateFinancialAccount = async (req: Request, res: Response) => {
 }
 
 export const getAllFinancialAccounts = async (req: Request, res: Response) => {
-    const restaurantId = req.user?.restaurantId;
+      const restaurantId = req.user?.restaurantId || req.user?.id; 
         if (!restaurantId) throw new UnauthorizedError("Unauthorized");
     
     const financialAccounts = await db.select().from(FinancialAccounts).where(eq(FinancialAccounts.restaurantId, restaurantId));
@@ -76,7 +76,7 @@ export const getFinancialAccount = async (req: Request, res: Response) => {
 }
 
 export const deleteFinancialAccount = async (req: Request, res: Response) => {
-    const restaurantId = req.user?.restaurantId;
+      const restaurantId = req.user?.restaurantId || req.user?.id; 
     if (!restaurantId) throw new UnauthorizedError("Unauthorized");
     const { id } = req.params;
     const financialAccount = await db.delete(FinancialAccounts).where(eq(FinancialAccounts.id, id));
@@ -84,7 +84,7 @@ export const deleteFinancialAccount = async (req: Request, res: Response) => {
 }
 
 export const selectbranch= async (req: Request, res: Response) => {
-    const restaurantId = req.user?.restaurantId;
+      const restaurantId = req.user?.restaurantId || req.user?.id; 
     if (!restaurantId) throw new UnauthorizedError("Unauthorized");
     const branch = await db.select().from(branches).where(eq(branches.restaurantId, restaurantId));
     SuccessResponse(res, branch);

@@ -9,7 +9,7 @@ const response_1 = require("../../utils/response");
 const handleImages_1 = require("../../utils/handleImages");
 const Errors_2 = require("../../Errors");
 const createFinancialAccount = async (req, res) => {
-    const restaurantId = req.user?.restaurantId;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new Errors_2.UnauthorizedError("Unauthorized");
     const { name, branchId, isActive, imageUrl, balance, in_POS } = req.body;
@@ -33,7 +33,7 @@ const createFinancialAccount = async (req, res) => {
 };
 exports.createFinancialAccount = createFinancialAccount;
 const updateFinancialAccount = async (req, res) => {
-    const restaurantId = req.user?.restaurantId;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new Errors_2.UnauthorizedError("Unauthorized");
     const { id, name, branchId, isActive, imageUrl, balance, in_POS } = req.body;
@@ -56,7 +56,7 @@ const updateFinancialAccount = async (req, res) => {
 };
 exports.updateFinancialAccount = updateFinancialAccount;
 const getAllFinancialAccounts = async (req, res) => {
-    const restaurantId = req.user?.restaurantId;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new Errors_2.UnauthorizedError("Unauthorized");
     const financialAccounts = await connection_1.db.select().from(schema_1.FinancialAccounts).where((0, drizzle_orm_1.eq)(schema_1.FinancialAccounts.restaurantId, restaurantId));
@@ -73,7 +73,7 @@ const getFinancialAccount = async (req, res) => {
 };
 exports.getFinancialAccount = getFinancialAccount;
 const deleteFinancialAccount = async (req, res) => {
-    const restaurantId = req.user?.restaurantId;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new Errors_2.UnauthorizedError("Unauthorized");
     const { id } = req.params;
@@ -82,7 +82,7 @@ const deleteFinancialAccount = async (req, res) => {
 };
 exports.deleteFinancialAccount = deleteFinancialAccount;
 const selectbranch = async (req, res) => {
-    const restaurantId = req.user?.restaurantId;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new Errors_2.UnauthorizedError("Unauthorized");
     const branch = await connection_1.db.select().from(schema_1.branches).where((0, drizzle_orm_1.eq)(schema_1.branches.restaurantId, restaurantId));
