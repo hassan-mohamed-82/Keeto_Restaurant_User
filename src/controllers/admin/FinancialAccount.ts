@@ -68,6 +68,31 @@ export const updateFinancialAccount = async (req: Request, res: Response) => {
     
     SuccessResponse(res, financialAccount);
 }
+
+export const updateFinancialAccountStatus = async (req: Request, res: Response) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id; 
+    if (!restaurantId) throw new UnauthorizedError("Unauthorized");
+    
+    const { id } = req.params;
+    const { isActive } = req.body;
+
+    if (isActive === undefined) {
+        throw new BadRequest("Missing required field: isActive");
+    }
+
+    const financialAccount = await db.update(FinancialAccounts).set({
+        isActive
+    }).where(
+        and(
+            eq(FinancialAccounts.id, id),
+            eq(FinancialAccounts.restaurantId, restaurantId)
+        )
+    );
+    
+    SuccessResponse(res, { message: "Status updated successfully", data: financialAccount });
+}
+
+
 export const getAllFinancialAccounts = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id; 
     if (!restaurantId) throw new UnauthorizedError("Unauthorized");
