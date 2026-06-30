@@ -10,7 +10,6 @@ import { NotFound } from "../../Errors/NotFound";
 import { v4 as uuidv4 } from "uuid";
 
 export const createBranch = async (req: Request, res: Response) => {
-    // صاحب المطعم هو اللي بيكريت
     const restaurantId = req.user?.restaurantId || req.user?.id; 
     if (!restaurantId) throw new BadRequest("Restaurant ID missing");
 
@@ -20,7 +19,6 @@ export const createBranch = async (req: Request, res: Response) => {
         throw new BadRequest("Missing required fields (name, address, zoneId)");
     }
 
-    // التأكد إن منطقة التوصيل دي موجودة
     const zoneExists = await db.select().from(zones).where(eq(zones.id, zoneId)).limit(1);
     if (!zoneExists[0]) throw new BadRequest("Zone not found");
 

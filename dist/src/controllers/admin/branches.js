@@ -10,7 +10,6 @@ const BadRequest_1 = require("../../Errors/BadRequest");
 const NotFound_1 = require("../../Errors/NotFound");
 const uuid_1 = require("uuid");
 const createBranch = async (req, res) => {
-    // صاحب المطعم هو اللي بيكريت
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID missing");
@@ -18,7 +17,6 @@ const createBranch = async (req, res) => {
     if (!name || !address || !zoneId) {
         throw new BadRequest_1.BadRequest("Missing required fields (name, address, zoneId)");
     }
-    // التأكد إن منطقة التوصيل دي موجودة
     const zoneExists = await connection_1.db.select().from(schema_1.zones).where((0, drizzle_orm_1.eq)(schema_1.zones.id, zoneId)).limit(1);
     if (!zoneExists[0])
         throw new BadRequest_1.BadRequest("Zone not found");
