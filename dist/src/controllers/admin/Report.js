@@ -77,10 +77,7 @@ const getMyRestaurantReport = async (req, res) => {
         takeaway: { count: 0, totalAmount: 0 },
         dine_in: { count: 0, totalAmount: 0 },
     };
-    const orderSourceSummary = {
-        online_order: { count: 0, totalAmount: 0 },
-        food_aggregator: { count: 0, totalAmount: 0 },
-    };
+    const orderSourceSummary = {};
     const branchSummary = {};
     const dailyTrend = {};
     let totalOrders = 0;
@@ -155,10 +152,11 @@ const getMyRestaurantReport = async (req, res) => {
             orderTypeSummary[oType].count++;
             orderTypeSummary[oType].totalAmount += amount;
         }
-        if (orderSourceSummary[oSource]) {
-            orderSourceSummary[oSource].count++;
-            orderSourceSummary[oSource].totalAmount += amount;
+        if (!orderSourceSummary[oSource]) {
+            orderSourceSummary[oSource] = { count: 0, totalAmount: 0 };
         }
+        orderSourceSummary[oSource].count++;
+        orderSourceSummary[oSource].totalAmount += amount;
         const bId = order.branchId || "unknown";
         const bName = order.branchName || "Unknown Branch";
         if (!branchSummary[bId]) {
@@ -426,9 +424,9 @@ const getDashboardReports = async (req, res) => {
     const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
     let userCancellations = 0;
     let restaurantCancellations = 0;
-    let appOrders = 0;
-    let websiteOrders = 0;
-    const discountEffectiveness = [];
+    let otherCancellations = 0;
+    const orderSourcesObj = {};
+    const discountEffectivenessMap = {};
     const branchesNetSales = {};
     const couponAnalysis = {};
     const geoMapObj = {};
@@ -456,12 +454,12 @@ const getDashboardReports = async (req, res) => {
             const bName = o.branchName || "Unknown Branch";
             branchesNetSales[bName] = (branchesNetSales[bName] || 0) + amount;
             // مصادر الطلب (Order Source)
-            if (o.orderSource === "food_aggregator") {
-                websiteOrders++;
-            }
-            else {
-                appOrders++;
-            }
+            const source = o.orderSource || "unknown";
+            const platformName = source === "my_keeto" ? "App"
+                : source === "online_order" ? "Website"
+                    : source === "food_aggregator" ? "Aggregator"
+                        : source;
+            orderSourcesObj[platformName] = (orderSourcesObj[platformName] || 0) + 1;
             // الخريطة الجغرافية
             const zName = o.zoneName || "Unknown Zone";
             geoMapObj[zName] = (geoMapObj[zName] || 0) + amount;
@@ -472,19 +470,21 @@ const getDashboardReports = async (req, res) => {
                 userCancellations++;
             else if (o.cancelReasonType === "restaurant")
                 restaurantCancellations++;
+            else
+                otherCancellations++;
         }
         // تحليل الكوبونات
         if (o.couponCode && o.status !== "cancelled") {
+            const revenueBefore = amount + disc;
             if (!couponAnalysis[o.couponCode])
                 couponAnalysis[o.couponCode] = { before: 0, after: 0 };
-            couponAnalysis[o.couponCode].before += sub;
+            couponAnalysis[o.couponCode].before += revenueBefore;
             couponAnalysis[o.couponCode].after += amount;
-            const discountPct = sub > 0 ? ((disc / sub) * 100).toFixed(2) : "0.00";
-            discountEffectiveness.push({
-                discountPercent: discountPct,
-                revenue: amount,
-                count: 1
-            });
+            const discountPct = revenueBefore > 0 ? ((disc / revenueBefore) * 100).toFixed(0) : "0";
+            if (!discountEffectivenessMap[discountPct])
+                discountEffectivenessMap[discountPct] = { revenue: 0, count: 0 };
+            discountEffectivenessMap[discountPct].revenue += amount;
+            discountEffectivenessMap[discountPct].count++;
         }
     }
     // ==========================================
@@ -518,7 +518,10 @@ const getDashboardReports = async (req, res) => {
                 productSales[fId].count++;
                 if (!itemsByOrder[item.orderId])
                     itemsByOrder[item.orderId] = [];
-                itemsByOrder[item.orderId].push({ id: fId, name: fName });
+                // Prevent duplicate item names in the same order combination
+                if (!itemsByOrder[item.orderId].find(i => i.id === fId)) {
+                    itemsByOrder[item.orderId].push({ id: fId, name: fName });
+                }
             }
             // Market Basket Analysis (Combos)
             for (const oId in itemsByOrder) {
@@ -547,9 +550,17 @@ const getDashboardReports = async (req, res) => {
     // ==========================================
     // جلب التقييمات (Rating)
     // ==========================================
+    const ratingConditions = [(0, drizzle_orm_1.eq)(schema_1.restaurantRatings.restaurantId, restaurantId)];
+    if (startDate)
+        ratingConditions.push((0, drizzle_orm_1.gte)(schema_1.restaurantRatings.createdAt, new Date(startDate)));
+    if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        ratingConditions.push((0, drizzle_orm_1.lte)(schema_1.restaurantRatings.createdAt, end));
+    }
     const ratings = await connection_1.db.select({ rating: schema_1.restaurantRatings.rating })
         .from(schema_1.restaurantRatings)
-        .where((0, drizzle_orm_1.eq)(schema_1.restaurantRatings.restaurantId, restaurantId));
+        .where((0, drizzle_orm_1.and)(...ratingConditions));
     let avgRating = "0.00";
     if (ratings.length > 0) {
         const sum = ratings.reduce((acc, r) => acc + (r.rating || 0), 0);
@@ -572,14 +583,16 @@ const getDashboardReports = async (req, res) => {
             topProducts,
             cancellations: [
                 { type: "User", orders: userCancellations },
-                { type: "Restaurant", orders: restaurantCancellations }
+                { type: "Restaurant", orders: restaurantCancellations },
+                ...(otherCancellations > 0 ? [{ type: "Other", orders: otherCancellations }] : [])
             ],
-            discountEffectiveness,
+            discountEffectiveness: Object.entries(discountEffectivenessMap).map(([pct, data]) => ({
+                discountPercent: pct,
+                revenue: data.revenue.toFixed(2),
+                bubbleSize: data.revenue.toFixed(2)
+            })),
             branchesNetSales: Object.entries(branchesNetSales).map(([b, rev]) => ({ branch: b, netSales: rev.toFixed(2) })),
-            appVsWebsite: [
-                { platform: "App", orders: appOrders },
-                { platform: "Website", orders: websiteOrders }
-            ],
+            appVsWebsite: Object.entries(orderSourcesObj).map(([platform, orders]) => ({ platform, orders })),
             rating: avgRating,
             geographicMap: Object.entries(geoMapObj).map(([z, rev]) => ({ zone: z, revenue: rev.toFixed(2) })),
             marketBasket,

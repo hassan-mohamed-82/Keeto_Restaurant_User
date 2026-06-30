@@ -94,10 +94,7 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
         dine_in: { count: 0, totalAmount: 0 },
     };
 
-    const orderSourceSummary: Record<string, { count: number; totalAmount: number }> = {
-        online_order: { count: 0, totalAmount: 0 },
-        food_aggregator: { count: 0, totalAmount: 0 },
-    };
+    const orderSourceSummary: Record<string, { count: number; totalAmount: number }> = {};
 
     const branchSummary: Record<string, any> = {};
     const dailyTrend: Record<string, { date: string; orders: number; revenue: number }> = {};
@@ -191,10 +188,11 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
             orderTypeSummary[oType].totalAmount += amount;
         }
 
-        if (orderSourceSummary[oSource]) {
-            orderSourceSummary[oSource].count++;
-            orderSourceSummary[oSource].totalAmount += amount;
+        if (!orderSourceSummary[oSource]) {
+            orderSourceSummary[oSource] = { count: 0, totalAmount: 0 };
         }
+        orderSourceSummary[oSource].count++;
+        orderSourceSummary[oSource].totalAmount += amount;
 
         const bId = order.branchId || "unknown";
         const bName = order.branchName || "Unknown Branch";
@@ -499,10 +497,11 @@ export const getDashboardReports = async (req: Request | any, res: Response) => 
 
     let userCancellations = 0;
     let restaurantCancellations = 0;
-    let appOrders = 0;
-    let websiteOrders = 0;
+    let otherCancellations = 0;
 
-    const discountEffectiveness: { discountPercent: string, revenue: number, count: number }[] = [];
+    const orderSourcesObj: Record<string, number> = {};
+
+    const discountEffectivenessMap: Record<string, { revenue: number, count: number }> = {};
     const branchesNetSales: Record<string, number> = {};
     const couponAnalysis: Record<string, { before: number, after: number }> = {};
     const geoMapObj: Record<string, number> = {};
@@ -536,11 +535,12 @@ export const getDashboardReports = async (req: Request | any, res: Response) => 
             branchesNetSales[bName] = (branchesNetSales[bName] || 0) + amount;
 
             // مصادر الطلب (Order Source)
-            if (o.orderSource === "food_aggregator") {
-                websiteOrders++;
-            } else {
-                appOrders++;
-            }
+            const source = o.orderSource || "unknown";
+            const platformName = source === "my_keeto" ? "App" 
+                               : source === "online_order" ? "Website" 
+                               : source === "food_aggregator" ? "Aggregator" 
+                               : source;
+            orderSourcesObj[platformName] = (orderSourcesObj[platformName] || 0) + 1;
 
             // الخريطة الجغرافية
             const zName = o.zoneName || "Unknown Zone";
@@ -551,20 +551,20 @@ export const getDashboardReports = async (req: Request | any, res: Response) => 
         if (o.status === "cancelled") {
             if (o.cancelReasonType === "user") userCancellations++;
             else if (o.cancelReasonType === "restaurant") restaurantCancellations++; 
+            else otherCancellations++;
         }
 
         // تحليل الكوبونات
         if (o.couponCode && o.status !== "cancelled") {
+            const revenueBefore = amount + disc;
             if (!couponAnalysis[o.couponCode]) couponAnalysis[o.couponCode] = { before: 0, after: 0 };
-            couponAnalysis[o.couponCode].before += sub;
+            couponAnalysis[o.couponCode].before += revenueBefore;
             couponAnalysis[o.couponCode].after += amount;
             
-            const discountPct = sub > 0 ? ((disc / sub) * 100).toFixed(2) : "0.00";
-            discountEffectiveness.push({
-                discountPercent: discountPct,
-                revenue: amount,
-                count: 1 
-            });
+            const discountPct = revenueBefore > 0 ? ((disc / revenueBefore) * 100).toFixed(0) : "0";
+            if (!discountEffectivenessMap[discountPct]) discountEffectivenessMap[discountPct] = { revenue: 0, count: 0 };
+            discountEffectivenessMap[discountPct].revenue += amount;
+            discountEffectivenessMap[discountPct].count++;
         }
     }
 
@@ -602,7 +602,10 @@ export const getDashboardReports = async (req: Request | any, res: Response) => 
                 productSales[fId].count++;
 
                 if (!itemsByOrder[item.orderId]) itemsByOrder[item.orderId] = [];
-                itemsByOrder[item.orderId].push({ id: fId, name: fName });
+                // Prevent duplicate item names in the same order combination
+                if (!itemsByOrder[item.orderId].find(i => i.id === fId)) {
+                    itemsByOrder[item.orderId].push({ id: fId, name: fName });
+                }
             }
 
             // Market Basket Analysis (Combos)
@@ -635,9 +638,17 @@ export const getDashboardReports = async (req: Request | any, res: Response) => 
     // ==========================================
     // جلب التقييمات (Rating)
     // ==========================================
+    const ratingConditions: any[] = [eq(restaurantRatings.restaurantId, restaurantId)];
+    if (startDate) ratingConditions.push(gte(restaurantRatings.createdAt, new Date(startDate as string)));
+    if (endDate) {
+        const end = new Date(endDate as string);
+        end.setHours(23, 59, 59, 999);
+        ratingConditions.push(lte(restaurantRatings.createdAt, end));
+    }
+
     const ratings = await db.select({ rating: restaurantRatings.rating })
         .from(restaurantRatings)
-        .where(eq(restaurantRatings.restaurantId, restaurantId));
+        .where(and(...ratingConditions));
     
     let avgRating = "0.00";
     if (ratings.length > 0) {
@@ -662,14 +673,16 @@ export const getDashboardReports = async (req: Request | any, res: Response) => 
             topProducts,
             cancellations: [
                 { type: "User", orders: userCancellations },
-                { type: "Restaurant", orders: restaurantCancellations }
+                { type: "Restaurant", orders: restaurantCancellations },
+                ...(otherCancellations > 0 ? [{ type: "Other", orders: otherCancellations }] : [])
             ],
-            discountEffectiveness,
+            discountEffectiveness: Object.entries(discountEffectivenessMap).map(([pct, data]) => ({
+                discountPercent: pct,
+                revenue: data.revenue.toFixed(2),
+                bubbleSize: data.revenue.toFixed(2)
+            })),
             branchesNetSales: Object.entries(branchesNetSales).map(([b, rev]) => ({ branch: b, netSales: rev.toFixed(2) })),
-            appVsWebsite: [
-                { platform: "App", orders: appOrders },
-                { platform: "Website", orders: websiteOrders }
-            ],
+            appVsWebsite: Object.entries(orderSourcesObj).map(([platform, orders]) => ({ platform, orders })),
             rating: avgRating,
             geographicMap: Object.entries(geoMapObj).map(([z, rev]) => ({ zone: z, revenue: rev.toFixed(2) })),
             marketBasket,

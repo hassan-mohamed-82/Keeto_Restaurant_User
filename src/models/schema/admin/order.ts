@@ -27,7 +27,7 @@ export const orders = mysqlTable("orders", {
     addressId: char("address_id", { length: 36 })
         .references(() => addresses.id),
 
-    orderSource: mysqlEnum("order_source", ["online_order", "food_aggregator"]).notNull(),
+    orderSource: mysqlEnum("order_source", ["online_order", "food_aggregator","my_keeto"]).notNull(),
 
     // ✅ التعديل هنا: رجعناها لـ varchar عشان تقبل الـ ID (UUID) اللي مبعوت من الـ Body
     paymentMethod: varchar("payment_method", { length: 100 }).notNull(),
@@ -49,7 +49,7 @@ export const orders = mysqlTable("orders", {
         "out_for_delivery",
         "delivered",
         "cancelled",
-        "refund" 
+        "refund"
     ]).default("pending"),
 
     cancelReasonId: char("cancel_reason_id", { length: 36 })
@@ -57,6 +57,7 @@ export const orders = mysqlTable("orders", {
     cancelReason: text("cancel_reason"),
     note: text("note"),
     dailyOrderNumber: int("daily_order_number").default(1),
+
 
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
     createdAt: timestamp("created_at").defaultNow(),
@@ -87,4 +88,5 @@ export const orderItems = mysqlTable("order_items", {
     variations: json("variations"),
 
     note: text("note"),
+
 });
