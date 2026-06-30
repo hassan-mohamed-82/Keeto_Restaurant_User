@@ -8,6 +8,7 @@ router.get("/select", (0, catchAsync_1.catchAsync)(FinancialAccount_1.selectbran
 router.post("/", (0, catchAsync_1.catchAsync)(FinancialAccount_1.createFinancialAccount));
 router.get("/", (0, catchAsync_1.catchAsync)(FinancialAccount_1.getAllFinancialAccounts));
 router.get("/:id", (0, catchAsync_1.catchAsync)(FinancialAccount_1.getFinancialAccount));
+router.put("/status/:id", (0, catchAsync_1.catchAsync)(FinancialAccount_1.updateFinancialAccountStatus));
 router.put("/:id", (0, catchAsync_1.catchAsync)(FinancialAccount_1.updateFinancialAccount));
 router.delete("/:id", (0, catchAsync_1.catchAsync)(FinancialAccount_1.deleteFinancialAccount));
 exports.default = router;
