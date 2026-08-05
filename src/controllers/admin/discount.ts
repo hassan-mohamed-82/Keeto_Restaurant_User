@@ -6,6 +6,7 @@ import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors/NotFound";
 import { v4 as uuidv4 } from "uuid";
+import { saveBase64Image } from "../../utils/handleImages";
 
 // ==========================================
 // 1. Create Discount (With Switch Logic)
@@ -18,7 +19,7 @@ export const createDiscount = async (req: Request, res: Response) => {
         name, nameAr, nameFr,
         discountType, discountValue,
         maxDiscount, minOrderAmount,
-        usageLimit, startDate, endDate, isActive, foodIds
+        usageLimit, startDate, endDate, isActive, foodIds, logo
     } = req.body;
 
     if (!name) throw new BadRequest("Discount name is required");
@@ -27,6 +28,11 @@ export const createDiscount = async (req: Request, res: Response) => {
 
     const shouldBeActive = isActive !== undefined ? isActive : true;
     const discountId = uuidv4();
+
+    let FinalLogo = logo;
+    if (logo && logo.startsWith("data:image")) {
+        FinalLogo = await saveBase64Image(logo, req, "discounts");
+    }
 
     // 💡 منطق الـ Switch: إذا كان الخصم الجديد نشطاً، نقوم بإطفاء كل الخصومات النشطة حالياً للمطعم
     if (shouldBeActive) {
@@ -62,7 +68,8 @@ export const createDiscount = async (req: Request, res: Response) => {
         startDate: startDate ? new Date(startDate) : null,
         endDate: endDate ? new Date(endDate) : null,
         isActive: shouldBeActive,
-        isGlobal: false
+        isGlobal: false,
+        logo: FinalLogo || null
     });
 
     // 2. ربطه بالمطعم الحالي
@@ -197,8 +204,13 @@ export const updateDiscount = async (req: Request, res: Response) => {
         name, nameAr, nameFr,
         discountType, discountValue,
         maxDiscount, minOrderAmount,
-        usageLimit, startDate, endDate, isActive, foodIds
+        usageLimit, startDate, endDate, isActive, foodIds, logo
     } = req.body;
+
+    let FinalLogo = logo;
+    if (logo && logo.startsWith("data:image")) {
+        FinalLogo = await saveBase64Image(logo, req, "discounts");
+    }
 
     // 💡 أيضاً في التحديث: إذا قام بتحويل الحالة إلى active، نطفئ باقي الخصومات
     if (isActive === true && !existing.discounts.isActive) {
@@ -231,6 +243,7 @@ export const updateDiscount = async (req: Request, res: Response) => {
     if (startDate !== undefined) updateData.startDate = startDate ? new Date(startDate) : null;
     if (endDate !== undefined) updateData.endDate = endDate ? new Date(endDate) : null;
     if (isActive !== undefined) updateData.isActive = isActive;
+    if (logo !== undefined) updateData.logo = FinalLogo;
 
     await db.update(discounts).set(updateData).where(eq(discounts.id, id));
 
