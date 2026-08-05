@@ -46,7 +46,7 @@ export const discounts = mysqlTable("discounts", {
     // الحقل الجديد لمعرفة العروض العامة الشاملة لكل النظام
     isGlobal: boolean("is_global").default(false),
     
-    logo: varchar("logo", { length: 255 }),
+    logo: varchar("logo", { length: 500 }),
 
 
     createdAt: timestamp("created_at").defaultNow(),
