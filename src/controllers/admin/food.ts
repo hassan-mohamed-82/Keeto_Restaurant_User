@@ -36,7 +36,7 @@ export const createFood = async (req: Request, res: Response) => {
             foodtype, Nutrition, allergen_ingredients, is_Halal,
             startTime, endTime, search_tags,
             price, discount_type, discount_value, Maximum_Purchase, stock_type,
-            status, variations,
+            status, variations, points,
             nameAr, nameFr, descriptionAr, descriptionFr
         } = req.body;
 
@@ -120,6 +120,7 @@ export const createFood = async (req: Request, res: Response) => {
                 price, discount_type: discount_type || "percentage",
                 discount_value: discount_value || null, Maximum_Purchase: Maximum_Purchase || null,
                 stock_type: stock_type || "unlimited", status: status || "active",
+                points: points ?? 0,
             });
 
             // إدخال الخيارات (Variations) إن وجدت
@@ -175,7 +176,7 @@ export const getAllFoods = async (req: Request, res: Response) => {
         foodtype: food.foodtype, Nutrition: food.Nutrition, allergen_ingredients: food.allergen_ingredients,
         is_Halal: food.is_Halal, addonsId: food.addonsId, startTime: food.startTime, endTime: food.endTime,
         search_tags: food.search_tags, price: food.price, discount_type: food.discount_type, discount_value: food.discount_value,
-        Maximum_Purchase: food.Maximum_Purchase, stock_type: food.stock_type, status: food.status,
+        Maximum_Purchase: food.Maximum_Purchase, points: food.points, stock_type: food.stock_type, status: food.status,
         createdAt: food.createdAt, updatedAt: food.updatedAt,
         restaurant: restaurants,
         category_name: categories.name, category_nameAr: categories.nameAr, category_nameFr: categories.nameFr,
@@ -236,6 +237,7 @@ export const getAllFoods = async (req: Request, res: Response) => {
             foodtype: f.foodtype, Nutrition: f.Nutrition, allergen_ingredients: f.allergen_ingredients,
             is_Halal: f.is_Halal, startTime: f.startTime, endTime: f.endTime, search_tags: f.search_tags,
             discount_type: f.discount_type, discount_value: f.discount_value, Maximum_Purchase: f.Maximum_Purchase,
+            points: f.points ?? 0,
             stock_type: f.stock_type, createdAt: f.createdAt, updatedAt: f.updatedAt,
             variations: foodVars, restaurant: f.restaurant,
             category: f.category_name ? { name: f.category_name, nameAr: f.category_nameAr, nameFr: f.category_nameFr } : null,
@@ -261,7 +263,7 @@ export const getFoodById = async (req: Request, res: Response) => {
         foodtype: food.foodtype, Nutrition: food.Nutrition, allergen_ingredients: food.allergen_ingredients,
         is_Halal: food.is_Halal, addonsId: food.addonsId, startTime: food.startTime, endTime: food.endTime,
         search_tags: food.search_tags, price: food.price, discount_type: food.discount_type, discount_value: food.discount_value,
-        Maximum_Purchase: food.Maximum_Purchase, stock_type: food.stock_type, status: food.status,
+        Maximum_Purchase: food.Maximum_Purchase, points: food.points, stock_type: food.stock_type, status: food.status,
         createdAt: food.createdAt, updatedAt: food.updatedAt,
         restaurant: { id: restaurants.id, name: restaurants.name },
         category: { id: categories.id, name: categories.name, nameAr: categories.nameAr, nameFr: categories.nameFr },
@@ -334,7 +336,8 @@ export const updateFood = async (req: Request, res: Response) => {
         "price", "status", "image",
         "foodtype", "Nutrition", "allergen_ingredients", "is_Halal",
         "startTime", "endTime", "search_tags",
-        "discount_type", "discount_value", "Maximum_Purchase", "stock_type"
+        "discount_type", "discount_value", "Maximum_Purchase", "stock_type",
+        "points"
     ];
 
     const updateData: any = {
