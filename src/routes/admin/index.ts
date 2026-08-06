@@ -37,6 +37,7 @@ import SocialMediaRouter from "./SocialMedia";
 import ProfileRouter from "./profile";
 import RestaurantUserRouter from "./restraurant_user";
 import CashierRouter from "./cashier";
+import PointsProductsRouter from "./pointsProducts";
 const router = Router();
 
 router.use("/auth", authRouter);
@@ -76,5 +77,6 @@ router.use("/restaurant-users", RestaurantUserRouter);
 router.use("/cashiers", CashierRouter);
 router.use("/expenses", expenseRouter);
 router.use("/expense-categories", expenseCategoryRouter);
+router.use("/points-products", PointsProductsRouter);
 
 export default router;

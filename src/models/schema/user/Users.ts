@@ -14,6 +14,7 @@ export const users = mysqlTable("users", {
     
     // ⚠️ التعديل هنا: شيلنا notNull() عشان فيس بوك مش بيرجع رقم التليفون
     phone: varchar("phone", { length: 20 }), 
+    alternatePhone: varchar("alternate_phone", { length: 20 }), 
     
     fcmToken: text("fcm_token"),
     

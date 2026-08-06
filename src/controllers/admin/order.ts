@@ -11,7 +11,9 @@ import {
     foodVariations,
     variationOptions,
     addresses,
-    zones
+    zones,
+    pointsProducts,
+    userPointsTransactions,
 } from "../../models/schema";
 import { eq, and, desc, inArray, sql } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
@@ -521,7 +523,101 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
                 createdAt: new Date()
             });
         }
-    });
+
+        // ==========================================
+        // ⭐ LOYALTY POINTS: Award points on delivery
+        // ==========================================
+        if (status === "delivered") {
+            // 1. Fetch all items in this order
+            const items = await tx
+                .select({ foodId: orderItems.foodId, quantity: orderItems.quantity })
+                .from(orderItems)
+                .where(eq(orderItems.orderId, orderId));
+
+            if (items.length > 0) {
+                const foodIds = items.map(i => i.foodId);
+
+                // 2. Which of these foods are enrolled in the points program?
+                const enrolledRows = await tx
+                    .select({ foodId: pointsProducts.foodId, isActive: pointsProducts.isActive })
+                    .from(pointsProducts)
+                    .where(
+                        and(
+                            eq(pointsProducts.restaurantId, existingOrder.restaurantId),
+                            inArray(pointsProducts.foodId, foodIds)
+                        )
+                    );
+
+                const enrolledMap = new Map(
+                    enrolledRows.filter(r => r.isActive).map(r => [r.foodId, true])
+                );
+
+                if (enrolledMap.size > 0) {
+                    // 3. Get points value for each enrolled food
+                    const enrolledFoodIds = foodIds.filter(id => enrolledMap.has(id));
+                    const foodPoints = await tx
+                        .select({ id: food.id, points: food.points })
+                        .from(food)
+                        .where(inArray(food.id, enrolledFoodIds));
+
+                    const foodPointsMap = new Map(foodPoints.map(f => [f.id, f.points ?? 0]));
+
+                    // 4. Calculate total points earned (points × quantity)
+                    let totalPointsEarned = 0;
+                    for (const item of items) {
+                        if (enrolledMap.has(item.foodId)) {
+                            totalPointsEarned += (foodPointsMap.get(item.foodId) ?? 0) * item.quantity;
+                        }
+                    }
+
+                    if (totalPointsEarned > 0) {
+                        // 5. Get or create user wallet
+                        let [userWallet] = await tx
+                            .select()
+                            .from(userWallets)
+                            .where(eq(userWallets.userId, existingOrder.userId))
+                            .limit(1);
+
+                        if (!userWallet) {
+                            await tx.insert(userWallets).values({
+                                id: uuidv4(),
+                                userId: existingOrder.userId,
+                                balance: "0.00",
+                                loyaltyPoints: 0,
+                            });
+                            [userWallet] = await tx
+                                .select()
+                                .from(userWallets)
+                                .where(eq(userWallets.userId, existingOrder.userId))
+                                .limit(1);
+                        }
+
+                        const balanceBefore = userWallet.loyaltyPoints ?? 0;
+                        const balanceAfter = balanceBefore + totalPointsEarned;
+
+                        // 6. Add points to wallet
+                        await tx
+                            .update(userWallets)
+                            .set({ loyaltyPoints: balanceAfter, updatedAt: new Date() })
+                            .where(eq(userWallets.id, userWallet.id));
+
+                        // 7. Record the transaction
+                        await tx.insert(userPointsTransactions).values({
+                            id: uuidv4(),
+                            userId: existingOrder.userId,
+                            restaurantId: existingOrder.restaurantId,
+                            type: "earn",
+                            points: totalPointsEarned,
+                            balanceBefore,
+                            balanceAfter,
+                            orderId: orderId,
+                            note: `Earned from order ${existingOrder.orderNumber}`,
+                        });
+                    }
+                }
+            }
+        }
+    }); // close db.transaction
 
     // ==========================================
     // 4. إرسال الإشعارات للعميل
