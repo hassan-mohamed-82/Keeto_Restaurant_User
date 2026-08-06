@@ -708,7 +708,7 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
 
     // Order Info
     doc.fontSize(10);
-    doc.text(`Order #: ${orderDetail.order.orderNumber}`);
+    doc.text(`Order #: ${orderDetail.order.dailyOrderNumber}`);
     
     const orderDate = new Date(orderDetail.order.createdAt || new Date());
     
