@@ -58,6 +58,7 @@ export const food = mysqlTable("food", {
     discount_value: decimal("discount_value", { precision: 10, scale: 2 }),
 
     Maximum_Purchase: int("Maximum_Purchase"),
+    points: int("points").default(0),
 
     stock_type: mysqlEnum("stock_type", ["limited", "unlimited", "daily"])
         .default("unlimited"),
