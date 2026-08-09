@@ -912,7 +912,21 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
 
 export const getallnumbersoforders = async (req: Request, res: Response) => {
     const adminRestaurantId = req.user?.restaurantId || req.user?.id;
+    const adminBranchId = req.user?.branchId; // لو Null يبقى ده المالك
+
     if (!adminRestaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
+    
+    // بناء الـ Query الأساسي
+    let queryConditions = eq(orders.restaurantId, adminRestaurantId);
+
+    // لو ده مدير فرع، نفلتر الأوردرات لفرعه هو بس بشكل إجباري
+    if (adminBranchId) {
+        queryConditions = and(queryConditions, eq(orders.branchId, adminBranchId)) as any;
+    } 
+    // لو ده المالك وبعت branchId في الـ Query عشان يفلتر بيه
+    else if (req.query?.branchId) {
+        queryConditions = and(queryConditions, eq(orders.branchId, req.query.branchId as string)) as any;
+    }
 
     const statusCountsResult = await db
         .select({
@@ -920,7 +934,7 @@ export const getallnumbersoforders = async (req: Request, res: Response) => {
             count: sql<number>`count(${orders.id})`,
         })
         .from(orders)
-        .where(eq(orders.restaurantId, adminRestaurantId))
+        .where(queryConditions)
         .groupBy(orders.status);
 
     const totalOrders = statusCountsResult.reduce((acc, curr) => acc + Number(curr.count), 0);
