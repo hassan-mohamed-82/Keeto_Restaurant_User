@@ -14,6 +14,7 @@ import {
     zones,
     pointsProducts,
     userPointsTransactions,
+    userRestaurantPoints,
 } from "../../models/schema";
 import { eq, and, desc, inArray, sql } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
@@ -352,6 +353,7 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
 };
 // ==========================================
 // 3. تحديث حالة الأوردر (مع إرجاع الفلوس والعمولة لو المطعم كنسل)
+// تحديث حالة الأوردر (إرجاع المحفظة + التسوية + إضافة النقاط عند delivered)
 // ==========================================
 export const updateOrderStatus = async (req: Request, res: Response) => {
     const { orderId } = req.params;
@@ -408,7 +410,7 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
     }
 
     await db.transaction(async (tx) => {
-        // 1. تحديث الحالة
+        // 1. تحديث حالة الطلب
         await tx.update(orders)
             .set({
                 status: status,
@@ -419,9 +421,10 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
             .where(eq(orders.id, orderId));
 
         // ==========================================
-        // 💰 2. الـ Refund للعميل (لو كان دافع بالمحفظة)
+        // 💰 2. الـ Refund لمحفظة العميل (User Wallet) عند الإلغاء
         // ==========================================
         if (status === "cancelled" || status === "rejected") {
+            // البحث هل تم الدفع سابقاً بواسطة المحفظة
             const [walletTx] = await tx.select().from(userWalletTransactions)
                 .where(and(
                     eq(userWalletTransactions.reference, existingOrder.orderNumber),
@@ -433,21 +436,27 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
                     .where(eq(userWallets.userId, existingOrder.userId)).limit(1);
 
                 if (userWallet) {
-                    const balanceBefore = parseFloat(userWallet.balance as string);
-                    const amountToRefund = parseFloat(existingOrder.totalAmount as string);
+                    const balanceBefore = parseFloat(userWallet.balance ?? "0.00");
+                    const amountToRefund = parseFloat(existingOrder.totalAmount as string || "0.00");
                     const newBalance = balanceBefore + amountToRefund;
 
+                    // تحديث رصيد محفظة العميل
                     await tx.update(userWallets)
-                        .set({ balance: newBalance.toString(), updatedAt: new Date() })
+                        .set({
+                            balance: newBalance.toFixed(2),
+                            updatedAt: new Date()
+                        })
                         .where(eq(userWallets.id, userWallet.id));
 
+                    // إضافة حركة إرجاع الرصيد (Refund Transaction)
                     await tx.insert(userWalletTransactions).values({
                         id: uuidv4(),
                         userId: existingOrder.userId,
+                        paymentMethodId: existingOrder.paymentMethod ?? null,
                         type: "credit",
                         transactionType: "refund",
-                        amount: amountToRefund.toString(),
-                        balanceBefore: balanceBefore.toString(),
+                        amount: amountToRefund.toFixed(2),
+                        balanceBefore: balanceBefore.toFixed(2),
                         reference: existingOrder.orderNumber,
                         status: "approved",
                         createdAt: new Date()
@@ -456,25 +465,21 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
             }
 
             // ==========================================
-            // 💰 3. التسوية العكسية للمطعم (Reversal) + خصم الغرامة
+            // 💰 3. التسوية العكسية لمحفظة المطعم (Restaurant Wallet Reversal)
             // ==========================================
-            
-            // أ. نجيب طريقة الدفع عشان نعرف نعكس الحسبة إزاي
             const [payment] = await tx.select().from(paymentMethods).where(eq(paymentMethods.id, existingOrder.paymentMethod)).limit(1);
             const pmName = (payment?.name || "").toLowerCase();
             const isCashPayment = pmName.includes("cash") || pmName.includes("استلام");
 
-            // ب. تجهيز الأرقام اللي اتحسبت وقت الـ Checkout
             const appCommission = parseFloat(existingOrder.appCommission as string || "0");
             const serviceFee = parseFloat(existingOrder.serviceFee as string || "0");
             const totalAmount = parseFloat(existingOrder.totalAmount as string || "0");
             const subtotal = parseFloat(existingOrder.subtotal as string || "0");
             const deliveryFee = parseFloat(existingOrder.deliveryFee as string || "0");
-            
-            const appDues = appCommission + serviceFee; // الغرامة أو فلوس المنصة
-            const restaurantEarning = subtotal + deliveryFee - appCommission; // الربح اللي كان داخل للمطعم
 
-            // ج. نجيب محفظة المطعم
+            const appDues = appCommission + serviceFee;
+            const restaurantEarning = subtotal + deliveryFee - appCommission;
+
             let [restWallet] = await tx.select().from(restaurantWallets)
                 .where(eq(restaurantWallets.restaurantId, existingOrder.restaurantId)).limit(1);
 
@@ -484,39 +489,36 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
                     .where(eq(restaurantWallets.restaurantId, existingOrder.restaurantId)).limit(1);
             }
 
-            let currentBalance = parseFloat(restWallet.balance as string);
-            let currentCollectedCash = parseFloat(restWallet.collectedCash as string);
-            let currentTotalEarning = parseFloat(restWallet.totalEarning as string);
+            let currentBalance = parseFloat(restWallet.balance as string || "0");
+            let currentCollectedCash = parseFloat(restWallet.collectedCash as string || "0");
+            let currentTotalEarning = parseFloat(restWallet.totalEarning as string || "0");
 
-            // د. عكس العمليات اللي تمت في الـ Checkout
             if (isCashPayment) {
-                currentBalance += appDues; // نرجع فلوس العمولة اللي اتخصمت منه مقدماً
-                currentCollectedCash -= totalAmount; // نطرح الكاش اللي كان المفروض يستلمه ومستلموش
+                currentBalance += appDues;
+                currentCollectedCash -= totalAmount;
             } else {
-                currentBalance -= restaurantEarning; // نطرح الأرباح اللي ضفناها في حسابه
+                currentBalance -= restaurantEarning;
             }
-            currentTotalEarning -= restaurantEarning; // تقليل إجمالي الأرباح
+            currentTotalEarning -= restaurantEarning;
 
-            // هـ. تطبيق الغرامة (لأنه لغى الأوردر)
             const balanceAfterPenalty = currentBalance - appDues;
 
             await tx.update(restaurantWallets)
                 .set({
-                    balance: balanceAfterPenalty.toString(),
-                    collectedCash: currentCollectedCash.toString(),
-                    totalEarning: currentTotalEarning.toString(),
+                    balance: balanceAfterPenalty.toFixed(2),
+                    collectedCash: currentCollectedCash.toFixed(2),
+                    totalEarning: currentTotalEarning.toFixed(2),
                     updatedAt: new Date()
                 })
                 .where(eq(restaurantWallets.restaurantId, existingOrder.restaurantId));
 
-            // و. تسجيل حركة الغرامة في السجل
             await tx.insert(restaurantWalletTransactions).values({
                 id: uuidv4(),
                 restaurantId: existingOrder.restaurantId,
                 type: "order_payment",
-                amount: `-${appDues}`,
-                balanceBefore: currentBalance.toString(), // الرصيد بعد عملية العكس وقبل الغرامة
-                balanceAfter: balanceAfterPenalty.toString(),
+                amount: `-${appDues.toFixed(2)}`,
+                balanceBefore: currentBalance.toFixed(2),
+                balanceAfter: balanceAfterPenalty.toFixed(2),
                 method: existingOrder.paymentMethod,
                 reference: existingOrder.orderNumber,
                 note: `Order Reversal & Penalty: Cancelled by restaurant. Commission deducted: ${appDues}`,
@@ -525,10 +527,9 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
         }
 
         // ==========================================
-        // ⭐ LOYALTY POINTS: Award points on delivery
+        // ⭐ LOYALTY POINTS: إضافة نقاط المطعم عند التوصيل (DELIVERED)
         // ==========================================
         if (status === "delivered") {
-            // 1. Fetch all items in this order
             const items = await tx
                 .select({ foodId: orderItems.foodId, quantity: orderItems.quantity })
                 .from(orderItems)
@@ -537,7 +538,6 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
             if (items.length > 0) {
                 const foodIds = items.map(i => i.foodId);
 
-                // 2. Which of these foods are enrolled in the points program?
                 const enrolledRows = await tx
                     .select({ foodId: pointsProducts.foodId, isActive: pointsProducts.isActive })
                     .from(pointsProducts)
@@ -553,7 +553,6 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
                 );
 
                 if (enrolledMap.size > 0) {
-                    // 3. Get points value for each enrolled food
                     const enrolledFoodIds = foodIds.filter(id => enrolledMap.has(id));
                     const foodPoints = await tx
                         .select({ id: food.id, points: food.points })
@@ -562,7 +561,6 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
 
                     const foodPointsMap = new Map(foodPoints.map(f => [f.id, f.points ?? 0]));
 
-                    // 4. Calculate total points earned (points × quantity)
                     let totalPointsEarned = 0;
                     for (const item of items) {
                         if (enrolledMap.has(item.foodId)) {
@@ -571,53 +569,57 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
                     }
 
                     if (totalPointsEarned > 0) {
-                        // 5. Get or create user wallet
-                        let [userWallet] = await tx
+                        let [userPointRecord] = await tx
                             .select()
-                            .from(userWallets)
-                            .where(eq(userWallets.userId, existingOrder.userId))
+                            .from(userRestaurantPoints)
+                            .where(
+                                and(
+                                    eq(userRestaurantPoints.userId, existingOrder.userId),
+                                    eq(userRestaurantPoints.restaurantId, existingOrder.restaurantId)
+                                )
+                            )
                             .limit(1);
 
-                        if (!userWallet) {
-                            await tx.insert(userWallets).values({
-                                id: uuidv4(),
+                        if (!userPointRecord) {
+                            const newPointId = uuidv4();
+                            await tx.insert(userRestaurantPoints).values({
+                                id: newPointId,
                                 userId: existingOrder.userId,
-                                balance: "0.00",
-                                loyaltyPoints: 0,
+                                restaurantId: existingOrder.restaurantId,
+                                points: 0,
                             });
-                            [userWallet] = await tx
+                            [userPointRecord] = await tx
                                 .select()
-                                .from(userWallets)
-                                .where(eq(userWallets.userId, existingOrder.userId))
+                                .from(userRestaurantPoints)
+                                .where(eq(userRestaurantPoints.id, newPointId))
                                 .limit(1);
                         }
 
-                        const balanceBefore = userWallet.loyaltyPoints ?? 0;
-                        const balanceAfter = balanceBefore + totalPointsEarned;
+                        const pointsBefore = userPointRecord.points ?? 0;
+                        const pointsAfter = pointsBefore + totalPointsEarned;
 
-                        // 6. Add points to wallet
                         await tx
-                            .update(userWallets)
-                            .set({ loyaltyPoints: balanceAfter, updatedAt: new Date() })
-                            .where(eq(userWallets.id, userWallet.id));
+                            .update(userRestaurantPoints)
+                            .set({ points: pointsAfter, updatedAt: new Date() })
+                            .where(eq(userRestaurantPoints.id, userPointRecord.id));
 
-                        // 7. Record the transaction
                         await tx.insert(userPointsTransactions).values({
                             id: uuidv4(),
                             userId: existingOrder.userId,
                             restaurantId: existingOrder.restaurantId,
                             type: "earn",
                             points: totalPointsEarned,
-                            balanceBefore,
-                            balanceAfter,
+                            balanceBefore: pointsBefore,
+                            balanceAfter: pointsAfter,
                             orderId: orderId,
-                            note: `Earned from order ${existingOrder.orderNumber}`,
+                            note: `Earned ${totalPointsEarned} points from order #${existingOrder.orderNumber}`,
+                            createdAt: new Date(),
                         });
                     }
                 }
             }
         }
-    }); // close db.transaction
+    });
 
     // ==========================================
     // 4. إرسال الإشعارات للعميل

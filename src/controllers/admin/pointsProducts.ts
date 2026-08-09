@@ -7,21 +7,12 @@ import { NotFound } from "../../Errors/NotFound";
 import { BadRequest } from "../../Errors/BadRequest";
 import { v4 as uuidv4 } from "uuid";
 
-// =========================================================
-// HELPER
-// =========================================================
 const getRestaurantId = (req: Request): string => {
     const id = req.user?.restaurantId || req.user?.id;
     if (!id) throw new BadRequest("Restaurant ID missing or unauthorized");
     return id;
 };
 
-// =========================================================
-// GET /points-products/food-select
-// Returns ALL active foods for the restaurant so the admin
-// can pick which ones should be part of the points program.
-// Each food already carries its own `points` value.
-// =========================================================
 export const getFoodsForPointsSelect = async (req: Request, res: Response) => {
     const restaurantId = getRestaurantId(req);
 
@@ -65,11 +56,6 @@ export const getFoodsForPointsSelect = async (req: Request, res: Response) => {
     });
 };
 
-// =========================================================
-// GET /points-products
-// List all foods currently enrolled in the points program,
-// with their points value read from food.points.
-// =========================================================
 export const getPointsProducts = async (req: Request, res: Response) => {
     const restaurantId = getRestaurantId(req);
 
@@ -114,14 +100,6 @@ export const getPointsProducts = async (req: Request, res: Response) => {
     });
 };
 
-// =========================================================
-// POST /points-products
-// Unified enroll — accepts either:
-//   { foodId: "uuid" }          → single food
-//   { foodIds: ["uuid", ...] }  → multiple foods
-// Foods must already have food.points > 0.
-// Existing enrollments are re-activated rather than duplicated.
-// =========================================================
 export const enrollPointsProducts = async (req: Request, res: Response) => {
     const restaurantId = getRestaurantId(req);
     const { foodId, foodIds } = req.body;
@@ -192,10 +170,6 @@ export const enrollPointsProducts = async (req: Request, res: Response) => {
     });
 };
 
-// =========================================================
-// PATCH /points-products/:id/toggle
-// Toggle isActive on / off for one enrollment record
-// =========================================================
 export const togglePointsProduct = async (req: Request, res: Response) => {
     const restaurantId = getRestaurantId(req);
     const { id } = req.params;
@@ -217,10 +191,6 @@ export const togglePointsProduct = async (req: Request, res: Response) => {
     });
 };
 
-// =========================================================
-// DELETE /points-products/:id
-// Remove a food from the enrollment list (does NOT reset food.points)
-// =========================================================
 export const removePointsProduct = async (req: Request, res: Response) => {
     const restaurantId = getRestaurantId(req);
     const { id } = req.params;

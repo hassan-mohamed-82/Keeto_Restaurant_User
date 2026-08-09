@@ -1,4 +1,4 @@
-import { mysqlTable, varchar, char, timestamp, decimal, mysqlEnum, text, int, json } from "drizzle-orm/mysql-core";
+import { mysqlTable, varchar, char, timestamp, decimal, mysqlEnum, text, int, json, boolean } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
 import { restaurants } from "./restaurants";
 import { food } from "./food";
@@ -52,12 +52,17 @@ export const orders = mysqlTable("orders", {
         "refund"
     ]).default("pending"),
 
+    isPointsRedeemed: boolean("is_points_redeemed").default(false),
+    redeemCode: varchar("redeem_code", { length: 10 }),
+
     cancelReasonId: char("cancel_reason_id", { length: 36 })
         .references(() => selectReasons.id),
     cancelReason: text("cancel_reason"),
     note: text("note"),
     dailyOrderNumber: int("daily_order_number").default(1),
 
+    rating: int("rating"),
+    ratingComment: text("rating_comment"),
 
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
     createdAt: timestamp("created_at").defaultNow(),
