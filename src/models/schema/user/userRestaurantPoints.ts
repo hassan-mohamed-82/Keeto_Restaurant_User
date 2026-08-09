@@ -22,36 +22,37 @@ export const userRestaurantPoints = mysqlTable("user_restaurant_points", {
     userRestIdx: uniqueIndex("unique_user_restaurant_points").on(table.userId, table.restaurantId),
 }));
 
-export const userPointsTransactions = mysqlTable("user_points_transactions", {
-    id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
 
-    userId: char("user_id", { length: 36 })
-        .references(() => users.id, { onDelete: "cascade" })
-        .notNull(),
+// export const userPointsTransactions = mysqlTable("user_points_transactions", {
+//     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
 
-    restaurantId: char("restaurant_id", { length: 36 })
-        .references(() => restaurants.id, { onDelete: "cascade" })
-        .notNull(),
+//     userId: char("user_id", { length: 36 })
+//         .references(() => users.id, { onDelete: "cascade" })
+//         .notNull(),
 
-    type: mysqlEnum("type", [
-        "earn",          // كسب نقاط عند استلام الطلب
-        "redeem",        // استبدال نقاط بوجبة
-        "manual_adjust"  // تعديل يدوي من الإدارة
-    ]).notNull(),
+//     restaurantId: char("restaurant_id", { length: 36 })
+//         .references(() => restaurants.id, { onDelete: "cascade" })
+//         .notNull(),
 
-    points: int("points").notNull(),
+//     type: mysqlEnum("type", [
+//         "earn",          // كسب نقاط عند استلام الطلب
+//         "redeem",        // استبدال نقاط بوجبة
+//         "manual_adjust"  // تعديل يدوي من الإدارة
+//     ]).notNull(),
 
-    balanceBefore: int("balance_before").notNull(),
+//     points: int("points").notNull(),
 
-    balanceAfter: int("balance_after").notNull(),
+//     balanceBefore: int("balance_before").notNull(),
 
-    orderId: char("order_id", { length: 36 })
-        .references(() => orders.id, { onDelete: "set null" }),
+//     balanceAfter: int("balance_after").notNull(),
 
-    note: varchar("note", { length: 255 }),
+//     orderId: char("order_id", { length: 36 })
+//         .references(() => orders.id, { onDelete: "set null" }),
 
-    createdAt: timestamp("created_at").defaultNow(),
-}, (table) => ({
-    userIdx: index  ("user_points_tx_user_idx").on(table.userId),
-    restIdx: index("user_points_tx_rest_idx").on(table.restaurantId),
-}));
+//     note: varchar("note", { length: 255 }),
+
+//     createdAt: timestamp("created_at").defaultNow(),
+// }, (table) => ({
+//     userIdx: index  ("user_points_tx_user_idx").on(table.userId),
+//     restIdx: index("user_points_tx_rest_idx").on(table.restaurantId),
+// }));

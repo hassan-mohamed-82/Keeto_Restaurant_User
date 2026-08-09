@@ -61,6 +61,7 @@ export const verifyFacebookToken = async (req: Request, res: Response) => {
         facebookId, 
         googleId: null, 
         phone: null, 
+        alternatePhone: null, 
         photo: null, 
         fcmToken: null, 
         password: null, 

@@ -5,10 +5,12 @@ import {
     varchar,
     timestamp,
     mysqlEnum,
+    index,
 } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
 import { users } from "../user/Users";
 import { restaurants } from "./restaurants";
+import { orders } from "./order";
 
 /**
  * user_points_transactions
@@ -19,29 +21,32 @@ export const userPointsTransactions = mysqlTable("user_points_transactions", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
 
     userId: char("user_id", { length: 36 })
-        .references(() => users.id)
+        .references(() => users.id, { onDelete: "cascade" })
         .notNull(),
 
     restaurantId: char("restaurant_id", { length: 36 })
-        .references(() => restaurants.id)
+        .references(() => restaurants.id, { onDelete: "cascade" })
         .notNull(),
 
-    /** "earn" when order delivered, "redeem" when OTP created */
-    type: mysqlEnum("type", ["earn", "redeem"]).notNull(),
+    type: mysqlEnum("type", [
+        "earn",          // كسب نقاط عند استلام الطلب
+        "redeem",        // استبدال نقاط بوجبة
+        "manual_adjust"  // تعديل يدوي من الإدارة
+    ]).notNull(),
 
-    /** Number of points earned (+) or redeemed (-) */
     points: int("points").notNull(),
 
     balanceBefore: int("balance_before").notNull(),
+
     balanceAfter: int("balance_after").notNull(),
 
-    /** Linked to an order (for earn transactions) */
-    orderId: char("order_id", { length: 36 }),
-
-    /** Linked to a redemption (for redeem transactions) */
-    redemptionId: char("redemption_id", { length: 36 }),
+    orderId: char("order_id", { length: 36 })
+        .references(() => orders.id, { onDelete: "set null" }),
 
     note: varchar("note", { length: 255 }),
 
     createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => ({
+    userIdx: index  ("user_points_tx_user_idx").on(table.userId),
+    restIdx: index("user_points_tx_rest_idx").on(table.restaurantId),
+}));
