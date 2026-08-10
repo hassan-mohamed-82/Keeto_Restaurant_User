@@ -63,6 +63,7 @@ export const getPointsProducts = async (req: Request, res: Response) => {
         .select({
             id: pointsProducts.id,
             isActive: pointsProducts.isActive,
+            pointsRequiredForRedeem: pointsProducts.pointsRequiredForRedeem, // ← from pointsProducts table
             createdAt: pointsProducts.createdAt,
             updatedAt: pointsProducts.updatedAt,
             // Food details (including its own points field)
@@ -72,7 +73,7 @@ export const getPointsProducts = async (req: Request, res: Response) => {
             foodNameFr: food.nameFr,
             foodImage: food.image,
             foodPrice: food.price,
-            foodPoints: food.points,   // ← read from food, not from this table
+            foodPoints: food.points,
             foodStatus: food.status,
         })
         .from(pointsProducts)
@@ -84,6 +85,7 @@ export const getPointsProducts = async (req: Request, res: Response) => {
         data: rows.map(r => ({
             id: r.id,
             isActive: r.isActive,
+            pointsRequiredForRedeem: r.pointsRequiredForRedeem ?? 0, // ← returned in response
             createdAt: r.createdAt,
             updatedAt: r.updatedAt,
             food: {
@@ -93,7 +95,7 @@ export const getPointsProducts = async (req: Request, res: Response) => {
                 nameFr: r.foodNameFr,
                 image: r.foodImage,
                 price: r.foodPrice,
-                points: r.foodPoints,  // ← from food table
+                points: r.foodPoints,
                 status: r.foodStatus,
             },
         })),
@@ -102,18 +104,17 @@ export const getPointsProducts = async (req: Request, res: Response) => {
 
 export const enrollPointsProducts = async (req: Request, res: Response) => {
     const restaurantId = getRestaurantId(req);
-    const { foodId, foodIds } = req.body;
 
-    // Normalise: accept single string OR array
-    const rawIds: string[] = foodId
-        ? [foodId]
-        : Array.isArray(foodIds)
-        ? foodIds
-        : [];
+    // Body: { items: [{ foodId: string, pointsRequiredForRedeem: number }] }
+    const items: { foodId: string; pointsRequiredForRedeem: number }[] = req.body.items;
 
-    if (rawIds.length === 0) {
-        throw new BadRequest("Provide foodId (string) or foodIds (array)");
+    if (!Array.isArray(items) || items.length === 0) {
+        throw new BadRequest("Provide items as an array of { foodId, pointsRequiredForRedeem }");
     }
+
+    // Build lookup maps from the items array
+    const rawIds = items.map(i => i.foodId);
+    const pointsLookup = new Map(items.map(i => [i.foodId, Number(i.pointsRequiredForRedeem) || 0]));
 
     // Validate all foods belong to this restaurant and have points set
     const existingFoods = await db
@@ -144,20 +145,24 @@ export const enrollPointsProducts = async (req: Request, res: Response) => {
     const reactivated: string[] = [];
 
     await db.transaction(async (tx) => {
-        for (const fId of rawIds) {
+        for (const { foodId: fId } of items) {
+            const pts = pointsLookup.get(fId) ?? 0;
             const existingId = existingMap.get(fId);
             if (existingId) {
+                // Re-activate and update pointsRequiredForRedeem
                 await tx
                     .update(pointsProducts)
-                    .set({ isActive: true })
+                    .set({ isActive: true, pointsRequiredForRedeem: pts })
                     .where(eq(pointsProducts.id, existingId));
                 reactivated.push(fId);
             } else {
+                // Fresh insert with pointsRequiredForRedeem
                 await tx.insert(pointsProducts).values({
                     id: uuidv4(),
                     restaurantId,
                     foodId: fId,
                     isActive: true,
+                    pointsRequiredForRedeem: pts,
                 });
                 inserted.push(fId);
             }
