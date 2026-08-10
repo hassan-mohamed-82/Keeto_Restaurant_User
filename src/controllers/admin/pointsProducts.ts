@@ -126,12 +126,12 @@ export const enrollPointsProducts = async (req: Request, res: Response) => {
         throw new BadRequest("One or more food items not found or don't belong to your restaurant");
     }
 
-    const withoutPoints = existingFoods.filter(f => (f.points ?? 0) <= 0);
-    if (withoutPoints.length > 0) {
-        throw new BadRequest(
-            `Set a points value on these foods first: ${withoutPoints.map(f => f.name).join(", ")}`
-        );
-    }
+    // const withoutPoints = existingFoods.filter(f => (f.points ?? 0) <= 0);
+    // if (withoutPoints.length > 0) {
+    //     throw new BadRequest(
+    //         `Set a points value on these foods first: ${withoutPoints.map(f => f.name).join(", ")}`
+    //     );
+    // }
 
     // Fetch already-enrolled entries for this restaurant
     const existingPP = await db
