@@ -792,7 +792,7 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
     const doc = new PDFDocument({ margin: 20, size: [250, 600] });
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="Receipt_${orderDetail.order.orderNumber}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="Receipt_${orderDetail.order.dailyOrderNumber}.pdf"`);
 
     doc.pipe(res);
 
