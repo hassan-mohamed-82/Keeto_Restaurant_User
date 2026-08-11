@@ -202,6 +202,102 @@ export const deleteBranchMenuItem = async (req: Request, res: Response) => {
 };
 
 
+// =============================================
+// Toggle حالة الأكلة (فتح / إغلاق) في فرع معين 
+// =============================================
+export const toggleBranchFoodStatus = async (req: Request, res: Response) => {
+    const { branchId, foodId } = req.params;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    const userBranchId = req.user?.branchId;
+
+    if (!restaurantId) throw new BadRequest("Restaurant ID missing");
+
+    // حماية الصلاحيات
+    if (userBranchId && userBranchId !== branchId) {
+        throw new BadRequest("Unauthorized: You cannot edit another branch's menu");
+    }
+
+    // التأكد إن الفرع يخص المطعم
+    const branchCheck = await db.select().from(branches)
+        .where(and(eq(branches.id, branchId), eq(branches.restaurantId, restaurantId))).limit(1);
+    if (!branchCheck[0]) throw new NotFound("Branch not found");
+
+    // جلب المنتج في هذا الفرع
+    const existingItem = await db.select().from(branchMenuItems)
+        .where(and(eq(branchMenuItems.branchId, branchId), eq(branchMenuItems.foodId, foodId)))
+        .limit(1);
+
+    if (!existingItem[0]) {
+        throw new NotFound("This product is not assigned to this branch yet.");
+    }
+
+    // تحديد الحالة الجديدة
+    const newStatus = existingItem[0].status === "active" ? "inactive" : "active";
+
+    // تحديث الحالة
+    await db.update(branchMenuItems)
+        .set({ status: newStatus, updatedAt: new Date() })
+        .where(eq(branchMenuItems.id, existingItem[0].id));
+
+    // مسح الكاش
+    await invalidateBranchMenuCache(branchId, restaurantId);
+
+    return SuccessResponse(res, { 
+        message: `Product status successfully changed to ${newStatus} in this branch`,
+        data: { status: newStatus }
+    });
+};
+
+// =============================================
+// Get food availability across all branches
+// =============================================
+export const getFoodAvailabilityAcrossBranches = async (req: Request, res: Response) => {
+    const { foodId } = req.params;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+
+    if (!restaurantId) throw new BadRequest("Restaurant ID missing");
+
+    // 1. Fetch all branches for this restaurant
+    const allBranches = await db.select({
+        id: branches.id,
+        name: branches.name,
+        nameAr: branches.nameAr,
+    })
+    .from(branches)
+    .where(eq(branches.restaurantId, restaurantId));
+
+    if (allBranches.length === 0) {
+        return SuccessResponse(res, { message: "No branches found", data: [] });
+    }
+
+    // 2. Fetch the assigned branch menu items for this food
+    const branchItems = await db.select({
+        branchId: branchMenuItems.branchId,
+        status: branchMenuItems.status,
+    })
+    .from(branchMenuItems)
+    .where(eq(branchMenuItems.foodId, foodId));
+
+    // 3. Map branches and determine availability
+    const branchAvailability = allBranches.map(branch => {
+        const branchItem = branchItems.find(item => item.branchId === branch.id);
+        const isAvailable = branchItem ? branchItem.status === "active" : false;
+        
+        return {
+            branchId: branch.id,
+            branchName: branch.name,
+            branchNameAr: branch.nameAr,
+            isAvailable
+        };
+    });
+
+    return SuccessResponse(res, { 
+        message: "Food availability across branches fetched successfully", 
+        data: branchAvailability 
+    });
+};
+
+
 // controllers/restaurant.controller.ts
 
 export const getRestaurantSelectData = async (req: Request, res: Response) => {
