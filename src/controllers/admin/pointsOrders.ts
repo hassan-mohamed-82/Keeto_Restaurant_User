@@ -24,6 +24,7 @@ export const getOrderByRedeemCode = async (req: Request, res: Response) => {
             orderId: orders.id,
             status: orders.status,
             redeemCode: orders.redeemCode,
+            redeemCodeExpiresAt: orders.redeemCodeExpiresAt,
             createdAt: orders.createdAt,
             userName: users.name,
             userPhone: users.phone
@@ -43,7 +44,8 @@ export const getOrderByRedeemCode = async (req: Request, res: Response) => {
         throw new NotFound("Invalid code or order not found for this restaurant");
     }
 
-    // 2. Get items in this redemption order
+    const isExpired = order.redeemCodeExpiresAt && new Date() > new Date(order.redeemCodeExpiresAt);
+
     const items = await db
         .select({
             foodId: food.id,
@@ -59,6 +61,7 @@ export const getOrderByRedeemCode = async (req: Request, res: Response) => {
         message: "Redemption order fetched successfully",
         data: {
             ...order,
+            isExpired,
             items
         }
     });
@@ -89,6 +92,10 @@ export const approveRedeemCode = async (req: Request, res: Response) => {
 
     if (order.status !== "pending") {
         throw new BadRequest(`Order code has already been processed or is in status: ${order.status}`);
+    }
+
+    if (order.redeemCodeExpiresAt && new Date() > new Date(order.redeemCodeExpiresAt)) {
+        throw new BadRequest("Redeem code has expired. Codes are only valid for 3 minutes.");
     }
 
     // 2. Update order status to 'preparing'
