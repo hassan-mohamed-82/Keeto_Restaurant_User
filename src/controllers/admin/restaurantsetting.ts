@@ -44,6 +44,8 @@ export const updateSettings = async (req: Request, res: Response): Promise<void>
           if (settings.minOrderAmount !== undefined) settingsData.minOrderAmount = String(settings.minOrderAmount);
           if (settings.minDeliveryTime !== undefined) settingsData.minDeliveryTime = settings.minDeliveryTime;
           if (settings.maxDeliveryTime !== undefined) settingsData.maxDeliveryTime = settings.maxDeliveryTime;
+          if (settings.firstColor !== undefined) settingsData.firstColor = settings.firstColor;
+          if (settings.secondColor !== undefined) settingsData.secondColor = settings.secondColor;
 
           if (existingSettings.length > 0) {
             // ✅ Update existing settings
