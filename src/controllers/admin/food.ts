@@ -215,6 +215,20 @@ export const getAllFoods = async (req: Request, res: Response) => {
         allAddonsDetails = await db.select().from(addons).where(inArray(addons.id, uniqueAddonsIds));
     }
 
+    const allIngredients = foodIds.length > 0 
+        ? await db.select({
+            foodId: foodIngredients.foodId,
+            ingredientId: ingredients.id,
+            name: ingredients.name,
+            nameAr: ingredients.nameAr,
+            inStock: ingredients.inStock,
+            isRemovable: foodIngredients.isRemovable
+        })
+        .from(foodIngredients)
+        .innerJoin(ingredients, eq(foodIngredients.ingredientId, ingredients.id))
+        .where(inArray(foodIngredients.foodId, foodIds))
+        : [];
+
     const allFoods = rawFoods.map(f => {
         const foodVars = allVars.filter(v => v.foodId === f.id).map(v => ({
             ...v, options: allOpts.filter(o => o.variationId === v.id)
@@ -228,6 +242,14 @@ export const getAllFoods = async (req: Request, res: Response) => {
         const cleanAddonsArray = Array.isArray(safeAddons) ? safeAddons.filter((id: any) => typeof id === 'string' && id.trim() !== '') : [];
         const foodAddonsDetails = allAddonsDetails.filter(a => cleanAddonsArray.includes(a.id));
 
+        const assignedIngredients = allIngredients.filter(i => i.foodId === f.id).map(i => ({
+            id: i.ingredientId,
+            name: i.name,
+            nameAr: i.nameAr,
+            inStock: i.inStock,
+            isRemovable: i.isRemovable
+        }));
+
         return {
             id: f.id, name: f.name, nameAr: f.nameAr, nameFr: f.nameFr,
             description: f.description, descriptionAr: f.descriptionAr, descriptionFr: f.descriptionFr,
@@ -240,6 +262,7 @@ export const getAllFoods = async (req: Request, res: Response) => {
             points: f.points ?? 0,
             stock_type: f.stock_type, createdAt: f.createdAt, updatedAt: f.updatedAt,
             variations: foodVars, restaurant: f.restaurant,
+            ingredients: assignedIngredients,
             category: f.category_name ? { name: f.category_name, nameAr: f.category_nameAr, nameFr: f.category_nameFr } : null,
             subcategory: f.subcategory_name ? { name: f.subcategory_name, nameAr: f.subcategory_nameAr, nameFr: f.subcategory_nameFr } : null,
         };
