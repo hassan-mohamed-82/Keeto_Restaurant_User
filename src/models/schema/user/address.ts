@@ -9,6 +9,7 @@ import {
 import { sql } from "drizzle-orm";
 import { users ,} from "./Users";
 import {zones} from "../admin/zone"
+
 export const addresses = mysqlTable("addresses", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
     userId: char("user_id", { length: 36 }).references(() => users.id).notNull(),
@@ -20,4 +21,8 @@ export const addresses = mysqlTable("addresses", {
     street: varchar("street", { length: 255 }).notNull(),
     number: varchar("number", { length: 20 }).notNull(),
     floor: varchar("floor", { length: 20 }),
+    landmark: varchar("landmark", { length: 500 }),
+    location: varchar("location", { length: 255 }),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
 });

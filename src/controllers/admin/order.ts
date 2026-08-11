@@ -173,6 +173,8 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             street: addresses.street,
             number: addresses.number,
             floor: addresses.floor,
+            landmark: addresses.landmark,
+            location: addresses.location,
         },
     })
         .from(orders)
