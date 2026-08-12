@@ -12,6 +12,8 @@ import {
     variationOptions,
     addresses,
     zones,
+    addons,
+    adonescategory,
     pointsProducts,
     userPointsTransactions,
     userRestaurantPoints,
@@ -178,6 +180,12 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             landmark: addresses.landmark,
             location: addresses.location,
         },
+        zone: {
+            id: zones.id,
+            name: zones.name,
+            nameAr: zones.nameAr,
+            nameFr: zones.nameFr,
+        },
         driver: {
             id: deliveryMen.id,
             name: deliveryMen.name,
@@ -190,6 +198,7 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
         .leftJoin(restaurants, eq(orders.restaurantId, restaurants.id))
         .leftJoin(deliveryMen, eq(orders.deliveryManId, deliveryMen.id))
         .leftJoin(addresses, eq(orders.addressId, addresses.id))
+        .leftJoin(zones, eq(addresses.zoneId, zones.id))
         .where(eq(orders.id, id))
         .limit(1);
 
@@ -218,6 +227,7 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
         foodNameFr: food.nameFr,
         foodImage: food.image,
         foodDescription: food.description,
+        foodAddonsIds: food.addonsId,
     })
         .from(orderItems)
         .leftJoin(food, eq(orderItems.foodId, food.id))
@@ -280,11 +290,31 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
         const finalVarPrice = parseFloat(item.variationsPrice || "0") > 0 ? parseFloat(item.variationsPrice || "0") : totalCalculatedVarPrice;
         const finalTotalPrice = (parseFloat(item.basePrice || "0") + finalVarPrice) * item.quantity;
 
+        // 🍟 جلب تفاصيل الـ Addons الخاصة بالأكل
+        let foodAddons: any[] = [];
+        const addonIds = item.foodAddonsIds;
+        if (Array.isArray(addonIds) && addonIds.length > 0) {
+            foodAddons = await db
+                .select({
+                    id: addons.id,
+                    name: addons.name,
+                    nameAr: addons.nameAr,
+                    nameFr: addons.nameFr,
+                    price: addons.price,
+                    status: addons.status,
+                    categoryId: addons.adonescategoryid,
+                })
+                .from(addons)
+                .where(inArray(addons.id, addonIds));
+        }
+
         return {
             ...item,
+            foodAddonsIds: undefined,
             variationsPrice: finalVarPrice.toFixed(2),
             totalPrice: finalTotalPrice.toFixed(2),
-            variations: cleanVariations
+            variations: cleanVariations,
+            addons: foodAddons,
         };
     }));
 
@@ -357,6 +387,8 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             branch: orderDetail.branch,
             restaurant: orderDetail.restaurant,
             address: orderDetail.address,
+            zone: orderDetail.zone,
+            driver: orderDetail.driver,
             items: formattedItems
         }
     });
