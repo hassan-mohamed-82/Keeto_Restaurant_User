@@ -916,7 +916,7 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
 
     doc.moveDown(1);
     doc.fontSize(10).text('Thank you for your order', { align: 'center' });
-    doc.fontSize(8).text('Powered by Systego', { align: 'center' });
+    doc.fontSize(8).text('Powered by keeto', { align: 'center' });
 
     doc.end();
 };
