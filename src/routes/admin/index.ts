@@ -39,6 +39,7 @@ import RestaurantUserRouter from "./restraurant_user";
 import CashierRouter from "./cashier";
 import PointsProductsRouter from "./pointsProducts";
 import PointsOrdersRouter from "./pointsOrders";
+import DeliveryManRouter from "./delivery_man";
 const router = Router();
 
 router.use("/auth", authRouter);
@@ -80,5 +81,6 @@ router.use("/expenses", expenseRouter);
 router.use("/expense-categories", expenseCategoryRouter);
 router.use("/points-products", PointsProductsRouter);
 router.use("/points-orders", PointsOrdersRouter)
+router.use("/delivery-men", DeliveryManRouter);
 
 export default router;

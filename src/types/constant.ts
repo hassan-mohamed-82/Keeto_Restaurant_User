@@ -27,7 +27,8 @@ export const MODULES = [
     "restaurantadmin",
     "roles",
     "subcategory",
-    "zone"
+    "zone",
+    "delivery_man"
 
     
 ] as const;

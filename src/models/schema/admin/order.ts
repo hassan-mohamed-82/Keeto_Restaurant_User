@@ -6,6 +6,7 @@ import { users } from "../user/Users";
 import { branches } from "../../schema";
 import { addresses } from "../user/address";
 import { selectReasons } from "./selectReasons";
+import { deliveryMen } from "./delivery_man";
 
 export const orders = mysqlTable("orders", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
@@ -26,6 +27,9 @@ export const orders = mysqlTable("orders", {
 
     addressId: char("address_id", { length: 36 })
         .references(() => addresses.id),
+
+    deliveryManId: char("delivery_man_id", { length: 36 })
+        .references(() => deliveryMen.id),
 
     orderSource: mysqlEnum("order_source", ["online_order", "food_aggregator","my_keeto"]).notNull(),
 

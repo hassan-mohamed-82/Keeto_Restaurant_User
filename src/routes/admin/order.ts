@@ -14,7 +14,8 @@ import {
     getReasons,
     getRefundOrders,
     generateOrderInvoicePDF,
-    getallnumbersoforders
+    getallnumbersoforders,
+    assignDelivery
 } from "../../controllers/admin/order";
 
 const router = Router();
@@ -43,6 +44,9 @@ router.get("/:orderId/invoice", hasPermission("orders", "read", true), catchAsyn
 
 // ✅ تحديث حالة الأوردر - يحتاج صلاحية update + التحقق من الفرع
 router.put("/:orderId", hasPermission("orders", "update", true), catchAsync(updateOrderStatus));
+
+// ✅ تعيين مندوب توصيل لطلب - يحتاج صلاحية update
+router.put("/:orderId/assign-delivery", hasPermission("orders", "update", true), catchAsync(assignDelivery));
 
 // ✅ الحصول على أرقام جميع الأوردرات (عدادات حسب الحالة)
 

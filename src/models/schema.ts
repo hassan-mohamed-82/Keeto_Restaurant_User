@@ -50,3 +50,4 @@ export * from "./schema/admin/FinancialAccount";
 export * from "./schema/admin/pointsProducts";
 export * from "./schema/admin/pointsRedemptions";
 export * from "./schema/admin/userPointsTransactions";
+export * from "./schema/admin/delivery_man";

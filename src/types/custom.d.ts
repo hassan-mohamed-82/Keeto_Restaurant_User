@@ -86,7 +86,8 @@ export type ModuleName =
     | "restaurant QR"
     | "restaurantadmin"
     | "subcategory"
-    | "zone";
+    | "zone"
+    | "delivery_man";
 
 export interface PermissionAction {
     id?: string;

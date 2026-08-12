@@ -15,6 +15,7 @@ import {
     pointsProducts,
     userPointsTransactions,
     userRestaurantPoints,
+    deliveryMen,
 } from "../../models/schema";
 import { eq, and, desc, inArray, sql } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
@@ -956,4 +957,36 @@ export const getallnumbersoforders = async (req: Request, res: Response) => {
             statusCounts
         } 
     });
+};
+
+// ==========================================
+// 6. تعيين مندوب توصيل لطلب (Assign Delivery)
+// ==========================================
+export const assignDelivery = async (req: Request, res: Response) => {
+    const { orderId } = req.params;
+    const { deliveryManId } = req.body;
+
+    const adminRestaurantId = req.user?.restaurantId || req.user?.id;
+    const adminBranchId = req.user?.branchId;
+
+    if (!deliveryManId) throw new BadRequest("Delivery Man ID is required");
+
+    // 1. تحقق من الطلب
+    const [existingOrder] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+    if (!existingOrder) throw new NotFound("Order not found");
+
+    if (existingOrder.restaurantId !== adminRestaurantId) throw new BadRequest("Unauthorized");
+    if (adminBranchId && existingOrder.branchId !== adminBranchId) throw new BadRequest("Unauthorized");
+
+    // 2. تحقق من المندوب
+    const [deliveryMan] = await db.select().from(deliveryMen).where(eq(deliveryMen.id, deliveryManId)).limit(1);
+    if (!deliveryMan) throw new NotFound("Delivery Man not found");
+    if (deliveryMan.restaurantId !== adminRestaurantId) throw new BadRequest("Unauthorized: Delivery man does not belong to your restaurant");
+
+    // 3. تحديث الطلب وإسناد المندوب
+    await db.update(orders)
+        .set({ deliveryManId, updatedAt: new Date() })
+        .where(eq(orders.id, orderId));
+
+    return SuccessResponse(res, { message: "Delivery man successfully assigned to order" });
 };
