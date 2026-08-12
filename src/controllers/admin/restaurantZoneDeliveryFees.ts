@@ -270,8 +270,23 @@ export const deleteDeliveryFee = async (req: Request, res: Response) => {
 // SELECT Active Zones and Cities
 // =============================================
 export const select = async (req: Request, res: Response) => {
-    const zonesselect = await db.select().from(zones).where(eq(zones.status, "active"));
+    const rawZones = await db.select().from(zones).where(eq(zones.status, "active"));
     const citiesselect = await db.select().from(cities).where(eq(cities.status, "active"));
+
+    const zonesselect = rawZones.map((zone) => {
+        let parsedCoordinates = zone.coordinates;
+        if (typeof parsedCoordinates === "string") {
+            try {
+                parsedCoordinates = JSON.parse(parsedCoordinates);
+            } catch (error) {
+                console.error(`Error parsing coordinates for zone ${zone.id}:`, error);
+            }
+        }
+        return {
+            ...zone,
+            coordinates: parsedCoordinates
+        };
+    });
 
     return SuccessResponse(res, {
         message: "Get delivery fees select data success",

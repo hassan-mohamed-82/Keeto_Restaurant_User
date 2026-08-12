@@ -48,7 +48,7 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
     // لو ده مدير فرع، نفلتر الأوردرات لفرعه هو بس بشكل إجباري
     if (adminBranchId) {
         queryConditions = and(queryConditions, eq(orders.branchId, adminBranchId)) as any;
-    } 
+    }
     // لو ده المالك وبعت branchId في الـ Query عشان يفلتر بيه
     else if (req.query?.branchId) {
         queryConditions = and(queryConditions, eq(orders.branchId, req.query.branchId as string)) as any;
@@ -98,7 +98,7 @@ const getOrdersByStatus = async (req: Request, res: Response, status: "pending" 
     // لو ده مدير فرع، نفلتر إجباري لفرعه هو بس
     if (adminBranchId) {
         conditions.push(eq(orders.branchId, adminBranchId));
-    } 
+    }
     // لو ده المالك وبعت branchId يفلتر بيه
     else if (req.query?.branchId) {
         conditions.push(eq(orders.branchId, req.query.branchId as string));
@@ -174,14 +174,21 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             street: addresses.street,
             number: addresses.number,
             floor: addresses.floor,
+            apartment: addresses.apartment,
             landmark: addresses.landmark,
             location: addresses.location,
+        },
+        driver: {
+            id: deliveryMen.id,
+            name: deliveryMen.name,
+            phone: deliveryMen.phone,
         },
     })
         .from(orders)
         .leftJoin(users, eq(orders.userId, users.id))
         .leftJoin(branches, eq(orders.branchId, branches.id))
         .leftJoin(restaurants, eq(orders.restaurantId, restaurants.id))
+        .leftJoin(deliveryMen, eq(orders.deliveryManId, deliveryMen.id))
         .leftJoin(addresses, eq(orders.addressId, addresses.id))
         .where(eq(orders.id, id))
         .limit(1);
@@ -219,7 +226,7 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
     // ✅ 3. تنظيف الـ Variations وجلب الأسماء وحساب السعر ديناميكياً
     const formattedItems = await Promise.all(items.map(async (item) => {
         let cleanVariations = item.variations;
-        
+
         if (typeof cleanVariations === 'string') {
             try {
                 cleanVariations = JSON.parse(cleanVariations);
@@ -253,7 +260,7 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
                     if (optDb) {
                         optionName = optDb.optionName || optionName;
                         optionNameAr = optDb.optionNameAr || optionNameAr;
-                        
+
                         // 💰 جلب سعر الفارييشن
                         const price = parseFloat((optDb as any).price || optDb.additionalPrice || "0");
                         totalCalculatedVarPrice += price;
@@ -290,9 +297,9 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             const [pm] = await db.select({
                 id: paymentMethods.id,
                 name: paymentMethods.name,
-                nameAr: paymentMethods.nameAr 
+                nameAr: paymentMethods.nameAr
             }).from(paymentMethods).where(eq(paymentMethods.id, pmValue)).limit(1);
-            
+
             if (pm) {
                 pmDetails = {
                     id: pm.id,
@@ -341,12 +348,12 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             createdAt: orderDetail.order.createdAt,
             updatedAt: orderDetail.order.updatedAt,
             customer: orderDetail.customer,
-            
+
             // ✅ فصلنا الداتا عشان الرياكت ميضربش ويقرأ الـ ID زي ما هو متعود
             paymentMethod: typeof pmDetails === "object" && pmDetails !== null ? pmDetails.id : pmDetails,
             paymentMethodName: typeof pmDetails === "object" && pmDetails !== null ? pmDetails.name : pmDetails,
             paymentMethodNameAr: typeof pmDetails === "object" && pmDetails !== null ? pmDetails.nameAr : pmDetails,
-            
+
             branch: orderDetail.branch,
             restaurant: orderDetail.restaurant,
             address: orderDetail.address,
@@ -737,7 +744,7 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
             try {
                 cleanVariations = JSON.parse(cleanVariations);
                 if (typeof cleanVariations === 'string') cleanVariations = JSON.parse(cleanVariations);
-            } catch (error) {}
+            } catch (error) { }
         }
 
         let varDetails: { name: string, price: number }[] = [];
@@ -763,7 +770,7 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
         return {
             ...item,
             finalTotalPrice,
-            variationDetails: varDetails 
+            variationDetails: varDetails
         };
     }));
 
@@ -778,7 +785,7 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
             else paymentName = pmValue;
         } catch (error) {
             console.error("Error fetching payment method for PDF:", error);
-            paymentName = "Cash"; 
+            paymentName = "Cash";
         }
     } else {
         switch (pmValue) {
@@ -802,7 +809,7 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
     if (orderDetail.branch?.name) {
         doc.fontSize(12).text(orderDetail.branch.name, { align: 'center' });
     }
-    
+
     doc.moveDown(0.5);
     doc.moveTo(10, doc.y).lineTo(240, doc.y).dash(2, { space: 2 }).stroke();
     doc.undash();
@@ -811,22 +818,22 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
     // Order Info
     doc.fontSize(10);
     doc.text(`Order #: ${orderDetail.order.dailyOrderNumber}`);
-    
+
     const orderDate = new Date(orderDetail.order.createdAt || new Date());
-    
+
     // ✅ تحويل الوقت والتاريخ لتوقيت القاهرة بشكل صريح
     const cairoTimeStr = orderDate.toLocaleTimeString("en-US", { timeZone: "Africa/Cairo" });
     const cairoDateStr = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo", year: "numeric", month: "2-digit", day: "2-digit" }).format(orderDate);
 
     doc.text(`Date: ${cairoDateStr}`);
     doc.text(`Time: ${cairoTimeStr}`);
-    
+
     doc.text(`Branch: ${orderDetail.branch?.name || 'N/A'}`);
     doc.text(`Client: ${orderDetail.customer?.name || 'Guest'}`);
     doc.text(`Phone: ${orderDetail.customer?.phone || 'N/A'}`);
     doc.text(`Order Type: ${orderDetail.order.orderType}`);
     doc.text(`Payment: ${paymentName}`);
-    
+
     doc.moveDown(0.5);
     doc.moveTo(10, doc.y).lineTo(240, doc.y).dash(2, { space: 2 }).stroke();
     doc.undash();
@@ -840,7 +847,7 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
         let details = `Bldg: ${orderDetail.address.number || ''}`;
         if (orderDetail.address.floor) details += ` | Floor: ${orderDetail.address.floor}`;
         doc.text(details);
-        
+
         doc.moveDown(0.5);
         doc.moveTo(10, doc.y).lineTo(240, doc.y).dash(2, { space: 2 }).stroke();
         doc.undash();
@@ -854,7 +861,7 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
     doc.text('Price', 140, itemStartY, { width: 45, align: 'right' });
     doc.text('Total', 185, itemStartY, { width: 55, align: 'right' });
     doc.moveDown(0.2);
-    
+
     doc.moveTo(10, doc.y).lineTo(240, doc.y).stroke();
     doc.moveDown(0.5);
 
@@ -862,14 +869,14 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
     for (const item of formattedItems) {
         const currentY = doc.y;
         const name = item.foodName || item.foodNameAr || 'Item';
-        
+
         doc.text(name, 10, currentY, { width: 100 });
         const nextY = doc.y;
-        
+
         doc.text(item.quantity.toString(), 110, currentY, { width: 30, align: 'right' });
         doc.text(parseFloat(item.basePrice as string).toFixed(2), 140, currentY, { width: 45, align: 'right' });
         doc.text(item.finalTotalPrice.toFixed(2), 185, currentY, { width: 55, align: 'right' });
-        
+
         doc.y = nextY;
 
         // طباعة الفارييشنز تحت الصنف مع عرض السعر
@@ -884,7 +891,7 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
             }
             doc.fontSize(10);
         }
-        
+
         doc.moveDown(0.5);
     }
 
@@ -899,8 +906,8 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
 
     doc.text(`Total Product Price`, 10, doc.y, { continued: true }).text(`${subtotal}`, { align: 'right' });
     doc.text(`Delivery Fee`, 10, doc.y, { continued: true }).text(`${deliveryFee}`, { align: 'right' });
-    doc.text(`Service Fee`, 10, doc.y, { continued: true }).text(`${serviceFee}`, { align: 'right' }); 
-    
+    doc.text(`Service Fee`, 10, doc.y, { continued: true }).text(`${serviceFee}`, { align: 'right' });
+
     doc.moveDown(0.5);
     doc.moveTo(10, doc.y).lineTo(240, doc.y).stroke();
     doc.moveDown(0.5);
@@ -919,14 +926,14 @@ export const getallnumbersoforders = async (req: Request, res: Response) => {
     const adminBranchId = req.user?.branchId; // لو Null يبقى ده المالك
 
     if (!adminRestaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
-    
+
     // بناء الـ Query الأساسي
     let queryConditions = eq(orders.restaurantId, adminRestaurantId);
 
     // لو ده مدير فرع، نفلتر الأوردرات لفرعه هو بس بشكل إجباري
     if (adminBranchId) {
         queryConditions = and(queryConditions, eq(orders.branchId, adminBranchId)) as any;
-    } 
+    }
     // لو ده المالك وبعت branchId في الـ Query عشان يفلتر بيه
     else if (req.query?.branchId) {
         queryConditions = and(queryConditions, eq(orders.branchId, req.query.branchId as string)) as any;
@@ -951,11 +958,11 @@ export const getallnumbersoforders = async (req: Request, res: Response) => {
         return acc;
     }, {} as Record<string, number>);
 
-    return SuccessResponse(res, { 
+    return SuccessResponse(res, {
         data: {
             totalOrders,
             statusCounts
-        } 
+        }
     });
 };
 
