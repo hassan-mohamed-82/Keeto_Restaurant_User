@@ -37,7 +37,8 @@ export const createFood = async (req: Request, res: Response) => {
             startTime, endTime, search_tags,
             price, discount_type, discount_value, Maximum_Purchase, stock_type,
             status, variations, points,
-            nameAr, nameFr, descriptionAr, descriptionFr
+            nameAr, nameFr, descriptionAr, descriptionFr,
+            isOutOfStock
         } = req.body;
 
         const incomingAddons = req.body.addonsId ?? req.body.addons ?? req.body.addonIds ?? req.body['addonsId[]'] ?? req.body['addons[]'];
@@ -120,6 +121,7 @@ export const createFood = async (req: Request, res: Response) => {
                 price, discount_type: discount_type || "percentage",
                 discount_value: discount_value || null, Maximum_Purchase: Maximum_Purchase || null,
                 stock_type: stock_type || "unlimited", status: status || "active",
+                isOutOfStock: isOutOfStock ?? false,
                 points: points ?? 0,
             });
 
@@ -174,7 +176,7 @@ export const getAllFoods = async (req: Request, res: Response) => {
         description: food.description, descriptionAr: food.descriptionAr, descriptionFr: food.descriptionFr,
         image: food.image, restaurantid: food.restaurantid, categoryid: food.categoryid, subcategoryid: food.subcategoryid,
         foodtype: food.foodtype, Nutrition: food.Nutrition, allergen_ingredients: food.allergen_ingredients,
-        is_Halal: food.is_Halal, addonsId: food.addonsId, startTime: food.startTime, endTime: food.endTime,
+        is_Halal: food.is_Halal, isOutOfStock: food.isOutOfStock, addonsId: food.addonsId, startTime: food.startTime, endTime: food.endTime,
         search_tags: food.search_tags, price: food.price, discount_type: food.discount_type, discount_value: food.discount_value,
         Maximum_Purchase: food.Maximum_Purchase, points: food.points, stock_type: food.stock_type, status: food.status,
         createdAt: food.createdAt, updatedAt: food.updatedAt,
@@ -257,7 +259,7 @@ export const getAllFoods = async (req: Request, res: Response) => {
             addonsId: cleanAddonsArray, // ✅ إرجاع الـ Array نظيفة
             addonsDetails: foodAddonsDetails, // 🔥 تفاصيل الإضافات
             foodtype: f.foodtype, Nutrition: f.Nutrition, allergen_ingredients: f.allergen_ingredients,
-            is_Halal: f.is_Halal, startTime: f.startTime, endTime: f.endTime, search_tags: f.search_tags,
+            is_Halal: f.is_Halal, isOutOfStock: f.isOutOfStock, startTime: f.startTime, endTime: f.endTime, search_tags: f.search_tags,
             discount_type: f.discount_type, discount_value: f.discount_value, Maximum_Purchase: f.Maximum_Purchase,
             points: f.points ?? 0,
             stock_type: f.stock_type, createdAt: f.createdAt, updatedAt: f.updatedAt,
@@ -284,7 +286,7 @@ export const getFoodById = async (req: Request, res: Response) => {
         description: food.description, descriptionAr: food.descriptionAr, descriptionFr: food.descriptionFr,
         image: food.image, restaurantid: food.restaurantid, categoryid: food.categoryid, subcategoryid: food.subcategoryid,
         foodtype: food.foodtype, Nutrition: food.Nutrition, allergen_ingredients: food.allergen_ingredients,
-        is_Halal: food.is_Halal, addonsId: food.addonsId, startTime: food.startTime, endTime: food.endTime,
+        is_Halal: food.is_Halal, isOutOfStock: food.isOutOfStock, addonsId: food.addonsId, startTime: food.startTime, endTime: food.endTime,
         search_tags: food.search_tags, price: food.price, discount_type: food.discount_type, discount_value: food.discount_value,
         Maximum_Purchase: food.Maximum_Purchase, points: food.points, stock_type: food.stock_type, status: food.status,
         createdAt: food.createdAt, updatedAt: food.updatedAt,
@@ -360,7 +362,7 @@ export const updateFood = async (req: Request, res: Response) => {
         "foodtype", "Nutrition", "allergen_ingredients", "is_Halal",
         "startTime", "endTime", "search_tags",
         "discount_type", "discount_value", "Maximum_Purchase", "stock_type",
-        "points"
+        "points", "isOutOfStock"
     ];
 
     const updateData: any = {

@@ -63,7 +63,7 @@ export const food = mysqlTable("food", {
     stock_type: mysqlEnum("stock_type", ["limited", "unlimited", "daily"])
         .default("unlimited"),
 
-    // ❌ تم حذف variations نهائيًا
+    isOutOfStock: boolean("is_out_of_stock").default(false),
 
     status: mysqlEnum("status", ["active", "inactive"])
         .default("active"),
