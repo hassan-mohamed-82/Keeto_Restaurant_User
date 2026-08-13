@@ -115,9 +115,24 @@ export const getDeliveryFees = async (req: Request, res: Response) => {
         .leftJoin(cities, eq(restaurantZoneDeliveryFees.cityId, cities.id))
         .where(eq(restaurantZoneDeliveryFees.restaurantId, restaurantId));
 
+    const processedFees = rawFees.map((fee) => {
+        if (fee.zone) {
+            let parsedCoordinates = fee.zone.defaultCoordinates;
+            if (typeof parsedCoordinates === "string") {
+                try {
+                    parsedCoordinates = JSON.parse(parsedCoordinates);
+                } catch (error) {
+                    console.error(`Error parsing coordinates for zone ${fee.zone.id}:`, error);
+                }
+            }
+            fee.zone.defaultCoordinates = parsedCoordinates;
+        }
+        return fee;
+    });
+
     return SuccessResponse(res, {
         message: "Get delivery fees success",
-        data: rawFees,
+        data: processedFees,
     });
 };
 
@@ -168,9 +183,22 @@ export const getDeliveryFeeById = async (req: Request, res: Response) => {
 
     if (!fee[0]) throw new NotFound("Delivery fee not found or does not belong to your restaurant");
 
+    const resultFee = fee[0];
+    if (resultFee.zone) {
+        let parsedCoordinates = resultFee.zone.defaultCoordinates;
+        if (typeof parsedCoordinates === "string") {
+            try {
+                parsedCoordinates = JSON.parse(parsedCoordinates);
+            } catch (error) {
+                console.error(`Error parsing coordinates for zone ${resultFee.zone.id}:`, error);
+            }
+        }
+        resultFee.zone.defaultCoordinates = parsedCoordinates;
+    }
+
     return SuccessResponse(res, {
         message: "Get delivery fee by id success",
-        data: fee[0],
+        data: resultFee,
     });
 };
 
