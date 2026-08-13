@@ -304,6 +304,7 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             // استخراج معرفات الإضافات (IDs) في حال كانت مصفوفة من الكائنات
             const extractedIds = selectedAddonIds.map((addon: any) => {
                 if (typeof addon === "string") return addon;
+                if (addon && addon.addonId) return String(addon.addonId);
                 if (addon && addon.id) return String(addon.id);
                 return String(addon);
             }).filter(id => id && id.trim() !== "" && id !== "[object Object]");
