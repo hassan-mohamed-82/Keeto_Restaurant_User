@@ -48,7 +48,7 @@ export const checkout = async (req: Request | any, res: Response) => {
     // ==========================================
     // 🛡️ 1. Validation (التحقق من المدخلات)
     // ==========================================
-    const validOrderSources = ["online_order", "food_aggregator", "mykeeto"];
+    const validOrderSources = ["online_order_app", "online_order_web", "food_aggregator", "mykeeto"];
     if (!validOrderSources.includes(orderSource)) {
         throw new BadRequest("Invalid order source");
     }
