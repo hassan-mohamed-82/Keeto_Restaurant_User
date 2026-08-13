@@ -219,6 +219,7 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
         quantity: orderItems.quantity,
         basePrice: orderItems.basePrice,
         variationsPrice: orderItems.variationsPrice,
+        addonsPrice: orderItems.addonsPrice,
         totalPrice: orderItems.totalPrice,
         note: orderItems.note,
         variations: orderItems.variations,
@@ -288,7 +289,8 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
         }
 
         const finalVarPrice = parseFloat(item.variationsPrice || "0") > 0 ? parseFloat(item.variationsPrice || "0") : totalCalculatedVarPrice;
-        const finalTotalPrice = (parseFloat(item.basePrice || "0") + finalVarPrice) * item.quantity;
+        const finalAddonsPrice = parseFloat(item.addonsPrice || "0");
+        const finalTotalPrice = (parseFloat(item.basePrice || "0") + finalVarPrice + finalAddonsPrice) * item.quantity;
 
         // 🌟 جلب تفاصيل الـ Addons اللي اختارها العميل فعلاً
         let foodAddons: any[] = [];
@@ -329,6 +331,7 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             ...item,
             addons: foodAddons,
             variationsPrice: finalVarPrice.toFixed(2),
+            addonsPrice: finalAddonsPrice.toFixed(2),
             totalPrice: finalTotalPrice.toFixed(2),
             variations: cleanVariations,
         };
