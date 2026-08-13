@@ -1017,10 +1017,15 @@ export const assignDelivery = async (req: Request, res: Response) => {
     if (existingOrder.restaurantId !== adminRestaurantId) throw new BadRequest("Unauthorized");
     if (adminBranchId && existingOrder.branchId !== adminBranchId) throw new BadRequest("Unauthorized");
 
-    // 2. تحقق من المندوب
+    const orderType = existingOrder.orderType || (existingOrder as any).type;
+    if (orderType !== "delivery") {
+        throw new BadRequest("Cannot assign a delivery man to a non-delivery order");
+    }
     const [deliveryMan] = await db.select().from(deliveryMen).where(eq(deliveryMen.id, deliveryManId)).limit(1);
     if (!deliveryMan) throw new NotFound("Delivery Man not found");
-    if (deliveryMan.restaurantId !== adminRestaurantId) throw new BadRequest("Unauthorized: Delivery man does not belong to your restaurant");
+    if (deliveryMan.restaurantId !== adminRestaurantId) {
+        throw new BadRequest("Unauthorized: Delivery man does not belong to your restaurant");
+    }
 
     // 3. تحديث الطلب وإسناد المندوب
     await db.update(orders)
@@ -1028,4 +1033,35 @@ export const assignDelivery = async (req: Request, res: Response) => {
         .where(eq(orders.id, orderId));
 
     return SuccessResponse(res, { message: "Delivery man successfully assigned to order" });
+};
+
+//=======================================
+//  select delivery men
+//=======================================
+export const selectDeliveryMan = async (req: Request, res: Response) => {
+    const adminRestaurantId = req.user?.restaurantId || req.user?.id;
+    const adminBranchId = req.user?.branchId;
+
+    if (!adminRestaurantId) {
+        throw new BadRequest("Restaurant ID not found");
+    }
+
+    const conditions: any[] = [
+        eq(deliveryMen.restaurantId, adminRestaurantId),
+        eq(deliveryMen.isActive, true),
+    ];
+
+    if (adminBranchId) {
+        conditions.push(eq(deliveryMen.branchId, adminBranchId));
+    } 
+
+    const deliveryMenList = await db.select({
+        id: deliveryMen.id,
+        name: deliveryMen.name,
+        phone: deliveryMen.phone,
+    })
+        .from(deliveryMen)
+        .where(and(...conditions));
+
+    return SuccessResponse(res, { message: "Get delivery men success", data: deliveryMenList });
 };

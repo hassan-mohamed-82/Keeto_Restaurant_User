@@ -15,7 +15,8 @@ import {
     getRefundOrders,
     generateOrderInvoicePDF,
     getallnumbersoforders,
-    assignDelivery
+    assignDelivery,
+    selectDeliveryMan
 } from "../../controllers/admin/order";
 
 const router = Router();
@@ -23,6 +24,7 @@ const router = Router();
 // ✅ Get reasons - يحتاج صلاحية read
 router.get("/reasons", hasPermission("orders", "read"), catchAsync(getReasons));
 router.get("/numbers", hasPermission("orders", "read", true), catchAsync(getallnumbersoforders));
+router.get("/select", hasPermission("orders", "read", true), catchAsync(selectDeliveryMan))
 
 // ✅ كل الأوردرات - يحتاج صلاحية read + التحقق من الفرع
 router.get("/", hasPermission("orders", "read", true), catchAsync(getRestaurantOrders));
