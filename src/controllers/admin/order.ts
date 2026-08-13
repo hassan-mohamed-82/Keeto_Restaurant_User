@@ -301,18 +301,27 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             }
         }
         if (Array.isArray(selectedAddonIds) && selectedAddonIds.length > 0) {
-            foodAddons = await db
-                .select({
-                    id: addons.id,
-                    name: addons.name,
-                    nameAr: addons.nameAr,
-                    nameFr: addons.nameFr,
-                    price: addons.price,
-                    status: addons.status,
-                    categoryId: addons.adonescategoryid,
-                })
-                .from(addons)
-                .where(inArray(addons.id, selectedAddonIds));
+            // استخراج معرفات الإضافات (IDs) في حال كانت مصفوفة من الكائنات
+            const extractedIds = selectedAddonIds.map((addon: any) => {
+                if (typeof addon === "string") return addon;
+                if (addon && addon.id) return String(addon.id);
+                return String(addon);
+            }).filter(id => id && id.trim() !== "" && id !== "[object Object]");
+
+            if (extractedIds.length > 0) {
+                foodAddons = await db
+                    .select({
+                        id: addons.id,
+                        name: addons.name,
+                        nameAr: addons.nameAr,
+                        nameFr: addons.nameFr,
+                        price: addons.price,
+                        status: addons.status,
+                        categoryId: addons.adonescategoryid,
+                    })
+                    .from(addons)
+                    .where(inArray(addons.id, extractedIds));
+            }
         }
 
         return {
