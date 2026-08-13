@@ -12,7 +12,7 @@ export const createDeliveryMan = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Restaurant ID missing");
 
-    const { branchId, name, phone, email, password, image } = req.body;
+    const { branchId, name, phone, email, password, image , isActive } = req.body;
 
     if (!name || !phone) {
         throw new BadRequest("Missing required fields (name, phone)");
@@ -34,6 +34,7 @@ export const createDeliveryMan = async (req: Request, res: Response) => {
         email: email || null,
         password: hashedPassword,
         image: image || null,
+        isActive: isActive ?? true,
     });
 
     return SuccessResponse(res, { message: "Delivery man created successfully", data: { id } }, 201);
@@ -58,6 +59,7 @@ export const getDeliveryMen = async (req: Request, res: Response) => {
         phone: deliveryMen.phone,
         email: deliveryMen.email,
         image: deliveryMen.image,
+        isActive: deliveryMen.isActive,
         createdAt: deliveryMen.createdAt,
         updatedAt: deliveryMen.updatedAt,
     })
@@ -80,6 +82,7 @@ export const getDeliveryManById = async (req: Request, res: Response) => {
         phone: deliveryMen.phone,
         email: deliveryMen.email,
         image: deliveryMen.image,
+        isActive: deliveryMen.isActive,
         createdAt: deliveryMen.createdAt,
         updatedAt: deliveryMen.updatedAt,
     })
@@ -99,7 +102,7 @@ export const getDeliveryManById = async (req: Request, res: Response) => {
 
 export const updateDeliveryMan = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { branchId, name, phone, email, password, image } = req.body;
+    const { branchId, name, phone, email, password, image, isActive } = req.body;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Restaurant ID missing");
 
@@ -126,6 +129,8 @@ export const updateDeliveryMan = async (req: Request, res: Response) => {
     if (password) {
         updateData.password = await bcrypt.hash(password, 10);
     }
+
+    if (isActive !== undefined) updateData.isActive = isActive;
 
     await db
         .update(deliveryMen)

@@ -5,15 +5,17 @@ import { eq, and, desc } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { UnauthorizedError } from "../../Errors";
 import { NotFound } from "../../Errors/NotFound";
-
+import { BadRequest } from "../../Errors/BadRequest";
 // ==========================================
 // 1. Get Restaurant Notifications
 // ==========================================
 export const getMyNotifications = async (req: Request | any, res: Response) => {
     if (!req.user) throw new UnauthorizedError("Unauthenticated");
-    
+
     // Both restaurant owner and subadmins/managers belong to a restaurantId
-    const restaurantId = req.user.restaurantId || req.user.id; 
+    const restaurantId = req.user.restaurantId || req.user.branchId;
+
+    if (!restaurantId) throw new BadRequest("Restaurant ID not found");
 
     // Pagination
     const page = parseInt(req.query.page as string) || 1;
@@ -67,7 +69,9 @@ export const getMyNotifications = async (req: Request | any, res: Response) => {
 // ==========================================
 export const markNotificationAsRead = async (req: Request | any, res: Response) => {
     if (!req.user) throw new UnauthorizedError("Unauthenticated");
-    const restaurantId = req.user.restaurantId || req.user.id; 
+    const restaurantId = req.user.restaurantId || req.user.branchId;
+
+    if (!restaurantId) throw new BadRequest("Restaurant ID not found");
     const { id } = req.params;
 
     const [notification] = await db
@@ -93,7 +97,10 @@ export const markNotificationAsRead = async (req: Request | any, res: Response) 
 // ==========================================
 export const markAllNotificationsAsRead = async (req: Request | any, res: Response) => {
     if (!req.user) throw new UnauthorizedError("Unauthenticated");
-    const restaurantId = req.user.restaurantId || req.user.id; 
+    
+    const restaurantId = req.user.restaurantId || req.user.branchId;
+
+    if (!restaurantId) throw new BadRequest("Restaurant ID not found");
 
     await db.update(notifications)
         .set({ isRead: true })
