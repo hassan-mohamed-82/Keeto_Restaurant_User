@@ -118,6 +118,7 @@ export const checkout = async (req: Request | any, res: Response) => {
             variationsPrice: varPrice.toString(),
             totalPrice: itemTotal.toString(),
             variations: vars, // ✅ التعديل هنا: إضافة الفارييشنز عشان متكونش null
+            addons: item.addons || null, // ✅ الأدونز اللي اختارها العميل
             note: item.note || null
         });
     }

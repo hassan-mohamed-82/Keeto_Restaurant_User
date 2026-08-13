@@ -222,12 +222,12 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
         totalPrice: orderItems.totalPrice,
         note: orderItems.note,
         variations: orderItems.variations,
+        addons: orderItems.addons,
         foodName: food.name,
         foodNameAr: food.nameAr,
         foodNameFr: food.nameFr,
         foodImage: food.image,
         foodDescription: food.description,
-        foodAddonsIds: food.addonsId,
     })
         .from(orderItems)
         .leftJoin(food, eq(orderItems.foodId, food.id))
@@ -290,10 +290,17 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
         const finalVarPrice = parseFloat(item.variationsPrice || "0") > 0 ? parseFloat(item.variationsPrice || "0") : totalCalculatedVarPrice;
         const finalTotalPrice = (parseFloat(item.basePrice || "0") + finalVarPrice) * item.quantity;
 
-        // 🍟 جلب تفاصيل الـ Addons الخاصة بالأكل
+        // 🌟 جلب تفاصيل الـ Addons اللي اختارها العميل فعلاً
         let foodAddons: any[] = [];
-        const addonIds = item.foodAddonsIds;
-        if (Array.isArray(addonIds) && addonIds.length > 0) {
+        let selectedAddonIds = item.addons;
+        if (typeof selectedAddonIds === "string") {
+            try {
+                selectedAddonIds = JSON.parse(selectedAddonIds);
+            } catch {
+                selectedAddonIds = [];
+            }
+        }
+        if (Array.isArray(selectedAddonIds) && selectedAddonIds.length > 0) {
             foodAddons = await db
                 .select({
                     id: addons.id,
@@ -305,16 +312,15 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
                     categoryId: addons.adonescategoryid,
                 })
                 .from(addons)
-                .where(inArray(addons.id, addonIds));
+                .where(inArray(addons.id, selectedAddonIds));
         }
 
         return {
             ...item,
-            foodAddonsIds: undefined,
+            addons: foodAddons,
             variationsPrice: finalVarPrice.toFixed(2),
             totalPrice: finalTotalPrice.toFixed(2),
             variations: cleanVariations,
-            addons: foodAddons,
         };
     }));
 

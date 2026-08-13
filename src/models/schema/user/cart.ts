@@ -29,6 +29,9 @@ export const cartItems = mysqlTable("cart_items", {
     // 🔥 variations محفوظة بشكل snapshot
     variations: json("variations"),
 
+    // 🔥 addons محفوظة بشكل snapshot
+    addons: json("addons"),
+
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
 
