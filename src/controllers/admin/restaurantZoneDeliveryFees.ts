@@ -127,6 +127,17 @@ export const getDeliveryFees = async (req: Request, res: Response) => {
             }
             fee.zone.defaultCoordinates = parsedCoordinates;
         }
+
+        let parsedCustomCoordinates = fee.customCoordinates;
+        if (typeof parsedCustomCoordinates === "string") {
+            try {
+                parsedCustomCoordinates = JSON.parse(parsedCustomCoordinates);
+            } catch (error) {
+                console.error(`Error parsing custom coordinates for fee ${fee.id}:`, error);
+            }
+        }
+        fee.customCoordinates = parsedCustomCoordinates as any;
+
         return fee;
     });
 
@@ -195,6 +206,16 @@ export const getDeliveryFeeById = async (req: Request, res: Response) => {
         }
         resultFee.zone.defaultCoordinates = parsedCoordinates;
     }
+
+    let parsedCustomCoordinates = resultFee.customCoordinates;
+    if (typeof parsedCustomCoordinates === "string") {
+        try {
+            parsedCustomCoordinates = JSON.parse(parsedCustomCoordinates);
+        } catch (error) {
+            console.error(`Error parsing custom coordinates for fee ${resultFee.id}:`, error);
+        }
+    }
+    resultFee.customCoordinates = parsedCustomCoordinates as any;
 
     return SuccessResponse(res, {
         message: "Get delivery fee by id success",
