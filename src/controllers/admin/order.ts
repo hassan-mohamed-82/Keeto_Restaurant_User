@@ -18,6 +18,7 @@ import {
     userPointsTransactions,
     userRestaurantPoints,
     deliveryMen,
+    restaurantZoneDeliveryFees,
 } from "../../models/schema";
 import { eq, and, desc, inArray, sql } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
@@ -27,6 +28,124 @@ import { v4 as uuidv4 } from "uuid";
 import { selectReasons } from "../../models/schema/admin/selectReasons";
 import { sendPushNotification } from "../../utils/notifications";
 import { UnauthorizedError } from "../../Errors";
+
+// ==========================================
+// Helper: استنتاج الزون من إحداثيات العنوان
+// يُستخدم فقط عندما يكون zoneId في العنوان فارغاً (null)
+// ==========================================
+/**
+ * يحدد أنسب zone لنقطة جغرافية معينة بناءً على zones المطعم النشطة.
+ * - يتحقق من التقاطع باستخدام Ray-Casting (Polygon) أو نصف القطر (Radius).
+ * - في حال وجود أكثر من zone تحتوي النقطة، تُختار الـ zone ذات أعلى رسوم توصيل
+ *   (الأكثر تحديداً).
+ *
+ * @param lat خط عرض العنوان
+ * @param lng خط طول العنوان
+ * @param restaurantId معرف المطعم
+ * @returns بيانات الـ zone المُستنتجة، أو null إن لم تتوافق أي zone
+ */
+async function resolveZoneFromCoords(
+    lat: number | null | undefined,
+    lng: number | null | undefined,
+    restaurantId: string
+): Promise<{ id: string; name: string; nameAr: string | null; nameFr: string | null; deliveryFee: string } | null> {
+    if (!lat || !lng) return null;
+
+    // جلب كل zones المطعم النشطة مع بيانات الـ zone نفسها
+    const feesWithZones = await db
+        .select({
+            fee: {
+                id: restaurantZoneDeliveryFees.id,
+                zoneId: restaurantZoneDeliveryFees.zoneId,
+                coverageType: restaurantZoneDeliveryFees.coverageType,
+                customCoordinates: restaurantZoneDeliveryFees.customCoordinates,
+                customRadiusKm: restaurantZoneDeliveryFees.customRadiusKm,
+                deliveryFee: restaurantZoneDeliveryFees.deliveryFee,
+            },
+            zone: {
+                id: zones.id,
+                name: zones.name,
+                nameAr: zones.nameAr,
+                nameFr: zones.nameFr,
+                coordinates: zones.coordinates,
+                coverageAreaRadiusKm: zones.coverageAreaRadiusKm,
+            },
+        })
+        .from(restaurantZoneDeliveryFees)
+        .leftJoin(zones, eq(restaurantZoneDeliveryFees.zoneId, zones.id))
+        .where(
+            and(
+                eq(restaurantZoneDeliveryFees.restaurantId, restaurantId),
+                eq(restaurantZoneDeliveryFees.status, "active")
+            )
+        );
+
+    // --- Ray-casting algorithm للـ Polygon ---
+    const pointInPolygon = (pLat: number, pLng: number, polygon: { lat: number; lng: number }[]): boolean => {
+        let inside = false;
+        const n = polygon.length;
+        for (let i = 0, j = n - 1; i < n; j = i++) {
+            const xi = polygon[i].lng, yi = polygon[i].lat;
+            const xj = polygon[j].lng, yj = polygon[j].lat;
+            const intersect = yi > pLat !== yj > pLat && pLng < ((xj - xi) * (pLat - yi)) / (yj - yi) + xi;
+            if (intersect) inside = !inside;
+        }
+        return inside;
+    };
+
+    // --- Haversine distance بالكيلومتر ---
+    const haversineKm = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
+        const R = 6371;
+        const dLat = ((lat2 - lat1) * Math.PI) / 180;
+        const dLng = ((lng2 - lng1) * Math.PI) / 180;
+        const a =
+            Math.sin(dLat / 2) ** 2 +
+            Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    };
+
+    let bestMatch: { id: string; name: string; nameAr: string | null; nameFr: string | null; deliveryFee: string } | null = null;
+    let bestFee = -1;
+
+    for (const row of feesWithZones) {
+        if (!row.zone) continue;
+
+        // تحديد نوع التغطية
+        const coverageType = row.fee.coverageType || "POLYGON";
+
+        // الإحداثيات: نفضّل الـ custom، ثم الافتراضية من الـ zone
+        const coords = (row.fee.customCoordinates as { lat: number; lng: number }[] | null) || row.zone.coordinates;
+        const radiusKm = parseFloat((row.fee.customRadiusKm || row.zone.coverageAreaRadiusKm || "0") as string);
+
+        let isInside = false;
+
+        if (coverageType === "RADIUS" && radiusKm > 0 && coords && coords.length > 0) {
+            // مركز الـ zone = أول نقطة في المصفوفة (أو يمكن حساب المركز)
+            const center = coords[0];
+            const distKm = haversineKm(lat, lng, center.lat, center.lng);
+            isInside = distKm <= radiusKm;
+        } else if (coords && coords.length >= 3) {
+            isInside = pointInPolygon(lat, lng, coords);
+        }
+
+        if (isInside) {
+            const fee = parseFloat((row.fee.deliveryFee || "0") as string);
+            // نختار الـ zone ذات أعلى رسوم توصيل (الأكثر تحديداً)
+            if (fee > bestFee) {
+                bestFee = fee;
+                bestMatch = {
+                    id: row.zone.id,
+                    name: row.zone.name,
+                    nameAr: row.zone.nameAr ?? null,
+                    nameFr: row.zone.nameFr ?? null,
+                    deliveryFee: row.fee.deliveryFee as string,
+                };
+            }
+        }
+    }
+
+    return bestMatch;
+}
 
 // ==========================================
 // 1. جلب كل الأوردرات الخاصة بالمطعم/الفرع
@@ -210,6 +329,30 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
     }
     if (adminBranchId && orderDetail.order.branchId !== adminBranchId) {
         throw new BadRequest("Unauthorized: Order does not belong to your branch");
+    }
+
+    // ==========================================
+    // 🗺️ Fallback: استنتاج الزون من إحداثيات العنوان إذا كان zone فارغاً
+    // يُطبَّق فقط عندما يكون النوع delivery وzone = null
+    // ==========================================
+    let resolvedZone = orderDetail.zone?.id
+        ? orderDetail.zone
+        : null;
+
+    if (!resolvedZone && orderDetail.order.orderType === "delivery" && orderDetail.address && orderDetail.address.lat) {
+        const restaurantId = orderDetail.order.restaurantId;
+        const addrLat = parseFloat(orderDetail.address.lat as string);
+        const addrLng = parseFloat(orderDetail.address.lng as string);
+
+        const detected = await resolveZoneFromCoords(addrLat, addrLng, restaurantId);
+        if (detected) {
+            resolvedZone = {
+                id: detected.id,
+                name: detected.name,
+                nameAr: detected.nameAr ?? "",
+                nameFr: detected.nameFr ?? "",
+            };
+        }
     }
 
     // 2. جلب أصناف الأكل (Order Items)
@@ -406,7 +549,7 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             branch: orderDetail.branch,
             restaurant: orderDetail.restaurant,
             address: orderDetail.address,
-            zone: orderDetail.zone,
+            zone: resolvedZone,
             driver: orderDetail.driver,
             items: formattedItems
         }
@@ -774,6 +917,18 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
         throw new BadRequest("Unauthorized: Order does not belong to your branch");
     }
 
+    // ==========================================
+    // 🗺️ Fallback: استنتاج الزون للـ PDF إذا كان zone فارغاً
+    // ==========================================
+    let pdfZoneName = orderDetail.zone?.name || "";
+
+    if (!pdfZoneName && orderDetail.order.orderType === "delivery" && orderDetail.address?.lat) {
+        const addrLat = parseFloat((orderDetail.address as any).lat as string);
+        const addrLng = parseFloat((orderDetail.address as any).lng as string);
+        const detected = await resolveZoneFromCoords(addrLat, addrLng, orderDetail.order.restaurantId);
+        if (detected) pdfZoneName = detected.name;
+    }
+
     // 2. جلب أصناف الأكل والتفاصيل (Variations)
     const items = await db.select({
         quantity: orderItems.quantity,
@@ -893,7 +1048,7 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
     // Delivery Address if applicable
     if (orderDetail.order.orderType === 'delivery' && orderDetail.address) {
         doc.text('Delivery Address:', { underline: true });
-        doc.text(`Zone: ${orderDetail.zone?.name || ''}`);
+        doc.text(`Zone: ${pdfZoneName}`);
         doc.text(`Street: ${orderDetail.address.street || ''}`);
         let details = `Bldg: ${orderDetail.address.number || ''}`;
         if (orderDetail.address.floor) details += ` | Floor: ${orderDetail.address.floor}`;
