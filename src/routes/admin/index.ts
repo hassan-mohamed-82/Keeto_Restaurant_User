@@ -12,6 +12,7 @@ import walletsRouter from "./restaurant_wallets"
 import restaurantsettingRouter from "./restaurantsetting";
 import branchesRouter from "./branches";
 import branchemenuRouter from "./branchemenu";
+import foodLocksRouter from "./foodLocks";
 import OrderRouter from "./order"
 import IngredientsRouter from "./ingredients"
 import IngredientCategoryRouter from "./IngredientCategory";
@@ -55,6 +56,7 @@ router.use("/subcategories", SubcategoryRouter);
 router.use("/order", OrderRouter);
 router.use("/addons", AddonRouter);
 router.use("/branchemenu", branchemenuRouter);
+router.use("/food-locks", foodLocksRouter);
 router.use("/FinancialAccount", FinancialAccountRouter);
 router.use("/food", FoodRouter);
 router.use("/image", ImageRouter);
