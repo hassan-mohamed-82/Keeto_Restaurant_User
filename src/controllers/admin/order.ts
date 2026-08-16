@@ -31,13 +31,87 @@ import { UnauthorizedError } from "../../Errors";
 
 // ==========================================
 // Helper: استنتاج الزون من إحداثيات العنوان
-// يُستخدم فقط عندما يكون zoneId في العنوان فارغاً (null)
+// يُستخدم عندما يكون zoneId في العنوان فارغاً (null) أو لتحديد الزون بدقة
 // ==========================================
+
 /**
- * يحدد أنسب zone لنقطة جغرافية معينة بناءً على zones المطعم النشطة.
- * - يتحقق من التقاطع باستخدام Ray-Casting (Polygon) أو نصف القطر (Radius).
- * - في حال وجود أكثر من zone تحتوي النقطة، تُختار الـ zone ذات أعلى رسوم توصيل
- *   (الأكثر تحديداً).
+ * دالة مساعدة لفك واستخراج مصفوفة النقاط {lat, lng} من أي شكل محتمل (JSON string, GeoJSON, Array, Objects)
+ */
+function parseAndNormalizeCoordinates(raw: any): { lat: number; lng: number }[] {
+    if (!raw) return [];
+    let parsed = raw;
+
+    // في حال كانت الداتا مشفرة كـ JSON string مرة أو أكثر
+    while (typeof parsed === "string") {
+        try {
+            parsed = JSON.parse(parsed);
+        } catch (e) {
+            break;
+        }
+    }
+
+    // إذا كانت مغلفة بمصفوفات إضافية (مثل GeoJSON Polygon coordinates: [[[lng, lat], ...]])
+    while (Array.isArray(parsed) && parsed.length === 1 && Array.isArray(parsed[0])) {
+        parsed = parsed[0];
+    }
+
+    if (!Array.isArray(parsed)) return [];
+
+    const result: { lat: number; lng: number }[] = [];
+    for (const item of parsed) {
+        if (!item) continue;
+        let pLat: number | null = null;
+        let pLng: number | null = null;
+
+        if (Array.isArray(item) && item.length >= 2) {
+            pLng = Number(item[0]);
+            pLat = Number(item[1]);
+        } else if (typeof item === "object") {
+            pLat = item.lat !== undefined ? Number(item.lat) : (item.latitude !== undefined ? Number(item.latitude) : (item.latitud !== undefined ? Number(item.latitud) : null));
+            pLng = item.lng !== undefined ? Number(item.lng) : (item.longitude !== undefined ? Number(item.longitude) : (item.long !== undefined ? Number(item.long) : null));
+        }
+
+        if (pLat !== null && pLng !== null && !isNaN(pLat) && !isNaN(pLng)) {
+            result.push({ lat: pLat, lng: pLng });
+        }
+    }
+
+    return result;
+}
+
+/**
+ * خوارزمية Ray-Casting للتأكد من وقوع النقطة داخل مضلع (Polygon)
+ */
+function isPointInPolygon(pLat: number, pLng: number, polygon: { lat: number; lng: number }[]): boolean {
+    if (!polygon || polygon.length < 3) return false;
+    let inside = false;
+    const n = polygon.length;
+    for (let i = 0, j = n - 1; i < n; j = i++) {
+        const xi = Number(polygon[i].lng), yi = Number(polygon[i].lat);
+        const xj = Number(polygon[j].lng), yj = Number(polygon[j].lat);
+        if (isNaN(xi) || isNaN(yi) || isNaN(xj) || isNaN(yj)) continue;
+        const intersect = ((yi > pLat) !== (yj > pLat)) &&
+            (pLng < ((xj - xi) * (pLat - yi)) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
+    }
+    return inside;
+}
+
+/**
+ * حساب المسافة بين نقطتين جغرافيتين بالكيلومتر (Haversine Formula)
+ */
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+    const R = 6371;
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLng = ((lng2 - lng1) * Math.PI) / 180;
+    const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/**
+ * يحدد أنسب zone لنقطة جغرافية معينة بناءً على zones المطعم النشطة، مع fallback للـ zones العامة إن لم توجد.
  *
  * @param lat خط عرض العنوان
  * @param lng خط طول العنوان
@@ -45,101 +119,135 @@ import { UnauthorizedError } from "../../Errors";
  * @returns بيانات الـ zone المُستنتجة، أو null إن لم تتوافق أي zone
  */
 async function resolveZoneFromCoords(
-    lat: number | null | undefined,
-    lng: number | null | undefined,
-    restaurantId: string
+    lat: number | string | null | undefined,
+    lng: number | string | null | undefined,
+    restaurantId?: string | null
 ): Promise<{ id: string; name: string; nameAr: string | null; nameFr: string | null; deliveryFee: string } | null> {
-    if (!lat || !lng) return null;
+    if (lat === null || lat === undefined || lng === null || lng === undefined) return null;
+    const numLat = typeof lat === "number" ? lat : parseFloat(String(lat));
+    const numLng = typeof lng === "number" ? lng : parseFloat(String(lng));
+    if (isNaN(numLat) || isNaN(numLng)) return null;
 
-    // جلب كل zones المطعم النشطة مع بيانات الـ zone نفسها
-    const feesWithZones = await db
-        .select({
-            fee: {
-                id: restaurantZoneDeliveryFees.id,
-                zoneId: restaurantZoneDeliveryFees.zoneId,
-                coverageType: restaurantZoneDeliveryFees.coverageType,
-                customCoordinates: restaurantZoneDeliveryFees.customCoordinates,
-                customRadiusKm: restaurantZoneDeliveryFees.customRadiusKm,
-                deliveryFee: restaurantZoneDeliveryFees.deliveryFee,
-            },
-            zone: {
+    let bestMatch: { id: string; name: string; nameAr: string | null; nameFr: string | null; deliveryFee: string } | null = null;
+    let bestFee = -1;
+
+    // 1. فحص الـ zones المخصصة للمطعم أولاً (في حال وجود restaurantId)
+    if (restaurantId) {
+        const feesWithZones = await db
+            .select({
+                fee: {
+                    id: restaurantZoneDeliveryFees.id,
+                    zoneId: restaurantZoneDeliveryFees.zoneId,
+                    coverageType: restaurantZoneDeliveryFees.coverageType,
+                    customCoordinates: restaurantZoneDeliveryFees.customCoordinates,
+                    customRadiusKm: restaurantZoneDeliveryFees.customRadiusKm,
+                    deliveryFee: restaurantZoneDeliveryFees.deliveryFee,
+                },
+                zone: {
+                    id: zones.id,
+                    name: zones.name,
+                    nameAr: zones.nameAr,
+                    nameFr: zones.nameFr,
+                    coordinates: zones.coordinates,
+                    coverageAreaRadiusKm: zones.coverageAreaRadiusKm,
+                    deliveryFee: zones.deliveryFee,
+                },
+            })
+            .from(restaurantZoneDeliveryFees)
+            .leftJoin(zones, eq(restaurantZoneDeliveryFees.zoneId, zones.id))
+            .where(
+                and(
+                    eq(restaurantZoneDeliveryFees.restaurantId, restaurantId),
+                    eq(restaurantZoneDeliveryFees.status, "active")
+                )
+            );
+
+        for (const row of feesWithZones) {
+            if (!row.zone) continue;
+
+            const coverageType = row.fee.coverageType || "POLYGON";
+            const rawCoords = row.fee.customCoordinates || row.zone.coordinates;
+            const coords = parseAndNormalizeCoordinates(rawCoords);
+            const radiusKm = parseFloat(String(row.fee.customRadiusKm || row.zone.coverageAreaRadiusKm || "0"));
+
+            let isInside = false;
+
+            if (coverageType === "RADIUS" && radiusKm > 0 && coords.length > 0) {
+                const center = coords.length === 1 ? coords[0] : {
+                    lat: coords.reduce((sum, p) => sum + p.lat, 0) / coords.length,
+                    lng: coords.reduce((sum, p) => sum + p.lng, 0) / coords.length,
+                };
+                const distKm = haversineKm(numLat, numLng, center.lat, center.lng);
+                isInside = distKm <= radiusKm;
+            } else if (coords.length >= 3) {
+                isInside = isPointInPolygon(numLat, numLng, coords);
+            } else if (radiusKm > 0 && coords.length > 0) {
+                const center = coords[0];
+                const distKm = haversineKm(numLat, numLng, center.lat, center.lng);
+                isInside = distKm <= radiusKm;
+            }
+
+            if (isInside) {
+                const fee = parseFloat(String(row.fee.deliveryFee || "0"));
+                if (fee > bestFee || bestMatch === null) {
+                    bestFee = fee;
+                    bestMatch = {
+                        id: row.zone.id,
+                        name: row.zone.name,
+                        nameAr: row.zone.nameAr ?? null,
+                        nameFr: row.zone.nameFr ?? null,
+                        deliveryFee: String(row.fee.deliveryFee || "0"),
+                    };
+                }
+            }
+        }
+    }
+
+    // 2. إذا لم نجد تطابق في إعدادات المطعم، نبحث في الـ zones العامة بالنظام
+    if (!bestMatch) {
+        const allActiveZones = await db
+            .select({
                 id: zones.id,
                 name: zones.name,
                 nameAr: zones.nameAr,
                 nameFr: zones.nameFr,
                 coordinates: zones.coordinates,
                 coverageAreaRadiusKm: zones.coverageAreaRadiusKm,
-            },
-        })
-        .from(restaurantZoneDeliveryFees)
-        .leftJoin(zones, eq(restaurantZoneDeliveryFees.zoneId, zones.id))
-        .where(
-            and(
-                eq(restaurantZoneDeliveryFees.restaurantId, restaurantId),
-                eq(restaurantZoneDeliveryFees.status, "active")
-            )
-        );
+                deliveryFee: zones.deliveryFee,
+            })
+            .from(zones)
+            .where(eq(zones.status, "active"));
 
-    // --- Ray-casting algorithm للـ Polygon ---
-    const pointInPolygon = (pLat: number, pLng: number, polygon: { lat: number; lng: number }[]): boolean => {
-        let inside = false;
-        const n = polygon.length;
-        for (let i = 0, j = n - 1; i < n; j = i++) {
-            const xi = polygon[i].lng, yi = polygon[i].lat;
-            const xj = polygon[j].lng, yj = polygon[j].lat;
-            const intersect = yi > pLat !== yj > pLat && pLng < ((xj - xi) * (pLat - yi)) / (yj - yi) + xi;
-            if (intersect) inside = !inside;
-        }
-        return inside;
-    };
+        for (const zoneRow of allActiveZones) {
+            const coords = parseAndNormalizeCoordinates(zoneRow.coordinates);
+            const radiusKm = parseFloat(String(zoneRow.coverageAreaRadiusKm || "0"));
 
-    // --- Haversine distance بالكيلومتر ---
-    const haversineKm = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
-        const R = 6371;
-        const dLat = ((lat2 - lat1) * Math.PI) / 180;
-        const dLng = ((lng2 - lng1) * Math.PI) / 180;
-        const a =
-            Math.sin(dLat / 2) ** 2 +
-            Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
-        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    };
+            let isInside = false;
 
-    let bestMatch: { id: string; name: string; nameAr: string | null; nameFr: string | null; deliveryFee: string } | null = null;
-    let bestFee = -1;
-
-    for (const row of feesWithZones) {
-        if (!row.zone) continue;
-
-        // تحديد نوع التغطية
-        const coverageType = row.fee.coverageType || "POLYGON";
-
-        // الإحداثيات: نفضّل الـ custom، ثم الافتراضية من الـ zone
-        const coords = (row.fee.customCoordinates as { lat: number; lng: number }[] | null) || row.zone.coordinates;
-        const radiusKm = parseFloat((row.fee.customRadiusKm || row.zone.coverageAreaRadiusKm || "0") as string);
-
-        let isInside = false;
-
-        if (coverageType === "RADIUS" && radiusKm > 0 && coords && coords.length > 0) {
-            // مركز الـ zone = أول نقطة في المصفوفة (أو يمكن حساب المركز)
-            const center = coords[0];
-            const distKm = haversineKm(lat, lng, center.lat, center.lng);
-            isInside = distKm <= radiusKm;
-        } else if (coords && coords.length >= 3) {
-            isInside = pointInPolygon(lat, lng, coords);
-        }
-
-        if (isInside) {
-            const fee = parseFloat((row.fee.deliveryFee || "0") as string);
-            // نختار الـ zone ذات أعلى رسوم توصيل (الأكثر تحديداً)
-            if (fee > bestFee) {
-                bestFee = fee;
-                bestMatch = {
-                    id: row.zone.id,
-                    name: row.zone.name,
-                    nameAr: row.zone.nameAr ?? null,
-                    nameFr: row.zone.nameFr ?? null,
-                    deliveryFee: row.fee.deliveryFee as string,
+            if (coords.length >= 3) {
+                isInside = isPointInPolygon(numLat, numLng, coords);
+            }
+            if (!isInside && radiusKm > 0 && coords.length > 0) {
+                const center = coords.length === 1 ? coords[0] : {
+                    lat: coords.reduce((sum, p) => sum + p.lat, 0) / coords.length,
+                    lng: coords.reduce((sum, p) => sum + p.lng, 0) / coords.length,
                 };
+                const distKm = haversineKm(numLat, numLng, center.lat, center.lng);
+                isInside = distKm <= radiusKm;
+            }
+
+            if (isInside) {
+                const fee = parseFloat(String(zoneRow.deliveryFee || "0"));
+                if (fee > bestFee || bestMatch === null) {
+                    bestFee = fee;
+                    bestMatch = {
+                        id: zoneRow.id,
+                        name: zoneRow.name,
+                        nameAr: zoneRow.nameAr ?? null,
+                        nameFr: zoneRow.nameFr ?? null,
+                        deliveryFee: String(zoneRow.deliveryFee || "0"),
+                    };
+                }
             }
         }
     }
@@ -298,6 +406,7 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             apartment: addresses.apartment,
             landmark: addresses.landmark,
             location: addresses.location,
+            zoneId: addresses.zoneId,
         },
         zone: {
             id: zones.id,
@@ -333,17 +442,16 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
 
     // ==========================================
     // 🗺️ Fallback: استنتاج الزون من إحداثيات العنوان إذا كان zone فارغاً
-    // يُطبَّق فقط عندما يكون النوع delivery وzone = null
     // ==========================================
-    let resolvedZone = orderDetail.zone?.id
+    let resolvedZone = (orderDetail.zone && orderDetail.zone.id)
         ? orderDetail.zone
         : null;
 
-    if (!resolvedZone && orderDetail.order.orderType === "delivery" && orderDetail.address && orderDetail.address.lat) {
-        const restaurantId = orderDetail.order.restaurantId;
-        const addrLat = parseFloat(orderDetail.address.lat as string);
-        const addrLng = parseFloat(orderDetail.address.lng as string);
+    const restaurantId = orderDetail.order.restaurantId;
+    const addrLat = orderDetail.address?.lat ? parseFloat(String(orderDetail.address.lat)) : null;
+    const addrLng = orderDetail.address?.lng ? parseFloat(String(orderDetail.address.lng)) : null;
 
+    if (!resolvedZone && addrLat !== null && addrLng !== null && !isNaN(addrLat) && !isNaN(addrLng)) {
         const detected = await resolveZoneFromCoords(addrLat, addrLng, restaurantId);
         if (detected) {
             resolvedZone = {
@@ -352,6 +460,57 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
                 nameAr: detected.nameAr ?? "",
                 nameFr: detected.nameFr ?? "",
             };
+        }
+    }
+
+    // ==========================================
+    // 🏢 استنتاج الفرع (Branch) بناءً على الـ Zone إذا لم يكن محدداً في الأوردر
+    // ==========================================
+    let resolvedBranch = (orderDetail.branch && orderDetail.branch.id)
+        ? orderDetail.branch
+        : null;
+
+    const targetZoneId = resolvedZone?.id || orderDetail.address?.zoneId;
+
+    if ((!resolvedBranch || !resolvedBranch.id) && targetZoneId && restaurantId) {
+        const [matchedBranch] = await db
+            .select({
+                id: branches.id,
+                name: branches.name,
+            })
+            .from(branches)
+            .where(
+                and(
+                    eq(branches.restaurantId, restaurantId),
+                    eq(branches.zoneId, targetZoneId),
+                    eq(branches.status, "active")
+                )
+            )
+            .limit(1);
+
+        if (matchedBranch) {
+            resolvedBranch = matchedBranch;
+        }
+    }
+
+    // Fallback: إذا لم نجد فرعاً خاصاً بالزون، نجلب أي فرع نشط للمطعم
+    if ((!resolvedBranch || !resolvedBranch.id) && restaurantId) {
+        const [fallbackBranch] = await db
+            .select({
+                id: branches.id,
+                name: branches.name,
+            })
+            .from(branches)
+            .where(
+                and(
+                    eq(branches.restaurantId, restaurantId),
+                    eq(branches.status, "active")
+                )
+            )
+            .limit(1);
+
+        if (fallbackBranch) {
+            resolvedBranch = fallbackBranch;
         }
     }
 
@@ -546,10 +705,10 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             paymentMethodName: typeof pmDetails === "object" && pmDetails !== null ? pmDetails.name : pmDetails,
             paymentMethodNameAr: typeof pmDetails === "object" && pmDetails !== null ? pmDetails.nameAr : pmDetails,
 
-            branch: orderDetail.branch,
+            branchId: resolvedBranch?.id || orderDetail.order.branchId || null,
+            branch: resolvedBranch || orderDetail.branch || null,
             restaurant: orderDetail.restaurant,
             address: orderDetail.address,
-            // zone: orderDetail.zone,
             zone: resolvedZone,
             driver: orderDetail.driver,
             items: formattedItems
@@ -919,15 +1078,39 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
     }
 
     // ==========================================
-    // 🗺️ Fallback: استنتاج الزون للـ PDF إذا كان zone فارغاً
+    // 🗺️ Fallback: استنتاج الزون والفرع للـ PDF إذا كانت فارغة
     // ==========================================
     let pdfZoneName = orderDetail.zone?.name || "";
+    let pdfZoneId = (orderDetail.zone as any)?.id || (orderDetail.address as any)?.zoneId;
 
-    if (!pdfZoneName && orderDetail.order.orderType === "delivery" && orderDetail.address?.lat) {
-        const addrLat = parseFloat((orderDetail.address as any).lat as string);
-        const addrLng = parseFloat((orderDetail.address as any).lng as string);
-        const detected = await resolveZoneFromCoords(addrLat, addrLng, orderDetail.order.restaurantId);
-        if (detected) pdfZoneName = detected.name;
+    if (!pdfZoneName && orderDetail.address?.lat && orderDetail.address?.lng) {
+        const addrLat = parseFloat(String((orderDetail.address as any).lat));
+        const addrLng = parseFloat(String((orderDetail.address as any).lng));
+        if (!isNaN(addrLat) && !isNaN(addrLng)) {
+            const detected = await resolveZoneFromCoords(addrLat, addrLng, orderDetail.order.restaurantId);
+            if (detected) {
+                pdfZoneName = detected.name;
+                pdfZoneId = detected.id;
+            }
+        }
+    }
+
+    let pdfBranchName = orderDetail.branch?.name || "";
+    if (!pdfBranchName && pdfZoneId && orderDetail.order.restaurantId) {
+        const [matchedBranch] = await db
+            .select({ name: branches.name })
+            .from(branches)
+            .where(
+                and(
+                    eq(branches.restaurantId, orderDetail.order.restaurantId),
+                    eq(branches.zoneId, pdfZoneId),
+                    eq(branches.status, "active")
+                )
+            )
+            .limit(1);
+        if (matchedBranch) {
+            pdfBranchName = matchedBranch.name;
+        }
     }
 
     // 2. جلب أصناف الأكل والتفاصيل (Variations)
@@ -1013,8 +1196,8 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
 
     // Header
     doc.fontSize(16).text(orderDetail.restaurant?.name || 'Restaurant', { align: 'center' });
-    if (orderDetail.branch?.name) {
-        doc.fontSize(12).text(orderDetail.branch.name, { align: 'center' });
+    if (pdfBranchName) {
+        doc.fontSize(12).text(pdfBranchName, { align: 'center' });
     }
 
     doc.moveDown(0.5);
@@ -1035,7 +1218,7 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
     doc.text(`Date: ${cairoDateStr}`);
     doc.text(`Time: ${cairoTimeStr}`);
 
-    doc.text(`Branch: ${orderDetail.branch?.name || 'N/A'}`);
+    doc.text(`Branch: ${pdfBranchName || 'N/A'}`);
     doc.text(`Client: ${orderDetail.customer?.name || 'Guest'}`);
     doc.text(`Phone: ${orderDetail.customer?.phone || 'N/A'}`);
     doc.text(`Order Type: ${orderDetail.order.orderType}`);
