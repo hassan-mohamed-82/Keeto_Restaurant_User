@@ -8,12 +8,14 @@ import {
     updateFood,
     deleteFood,
     getFoodSelectData,
-    assignIngredientsToFood,
-    getFoodRecipe,
     toggleVariationStatus,
     toggleVariationOptionStatus,
     changeFoodStatus
 } from "../../controllers/admin/food";
+import {
+    assignIngredientsToFood,
+    getFoodRecipe,
+} from "../../controllers/admin/foodIngredients";
 
 const router = Router();
 

@@ -1,7 +1,14 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { branchMenuItems, food, branches, categories } from "../../models/schema";
-import { eq, and } from "drizzle-orm";
+import {
+    branchMenuItems,
+    food,
+    branches,
+    categories,
+    branchIngredientLocks,
+    foodIngredients,
+} from "../../models/schema";
+import { eq, and, sql } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors/NotFound";
@@ -22,7 +29,7 @@ const invalidateBranchMenuCache = async (branchId: string, restaurantId: string)
 export const assignFoodToBranch = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     const userBranchId = req.user?.branchId; // لو هو مدير فرع، مش هيقدر يعدل غير في فرعه
-    
+
     if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
 
     const { branchId, foodId, price, stockType, stockQty, status } = req.body;
@@ -87,6 +94,15 @@ export const assignFoodToBranch = async (req: Request, res: Response) => {
 export const getBranchMenu = async (req: Request, res: Response) => {
     const { branchId } = req.params;
 
+    // Get the restaurant ID for this branch
+    const branchCheck = await db.select({ restaurantId: branches.restaurantId })
+        .from(branches)
+        .where(eq(branches.id, branchId))
+        .limit(1);
+
+    if (!branchCheck[0]) throw new NotFound("Branch not found");
+    const restaurantId = branchCheck[0].restaurantId;
+
     // ✅ Redis Cache
     const cacheKey = `admin:branch_menu:${branchId}`;
     const cachedData = await redis.get(cacheKey);
@@ -94,9 +110,9 @@ export const getBranchMenu = async (req: Request, res: Response) => {
         return SuccessResponse(res, { message: "Get branch menu success", data: JSON.parse(cachedData) });
     }
 
-    // هنجيب الداتا المتغيرة (السعر/الحالة) من جدول الفرع، وندمجها مع الداتا الثابتة من جدول الأكل
-    const branchMenu = await db.select({
-        menuItemId: branchMenuItems.id,
+    // الكتالوج الموحد مدمج مع استثناءات الفرع
+    const rawBranchMenu = await db.select({
+        menuItemId: branchMenuItems.id, // قد يكون null إذا لم يكن هناك استثناء
         foodId: food.id,
         name: food.name,
         nameAr: food.nameAr,
@@ -105,21 +121,55 @@ export const getBranchMenu = async (req: Request, res: Response) => {
         descriptionAr: food.descriptionAr,
         descriptionFr: food.descriptionFr,
         image: food.image,
+        foodIsOutOfStock: food.isOutOfStock,
         categoryId: food.categoryid,
         categoryName: categories.name,
         categoryNameAr: categories.nameAr,
         categoryNameFr: categories.nameFr,
-        
-        // البيانات اللي بتخص الفرع ده بس:
-        price: branchMenuItems.price,
-        status: branchMenuItems.status,
-        stockType: branchMenuItems.stockType,
-        stockQty: branchMenuItems.stockQty,
+
+        // البيانات الخاصة بالفرع باستخدام COALESCE لاعتماد الأساسي في حالة غياب الاستثناء
+        price: sql<number>`COALESCE(${branchMenuItems.price}, ${food.price})`.as('price'),
+        status: sql<string>`COALESCE(${branchMenuItems.status}, 'active')`.as('status'),
+        stockType: sql<string>`COALESCE(${branchMenuItems.stockType}, ${food.stock_type})`.as('stock_type'),
+        stockQty: sql<number>`COALESCE(${branchMenuItems.stockQty}, 0)`.as('stock_qty'),
     })
-    .from(branchMenuItems)
-    .innerJoin(food, eq(branchMenuItems.foodId, food.id)) 
-    .leftJoin(categories, eq(food.categoryid, categories.id)) 
-    .where(eq(branchMenuItems.branchId, branchId));
+        .from(food)
+        .leftJoin(branchMenuItems, and(
+            eq(branchMenuItems.foodId, food.id),
+            eq(branchMenuItems.branchId, branchId)
+        ))
+        .leftJoin(categories, eq(food.categoryid, categories.id))
+        .where(eq(food.restaurantid, restaurantId));
+
+    // استخراج المنتجات غير المتاحة بسبب مكون أساسي مفقود في الفرع
+    const lockedEssentialIngredients = await db.select({
+        foodId: branchIngredientLocks.foodId
+    })
+        .from(branchIngredientLocks)
+        .innerJoin(foodIngredients, eq(branchIngredientLocks.ingredientId, foodIngredients.ingredientId))
+        .where(
+            and(
+                eq(branchIngredientLocks.branchId, branchId),
+                eq(branchIngredientLocks.isAvailable, false),
+                eq(foodIngredients.isEssential, true),
+                eq(foodIngredients.foodId, branchIngredientLocks.foodId)
+            )
+        );
+
+    const unavailableFoodIds = new Set(lockedEssentialIngredients.map(lock => lock.foodId));
+
+    // إضافة حقل isAvailable لكل منتج
+    const branchMenu = rawBranchMenu.map(item => {
+        const isAvailable = 
+            item.status === "active" && 
+            !item.foodIsOutOfStock && 
+            !unavailableFoodIds.has(item.foodId);
+
+        return {
+            ...item,
+            isAvailable
+        };
+    });
 
     // ✅ Cache for 30 minutes
     await redis.set(cacheKey, JSON.stringify(branchMenu), 'EX', 1800);
@@ -201,103 +251,6 @@ export const deleteBranchMenuItem = async (req: Request, res: Response) => {
     return SuccessResponse(res, { message: "Branch menu item deleted successfully" });
 };
 
-
-// =============================================
-// Toggle حالة الأكلة (فتح / إغلاق) في فرع معين 
-// =============================================
-export const toggleBranchFoodStatus = async (req: Request, res: Response) => {
-    const { branchId, foodId } = req.params;
-    const restaurantId = req.user?.restaurantId || req.user?.id;
-    const userBranchId = req.user?.branchId;
-
-    if (!restaurantId) throw new BadRequest("Restaurant ID missing");
-
-    // حماية الصلاحيات
-    if (userBranchId && userBranchId !== branchId) {
-        throw new BadRequest("Unauthorized: You cannot edit another branch's menu");
-    }
-
-    // التأكد إن الفرع يخص المطعم
-    const branchCheck = await db.select().from(branches)
-        .where(and(eq(branches.id, branchId), eq(branches.restaurantId, restaurantId))).limit(1);
-    if (!branchCheck[0]) throw new NotFound("Branch not found");
-
-    // جلب المنتج في هذا الفرع
-    const existingItem = await db.select().from(branchMenuItems)
-        .where(and(eq(branchMenuItems.branchId, branchId), eq(branchMenuItems.foodId, foodId)))
-        .limit(1);
-
-    if (!existingItem[0]) {
-        throw new NotFound("This product is not assigned to this branch yet.");
-    }
-
-    // تحديد الحالة الجديدة
-    const newStatus = existingItem[0].status === "active" ? "inactive" : "active";
-
-    // تحديث الحالة
-    await db.update(branchMenuItems)
-        .set({ status: newStatus, updatedAt: new Date() })
-        .where(eq(branchMenuItems.id, existingItem[0].id));
-
-    // مسح الكاش
-    await invalidateBranchMenuCache(branchId, restaurantId);
-
-    return SuccessResponse(res, { 
-        message: `Product status successfully changed to ${newStatus} in this branch`,
-        data: { status: newStatus }
-    });
-};
-
-// =============================================
-// Get food availability across all branches
-// =============================================
-export const getFoodAvailabilityAcrossBranches = async (req: Request, res: Response) => {
-    const { foodId } = req.params;
-    const restaurantId = req.user?.restaurantId || req.user?.id;
-
-    if (!restaurantId) throw new BadRequest("Restaurant ID missing");
-
-    // 1. Fetch all branches for this restaurant
-    const allBranches = await db.select({
-        id: branches.id,
-        name: branches.name,
-        nameAr: branches.nameAr,
-    })
-    .from(branches)
-    .where(eq(branches.restaurantId, restaurantId));
-
-    if (allBranches.length === 0) {
-        return SuccessResponse(res, { message: "No branches found", data: [] });
-    }
-
-    // 2. Fetch the assigned branch menu items for this food
-    const branchItems = await db.select({
-        branchId: branchMenuItems.branchId,
-        status: branchMenuItems.status,
-    })
-    .from(branchMenuItems)
-    .where(eq(branchMenuItems.foodId, foodId));
-
-    // 3. Map branches and determine availability
-    const branchAvailability = allBranches.map(branch => {
-        const branchItem = branchItems.find(item => item.branchId === branch.id);
-        const isAvailable = branchItem ? branchItem.status === "active" : false;
-        
-        return {
-            branchId: branch.id,
-            branchName: branch.name,
-            branchNameAr: branch.nameAr,
-            isAvailable
-        };
-    });
-
-    return SuccessResponse(res, { 
-        message: "Food availability across branches fetched successfully", 
-        data: branchAvailability 
-    });
-};
-
-
 // controllers/restaurant.controller.ts
 
 export const getRestaurantSelectData = async (req: Request, res: Response) => {
@@ -322,21 +275,21 @@ export const getRestaurantSelectData = async (req: Request, res: Response) => {
             id: branches.id,
             name: branches.name,
         })
-        .from(branches)
-        .where(
-            and(
-                eq(branches.restaurantId, restaurantId),
-                eq(branches.status, "active") // الفروع الشغالة بس
-            )
-        ),
+            .from(branches)
+            .where(
+                and(
+                    eq(branches.restaurantId, restaurantId),
+                    eq(branches.status, "active") // الفروع الشغالة بس
+                )
+            ),
 
         // 2. جلب قائمة الأكل (الكتالوج) بالكامل للمطعم ده
         db.select({
             id: food.id,
             name: food.name,
         })
-        .from(food)
-        .where(eq(food.restaurantid, restaurantId))
+            .from(food)
+            .where(eq(food.restaurantid, restaurantId))
     ]);
 
     const responseData = { branches: myBranches, foods: myFoods };
@@ -364,7 +317,7 @@ export const updateMasterFoodItem = async (req: Request, res: Response) => {
     // 1. التأكد إن الأكلة دي موجودة وتخص المطعم ده
     const existingFood = await db.select().from(food)
         .where(and(
-            eq(food.id, id), 
+            eq(food.id, id),
             eq(food.restaurantid, restaurantId)
         )).limit(1);
 
@@ -378,7 +331,7 @@ export const updateMasterFoodItem = async (req: Request, res: Response) => {
     if (description !== undefined) updateData.description = description;
     if (image !== undefined) updateData.image = image;
     if (categoryId !== undefined) updateData.categoryid = categoryId;
-    
+
     // updateData.updatedAt = new Date(); // لو عندك حقل updatedAt في جدول الـ food
 
     // 3. تحديث الداتابيز

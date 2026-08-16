@@ -217,7 +217,7 @@ export const getAllFoods = async (req: Request, res: Response) => {
         allAddonsDetails = await db.select().from(addons).where(inArray(addons.id, uniqueAddonsIds));
     }
 
-    const allIngredients = foodIds.length > 0 
+    const allIngredients = foodIds.length > 0
         ? await db.select({
             foodId: foodIngredients.foodId,
             ingredientId: ingredients.id,
@@ -226,9 +226,9 @@ export const getAllFoods = async (req: Request, res: Response) => {
             inStock: ingredients.inStock,
             isRemovable: foodIngredients.isRemovable
         })
-        .from(foodIngredients)
-        .innerJoin(ingredients, eq(foodIngredients.ingredientId, ingredients.id))
-        .where(inArray(foodIngredients.foodId, foodIds))
+            .from(foodIngredients)
+            .innerJoin(ingredients, eq(foodIngredients.ingredientId, ingredients.id))
+            .where(inArray(foodIngredients.foodId, foodIds))
         : [];
 
     const allFoods = rawFoods.map(f => {
@@ -598,67 +598,6 @@ export const getFoodSelectData = async (req: Request, res: Response) => {
             ingredients: list
         }
     });
-};
-
-
-
-
-
-// =========================================================
-// 🍳 إدارة الوصفة (Recipe / Food Ingredients)
-// =========================================================
-
-export const assignIngredientsToFood = async (req: Request, res: Response) => {
-    const { id } = req.params;
-    const { ingredientsList } = req.body;
-    const restaurantId = req.user?.restaurantId || req.user?.id;
-
-    if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
-    if (!Array.isArray(ingredientsList)) throw new BadRequest("ingredientsList must be an array");
-
-    const existingFood = await db.select().from(food).where(and(eq(food.id, id), eq(food.restaurantid, restaurantId))).limit(1);
-    if (!existingFood[0]) throw new NotFound("Food not found or does not belong to you");
-
-    await db.transaction(async (tx) => {
-        await tx.delete(foodIngredients).where(eq(foodIngredients.foodId, id));
-
-        if (ingredientsList.length > 0) {
-            const valuesToInsert = ingredientsList.map((item: any) => ({
-                id: uuidv4(),
-                foodId: id,
-                ingredientId: item.ingredientId,
-                isRemovable: item.isRemovable || false
-            }));
-            await tx.insert(foodIngredients).values(valuesToInsert);
-        }
-    });
-
-    return SuccessResponse(res, { message: "Food recipe saved successfully" });
-};
-
-export const getFoodRecipe = async (req: Request, res: Response) => {
-    const { id } = req.params;
-    const restaurantId = req.user?.restaurantId || req.user?.id;
-
-    if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
-
-    const existingFood = await db.select().from(food).where(and(eq(food.id, id), eq(food.restaurantid, restaurantId))).limit(1);
-    if (!existingFood[0]) throw new NotFound("Food not found");
-
-    const recipe = await db.select({
-        id: foodIngredients.id,
-        ingredientId: ingredients.id,
-        name: ingredients.name,
-        inStock: ingredients.inStock,
-        isRemovable: foodIngredients.isRemovable,
-        categoryName: ingredientCategories.name
-    })
-        .from(foodIngredients)
-        .innerJoin(ingredients, eq(foodIngredients.ingredientId, ingredients.id))
-        .leftJoin(ingredientCategories, eq(ingredients.categoryId, ingredientCategories.id))
-        .where(eq(foodIngredients.foodId, id));
-
-    return SuccessResponse(res, { message: "Get food recipe success", data: recipe });
 };
 
 // =========================================================

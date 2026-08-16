@@ -549,6 +549,7 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             branch: orderDetail.branch,
             restaurant: orderDetail.restaurant,
             address: orderDetail.address,
+            // zone: orderDetail.zone,
             zone: resolvedZone,
             driver: orderDetail.driver,
             items: formattedItems
@@ -1227,7 +1228,7 @@ export const selectDeliveryMan = async (req: Request, res: Response) => {
 
     if (adminBranchId) {
         conditions.push(eq(deliveryMen.branchId, adminBranchId));
-    } 
+    }
 
     const deliveryMenList = await db.select({
         id: deliveryMen.id,
