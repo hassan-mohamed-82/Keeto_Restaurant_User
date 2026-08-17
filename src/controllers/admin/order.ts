@@ -1013,15 +1013,18 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
 export const getReasons = async (req: Request, res: Response) => {
     const type = req.query.type as string;
 
-    const conditions: any[] = [eq(selectReasons.status, "active")];
-    if (type === "user" || type === "restaurant") {
-        conditions.push(eq(selectReasons.type, type));
-    }
+    // Default to "restaurant" if type is not provided or not "user"
+    const targetType = type === "user" ? "user" : "restaurant";
 
     const reasons = await db
         .select()
         .from(selectReasons)
-        .where(and(...conditions));
+        .where(
+            and(
+                eq(selectReasons.status, "active"),
+                eq(selectReasons.type, targetType)
+            )
+        );
 
     return SuccessResponse(res, {
         message: "Active reasons fetched successfully",
