@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { restaurants, restrauntadmin, rolesadmin } from "../../models/schema";
+import { branches, restaurants, restrauntadmin, rolesadmin } from "../../models/schema";
 import { eq } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
@@ -39,7 +39,7 @@ export async function login(req: Request, res: Response) {
         throw new UnauthorizedError("Your account is deactivated. Please contact support.");
     }
 
-    // 4. التحقق من حالة المطعم التابع له الحساب (لحماية السيستم إذا قام السوبر أدمن بحظر المطعم)
+    // 4. التحقق من حالة المطعم وجلب اسمه
     let restaurantName: string | null = null;
     if (user.restaurantId) {
         const [restaurant] = await db
@@ -56,6 +56,29 @@ export async function login(req: Request, res: Response) {
         }
     }
 
+    // 🌐 4.5 جلب أسماء الفرع باللغات المختلفة
+    let branchName: string | null = null;
+    let branchNameAr: string | null = null;
+    let branchNameFr: string | null = null;
+
+    if (user.branchId) {
+        const [branch] = await db
+            .select({
+                name: branches.name,
+                nameAr: branches.nameAr,
+                nameFr: branches.nameFr,
+            })
+            .from(branches)
+            .where(eq(branches.id, user.branchId))
+            .limit(1);
+
+        if (branch) {
+            branchName = branch.name as string;
+            branchNameAr = branch.nameAr as string | null;
+            branchNameFr = branch.nameFr as string | null;
+        }
+    }
+
     // 5. جلب الـ Role إذا كان المستخدم موظفاً وله دور محدد
     let role = null;
     if (user.roleId) {
@@ -68,13 +91,15 @@ export async function login(req: Request, res: Response) {
     }
 
     // 6. تجهيز الـ Token Payload الديناميكي
-    // الـ Owner يملك صلاحيات كاملة (branchId: null)، والـ Staff يتربط بفرعه الفردي
     const tokenPayload = {
         id: user.id,
-        restaurantId: user.restaurantId, 
-        name:user.name,
+        restaurantId: user.restaurantId,
+        name: user.name,
         restaurantName,
-        branchId: user.branchId, // سيكون تلقائياً null في حالة الـ owner
+        branchId: user.branchId,
+        branchName,
+        branchNameAr,
+        branchNameFr,
         type: user.type, // "owner" | "branch_manager" | "staff"
     };
 
@@ -82,8 +107,8 @@ export async function login(req: Request, res: Response) {
 
     // 7. صياغة الاستجابة الموحدة لتناسب الـ Frontend
     return SuccessResponse(res, {
-        message: `${user.type === "owner" ? "Owner" : "Staff"} logged in successfully`, 
-        token, 
+        message: `${user.type === "owner" ? "Owner" : "Staff"} logged in successfully`,
+        token,
         admin: {
             id: user.id,
             name: user.name,
@@ -92,10 +117,13 @@ export async function login(req: Request, res: Response) {
             roleId: user.roleId,
             permissions: user.permissions || [],
             status: user.status,
-            type: user.type, // الـ الفرونت إند سيتعرف على المالك من خلال "owner"
+            type: user.type,
             restaurantId: user.restaurantId,
             restaurantName,
-            branchId: user.branchId
+            branchId: user.branchId,
+            branchName,
+            branchNameAr,
+            branchNameFr
         }
     }, 200);
 }
