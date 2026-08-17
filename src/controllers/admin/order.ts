@@ -698,6 +698,7 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             totalAmount: orderDetail.order.totalAmount,
             createdAt: orderDetail.order.createdAt,
             updatedAt: orderDetail.order.updatedAt,
+            durationOrderPreparing: orderDetail.order.durationOrderPreparing,
             customer: orderDetail.customer,
 
             // ✅ فصلنا الداتا عشان الرياكت ميضربش ويقرأ الـ ID زي ما هو متعود
@@ -1009,6 +1010,34 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
 
     return SuccessResponse(res, { message: `Order status successfully updated to ${status}` });
 };
+
+// ==========================================
+// تحديث مدة تحضير الأوردر (بـ دقائق)
+// ==========================================
+export const setOrderPreparingDuration = async (req: Request, res: Response) => {
+    const { orderId } = req.params;
+    const { duration } = req.body; // duration in minutes
+
+    const adminRestaurantId = req.user?.restaurantId || req.user?.id;
+    const adminBranchId = req.user?.branchId;
+
+    if (typeof duration !== 'number' || duration < 0) {
+        throw new BadRequest('Invalid duration value');
+    }
+
+    const [existingOrder] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+    if (!existingOrder) throw new NotFound('Order not found');
+
+    if (existingOrder.restaurantId !== adminRestaurantId) throw new BadRequest('Unauthorized');
+    if (adminBranchId && existingOrder.branchId !== adminBranchId) throw new BadRequest('Unauthorized');
+
+    await db.update(orders)
+        .set({ durationOrderPreparing: duration, updatedAt: new Date() })
+        .where(eq(orders.id, orderId));
+
+    return SuccessResponse(res, { message: 'Order preparing duration updated successfully' });
+};
+
 // جلب أسباب الإلغاء حسب النوع (user أو restaurant)
 export const getReasons = async (req: Request, res: Response) => {
     const type = req.query.type as string;

@@ -16,7 +16,8 @@ import {
     generateOrderInvoicePDF,
     getallnumbersoforders,
     assignDelivery,
-    selectDeliveryMan
+    selectDeliveryMan,
+    setOrderPreparingDuration
 } from "../../controllers/admin/order";
 
 const router = Router();
@@ -50,6 +51,7 @@ router.put("/:orderId", hasPermission("orders", "update", true), catchAsync(upda
 // ✅ تعيين مندوب توصيل لطلب - يحتاج صلاحية update
 router.put("/:orderId/assign-delivery", hasPermission("orders", "update", true), catchAsync(assignDelivery));
 
-// ✅ الحصول على أرقام جميع الأوردرات (عدادات حسب الحالة)
+// ✅ تحديث مدة تحضير الأوردر (بـ دقائق) - يحتاج صلاحية update
+router.put("/:orderId/duration", hasPermission("orders", "update", true), catchAsync(setOrderPreparingDuration));
 
 export default router;

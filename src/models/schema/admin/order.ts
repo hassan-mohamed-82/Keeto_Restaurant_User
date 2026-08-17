@@ -23,7 +23,7 @@ export const orders = mysqlTable("orders", {
 
     branchId: char("branch_id", { length: 36 })
         .references(() => branches.id),
-        // .notNull(),
+    // .notNull(),
 
     addressId: char("address_id", { length: 36 })
         .references(() => addresses.id),
@@ -31,7 +31,7 @@ export const orders = mysqlTable("orders", {
     deliveryManId: char("delivery_man_id", { length: 36 })
         .references(() => deliveryMen.id),
 
-    orderSource: mysqlEnum("order_source", ["online_order_web", "online_order_app", "food_aggregator","my_keeto"]).notNull(),
+    orderSource: mysqlEnum("order_source", ["online_order_web", "online_order_app", "food_aggregator", "my_keeto"]).notNull(),
 
     // ✅ التعديل هنا: رجعناها لـ varchar عشان تقبل الـ ID (UUID) اللي مبعوت من الـ Body
     paymentMethod: varchar("payment_method", { length: 100 }).notNull(),
@@ -55,6 +55,9 @@ export const orders = mysqlTable("orders", {
         "cancelled",
         "refund"
     ]).default("pending"),
+
+    // Duration (in minutes) the restaurant expects to prepare the order
+    durationOrderPreparing: int("duration_order_preparing").default(15),
 
     isPointsRedeemed: boolean("is_points_redeemed").default(false),
     redeemCode: varchar("redeem_code", { length: 10 }),
