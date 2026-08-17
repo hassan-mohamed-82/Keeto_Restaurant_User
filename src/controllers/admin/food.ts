@@ -11,9 +11,12 @@ import {
     foodIngredients,
     ingredients,
     ingredientCategories,
+    branchMenuItems,
+    branches,
 } from "../../models/schema";
+import { getUnavailableBranchesForFoods } from "../../helpers/food.helper";
 // ✅ تم إضافة and, or, isNull هنا عشان نصلح مشكلة الشروط المتعددة
-import { eq, inArray, and, or, isNull } from "drizzle-orm";
+import { eq, inArray, and, or, isNull, lte } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { NotFound } from "../../Errors/NotFound";
 import { BadRequest } from "../../Errors/BadRequest";
@@ -673,4 +676,221 @@ export const changeFoodStatus = async (req: Request, res: Response) => {
     }
 
     return SuccessResponse(res, { message: "Food status updated successfully" });
-};  
+};
+
+// =============================================
+// GET Out-Of-Stock Foods
+// =============================================
+/**
+ * - Restaurant login (owner / subadmin without branchId):
+ *   Returns all foods where isOutOfStock = true (global OOS),
+ *   each food carries `unavailableBranches` from the food.helper.
+ *
+ * - Branch login (branch_manager / any user with branchId):
+ *   Returns foods that are out-of-stock for THIS branch only
+ *   (stockType='limited' && stockQty<=0  OR  status='inactive' in branch_menu_items).
+ */
+export const getOutOfStockFoods = async (req: Request, res: Response) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    const branchId = req.user?.branchId;
+
+    if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
+
+    // =========================================================
+    // BRANCH VIEW: Return foods OOS for this specific branch
+    // =========================================================
+    if (branchId) {
+        // Verify the branch belongs to this restaurant
+        const branchCheck = await db
+            .select({ id: branches.id })
+            .from(branches)
+            .where(and(eq(branches.id, branchId), eq(branches.restaurantId, restaurantId)))
+            .limit(1);
+
+        if (!branchCheck[0]) throw new BadRequest("Branch not found or does not belong to your restaurant");
+
+        // Foods that are OOS (limited stock exhausted) or inactive in branch_menu_items
+        const oosItems = await db
+            .select({
+                foodId: branchMenuItems.foodId,
+                branchStockType: branchMenuItems.stockType,
+                branchStockQty: branchMenuItems.stockQty,
+                branchStatus: branchMenuItems.status,
+                // Food fields
+                id: food.id,
+                name: food.name,
+                nameAr: food.nameAr,
+                nameFr: food.nameFr,
+                description: food.description,
+                descriptionAr: food.descriptionAr,
+                descriptionFr: food.descriptionFr,
+                image: food.image,
+                price: food.price,
+                status: food.status,
+                isOutOfStock: food.isOutOfStock,
+                stock_type: food.stock_type,
+                foodtype: food.foodtype,
+                startTime: food.startTime,
+                endTime: food.endTime,
+                discount_type: food.discount_type,
+                discount_value: food.discount_value,
+                Maximum_Purchase: food.Maximum_Purchase,
+                points: food.points,
+                createdAt: food.createdAt,
+                updatedAt: food.updatedAt,
+                category_name: categories.name,
+                category_nameAr: categories.nameAr,
+                category_nameFr: categories.nameFr,
+            })
+            .from(branchMenuItems)
+            .innerJoin(food, eq(branchMenuItems.foodId, food.id))
+            .leftJoin(categories, eq(food.categoryid, categories.id))
+            .where(
+                and(
+                    eq(branchMenuItems.branchId, branchId),
+                    or(
+                        // Limited stock exhausted
+                        and(
+                            eq(branchMenuItems.stockType, "limited"),
+                            lte(branchMenuItems.stockQty, 0)
+                        ),
+                        // Manually marked as inactive in this branch
+                        eq(branchMenuItems.status, "inactive")
+                    )
+                )
+            );
+
+        const result = oosItems.map((item) => ({
+            id: item.id,
+            name: item.name,
+            nameAr: item.nameAr,
+            nameFr: item.nameFr,
+            description: item.description,
+            descriptionAr: item.descriptionAr,
+            descriptionFr: item.descriptionFr,
+            image: item.image,
+            price: item.price,
+            isOutOfStock: item.isOutOfStock,
+            globalStock_type: item.stock_type,
+            foodtype: item.foodtype,
+            startTime: item.startTime,
+            endTime: item.endTime,
+            discount_type: item.discount_type,
+            discount_value: item.discount_value,
+            Maximum_Purchase: item.Maximum_Purchase,
+            points: item.points ?? 0,
+            createdAt: item.createdAt,
+            updatedAt: item.updatedAt,
+            category: item.category_name
+                ? { name: item.category_name, nameAr: item.category_nameAr, nameFr: item.category_nameFr }
+                : null,
+            // Branch-level stock info
+            branch: {
+                id: branchId,
+                stockType: item.branchStockType,
+                stockQty: item.branchStockQty,
+                status: item.branchStatus,
+                reason:
+                    item.branchStatus === "inactive"
+                        ? "inactive_in_branch"
+                        : "stock_exhausted",
+            },
+        }));
+
+        return SuccessResponse(res, {
+            message: "Get out-of-stock foods for branch success",
+            data: result,
+        });
+    }
+
+    // =========================================================
+    // RESTAURANT VIEW: Return globally OOS foods + unavailable branches
+    // =========================================================
+    const rawFoods = await db
+        .select({
+            id: food.id,
+            name: food.name,
+            nameAr: food.nameAr,
+            nameFr: food.nameFr,
+            description: food.description,
+            descriptionAr: food.descriptionAr,
+            descriptionFr: food.descriptionFr,
+            image: food.image,
+            price: food.price,
+            status: food.status,
+            isOutOfStock: food.isOutOfStock,
+            stock_type: food.stock_type,
+            foodtype: food.foodtype,
+            startTime: food.startTime,
+            endTime: food.endTime,
+            discount_type: food.discount_type,
+            discount_value: food.discount_value,
+            Maximum_Purchase: food.Maximum_Purchase,
+            points: food.points,
+            createdAt: food.createdAt,
+            updatedAt: food.updatedAt,
+            category_name: categories.name,
+            category_nameAr: categories.nameAr,
+            category_nameFr: categories.nameFr,
+            subcategory_name: subcategories.name,
+            subcategory_nameAr: subcategories.nameAr,
+            subcategory_nameFr: subcategories.nameFr,
+        })
+        .from(food)
+        .leftJoin(categories, eq(food.categoryid, categories.id))
+        .leftJoin(subcategories, eq(food.subcategoryid, subcategories.id))
+        .where(
+            and(
+                eq(food.restaurantid, restaurantId),
+                eq(food.isOutOfStock, true)
+            )
+        );
+
+    if (rawFoods.length === 0) {
+        return SuccessResponse(res, {
+            message: "Get out-of-stock foods success",
+            data: [],
+        });
+    }
+
+    // Get unavailable branches for each food using the food helper
+    const foodIds = rawFoods.map((f) => f.id);
+    const unavailableBranchesMap = await getUnavailableBranchesForFoods(foodIds);
+
+    const result = rawFoods.map((f) => ({
+        id: f.id,
+        name: f.name,
+        nameAr: f.nameAr,
+        nameFr: f.nameFr,
+        description: f.description,
+        descriptionAr: f.descriptionAr,
+        descriptionFr: f.descriptionFr,
+        image: f.image,
+        price: f.price,
+        status: f.status,
+        isOutOfStock: f.isOutOfStock,
+        stock_type: f.stock_type,
+        foodtype: f.foodtype,
+        startTime: f.startTime,
+        endTime: f.endTime,
+        discount_type: f.discount_type,
+        discount_value: f.discount_value,
+        Maximum_Purchase: f.Maximum_Purchase,
+        points: f.points ?? 0,
+        createdAt: f.createdAt,
+        updatedAt: f.updatedAt,
+        category: f.category_name
+            ? { name: f.category_name, nameAr: f.category_nameAr, nameFr: f.category_nameFr }
+            : null,
+        subcategory: f.subcategory_name
+            ? { name: f.subcategory_name, nameAr: f.subcategory_nameAr, nameFr: f.subcategory_nameFr }
+            : null,
+        // Branches where this food is also unavailable (inactive or branch-level OOS)
+        unavailableBranches: unavailableBranchesMap.get(f.id) ?? [],
+    }));
+
+    return SuccessResponse(res, {
+        message: "Get out-of-stock foods success",
+        data: result,
+    });
+};

@@ -10,7 +10,8 @@ import {
     getFoodSelectData,
     toggleVariationStatus,
     toggleVariationOptionStatus,
-    changeFoodStatus
+    changeFoodStatus,
+    getOutOfStockFoods,
 } from "../../controllers/admin/food";
 import {
     assignIngredientsToFood,
@@ -27,6 +28,9 @@ router.post("/", hasPermission("foods", "create"), catchAsync(createFood));
 
 // ✅ Get all foods - يحتاج صلاحية read
 router.get("/", hasPermission("foods", "read"), catchAsync(getAllFoods));
+
+// ✅ Get out-of-stock foods - restaurant sees all OOS foods + unavailable branches; branch sees only its own OOS
+router.get("/out-of-stock", hasPermission("foods", "read"), catchAsync(getOutOfStockFoods));
 
 // ✅ Get food by id - يحتاج صلاحية read
 router.get("/:id", hasPermission("foods", "read"), catchAsync(getFoodById));
