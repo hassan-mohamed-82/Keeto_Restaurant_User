@@ -19,6 +19,7 @@ import {
     userRestaurantPoints,
     deliveryMen,
     restaurantZoneDeliveryFees,
+    restaurantSettings,
 } from "../../models/schema";
 import { eq, and, desc, inArray, sql } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
@@ -1016,14 +1017,10 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
 // ==========================================
 export const setOrderPreparingDuration = async (req: Request, res: Response) => {
     const { orderId } = req.params;
-    const { duration } = req.body; // duration in minutes
+    const { duration } = req.body;
 
     const adminRestaurantId = req.user?.restaurantId || req.user?.id;
     const adminBranchId = req.user?.branchId;
-
-    if (typeof duration !== 'number' || duration < 0) {
-        throw new BadRequest('Invalid duration value');
-    }
 
     const [existingOrder] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
     if (!existingOrder) throw new NotFound('Order not found');
@@ -1031,11 +1028,31 @@ export const setOrderPreparingDuration = async (req: Request, res: Response) => 
     if (existingOrder.restaurantId !== adminRestaurantId) throw new BadRequest('Unauthorized');
     if (adminBranchId && existingOrder.branchId !== adminBranchId) throw new BadRequest('Unauthorized');
 
+    let finalDuration = duration;
+
+    // إذا لم يرسل الآدمن duration، نعتمد maxDeliveryTime للمطعم
+    if (typeof finalDuration !== 'number') {
+        const [settings] = await db
+            .select({ maxDeliveryTime: restaurantSettings.maxDeliveryTime })
+            .from(restaurantSettings)
+            .where(eq(restaurantSettings.restaurantId, existingOrder.restaurantId))
+            .limit(1);
+
+        finalDuration = settings?.maxDeliveryTime ?? 30;
+    }
+
+    if (finalDuration < 0) {
+        throw new BadRequest('Invalid duration value');
+    }
+
     await db.update(orders)
-        .set({ durationOrderPreparing: duration, updatedAt: new Date() })
+        .set({ durationOrderPreparing: finalDuration, updatedAt: new Date() })
         .where(eq(orders.id, orderId));
 
-    return SuccessResponse(res, { message: 'Order preparing duration updated successfully' });
+    return SuccessResponse(res, { 
+        message: 'Order preparing duration updated successfully',
+        durationOrderPreparing: finalDuration 
+    });
 };
 
 // جلب أسباب الإلغاء حسب النوع (user أو restaurant)
