@@ -20,8 +20,9 @@ import {
     deliveryMen,
     restaurantZoneDeliveryFees,
     restaurantSettings,
+    restaurantSchedules,
 } from "../../models/schema";
-import { eq, and, desc, inArray, sql } from "drizzle-orm";
+import { eq, and, desc, inArray, sql, gte, lte } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors/NotFound";
@@ -257,6 +258,105 @@ async function resolveZoneFromCoords(
 }
 
 // ==========================================
+// Helper: حساب تاريخ بداية الشيفت الحالي للمطعم
+// ==========================================
+export const getRestaurantShiftStartTime = async (restaurantId: string): Promise<Date> => {
+    const now = new Date();
+
+    const cairoParts = new Intl.DateTimeFormat("en-US", {
+        timeZone: "Africa/Cairo",
+        year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", hour12: false
+    }).formatToParts(now);
+    const getP = (type: string) => cairoParts.find(p => p.type === type)?.value || "00";
+    const cairoYear = getP("year");
+    const cairoMonth = getP("month");
+    const cairoDay = getP("day");
+    const cairoHour = getP("hour");
+    const cairoMinute = getP("minute");
+    const currentTimeStr = `${cairoHour === "24" ? "00" : cairoHour}:${cairoMinute}`;
+    const cairoDayOfWeek = new Date(`${cairoYear}-${cairoMonth}-${cairoDay}T12:00:00`).getDay();
+
+    let shiftStartTime: Date;
+
+    const [settings] = await db
+        .select()
+        .from(restaurantSettings)
+        .where(eq(restaurantSettings.restaurantId, restaurantId))
+        .limit(1);
+
+    if (settings && !settings.isAlwaysOpen) {
+        const allSchedules = await db
+            .select()
+            .from(restaurantSchedules)
+            .where(eq(restaurantSchedules.restaurantId, restaurantId));
+
+        const todaySchedule = allSchedules.find(s => s.dayOfWeek === cairoDayOfWeek);
+
+        if (todaySchedule && todaySchedule.openingTime && !todaySchedule.isOffDay) {
+            if (currentTimeStr < todaySchedule.openingTime) {
+                const yesterday = new Date(`${cairoYear}-${cairoMonth}-${cairoDay}T12:00:00`);
+                yesterday.setDate(yesterday.getDate() - 1);
+                const yDayOfWeek = yesterday.getDay();
+                const yDateStr = yesterday.toISOString().slice(0, 10);
+                const ySchedule = allSchedules.find(s => s.dayOfWeek === yDayOfWeek);
+                const opTime = ySchedule?.openingTime || "00:00";
+                shiftStartTime = new Date(`${yDateStr}T${opTime}:00+02:00`);
+            } else {
+                shiftStartTime = new Date(`${cairoYear}-${cairoMonth}-${cairoDay}T${todaySchedule.openingTime}:00+02:00`);
+            }
+        } else {
+            shiftStartTime = new Date(`${cairoYear}-${cairoMonth}-${cairoDay}T00:00:00+02:00`);
+        }
+    } else {
+        shiftStartTime = new Date(`${cairoYear}-${cairoMonth}-${cairoDay}T00:00:00+02:00`);
+    }
+
+    return shiftStartTime;
+};
+
+// Helper: بناء شروط التاريخ (الافتراضي هو بداية شيفت المطعم الحالي)
+const buildOrderDateConditions = async (req: Request, restaurantId: string): Promise<any[]> => {
+    const conditions: any[] = [];
+    const rawStartDate = (
+        req.query?.startDate ||
+        req.query?.start_date ||
+        req.query?.startt ||
+        req.query?.fromDate ||
+        req.query?.from_date ||
+        req.query?.date
+    ) as string | undefined;
+
+    const rawEndDate = (
+        req.query?.endDate ||
+        req.query?.end_date ||
+        req.query?.toDate ||
+        req.query?.to_date
+    ) as string | undefined;
+
+    let startDate: Date;
+    if (rawStartDate) {
+        startDate = new Date(rawStartDate);
+        if (typeof rawStartDate === "string" && rawStartDate.length <= 10 && !rawStartDate.includes("T")) {
+            startDate.setHours(0, 0, 0, 0);
+        }
+    } else {
+        startDate = await getRestaurantShiftStartTime(restaurantId);
+    }
+    conditions.push(gte(orders.createdAt, startDate));
+
+    if (rawEndDate) {
+        const endDate = new Date(rawEndDate);
+        if (typeof rawEndDate === "string" && rawEndDate.length <= 10 && !rawEndDate.includes("T")) {
+            endDate.setHours(23, 59, 59, 999);
+        }
+        conditions.push(lte(orders.createdAt, endDate));
+    }
+
+    return conditions;
+};
+
+// ==========================================
 // 1. جلب كل الأوردرات الخاصة بالمطعم/الفرع
 // ==========================================
 export const getRestaurantOrders = async (req: Request, res: Response) => {
@@ -273,17 +373,23 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
     }
 
     // بناء الـ Query الأساسي
-    let queryConditions = eq(orders.restaurantId, adminRestaurantId);
+    const conditions: any[] = [
+        eq(orders.restaurantId, adminRestaurantId)
+    ];
 
     // لو ده مدير فرع، نفلتر الأوردرات لفرعه هو بس بشكل إجباري
     if (adminBranchId) {
-        queryConditions = and(queryConditions, eq(orders.branchId, adminBranchId)) as any;
+        conditions.push(eq(orders.branchId, adminBranchId));
     }
     // لو ده المالك وبعت branchId في الـ Query عشان يفلتر بيه
     else if (req.query?.branchId) {
-        queryConditions = and(queryConditions, eq(orders.branchId, req.query.branchId as string)) as any;
+        conditions.push(eq(orders.branchId, req.query.branchId as string));
     }
 
+    //-----------------------
+    const dateConditions = await buildOrderDateConditions(req, adminRestaurantId);
+    conditions.push(...dateConditions);
+    //-----------------------
     const restaurantOrders = await db.select({
         id: orders.id,
         orderNumber: orders.orderNumber,
@@ -298,7 +404,7 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
     })
         .from(orders)
         .leftJoin(users, eq(orders.userId, users.id))
-        .where(queryConditions)
+        .where(and(...conditions))
         .orderBy(desc(orders.createdAt)); // ترتيب من الأحدث للأقدم
 
     return SuccessResponse(res, { message: "Get orders success", data: restaurantOrders });
@@ -333,6 +439,9 @@ const getOrdersByStatus = async (req: Request, res: Response, status: "pending" 
     else if (req.query?.branchId) {
         conditions.push(eq(orders.branchId, req.query.branchId as string));
     }
+
+    const dateConditions = await buildOrderDateConditions(req, adminRestaurantId);
+    conditions.push(...dateConditions);
 
     const result = await db.select({
         id: orders.id,
@@ -1367,16 +1476,23 @@ export const getallnumbersoforders = async (req: Request, res: Response) => {
     if (!adminRestaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
 
     // بناء الـ Query الأساسي
-    let queryConditions = eq(orders.restaurantId, adminRestaurantId);
+    const conditions: any[] = [
+        eq(orders.restaurantId, adminRestaurantId)
+    ];
 
     // لو ده مدير فرع، نفلتر الأوردرات لفرعه هو بس بشكل إجباري
     if (adminBranchId) {
-        queryConditions = and(queryConditions, eq(orders.branchId, adminBranchId)) as any;
+        conditions.push(eq(orders.branchId, adminBranchId));
     }
     // لو ده المالك وبعت branchId في الـ Query عشان يفلتر بيه
     else if (req.query?.branchId) {
-        queryConditions = and(queryConditions, eq(orders.branchId, req.query.branchId as string)) as any;
+        conditions.push(eq(orders.branchId, req.query.branchId as string));
     }
+
+    //-----------------------
+    const dateConditions = await buildOrderDateConditions(req, adminRestaurantId);
+    conditions.push(...dateConditions);
+    //-----------------------
 
     const statusCountsResult = await db
         .select({
@@ -1384,7 +1500,7 @@ export const getallnumbersoforders = async (req: Request, res: Response) => {
             count: sql<number>`count(${orders.id})`,
         })
         .from(orders)
-        .where(queryConditions)
+        .where(and(...conditions))
         .groupBy(orders.status);
 
     const totalOrders = statusCountsResult.reduce((acc, curr) => acc + Number(curr.count), 0);
