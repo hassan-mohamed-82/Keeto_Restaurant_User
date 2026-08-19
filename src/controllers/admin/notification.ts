@@ -40,6 +40,19 @@ export const getMyNotifications = async (req: Request | any, res: Response) => {
         );
     }
 
+    // ✅ عدم إرجاع الإشعارات المقروءة (أو التصفية بحسب isRead / unreadOnly / all)
+    const isReadParam = req.query.isRead as string | undefined;
+    const unreadOnlyParam = req.query.unreadOnly as string | undefined;
+
+    if (isReadParam === "false" || unreadOnlyParam === "true") {
+        conditions.push(eq(notifications.isRead, false));
+    } else if (isReadParam === "true") {
+        conditions.push(eq(notifications.isRead, true));
+    } else if (req.query.all !== "true") {
+        // افتراضياً: استبعاد الإشعارات المقروءة (عدم إرجاع الإشعار إذا قُرئ)
+        conditions.push(eq(notifications.isRead, false));
+    }
+
     // Fetching notifications from DB
     const restaurantNotifications = await db
         .select()
