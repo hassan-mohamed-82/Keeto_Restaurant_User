@@ -87,7 +87,8 @@ export type ModuleName =
     | "restaurantadmin"
     | "subcategory"
     | "zone"
-    | "delivery_man";
+    | "delivery_man"
+    | "socialmedia";
 
 export interface PermissionAction {
     id?: string;

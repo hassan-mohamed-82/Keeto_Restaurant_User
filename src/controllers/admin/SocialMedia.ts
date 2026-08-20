@@ -19,7 +19,7 @@ export const selectPlatform = async (req: Request, res: Response) => {
 };
 
 export const addSocialMedia = async (req: Request, res: Response) => {
-    const restaurantId = req.user?.restaurantId || req.user?.id;
+    const restaurantId = req.user?.restaurantId || req.user?.id || req.user?.branchId;
     const { link, platformId } = req.body;
 
     if (!restaurantId) {
@@ -59,7 +59,7 @@ export const addSocialMedia = async (req: Request, res: Response) => {
 };
 
 export const getSocialMedia = async (req: Request, res: Response) => {
-    const restaurantId = req.user?.restaurantId || req.user?.id;
+    const restaurantId = req.user?.restaurantId || req.user?.id || req.user?.branchId;
     if (!restaurantId) {
         throw new BadRequest("Restaurant ID is required");
     }
@@ -90,7 +90,7 @@ export const getSocialMedia = async (req: Request, res: Response) => {
 
 export const getSocialMediaById = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const restaurantId = req.user?.restaurantId || req.user?.id;
+    const restaurantId = req.user?.restaurantId || req.user?.id || req.user?.branchId;
     if (!restaurantId) {
         throw new BadRequest("Restaurant ID is required");
     }
@@ -126,7 +126,7 @@ export const getSocialMediaById = async (req: Request, res: Response) => {
 
 export const updateSocialMedia = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const restaurantId = req.user?.restaurantId || req.user?.id;
+    const restaurantId = req.user?.restaurantId || req.user?.id || req.user?.branchId;
     const { link, platformId } = req.body;
 
     if (!restaurantId) {
@@ -172,7 +172,7 @@ export const updateSocialMedia = async (req: Request, res: Response) => {
 
 export const deleteSocialMedia = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const restaurantId = req.user?.restaurantId || req.user?.id;
+    const restaurantId = req.user?.restaurantId || req.user?.id || req.user?.branchId;
 
     if (!restaurantId) {
         throw new BadRequest("Restaurant ID is required");
