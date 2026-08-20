@@ -1,11 +1,15 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
 import { users, restaurant_users, restaurants } from "../../models/schema";
-import { eq } from "drizzle-orm";
+import { eq, and, or } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors";
 import { handleImageUpdate } from "../../utils/handleImages";
+
+// =======================================================
+// 1. Get Restaurant Users (Supports ?status=active/blocked)
+// =======================================================
 export const getRestaurantUsers = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
 
@@ -13,85 +17,226 @@ export const getRestaurantUsers = async (req: Request, res: Response) => {
         throw new BadRequest("Restaurant ID is required");
     }
 
+    const { status } = req.query;
+
+    const conditions: any[] = [
+        eq(restaurant_users.restaurantId, restaurantId)
+    ];
+
+    if (status && (status === "active" || status === "blocked")) {
+        conditions.push(eq(restaurant_users.status, status));
+    }
+
     const data = await db.select({
-        user: users,
-        restaurant: restaurants
+        id: restaurant_users.id,
+        userId: users.id,
+        name: users.name,
+        phone: users.phone,
+        email: users.email,
+        photo: users.photo,
+        status: restaurant_users.status,
+        userStatus: users.status,
+        createdAt: restaurant_users.createdAt,
+        updatedAt: restaurant_users.updatedAt,
+        restaurant: {
+            id: restaurants.id,
+            name: restaurants.name,
+        }
     })
     .from(restaurant_users)
     .innerJoin(users, eq(restaurant_users.userId, users.id))
     .innerJoin(restaurants, eq(restaurant_users.restaurantId, restaurants.id))
-    .where(eq(restaurant_users.restaurantId, restaurantId));
+    .where(and(...conditions));
 
     return SuccessResponse(res, { message: "Restaurant users fetched successfully", data }, 200);
 };
 
-export const updateRestaurantUser = async (req: Request, res: Response) => {
-    const { id } = req.params;
-    const { name, phone, status } = req.body;
-    const photo = req.body.photo;
-    const restaurantId = req.user?.restaurantId;
+// =======================================================
+// 2. Get Blocked Users specifically for this Restaurant
+// =======================================================
+export const getBlockedRestaurantUsers = async (req: Request, res: Response) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
 
     if (!restaurantId) {
         throw new BadRequest("Restaurant ID is required");
     }
-    const [existingUser] = await db.select().from(users).where(eq(users.id, id)).limit(1);
 
-    if (!existingUser) {
-        throw new NotFound("User not found");
-    }
-
-    let photoUrl = existingUser.photo;
-    if (photo && photo !== existingUser.photo) {
-        if (photo.startsWith("data:image")) {
-            photoUrl = (await handleImageUpdate(req, existingUser.photo, photo, "users")) || null;
-        } else {
-            photoUrl = photo as string || null;
+    const data = await db.select({
+        id: restaurant_users.id,
+        userId: users.id,
+        name: users.name,
+        phone: users.phone,
+        email: users.email,
+        photo: users.photo,
+        status: restaurant_users.status,
+        userStatus: users.status,
+        createdAt: restaurant_users.createdAt,
+        updatedAt: restaurant_users.updatedAt,
+        restaurant: {
+            id: restaurants.id,
+            name: restaurants.name,
         }
-    }
-    await db.update(users)
-        .set({
-            name: name || existingUser.name,
-            phone: phone || existingUser.phone,
-            status: status || existingUser.status,
-            photo: photoUrl,
-        })
-        .where(eq(users.id, id));
+    })
+    .from(restaurant_users)
+    .innerJoin(users, eq(restaurant_users.userId, users.id))
+    .innerJoin(restaurants, eq(restaurant_users.restaurantId, restaurants.id))
+    .where(and(
+        eq(restaurant_users.restaurantId, restaurantId),
+        eq(restaurant_users.status, "blocked")
+    ));
 
-    return SuccessResponse(res, { message: "User updated successfully", data: { id } }, 200);
+    return SuccessResponse(res, { message: "Blocked restaurant users fetched successfully", data }, 200);
 };
 
-export const deleteRestaurantUser = async (req: Request, res: Response) => {
-    const { id } = req.params;
-    const restaurantId = req.user?.restaurantId;
+// =======================================================
+// 3. Update Restaurant User (Updates status in restaurant_users)
+// =======================================================
+export const updateRestaurantUser = async (req: Request, res: Response) => {
+    const { id } = req.params; // userId or restaurant_users.id
+    const { name, phone, status } = req.body;
+    const photo = req.body.photo;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
 
     if (!restaurantId) {
         throw new BadRequest("Restaurant ID is required");
     }
 
-    const [existingUser] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    // 1. Check if relation exists in restaurant_users
+    const [existingLink] = await db
+        .select()
+        .from(restaurant_users)
+        .where(
+            and(
+                eq(restaurant_users.restaurantId, restaurantId),
+                or(
+                    eq(restaurant_users.userId, id),
+                    eq(restaurant_users.id, id)
+                )
+            )
+        )
+        .limit(1);
 
-    if (!existingUser) {
+    const targetUserId = existingLink?.userId || id;
+    const [existingUser] = await db.select().from(users).where(eq(users.id, targetUserId)).limit(1);
+
+    if (!existingUser && !existingLink) {
         throw new NotFound("User not found");
+    }
+
+    // 2. Update status in restaurant_users for this restaurant
+    if (status && (status === "active" || status === "blocked")) {
+        if (existingLink) {
+            await db.update(restaurant_users)
+                .set({
+                    status: status,
+                    updatedAt: new Date()
+                })
+                .where(eq(restaurant_users.id, existingLink.id));
+        } else if (existingUser) {
+            await db.insert(restaurant_users).values({
+                restaurantId,
+                userId: existingUser.id,
+                status: status
+            });
+        }
+    }
+
+    // 3. Optional user profile details update
+    if (name || phone || photo) {
+        let photoUrl = existingUser?.photo;
+        if (photo && photo !== existingUser?.photo) {
+            if (photo.startsWith("data:image")) {
+                photoUrl = (await handleImageUpdate(req, existingUser?.photo, photo, "users")) || null;
+            } else {
+                photoUrl = photo as string || null;
+            }
+        }
+        if (existingUser) {
+            await db.update(users)
+                .set({
+                    name: name || existingUser.name,
+                    phone: phone || existingUser.phone,
+                    photo: photoUrl,
+                })
+                .where(eq(users.id, existingUser.id));
+        }
+    }
+
+    return SuccessResponse(res, {
+        message: status === "blocked" ? "User blocked successfully for this restaurant" : "User updated successfully",
+        data: { id, status }
+    }, 200);
+};
+
+// =======================================================
+// 4. Delete / Unlink User from Restaurant
+// =======================================================
+export const deleteRestaurantUser = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+
+    if (!restaurantId) {
+        throw new BadRequest("Restaurant ID is required");
     }
 
     await db.delete(restaurant_users)
-        .where(eq(restaurant_users.userId, id));
+        .where(
+            and(
+                eq(restaurant_users.restaurantId, restaurantId),
+                or(
+                    eq(restaurant_users.userId, id),
+                    eq(restaurant_users.id, id)
+                )
+            )
+        );
 
-    return SuccessResponse(res, { message: "User deleted successfully", data: { id } }, 200);
+    return SuccessResponse(res, { message: "User removed from restaurant successfully", data: { id } }, 200);
 };
+
+// =======================================================
+// 5. Get Restaurant User by ID
+// =======================================================
 export const getRestaurantUserById = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const restaurantId = req.user?.restaurantId;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
 
     if (!restaurantId) {
         throw new BadRequest("Restaurant ID is required");
     }
 
-    const [existingUser] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    const [userRecord] = await db.select({
+        id: restaurant_users.id,
+        userId: users.id,
+        name: users.name,
+        phone: users.phone,
+        email: users.email,
+        photo: users.photo,
+        status: restaurant_users.status,
+        userStatus: users.status,
+        createdAt: restaurant_users.createdAt,
+        updatedAt: restaurant_users.updatedAt,
+        restaurant: {
+            id: restaurants.id,
+            name: restaurants.name,
+        }
+    })
+    .from(restaurant_users)
+    .innerJoin(users, eq(restaurant_users.userId, users.id))
+    .innerJoin(restaurants, eq(restaurant_users.restaurantId, restaurants.id))
+    .where(
+        and(
+            eq(restaurant_users.restaurantId, restaurantId),
+            or(
+                eq(restaurant_users.userId, id),
+                eq(restaurant_users.id, id)
+            )
+        )
+    )
+    .limit(1);
 
-    if (!existingUser) {
-        throw new NotFound("User not found");
+    if (!userRecord) {
+        throw new NotFound("User not found for this restaurant");
     }
 
-    return SuccessResponse(res, { message: "User fetched successfully", data: existingUser }, 200);
+    return SuccessResponse(res, { message: "User fetched successfully", data: userRecord }, 200);
 };

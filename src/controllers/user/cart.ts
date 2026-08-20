@@ -5,7 +5,8 @@ import {
     food,
     restaurants,
     variationOptions,
-    foodVariations
+    foodVariations,
+    restaurant_users
 } from "../../models/schema";
 
 import { eq, and } from "drizzle-orm";
@@ -46,6 +47,18 @@ export const addToCart = async (req: Request | any, res: Response) => {
 
     const [itemFood] = await db.select().from(food).where(eq(food.id, foodId)).limit(1);
     if (!itemFood) throw new BadRequest("Food not found");
+
+    // 🛡️ Check if user is blocked by this restaurant
+    const [restaurantUserLink] = await db.select()
+        .from(restaurant_users)
+        .where(and(
+            eq(restaurant_users.restaurantId, itemFood.restaurantid),
+            eq(restaurant_users.userId, userId)
+        )).limit(1);
+
+    if (restaurantUserLink && restaurantUserLink.status === "blocked") {
+        throw new BadRequest("You are blocked by this restaurant");
+    }
 
     const existingCart = await db.select().from(cartItems)
         .where(eq(cartItems.userId, userId))

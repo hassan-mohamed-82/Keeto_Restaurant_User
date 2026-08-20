@@ -12,7 +12,8 @@ import {
     restaurants,
     orderItems,
     restaurantBusinessPlans,
-    food
+    food,
+    restaurant_users
 } from "../../models/schema";
 import { eq, and, inArray, sql, desc, gte } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
@@ -83,6 +84,18 @@ export const checkout = async (req: Request | any, res: Response) => {
     // ==========================================
     const [restaurant] = await db.select().from(restaurants).where(eq(restaurants.id, restaurantId)).limit(1);
     if (!restaurant) throw new BadRequest("Restaurant not found");
+
+    // 🛡️ Check if user is blocked by this restaurant
+    const [restaurantUserLink] = await db.select()
+        .from(restaurant_users)
+        .where(and(
+            eq(restaurant_users.restaurantId, restaurantId),
+            eq(restaurant_users.userId, userId)
+        )).limit(1);
+
+    if (restaurantUserLink && restaurantUserLink.status === "blocked") {
+        throw new BadRequest("You are blocked from ordering from this restaurant");
+    }
 
     const [plan] = await db.select().from(restaurantBusinessPlans).where(eq(restaurantBusinessPlans.restaurantId, restaurantId)).limit(1);
 
