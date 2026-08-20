@@ -12,6 +12,7 @@ import {
     variationOptions,
     addresses,
     zones,
+    cities,
     addons,
     adonescategory,
     pointsProducts,
@@ -22,7 +23,7 @@ import {
     restaurantSettings,
     restaurantSchedules,
 } from "../../models/schema";
-import { eq, and, desc, inArray, sql, gte, lte } from "drizzle-orm";
+import { eq, and, or, desc, inArray, sql, gte, lte, isNull } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors/NotFound";
@@ -68,10 +69,31 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
 
     const conditions: any[] = [eq(orders.restaurantId, adminRestaurantId)];
 
-    if (adminBranchId) {
-        conditions.push(eq(orders.branchId, adminBranchId));
-    } else if (req.query?.branchId) {
-        conditions.push(eq(orders.branchId, req.query.branchId as string));
+    const queryBranchId = (req.query?.branchId as string)?.trim();
+    const filterBranchId = adminBranchId || (queryBranchId && queryBranchId !== "null" && queryBranchId !== "undefined" ? queryBranchId : undefined);
+
+    if (filterBranchId) {
+        conditions.push(eq(orders.branchId, filterBranchId));
+    }
+
+    const source = ((req.query?.source || req.query?.orderSource) as string)?.trim();
+    if (source && source !== "null" && source !== "undefined") {
+        conditions.push(eq(orders.orderSource, source as any));
+    }
+
+    const zoneId = (req.query?.zoneId as string)?.trim();
+    if (zoneId && zoneId !== "null" && zoneId !== "undefined") {
+        conditions.push(
+            or(
+                eq(addresses.zoneId, zoneId),
+                eq(branches.zoneId, zoneId)
+            )
+        );
+    }
+
+    const cityId = (req.query?.cityId as string)?.trim();
+    if (cityId && cityId !== "null" && cityId !== "undefined") {
+        conditions.push(eq(zones.cityId, cityId));
     }
 
     const dateConditions = await buildOrderDateConditions(req, adminRestaurantId);
@@ -85,13 +107,19 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
             customerName: users.name,
             customerPhone: users.phone,
             orderType: orders.orderType,
+            orderSource: orders.orderSource,
             totalAmount: orders.totalAmount,
             status: orders.status,
             note: orders.note,
+            branchName: branches.name,
+            zoneName: zones.name,
             createdAt: orders.createdAt,
         })
         .from(orders)
         .leftJoin(users, eq(orders.userId, users.id))
+        .leftJoin(branches, eq(orders.branchId, branches.id))
+        .leftJoin(addresses, eq(orders.addressId, addresses.id))
+        .leftJoin(zones, eq(addresses.zoneId, zones.id))
         .where(and(...conditions))
         .orderBy(desc(orders.createdAt));
 
@@ -119,11 +147,31 @@ export const getOrdersByStatus = async (
         eq(orders.status, status),
     ];
 
-    if (adminBranchId) {
-        conditions.push(eq(orders.branchId, adminBranchId));
+    const queryBranchId = (req.query?.branchId as string)?.trim();
+    const filterBranchId = adminBranchId || (queryBranchId && queryBranchId !== "null" && queryBranchId !== "undefined" ? queryBranchId : undefined);
+
+    if (filterBranchId) {
+        conditions.push(eq(orders.branchId, filterBranchId));
     }
-    else if (req.query?.branchId) {
-        conditions.push(eq(orders.branchId, req.query.branchId as string));
+
+    const source = ((req.query?.source || req.query?.orderSource) as string)?.trim();
+    if (source && source !== "null" && source !== "undefined") {
+        conditions.push(eq(orders.orderSource, source as any));
+    }
+
+    const zoneId = (req.query?.zoneId as string)?.trim();
+    if (zoneId && zoneId !== "null" && zoneId !== "undefined") {
+        conditions.push(
+            or(
+                eq(addresses.zoneId, zoneId),
+                eq(branches.zoneId, zoneId)
+            )
+        );
+    }
+
+    const cityId = (req.query?.cityId as string)?.trim();
+    if (cityId && cityId !== "null" && cityId !== "undefined") {
+        conditions.push(eq(zones.cityId, cityId));
     }
 
     const dateConditions = await buildOrderDateConditions(req, adminRestaurantId);
@@ -144,11 +192,14 @@ export const getOrdersByStatus = async (
             status: orders.status,
             note: orders.note,
             branchName: branches.name,
+            zoneName: zones.name,
             createdAt: orders.createdAt,
         })
         .from(orders)
         .leftJoin(users, eq(orders.userId, users.id))
         .leftJoin(branches, eq(orders.branchId, branches.id))
+        .leftJoin(addresses, eq(orders.addressId, addresses.id))
+        .leftJoin(zones, eq(addresses.zoneId, zones.id))
         .where(and(...conditions))
         .orderBy(desc(orders.createdAt));
 
@@ -845,9 +896,9 @@ export const setOrderPreparingDuration = async (req: Request, res: Response) => 
         .set({ durationOrderPreparing: finalDuration, updatedAt: new Date() })
         .where(eq(orders.id, orderId));
 
-    return SuccessResponse(res, { 
+    return SuccessResponse(res, {
         message: 'Order preparing duration updated successfully',
-        durationOrderPreparing: finalDuration 
+        durationOrderPreparing: finalDuration
     });
 };
 
@@ -1167,13 +1218,31 @@ export const getallnumbersoforders = async (req: Request, res: Response) => {
         eq(orders.restaurantId, adminRestaurantId)
     ];
 
-    // لو ده مدير فرع، نفلتر الأوردرات لفرعه هو بس بشكل إجباري
-    if (adminBranchId) {
-        conditions.push(eq(orders.branchId, adminBranchId));
+    const queryBranchId = (req.query?.branchId as string)?.trim();
+    const filterBranchId = adminBranchId || (queryBranchId && queryBranchId !== "null" && queryBranchId !== "undefined" ? queryBranchId : undefined);
+
+    if (filterBranchId) {
+        conditions.push(eq(orders.branchId, filterBranchId));
     }
-    // لو ده المالك وبعت branchId في الـ Query عشان يفلتر بيه
-    else if (req.query?.branchId) {
-        conditions.push(eq(orders.branchId, req.query.branchId as string));
+
+    const source = ((req.query?.source || req.query?.orderSource) as string)?.trim();
+    if (source && source !== "null" && source !== "undefined") {
+        conditions.push(eq(orders.orderSource, source as any));
+    }
+
+    const zoneId = (req.query?.zoneId as string)?.trim();
+    if (zoneId && zoneId !== "null" && zoneId !== "undefined") {
+        conditions.push(
+            or(
+                eq(addresses.zoneId, zoneId),
+                eq(branches.zoneId, zoneId)
+            )
+        );
+    }
+
+    const cityId = (req.query?.cityId as string)?.trim();
+    if (cityId && cityId !== "null" && cityId !== "undefined") {
+        conditions.push(eq(zones.cityId, cityId));
     }
 
     //-----------------------
@@ -1187,6 +1256,9 @@ export const getallnumbersoforders = async (req: Request, res: Response) => {
             count: sql<number>`count(${orders.id})`,
         })
         .from(orders)
+        .leftJoin(branches, eq(orders.branchId, branches.id))
+        .leftJoin(addresses, eq(orders.addressId, addresses.id))
+        .leftJoin(zones, eq(addresses.zoneId, zones.id))
         .where(and(...conditions))
         .groupBy(orders.status);
 
@@ -1274,4 +1346,110 @@ export const selectDeliveryMan = async (req: Request, res: Response) => {
         .where(and(...conditions));
 
     return SuccessResponse(res, { message: "Get delivery men success", data: deliveryMenList });
+};
+
+//=======================================
+//  select (branch - zone - source)
+//=======================================
+export const getSelectData = async (req: Request, res: Response) => {
+    const adminRestaurantId = req.user?.restaurantId || req.user?.id;
+    const adminBranchId = req.user?.branchId;
+    const queryBranchId = req.query?.branchId as string | undefined;
+    const filterBranchId = adminBranchId || queryBranchId;
+
+    if (!adminRestaurantId) {
+        throw new BadRequest("Restaurant ID not found");
+    }
+
+    const branchConditions: any[] = [
+        eq(branches.restaurantId, adminRestaurantId),
+        eq(branches.status, "active"),
+    ];
+
+    if (adminBranchId) {
+        branchConditions.push(eq(branches.id, adminBranchId));
+    }
+
+    const zoneConditions: any[] = [
+        eq(restaurantZoneDeliveryFees.restaurantId, adminRestaurantId),
+        eq(restaurantZoneDeliveryFees.status, "active"),
+        eq(zones.status, "active"),
+    ];
+
+    if (filterBranchId) {
+        zoneConditions.push(
+            or(
+                eq(restaurantZoneDeliveryFees.branchId, filterBranchId),
+                isNull(restaurantZoneDeliveryFees.branchId)
+            )
+        );
+    }
+
+    const [branchList, rawZones] = await Promise.all([
+        db
+            .select({
+                id: branches.id,
+                name: branches.name,
+                nameAr: branches.nameAr,
+                nameFr: branches.nameFr,
+                zoneId: branches.zoneId,
+            })
+            .from(branches)
+            .where(and(...branchConditions)),
+
+        db
+            .select({
+                id: zones.id,
+                name: zones.name,
+                nameAr: zones.nameAr,
+                nameFr: zones.nameFr,
+                displayName: zones.displayName,
+                displayNameAr: zones.displayNameAr,
+                displayNameFr: zones.displayNameFr,
+                cityId: restaurantZoneDeliveryFees.cityId,
+            })
+            .from(restaurantZoneDeliveryFees)
+            .innerJoin(zones, eq(restaurantZoneDeliveryFees.zoneId, zones.id))
+            .where(and(...zoneConditions)),
+    ]);
+
+    // Deduplicate zones in case multiple fee rules exist for the same zone
+    const zoneMap = new Map<string, (typeof rawZones)[0]>();
+    for (const z of rawZones) {
+        if (!zoneMap.has(z.id)) {
+            zoneMap.set(z.id, z);
+        }
+    }
+    const zoneList = Array.from(zoneMap.values());
+
+    const cityIds = [...new Set(zoneList.map((z) => z.cityId).filter(Boolean))];
+    let cityList: any[] = [];
+    if (cityIds.length > 0) {
+        cityList = await db
+            .select({
+                id: cities.id,
+                name: cities.name,
+                nameAr: cities.nameAr,
+                nameFr: cities.nameFr,
+            })
+            .from(cities)
+            .where(and(inArray(cities.id, cityIds as string[]), eq(cities.status, "active")));
+    }
+
+    const sources = [
+        { id: "online_order_web", name: "Online Order Web", nameAr: "طلب أونلاين ويب", value: "online_order_web" },
+        { id: "online_order_app", name: "Online Order App", nameAr: "طلب أونلاين تطبيق", value: "online_order_app" },
+        { id: "food_aggregator", name: "Food Aggregator", nameAr: "تطبيقات التوصيل", value: "food_aggregator" },
+        { id: "my_keeto", name: "My Keeto", nameAr: "ماي كيتو", value: "my_keeto" },
+    ];
+
+    return SuccessResponse(res, {
+        message: "Get select data success",
+        data: {
+            branches: branchList,
+            zones: zoneList,
+            cities: cityList,
+            sources,
+        },
+    });
 };

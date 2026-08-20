@@ -17,7 +17,8 @@ import {
     getallnumbersoforders,
     assignDelivery,
     selectDeliveryMan,
-    setOrderPreparingDuration
+    setOrderPreparingDuration,
+    getSelectData
 } from "../../controllers/admin/order";
 
 const router = Router();
@@ -26,6 +27,7 @@ const router = Router();
 router.get("/reasons", hasPermission("orders", "read"), catchAsync(getReasons));
 router.get("/numbers", hasPermission("orders", "read", true), catchAsync(getallnumbersoforders));
 router.get("/select", hasPermission("orders", "read", true), catchAsync(selectDeliveryMan))
+router.get("/select-data", hasPermission("orders", "read", true), catchAsync(getSelectData))
 
 // ✅ كل الأوردرات - يحتاج صلاحية read + التحقق من الفرع
 router.get("/", hasPermission("orders", "read", true), catchAsync(getRestaurantOrders));
