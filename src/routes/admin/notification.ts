@@ -3,10 +3,15 @@ import { catchAsync } from "../../utils/catchAsync";
 import { 
     getMyNotifications, 
     markNotificationAsRead, 
-    markAllNotificationsAsRead 
+    markAllNotificationsAsRead,
+    getRepeatNotificationSettings,
+    updateRepeatNotificationSettings
 } from "../../controllers/admin/notification";
 
 const router = Router();
+
+router.get("/repeat-settings", catchAsync(getRepeatNotificationSettings));
+router.put("/repeat-settings", catchAsync(updateRepeatNotificationSettings));
 
 router.get("/", catchAsync(getMyNotifications));
 router.put("/read-all", catchAsync(markAllNotificationsAsRead));

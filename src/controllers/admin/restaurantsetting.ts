@@ -49,6 +49,10 @@ export const updateSettings = async (req: Request, res: Response): Promise<void>
         if (settings.firstTextColor !== undefined) settingsData.firstTextColor = settings.firstTextColor;
         if (settings.secondTextColor !== undefined) settingsData.secondTextColor = settings.secondTextColor;
 
+        if (settings.repeatNotification !== undefined) settingsData.repeatNotification = settings.repeatNotification;
+        if (settings.repeatNotificationDuration !== undefined) settingsData.repeatNotificationDuration = settings.repeatNotificationDuration;
+        if (settings.repeatNotificationInterval !== undefined) settingsData.repeatNotificationInterval = settings.repeatNotificationInterval;
+
         if (existingSettings.length > 0) {
           // ✅ Update existing settings
           await tx.update(restaurantSettings)

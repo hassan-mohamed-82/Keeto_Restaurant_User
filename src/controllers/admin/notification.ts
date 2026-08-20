@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { notifications } from "../../models/schema";
+import { notifications, restaurantSettings } from "../../models/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { UnauthorizedError } from "../../Errors";
@@ -151,6 +151,100 @@ export const markAllNotificationsAsRead = async (req: Request | any, res: Respon
         .where(and(...conditions));
 
     return SuccessResponse(res, { message: "All notifications marked as read" });
+};
+
+// ==========================================
+// 4. Get Repeat Notification Settings
+// ==========================================
+export const getRepeatNotificationSettings = async (req: Request | any, res: Response) => {
+    if (!req.user) throw new UnauthorizedError("Unauthenticated");
+    const adminRestaurantId = req.user.restaurantId || req.user.id;
+
+    if (!adminRestaurantId) throw new BadRequest("Restaurant ID not found");
+
+    let [settings] = await db
+        .select({
+            repeatNotification: restaurantSettings.repeatNotification,
+            repeatNotificationDuration: restaurantSettings.repeatNotificationDuration,
+            repeatNotificationInterval: restaurantSettings.repeatNotificationInterval,
+        })
+        .from(restaurantSettings)
+        .where(eq(restaurantSettings.restaurantId, adminRestaurantId))
+        .limit(1);
+
+    if (!settings) {
+        await db.insert(restaurantSettings).values({ restaurantId: adminRestaurantId });
+        [settings] = await db
+            .select({
+                repeatNotification: restaurantSettings.repeatNotification,
+                repeatNotificationDuration: restaurantSettings.repeatNotificationDuration,
+                repeatNotificationInterval: restaurantSettings.repeatNotificationInterval,
+            })
+            .from(restaurantSettings)
+            .where(eq(restaurantSettings.restaurantId, adminRestaurantId))
+            .limit(1);
+    }
+
+    return SuccessResponse(res, {
+        message: "Repeat notification settings fetched successfully",
+        data: {
+            repeatNotification: settings?.repeatNotification ?? false,
+            repeatNotificationDuration: settings?.repeatNotificationDuration ?? 5,
+            repeatNotificationInterval: settings?.repeatNotificationInterval ?? 60,
+        }
+    });
+};
+
+// ==========================================
+// 5. Update Repeat Notification Settings
+// ==========================================
+export const updateRepeatNotificationSettings = async (req: Request | any, res: Response) => {
+    if (!req.user) throw new UnauthorizedError("Unauthenticated");
+    const adminRestaurantId = req.user.restaurantId || req.user.id;
+
+    if (!adminRestaurantId) throw new BadRequest("Restaurant ID not found");
+
+    const { repeatNotification, repeatNotificationDuration, repeatNotificationInterval } = req.body;
+
+    const updateData: any = {};
+    if (repeatNotification !== undefined) updateData.repeatNotification = Boolean(repeatNotification);
+    if (repeatNotificationDuration !== undefined) updateData.repeatNotificationDuration = Number(repeatNotificationDuration);
+    if (repeatNotificationInterval !== undefined) updateData.repeatNotificationInterval = Number(repeatNotificationInterval);
+
+    const [existing] = await db
+        .select()
+        .from(restaurantSettings)
+        .where(eq(restaurantSettings.restaurantId, adminRestaurantId))
+        .limit(1);
+
+    if (existing) {
+        await db
+            .update(restaurantSettings)
+            .set(updateData)
+            .where(eq(restaurantSettings.restaurantId, adminRestaurantId));
+    } else {
+        await db
+            .insert(restaurantSettings)
+            .values({
+                restaurantId: adminRestaurantId,
+                ...updateData,
+            });
+    }
+
+    const [updatedSettings] = await db
+        .select({
+            repeatNotification: restaurantSettings.repeatNotification,
+            repeatNotificationDuration: restaurantSettings.repeatNotificationDuration,
+            repeatNotificationInterval: restaurantSettings.repeatNotificationInterval,
+        })
+        .from(restaurantSettings)
+        .where(eq(restaurantSettings.restaurantId, adminRestaurantId))
+        .limit(1);
+
+    return SuccessResponse(res, {
+        message: "Repeat notification settings updated successfully",
+        data: updatedSettings
+    });
 };
 
 
