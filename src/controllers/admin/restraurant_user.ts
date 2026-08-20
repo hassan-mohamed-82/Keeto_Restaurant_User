@@ -11,21 +11,15 @@ import { handleImageUpdate } from "../../utils/handleImages";
 // 1. Get Restaurant Users (Supports ?status=active/blocked)
 // =======================================================
 export const getRestaurantUsers = async (req: Request, res: Response) => {
-    const restaurantId = req.user?.restaurantId || req.user?.id;
+    const restaurantId = req.user?.restaurantId || req.user?.id || req.user?.branchId;
 
     if (!restaurantId) {
         throw new BadRequest("Restaurant ID is required");
     }
 
-    const { status } = req.query;
-
     const conditions: any[] = [
         eq(restaurant_users.restaurantId, restaurantId)
     ];
-
-    if (status && (status === "active" || status === "blocked")) {
-        conditions.push(eq(restaurant_users.status, status));
-    }
 
     const data = await db.select({
         id: restaurant_users.id,
@@ -43,10 +37,10 @@ export const getRestaurantUsers = async (req: Request, res: Response) => {
             name: restaurants.name,
         }
     })
-    .from(restaurant_users)
-    .innerJoin(users, eq(restaurant_users.userId, users.id))
-    .innerJoin(restaurants, eq(restaurant_users.restaurantId, restaurants.id))
-    .where(and(...conditions));
+        .from(restaurant_users)
+        .innerJoin(users, eq(restaurant_users.userId, users.id))
+        .innerJoin(restaurants, eq(restaurant_users.restaurantId, restaurants.id))
+        .where(and(...conditions));
 
     return SuccessResponse(res, { message: "Restaurant users fetched successfully", data }, 200);
 };
@@ -77,13 +71,13 @@ export const getBlockedRestaurantUsers = async (req: Request, res: Response) => 
             name: restaurants.name,
         }
     })
-    .from(restaurant_users)
-    .innerJoin(users, eq(restaurant_users.userId, users.id))
-    .innerJoin(restaurants, eq(restaurant_users.restaurantId, restaurants.id))
-    .where(and(
-        eq(restaurant_users.restaurantId, restaurantId),
-        eq(restaurant_users.status, "blocked")
-    ));
+        .from(restaurant_users)
+        .innerJoin(users, eq(restaurant_users.userId, users.id))
+        .innerJoin(restaurants, eq(restaurant_users.restaurantId, restaurants.id))
+        .where(and(
+            eq(restaurant_users.restaurantId, restaurantId),
+            eq(restaurant_users.status, "blocked")
+        ));
 
     return SuccessResponse(res, { message: "Blocked restaurant users fetched successfully", data }, 200);
 };
@@ -220,19 +214,19 @@ export const getRestaurantUserById = async (req: Request, res: Response) => {
             name: restaurants.name,
         }
     })
-    .from(restaurant_users)
-    .innerJoin(users, eq(restaurant_users.userId, users.id))
-    .innerJoin(restaurants, eq(restaurant_users.restaurantId, restaurants.id))
-    .where(
-        and(
-            eq(restaurant_users.restaurantId, restaurantId),
-            or(
-                eq(restaurant_users.userId, id),
-                eq(restaurant_users.id, id)
+        .from(restaurant_users)
+        .innerJoin(users, eq(restaurant_users.userId, users.id))
+        .innerJoin(restaurants, eq(restaurant_users.restaurantId, restaurants.id))
+        .where(
+            and(
+                eq(restaurant_users.restaurantId, restaurantId),
+                or(
+                    eq(restaurant_users.userId, id),
+                    eq(restaurant_users.id, id)
+                )
             )
         )
-    )
-    .limit(1);
+        .limit(1);
 
     if (!userRecord) {
         throw new NotFound("User not found for this restaurant");
