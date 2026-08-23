@@ -14,7 +14,8 @@ import {
     restaurantBusinessPlans,
     food,
     restaurant_users,
-    deliveryMen
+    deliveryMen,
+    freeDeliveryOffers
 } from "../../models/schema";
 import { eq, and, inArray, sql, desc, gte } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
@@ -263,6 +264,31 @@ export const checkout = async (req: Request | any, res: Response) => {
 
         if (!selfFee) throw new BadRequest("Restaurant does not deliver to your zone directly");
         deliveryFee = parseFloat(selfFee.deliveryFee as string || "0");
+    }
+
+    // ==========================================
+    // Check Free Delivery Offer (Restaurant Campaign)
+    // ==========================================
+    const nowOffer = new Date();
+    const [freeOffer] = await db
+        .select()
+        .from(freeDeliveryOffers)
+        .where(
+            and(
+                eq(freeDeliveryOffers.restaurantId, restaurantId),
+                eq(freeDeliveryOffers.status, "active")
+            )
+        )
+        .limit(1);
+
+    if (freeOffer) {
+        const isStartValid = !freeOffer.startDate || new Date(freeOffer.startDate) <= nowOffer;
+        const isEndValid = !freeOffer.endDate || new Date(freeOffer.endDate) >= nowOffer;
+        const minReq = parseFloat(freeOffer.minOrderAmount as string || "0");
+
+        if (isStartValid && isEndValid && subtotal >= minReq) {
+            isFreeDelivery = true;
+        }
     }
 
     if (isFreeDelivery) {
