@@ -24,6 +24,7 @@ import {
     restaurantSchedules,
 } from "../../models/schema";
 import { eq, and, or, desc, inArray, sql, gte, lte, isNull } from "drizzle-orm";
+import { alias } from "drizzle-orm/mysql-core";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors/NotFound";
@@ -54,6 +55,8 @@ export {
 // ==========================================
 // 3. API Endpoints
 // ==========================================
+
+const branchZones = alias(zones, "branch_zones");
 
 export const getRestaurantOrders = async (req: Request, res: Response) => {
     if (!req.user) {
@@ -129,7 +132,7 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
                 phone: deliveryMen.phone,
             },
             branchName: branches.name,
-            zoneName: zones.name,
+            zoneName: sql<string>`COALESCE(${zones.name}, ${branchZones.name})`,
             createdAt: orders.createdAt,
             updatedAt: orders.updatedAt,
         })
@@ -139,6 +142,7 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
         .leftJoin(deliveryMen, eq(orders.deliveryManId, deliveryMen.id))
         .leftJoin(addresses, eq(orders.addressId, addresses.id))
         .leftJoin(zones, eq(addresses.zoneId, zones.id))
+        .leftJoin(branchZones, eq(branches.zoneId, branchZones.id))
         .where(and(...conditions))
         .orderBy(desc(orders.createdAt));
 
@@ -226,7 +230,7 @@ export const getOrdersByStatus = async (
                 phone: deliveryMen.phone,
             },
             branchName: branches.name,
-            zoneName: zones.name,
+            zoneName: sql<string>`COALESCE(${zones.name}, ${branchZones.name})`,
             createdAt: orders.createdAt,
             updatedAt: orders.updatedAt,
         })
@@ -236,6 +240,7 @@ export const getOrdersByStatus = async (
         .leftJoin(deliveryMen, eq(orders.deliveryManId, deliveryMen.id))
         .leftJoin(addresses, eq(orders.addressId, addresses.id))
         .leftJoin(zones, eq(addresses.zoneId, zones.id))
+        .leftJoin(branchZones, eq(branches.zoneId, branchZones.id))
         .where(and(...conditions))
         .orderBy(desc(orders.createdAt));
 
