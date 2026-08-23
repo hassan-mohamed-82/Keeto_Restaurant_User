@@ -804,7 +804,7 @@ export const getOutOfStockFoods = async (req: Request, res: Response) => {
     }
 
     // =========================================================
-    // RESTAURANT VIEW: Return globally OOS foods + unavailable branches
+    // RESTAURANT VIEW: Return globally OOS foods + foods with unavailable branches
     // =========================================================
     const rawFoods = await db
         .select({
@@ -839,12 +839,7 @@ export const getOutOfStockFoods = async (req: Request, res: Response) => {
         .from(food)
         .leftJoin(categories, eq(food.categoryid, categories.id))
         .leftJoin(subcategories, eq(food.subcategoryid, subcategories.id))
-        .where(
-            and(
-                eq(food.restaurantid, restaurantId),
-                eq(food.isOutOfStock, true)
-            )
-        );
+        .where(eq(food.restaurantid, restaurantId)); // fetch all foods — filter below
 
     if (rawFoods.length === 0) {
         return SuccessResponse(res, {
@@ -853,11 +848,23 @@ export const getOutOfStockFoods = async (req: Request, res: Response) => {
         });
     }
 
-    // Get unavailable branches for each food using the food helper
+    // Get unavailable branches for ALL foods
     const foodIds = rawFoods.map((f) => f.id);
     const unavailableBranchesMap = await getUnavailableBranchesForFoods(foodIds);
 
-    const result = rawFoods.map((f) => ({
+    // Keep only: globally OOS  OR  has at least one unavailable branch
+    const filtered = rawFoods.filter(
+        (f) => f.isOutOfStock || (unavailableBranchesMap.get(f.id)?.length ?? 0) > 0
+    );
+
+    if (filtered.length === 0) {
+        return SuccessResponse(res, {
+            message: "Get out-of-stock foods success",
+            data: [],
+        });
+    }
+
+    const result = filtered.map((f) => ({
         id: f.id,
         name: f.name,
         nameAr: f.nameAr,
@@ -885,7 +892,6 @@ export const getOutOfStockFoods = async (req: Request, res: Response) => {
         subcategory: f.subcategory_name
             ? { name: f.subcategory_name, nameAr: f.subcategory_nameAr, nameFr: f.subcategory_nameFr }
             : null,
-        // Branches where this food is also unavailable (inactive or branch-level OOS)
         unavailableBranches: unavailableBranchesMap.get(f.id) ?? [],
     }));
 
@@ -893,4 +899,5 @@ export const getOutOfStockFoods = async (req: Request, res: Response) => {
         message: "Get out-of-stock foods success",
         data: result,
     });
-};
+};
+
