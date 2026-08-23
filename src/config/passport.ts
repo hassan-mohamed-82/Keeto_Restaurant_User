@@ -51,7 +51,7 @@ export const verifyGoogleToken = async (req: Request, res: Response) => {
         name,
         isVerified: true,
       });
-      user = { id: newId, name, email, googleId, phone: null, alternatePhone: null, photo: null, fcmToken: null, password: null, isVerified: true, status: "active", createdAt: new Date(), facebookId: null };
+      user = { id: newId, name, email, googleId, phone: null, alternatePhone: null, photo: null, fcmToken: null, password: null, isVerified: true, status: "active", createdAt: new Date(), facebookId: null , isDeleted: false };
     } else {
       // 👤 Login (existing user)
       // لو المستخدم كان موجود بالإيميل بس ومفيش googleId نخزنه

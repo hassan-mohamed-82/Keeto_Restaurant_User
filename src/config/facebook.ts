@@ -67,6 +67,7 @@ export const verifyFacebookToken = async (req: Request, res: Response) => {
         password: null, 
         isVerified: true, 
         status:"active",
+        isDeleted: false,
         createdAt: new Date() 
       };
     } else {
