@@ -53,3 +53,4 @@ export * from "./schema/admin/userPointsTransactions";
 export * from "./schema/admin/delivery_man";
 export * from "./schema/admin/platforms";
 export * from "./schema/admin/SocialMedia";
+export * from "./schema/admin/recommendedFood";
