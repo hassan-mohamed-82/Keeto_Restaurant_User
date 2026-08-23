@@ -27,6 +27,7 @@ export const branches = mysqlTable("branches", {
     lat: varchar("lat", { length: 255 }),
     lng: varchar("lng", { length: 255 }),
     status: mysqlEnum("status", ["active", "inactive"]).default("active"),
+    inactiveReason: text("inactive_reason"),
     createdAt: timestamp("created_at").defaultNow(),
 });
 

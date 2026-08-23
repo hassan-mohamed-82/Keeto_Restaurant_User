@@ -61,6 +61,7 @@ export const getMyBranches = async (req: Request, res: Response) => {
         lng: branches.lng,
         phoneNumber: branches.phoneNumber,
         status: branches.status,
+        inactiveReason: branches.inactiveReason,
         zone: {
             id: zones.id,
             name: zones.name,
@@ -93,6 +94,7 @@ export const getBranchById = async (req: Request, res: Response) => {
         lng: branches.lng,
         phoneNumber: branches.phoneNumber,
         status: branches.status,
+        inactiveReason: branches.inactiveReason,
         zone: {
             id: zones.id,
             name: zones.name,
@@ -117,7 +119,7 @@ export const getBranchById = async (req: Request, res: Response) => {
 
 export const updateBranch = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, address, phoneNumber, zoneId, status, nameAr, nameFr, addressAr, addressFr ,deliveryRadiusKm,lat,lng} = req.body;
+    const { name, address, phoneNumber, zoneId, status, nameAr, nameFr, addressAr, addressFr ,deliveryRadiusKm,lat,lng ,inactiveReason} = req.body;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Restaurant ID missing");
 
@@ -151,6 +153,7 @@ export const updateBranch = async (req: Request, res: Response) => {
         updateData.zoneId = zoneId;
     }
     if (status) updateData.status = status;
+    if (inactiveReason !== undefined && status === "inactive") updateData.inactiveReason = inactiveReason;
 
     await db
         .update(branches)
@@ -186,9 +189,13 @@ export const deleteBranch = async (req: Request, res: Response) => {
 
 export const updateBranchStatus = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, inactiveReason } = req.body;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Restaurant ID missing");
+
+    // if (status === "inactive" && !reason) {
+    //     throw new BadRequest("A reason is required when setting branch status to inactive");
+    // }
 
     const existingBranch = await db
         .select()
@@ -205,7 +212,10 @@ export const updateBranchStatus = async (req: Request, res: Response) => {
 
     await db
         .update(branches)
-        .set({ status })
+        .set({
+            status,
+            inactiveReason: status === "inactive" ? inactiveReason : null,
+        })
         .where(eq(branches.id, id));
 
     return SuccessResponse(res, { message: "Branch status updated successfully" });
