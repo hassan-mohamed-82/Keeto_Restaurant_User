@@ -106,18 +106,37 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
             dailyOrderNumber: orders.dailyOrderNumber,
             customerName: users.name,
             customerPhone: users.phone,
+            rating: orders.rating,
+            ratingComment: orders.ratingComment,
             orderType: orders.orderType,
             orderSource: orders.orderSource,
+            paymentMethod: orders.paymentMethod,
+            subtotal: orders.subtotal,
+            deliveryFee: orders.deliveryFee,
+            serviceFee: orders.serviceFee,
+            appCommission: orders.appCommission,
+            discountAmount: orders.discountAmount,
+            couponCode: orders.couponCode,
             totalAmount: orders.totalAmount,
             status: orders.status,
+            durationOrderPreparing: orders.durationOrderPreparing,
+            cancelReasonId: orders.cancelReasonId,
+            cancelReason: orders.cancelReason,
             note: orders.note,
+            deliveryMan: {
+                id: deliveryMen.id,
+                name: deliveryMen.name,
+                phone: deliveryMen.phone,
+            },
             branchName: branches.name,
             zoneName: zones.name,
             createdAt: orders.createdAt,
+            updatedAt: orders.updatedAt,
         })
         .from(orders)
         .leftJoin(users, eq(orders.userId, users.id))
         .leftJoin(branches, eq(orders.branchId, branches.id))
+        .leftJoin(deliveryMen, eq(orders.deliveryManId, deliveryMen.id))
         .leftJoin(addresses, eq(orders.addressId, addresses.id))
         .leftJoin(zones, eq(addresses.zoneId, zones.id))
         .where(and(...conditions))
@@ -184,20 +203,37 @@ export const getOrdersByStatus = async (
             dailyOrderNumber: orders.dailyOrderNumber,
             customerName: users.name,
             customerPhone: users.phone,
+            rating: orders.rating,
+            ratingComment: orders.ratingComment,
             orderType: orders.orderType,
             orderSource: orders.orderSource,
+            paymentMethod: orders.paymentMethod,
             subtotal: orders.subtotal,
             deliveryFee: orders.deliveryFee,
+            serviceFee: orders.serviceFee,
+            appCommission: orders.appCommission,
+            discountAmount: orders.discountAmount,
+            couponCode: orders.couponCode,
             totalAmount: orders.totalAmount,
             status: orders.status,
+            durationOrderPreparing: orders.durationOrderPreparing,
+            cancelReasonId: orders.cancelReasonId,
+            cancelReason: orders.cancelReason,
             note: orders.note,
+            deliveryMan: {
+                id: deliveryMen.id,
+                name: deliveryMen.name,
+                phone: deliveryMen.phone,
+            },
             branchName: branches.name,
             zoneName: zones.name,
             createdAt: orders.createdAt,
+            updatedAt: orders.updatedAt,
         })
         .from(orders)
         .leftJoin(users, eq(orders.userId, users.id))
         .leftJoin(branches, eq(orders.branchId, branches.id))
+        .leftJoin(deliveryMen, eq(orders.deliveryManId, deliveryMen.id))
         .leftJoin(addresses, eq(orders.addressId, addresses.id))
         .leftJoin(zones, eq(addresses.zoneId, zones.id))
         .where(and(...conditions))
@@ -537,13 +573,21 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             orderType: orderDetail.order.orderType,
             orderSource: orderDetail.order.orderSource,
             status: orderDetail.order.status,
+            cancelReasonId: orderDetail.order.cancelReasonId,
             cancelReason: orderDetail.order.cancelReason,
             note: orderDetail.order.note,
             subtotal: orderDetail.order.subtotal,
             deliveryFee: orderDetail.order.deliveryFee,
             serviceFee: orderDetail.order.serviceFee,
             appCommission: orderDetail.order.appCommission,
+            discountAmount: orderDetail.order.discountAmount,
+            couponCode: orderDetail.order.couponCode,
             totalAmount: orderDetail.order.totalAmount,
+            rating: orderDetail.order.rating,
+            ratingComment: orderDetail.order.ratingComment,
+            isPointsRedeemed: orderDetail.order.isPointsRedeemed,
+            redeemCode: orderDetail.order.redeemCode,
+            redeemCodeExpiresAt: orderDetail.order.redeemCodeExpiresAt,
             createdAt: orderDetail.order.createdAt,
             updatedAt: orderDetail.order.updatedAt,
             durationOrderPreparing: orderDetail.order.durationOrderPreparing,
@@ -554,12 +598,15 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             paymentMethodName: typeof pmDetails === "object" && pmDetails !== null ? pmDetails.name : pmDetails,
             paymentMethodNameAr: typeof pmDetails === "object" && pmDetails !== null ? pmDetails.nameAr : pmDetails,
 
+            deliveryManId: orderDetail.order.deliveryManId,
+            deliveryMan: orderDetail.driver,
+            driver: orderDetail.driver,
+
             branchId: resolvedBranch?.id || orderDetail.order.branchId || null,
             branch: resolvedBranch || orderDetail.branch || null,
             restaurant: orderDetail.restaurant,
             address: orderDetail.address,
             zone: resolvedZone,
-            driver: orderDetail.driver,
             items: formattedItems
         }
     });

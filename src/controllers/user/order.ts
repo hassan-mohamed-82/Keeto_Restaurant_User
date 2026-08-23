@@ -13,7 +13,8 @@ import {
     orderItems,
     restaurantBusinessPlans,
     food,
-    restaurant_users
+    restaurant_users,
+    deliveryMen
 } from "../../models/schema";
 import { eq, and, inArray, sql, desc, gte } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
@@ -542,16 +543,41 @@ export const getActiveOrders = async (req: Request | any, res: Response) => {
     const activeOrders = await db
         .select({
             orderId: orders.id,
+            id: orders.id,
             orderNumber: orders.orderNumber,
+            dailyOrderNumber: orders.dailyOrderNumber,
+            restaurantId: orders.restaurantId,
+            branchId: orders.branchId,
+            addressId: orders.addressId,
             restaurantName: restaurants.name,
             restaurantImage: restaurants.logo,
+            orderType: orders.orderType,
+            orderSource: orders.orderSource,
+            paymentMethod: orders.paymentMethod,
+            subtotal: orders.subtotal,
+            deliveryFee: orders.deliveryFee,
+            serviceFee: orders.serviceFee,
+            appCommission: orders.appCommission,
+            discountAmount: orders.discountAmount,
+            couponCode: orders.couponCode,
             totalAmount: orders.totalAmount,
             status: orders.status,
+            durationOrderPreparing: orders.durationOrderPreparing,
+            note: orders.note,
+            cancelReasonId: orders.cancelReasonId,
+            cancelReason: orders.cancelReason,
+            deliveryMan: {
+                id: deliveryMen.id,
+                name: deliveryMen.name,
+                phone: deliveryMen.phone,
+            },
             createdAt: orders.createdAt,
+            updatedAt: orders.updatedAt,
             itemsCount: sql<number>`(SELECT COUNT(*) FROM order_items WHERE order_items.order_id = ${orders.id})`
         })
         .from(orders)
         .leftJoin(restaurants, eq(orders.restaurantId, restaurants.id))
+        .leftJoin(deliveryMen, eq(orders.deliveryManId, deliveryMen.id))
         .where(
             and(
                 eq(orders.userId, userId),
@@ -576,16 +602,43 @@ export const getOrderHistory = async (req: Request | any, res: Response) => {
     const historyOrders = await db
         .select({
             orderId: orders.id,
+            id: orders.id,
             orderNumber: orders.orderNumber,
+            dailyOrderNumber: orders.dailyOrderNumber,
+            restaurantId: orders.restaurantId,
+            branchId: orders.branchId,
+            addressId: orders.addressId,
             restaurantName: restaurants.name,
             restaurantImage: restaurants.logo,
+            orderType: orders.orderType,
+            orderSource: orders.orderSource,
+            paymentMethod: orders.paymentMethod,
+            subtotal: orders.subtotal,
+            deliveryFee: orders.deliveryFee,
+            serviceFee: orders.serviceFee,
+            appCommission: orders.appCommission,
+            discountAmount: orders.discountAmount,
+            couponCode: orders.couponCode,
             totalAmount: orders.totalAmount,
             status: orders.status,
+            durationOrderPreparing: orders.durationOrderPreparing,
+            rating: orders.rating,
+            ratingComment: orders.ratingComment,
+            note: orders.note,
+            cancelReasonId: orders.cancelReasonId,
+            cancelReason: orders.cancelReason,
+            deliveryMan: {
+                id: deliveryMen.id,
+                name: deliveryMen.name,
+                phone: deliveryMen.phone,
+            },
             createdAt: orders.createdAt,
+            updatedAt: orders.updatedAt,
             itemsCount: sql<number>`(SELECT COUNT(*) FROM order_items WHERE order_items.order_id = ${orders.id})`
         })
         .from(orders)
         .leftJoin(restaurants, eq(orders.restaurantId, restaurants.id))
+        .leftJoin(deliveryMen, eq(orders.deliveryManId, deliveryMen.id))
         .where(
             and(
                 eq(orders.userId, userId),
@@ -610,26 +663,46 @@ export const getOrderDetails = async (req: Request | any, res: Response) => {
     const orderInfo = await db
         .select({
             orderId: orders.id,
+            id: orders.id,
             orderNumber: orders.orderNumber,
+            dailyOrderNumber: orders.dailyOrderNumber,
             status: orders.status,
             createdAt: orders.createdAt,
-            paymentMethod: orders.paymentMethod, // 👈 تم التعديل هنا (كانت orderItems بالخطأ)
+            updatedAt: orders.updatedAt,
+            paymentMethod: orders.paymentMethod,
             orderType: orders.orderType,
+            orderSource: orders.orderSource,
 
             subtotal: orders.subtotal,
             deliveryFee: orders.deliveryFee,
             serviceFee: orders.serviceFee,
+            appCommission: orders.appCommission,
             discountAmount: orders.discountAmount,
             couponCode: orders.couponCode,
             totalAmount: orders.totalAmount,
 
+            durationOrderPreparing: orders.durationOrderPreparing,
+            cancelReasonId: orders.cancelReasonId,
+            cancelReason: orders.cancelReason,
             note: orders.note,
+            rating: orders.rating,
+            ratingComment: orders.ratingComment,
 
+            restaurantId: orders.restaurantId,
+            branchId: orders.branchId,
+            addressId: orders.addressId,
             restaurantName: restaurants.name,
-            restaurantImage: restaurants.logo
+            restaurantImage: restaurants.logo,
+
+            deliveryMan: {
+                id: deliveryMen.id,
+                name: deliveryMen.name,
+                phone: deliveryMen.phone,
+            },
         })
         .from(orders)
         .leftJoin(restaurants, eq(orders.restaurantId, restaurants.id))
+        .leftJoin(deliveryMen, eq(orders.deliveryManId, deliveryMen.id))
         .where(eq(orders.id, orderId))
         .limit(1);
 
