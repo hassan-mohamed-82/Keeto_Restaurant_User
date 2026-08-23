@@ -13,7 +13,7 @@ export const createBranch = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id; 
     if (!restaurantId) throw new BadRequest("Restaurant ID missing");
 
-    const { name, address, phoneNumber, zoneId, nameAr, nameFr, addressAr, addressFr,deliveryRadiusKm,lat,lng } = req.body;
+    const { name, address, phoneNumber, zoneId, nameAr, nameFr, addressAr, addressFr,deliveryRadiusKm,lat,lng ,status,inactiveReason} = req.body;
 
     if (!name || !address || !zoneId) {
         throw new BadRequest("Missing required fields (name, address, zoneId)");
@@ -38,7 +38,8 @@ export const createBranch = async (req: Request, res: Response) => {
         lng,
         phoneNumber: phoneNumber || null,
         zoneId,
-        status: "active"
+        status: status || "active",
+        inactiveReason: status === "inactive" ? inactiveReason : null,
     });
 
     return SuccessResponse(res, { message: "Branch created successfully", data: { id } }, 201);
