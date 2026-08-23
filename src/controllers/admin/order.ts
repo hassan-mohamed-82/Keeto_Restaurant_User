@@ -86,12 +86,7 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
 
     const zoneId = (req.query?.zoneId as string)?.trim();
     if (zoneId && zoneId !== "null" && zoneId !== "undefined") {
-        conditions.push(
-            or(
-                eq(addresses.zoneId, zoneId),
-                eq(branches.zoneId, zoneId)
-            )
-        );
+        conditions.push(eq(orders.zoneId, zoneId));
     }
 
     const cityId = (req.query?.cityId as string)?.trim();
@@ -132,7 +127,7 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
                 phone: deliveryMen.phone,
             },
             branchName: branches.name,
-            zoneName: sql<string>`COALESCE(${zones.name}, ${branchZones.name})`,
+            zoneName: zones.name,
             createdAt: orders.createdAt,
             updatedAt: orders.updatedAt,
         })
@@ -140,9 +135,7 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
         .leftJoin(users, eq(orders.userId, users.id))
         .leftJoin(branches, eq(orders.branchId, branches.id))
         .leftJoin(deliveryMen, eq(orders.deliveryManId, deliveryMen.id))
-        .leftJoin(addresses, eq(orders.addressId, addresses.id))
-        .leftJoin(zones, eq(addresses.zoneId, zones.id))
-        .leftJoin(branchZones, eq(branches.zoneId, branchZones.id))
+        .leftJoin(zones, eq(orders.zoneId, zones.id))
         .where(and(...conditions))
         .orderBy(desc(orders.createdAt));
 
@@ -184,12 +177,7 @@ export const getOrdersByStatus = async (
 
     const zoneId = (req.query?.zoneId as string)?.trim();
     if (zoneId && zoneId !== "null" && zoneId !== "undefined") {
-        conditions.push(
-            or(
-                eq(addresses.zoneId, zoneId),
-                eq(branches.zoneId, zoneId)
-            )
-        );
+        conditions.push(eq(orders.zoneId, zoneId));
     }
 
     const cityId = (req.query?.cityId as string)?.trim();
@@ -230,7 +218,7 @@ export const getOrdersByStatus = async (
                 phone: deliveryMen.phone,
             },
             branchName: branches.name,
-            zoneName: sql<string>`COALESCE(${zones.name}, ${branchZones.name})`,
+            zoneName: zones.name,
             createdAt: orders.createdAt,
             updatedAt: orders.updatedAt,
         })
@@ -238,9 +226,7 @@ export const getOrdersByStatus = async (
         .leftJoin(users, eq(orders.userId, users.id))
         .leftJoin(branches, eq(orders.branchId, branches.id))
         .leftJoin(deliveryMen, eq(orders.deliveryManId, deliveryMen.id))
-        .leftJoin(addresses, eq(orders.addressId, addresses.id))
-        .leftJoin(zones, eq(addresses.zoneId, zones.id))
-        .leftJoin(branchZones, eq(branches.zoneId, branchZones.id))
+        .leftJoin(zones, eq(orders.zoneId, zones.id))
         .where(and(...conditions))
         .orderBy(desc(orders.createdAt));
 

@@ -27,6 +27,7 @@ export const users = mysqlTable("users", {
     googleId: varchar("google_id", { length: 255 }).unique(),
     
     isVerified: boolean("is_verified").default(false),
+    isDeleted: boolean("is_deleted").default(false),
     status: mysqlEnum("status", ["active", "blocked"]).default("active"),
     createdAt: timestamp("created_at").defaultNow(),
 });

@@ -28,6 +28,8 @@ export const orders = mysqlTable("orders", {
     addressId: char("address_id", { length: 36 })
         .references(() => addresses.id),
 
+    zoneId: char("zone_id", { length: 36 }),
+
     deliveryManId: char("delivery_man_id", { length: 36 })
         .references(() => deliveryMen.id),
 
