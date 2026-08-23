@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { db } from "../../models/connection";
 import { food, recommendedFoods } from "../../models/schema";
 import { eq, and, inArray, asc } from "drizzle-orm";
+import { alias } from "drizzle-orm/mysql-core";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors/NotFound";
@@ -10,7 +11,7 @@ import { v4 as uuidv4 } from "uuid";
 
 const getAdminRestaurantId = (req: Request): string => {
     if (!req.user) throw new UnauthorizedError("Not authenticated");
-    const restaurantId = req.user.restaurantId || req.user.id;
+    const restaurantId = req.user.restaurantId || req.user.id || req.user?.branchId;
     if (!restaurantId) throw new BadRequest("Restaurant ID not found");
     return restaurantId;
 };
@@ -111,7 +112,7 @@ export const getRecommendedProductsByFoodId = async (req: Request, res: Response
 
     // Verify basic food
     const [basicFood] = await db
-        .select({ id: food.id, name: food.name })
+        .select({ id: food.id, name: food.name, nameAr: food.nameAr, nameFr: food.nameFr, image: food.image })
         .from(food)
         .where(and(eq(food.id, foodId), eq(food.restaurantid, restaurantId)))
         .limit(1);
@@ -170,7 +171,7 @@ export const removeRecommendedProduct = async (req: Request, res: Response) => {
         throw new BadRequest("Both foodId and recommendedFoodId are required");
     }
 
-    const deleted = await db
+    await db
         .delete(recommendedFoods)
         .where(
             and(
@@ -182,5 +183,113 @@ export const removeRecommendedProduct = async (req: Request, res: Response) => {
 
     return SuccessResponse(res, {
         message: "Recommended product removed successfully",
+    });
+};
+
+// ==========================================
+// 4. Get All Foods for Select Dropdown (id, names, image, price)
+// ==========================================
+export const getFoodsForSelect = async (req: Request, res: Response) => {
+    const restaurantId = getAdminRestaurantId(req);
+
+    const foodsList = await db
+        .select({
+            id: food.id,
+            name: food.name,
+            nameAr: food.nameAr,
+            nameFr: food.nameFr,
+            image: food.image,
+            price: food.price,
+            status: food.status,
+            isOutOfStock: food.isOutOfStock,
+        })
+        .from(food)
+        .where(
+            and(
+                eq(food.restaurantid, restaurantId),
+                eq(food.status, "active")
+            )
+        );
+
+    return SuccessResponse(res, {
+        message: "Get foods for select success",
+        data: foodsList,
+    });
+};
+
+// ==========================================
+// 5. Get All Recommended Food Pairings (Basic Foods with their Recommended Foods)
+// ==========================================
+export const getAllRecommendedFoods = async (req: Request, res: Response) => {
+    const restaurantId = getAdminRestaurantId(req);
+
+    const basicFood = alias(food, "basic_food");
+    const recFood = alias(food, "rec_food");
+
+    const rows = await db
+        .select({
+            recommendationId: recommendedFoods.id,
+            sortOrder: recommendedFoods.sortOrder,
+            recommendationStatus: recommendedFoods.status,
+
+            basicFoodId: basicFood.id,
+            basicFoodName: basicFood.name,
+            basicFoodNameAr: basicFood.nameAr,
+            basicFoodNameFr: basicFood.nameFr,
+            basicFoodImage: basicFood.image,
+
+            recFoodId: recFood.id,
+            recFoodName: recFood.name,
+            recFoodNameAr: recFood.nameAr,
+            recFoodNameFr: recFood.nameFr,
+            recFoodImage: recFood.image,
+            recFoodPrice: recFood.price,
+            recFoodDiscountType: recFood.discount_type,
+            recFoodDiscountValue: recFood.discount_value,
+            recFoodIsOutOfStock: recFood.isOutOfStock,
+            recFoodStatus: recFood.status,
+        })
+        .from(recommendedFoods)
+        .innerJoin(basicFood, eq(recommendedFoods.foodId, basicFood.id))
+        .innerJoin(recFood, eq(recommendedFoods.recommendedFoodId, recFood.id))
+        .where(eq(recommendedFoods.restaurantId, restaurantId))
+        .orderBy(asc(recommendedFoods.sortOrder));
+
+    const groupedMap = new Map<string, any>();
+
+    for (const row of rows) {
+        if (!groupedMap.has(row.basicFoodId)) {
+            groupedMap.set(row.basicFoodId, {
+                food: {
+                    id: row.basicFoodId,
+                    name: row.basicFoodName,
+                    nameAr: row.basicFoodNameAr,
+                    nameFr: row.basicFoodNameFr,
+                    image: row.basicFoodImage,
+                },
+                recommendedFoods: [],
+            });
+        }
+
+        groupedMap.get(row.basicFoodId).recommendedFoods.push({
+            recommendationId: row.recommendationId,
+            id: row.recFoodId,
+            name: row.recFoodName,
+            nameAr: row.recFoodNameAr,
+            nameFr: row.recFoodNameFr,
+            image: row.recFoodImage,
+            price: row.recFoodPrice,
+            discountType: row.recFoodDiscountType,
+            discountValue: row.recFoodDiscountValue,
+            isOutOfStock: row.recFoodIsOutOfStock,
+            status: row.recFoodStatus,
+            sortOrder: row.sortOrder,
+            recommendationStatus: row.recommendationStatus,
+        });
+    }
+
+    return SuccessResponse(res, {
+        message: "Get all recommended foods success",
+        data: Array.from(groupedMap.values()),
     });
 };
