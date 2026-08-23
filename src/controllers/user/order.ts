@@ -472,7 +472,8 @@ export const checkout = async (req: Request | any, res: Response) => {
         if (!branch) throw new BadRequest("Invalid or inactive branch selected.");
 
         resolvedBranchId = branch.id;
-        resolvedZoneId = branch.zoneId;
+        // zoneId is only meaningful for delivery orders
+        // resolvedZoneId = branch.zoneId;
     }
 
     if (isFreeDelivery) deliveryFee = 0;

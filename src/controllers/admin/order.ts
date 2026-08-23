@@ -127,7 +127,7 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
                 phone: deliveryMen.phone,
             },
             branchName: branches.name,
-            zoneName: zones.name,
+            zoneName: sql<string | null>`CASE WHEN ${orders.orderType} = 'delivery' THEN ${zones.name} ELSE NULL END`,
             createdAt: orders.createdAt,
             updatedAt: orders.updatedAt,
         })
@@ -218,7 +218,7 @@ export const getOrdersByStatus = async (
                 phone: deliveryMen.phone,
             },
             branchName: branches.name,
-            zoneName: zones.name,
+            zoneName: sql<string | null>`CASE WHEN ${orders.orderType} = 'delivery' THEN ${zones.name} ELSE NULL END`,
             createdAt: orders.createdAt,
             updatedAt: orders.updatedAt,
         })
