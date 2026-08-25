@@ -43,6 +43,7 @@ import PointsOrdersRouter from "./pointsOrders";
 import DeliveryManRouter from "./delivery_man";
 import RecommendedFoodRouter from "./recommendedFood";
 import FreeDeliveryOfferRouter from "./freeDeliveryOffer";
+import PricingRouter from "./pricing";
 const router = Router();
 
 router.use("/auth", authRouter);
@@ -88,5 +89,6 @@ router.use("/points-orders", PointsOrdersRouter)
 router.use("/delivery-men", DeliveryManRouter);
 router.use("/recommended-foods", RecommendedFoodRouter);
 router.use("/free-delivery", FreeDeliveryOfferRouter);
+router.use("/pricing", PricingRouter);
 
 export default router;
