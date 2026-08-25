@@ -13,6 +13,8 @@ import {
     ingredientCategories,
     branchMenuItems,
     branches,
+    productChannelPricing,
+    variantChannelPricing,
 } from "../../models/schema";
 import { getUnavailableBranchesForFoods } from "../../helpers/food.helper";
 // ✅ تم إضافة and, or, isNull هنا عشان نصلح مشكلة الشروط المتعددة
@@ -128,7 +130,7 @@ export const createFood = async (req: Request, res: Response) => {
                 points: points ?? 0,
             });
 
-            // إدخال الخيارات (Variations) إن وجدت
+        // إدخال الخيارات (Variations) إن وجدت
             if (variations && Array.isArray(variations) && variations.length > 0) {
                 for (const variation of variations) {
                     const variationId = uuidv4();
@@ -153,6 +155,27 @@ export const createFood = async (req: Request, res: Response) => {
                             await tx.insert(variationOptions).values(optionsToInsert);
                         }
                     }
+                }
+            }
+
+            // ✅ حفظ branches في branchMenuItems إن وُجدت وغير فارغة
+            const incomingBranches = req.body.branches;
+            if (Array.isArray(incomingBranches) && incomingBranches.length > 0) {
+                const activeBranches = await tx
+                    .select({ id: branches.id })
+                    .from(branches)
+                    .where(eq(branches.restaurantId, restaurantId));
+                const activeBranchIds = new Set(activeBranches.map((b: any) => b.id));
+
+                for (const b of incomingBranches) {
+                    if (!b.branchId || !activeBranchIds.has(b.branchId)) continue;
+                    await tx.insert(branchMenuItems).values({
+                        id: uuidv4(),
+                        branchId: b.branchId,
+                        foodId,
+                        price: b.price !== undefined && b.price !== null ? String(b.price) : "0.00",
+                        status: b.status === "inactive" ? "inactive" : "active",
+                    });
                 }
             }
         });
@@ -503,6 +526,103 @@ export const updateFood = async (req: Request, res: Response) => {
                         additionalPrice: option.additionalPrice ? option.additionalPrice.toString() : "0",
                     });
                 }
+            }
+        }
+    }
+
+    // ===========================
+    // ✅ Branch Menu Items Update (if branches array provided and non-empty)
+    // ===========================
+    if (data.branches && Array.isArray(data.branches) && data.branches.length > 0) {
+        const activeBranches = await db
+            .select({ id: branches.id })
+            .from(branches)
+            .where(eq(branches.restaurantId, restaurantId));
+        const activeBranchIds = new Set(activeBranches.map((b: any) => b.id));
+
+        for (const b of data.branches) {
+            if (!b.branchId || !activeBranchIds.has(b.branchId)) continue;
+            const priceVal = b.price !== undefined && b.price !== null ? String(b.price) : "0.00";
+            const statusVal: "active" | "inactive" = b.status === "inactive" ? "inactive" : "active";
+
+            const [existing] = await db
+                .select({ id: branchMenuItems.id })
+                .from(branchMenuItems)
+                .where(and(eq(branchMenuItems.branchId, b.branchId), eq(branchMenuItems.foodId, id)))
+                .limit(1);
+
+            if (existing) {
+                await db.update(branchMenuItems)
+                    .set({ price: priceVal, status: statusVal, updatedAt: new Date() })
+                    .where(eq(branchMenuItems.id, existing.id));
+            } else {
+                await db.insert(branchMenuItems).values({
+                    id: uuidv4(),
+                    branchId: b.branchId,
+                    foodId: id,
+                    price: priceVal,
+                    status: statusVal,
+                });
+            }
+        }
+    }
+
+    // ===========================
+    // ✅ Product Channel Pricing Update (if channels provided)
+    // ===========================
+    if (data.channels && Array.isArray(data.channels) && data.channels.length > 0) {
+        for (const ch of data.channels) {
+            const { serviceModule, price, status, branchId: chBranchId } = ch;
+            if (!serviceModule || price === undefined) continue;
+            const priceVal = String(price);
+            const targetBranchId = chBranchId || null;
+            const statusVal: "active" | "inactive" = status === "inactive" ? "inactive" : "active";
+
+            const whereClause = targetBranchId
+                ? and(eq(productChannelPricing.foodId, id), eq(productChannelPricing.branchId, targetBranchId), eq(productChannelPricing.serviceModule, serviceModule))
+                : and(eq(productChannelPricing.foodId, id), isNull(productChannelPricing.branchId), eq(productChannelPricing.serviceModule, serviceModule));
+
+            const [existing] = await db.select({ id: productChannelPricing.id }).from(productChannelPricing).where(whereClause).limit(1);
+
+            if (existing) {
+                await db.update(productChannelPricing)
+                    .set({ price: priceVal, status: statusVal, updatedAt: new Date() })
+                    .where(eq(productChannelPricing.id, existing.id));
+            } else {
+                await db.insert(productChannelPricing).values({
+                    id: uuidv4(), foodId: id, branchId: targetBranchId,
+                    serviceModule, price: priceVal, status: statusVal,
+                });
+            }
+        }
+    }
+
+    // ===========================
+    // ✅ Variant Channel Pricing Update (if variantChannels provided)
+    // ===========================
+    if (data.variantChannels && Array.isArray(data.variantChannels) && data.variantChannels.length > 0) {
+        for (const vc of data.variantChannels) {
+            const { variantId, serviceModule, price, status, branchId: vcBranchId } = vc;
+            if (!variantId || !serviceModule || price === undefined) continue;
+            const priceVal = String(price);
+            const targetBranchId = vcBranchId || null;
+            const statusVal: "active" | "inactive" = status === "inactive" ? "inactive" : "active";
+
+            const whereClause = targetBranchId
+                ? and(eq(variantChannelPricing.variantId, variantId), eq(variantChannelPricing.branchId, targetBranchId), eq(variantChannelPricing.serviceModule, serviceModule))
+                : and(eq(variantChannelPricing.variantId, variantId), isNull(variantChannelPricing.branchId), eq(variantChannelPricing.serviceModule, serviceModule));
+
+            const [existing] = await db.select({ id: variantChannelPricing.id }).from(variantChannelPricing).where(whereClause).limit(1);
+
+            if (existing) {
+                await db.update(variantChannelPricing)
+                    .set({ price: priceVal, status: statusVal, updatedAt: new Date() })
+                    .where(eq(variantChannelPricing.id, existing.id));
+            } else {
+                await db.insert(variantChannelPricing).values({
+                    id: uuidv4(), variantId, branchId: targetBranchId,
+                    serviceModule, price: priceVal, status: statusVal,
+                });
             }
         }
     }
