@@ -723,6 +723,14 @@ export const getFoodSelectData = async (req: Request, res: Response) => {
         .leftJoin(ingredientCategories, eq(ingredients.categoryId, ingredientCategories.id))
         .where(eq(ingredients.restaurantId, restaurantId));
 
+    // GET ALL ACTIVE BRANCHES 
+    const activeBranches = await db
+        .select({ id: branches.id, name: branches.name })
+        .from(branches)
+        .where(and(
+            eq(branches.status, "active"),
+            eq(branches.restaurantId, restaurantId)
+        ));
 
     return SuccessResponse(res, {
         message: "Get food select data success",
@@ -730,7 +738,8 @@ export const getFoodSelectData = async (req: Request, res: Response) => {
             categories: myCategories,
             subcategories: mySubcategories,
             addons: myAddons,
-            ingredients: list
+            ingredients: list,
+            branches: activeBranches,
         }
     });
 };
