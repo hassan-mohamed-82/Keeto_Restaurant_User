@@ -103,7 +103,7 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
     const dateConditions = await buildOrderDateConditions(req, adminRestaurantId);
     conditions.push(...dateConditions);
 
-    const restaurantOrders = await db
+    const rawRestaurantOrders = await db
         .select({
             id: orders.id,
             orderNumber: orders.orderNumber,
@@ -134,6 +134,8 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
             },
             branchName: branches.name,
             zoneName: sql<string | null>`CASE WHEN ${orders.orderType} = 'delivery' THEN ${zones.name} ELSE NULL END`,
+            addressLat: addresses.lat,
+            addressLng: addresses.lng,
             createdAt: orders.createdAt,
             updatedAt: orders.updatedAt,
         })
@@ -141,10 +143,32 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
         .leftJoin(users, eq(orders.userId, users.id))
         .leftJoin(branches, eq(orders.branchId, branches.id))
         .leftJoin(deliveryMen, eq(orders.deliveryManId, deliveryMen.id))
+        .leftJoin(addresses, eq(orders.addressId, addresses.id))
         .leftJoin(restaurantZoneDeliveryFees, eq(orders.zoneId, restaurantZoneDeliveryFees.id))
-        .leftJoin(zones, eq(restaurantZoneDeliveryFees.zoneId, zones.id))
+        .leftJoin(zones, or(eq(restaurantZoneDeliveryFees.zoneId, zones.id), eq(orders.zoneId, zones.id)))
         .where(and(...conditions))
         .orderBy(desc(orders.createdAt));
+
+    const restaurantOrders = await Promise.all(
+        rawRestaurantOrders.map(async (o) => {
+            let finalZoneName = o.zoneName;
+            if (!finalZoneName && o.orderType === "delivery" && o.addressLat && o.addressLng) {
+                const latNum = parseFloat(String(o.addressLat));
+                const lngNum = parseFloat(String(o.addressLng));
+                if (!isNaN(latNum) && !isNaN(lngNum)) {
+                    const detected = await resolveZoneFromCoords(latNum, lngNum, adminRestaurantId);
+                    if (detected) {
+                        finalZoneName = detected.name;
+                    }
+                }
+            }
+            const { addressLat, addressLng, ...rest } = o;
+            return {
+                ...rest,
+                zoneName: finalZoneName,
+            };
+        })
+    );
 
     return SuccessResponse(res, { message: "Get orders success", data: restaurantOrders });
 };
@@ -201,7 +225,7 @@ export const getOrdersByStatus = async (
     const dateConditions = await buildOrderDateConditions(req, adminRestaurantId);
     conditions.push(...dateConditions);
 
-    const result = await db
+    const rawResult = await db
         .select({
             id: orders.id,
             orderNumber: orders.orderNumber,
@@ -232,6 +256,8 @@ export const getOrdersByStatus = async (
             },
             branchName: branches.name,
             zoneName: sql<string | null>`CASE WHEN ${orders.orderType} = 'delivery' THEN ${zones.name} ELSE NULL END`,
+            addressLat: addresses.lat,
+            addressLng: addresses.lng,
             createdAt: orders.createdAt,
             updatedAt: orders.updatedAt,
         })
@@ -239,10 +265,32 @@ export const getOrdersByStatus = async (
         .leftJoin(users, eq(orders.userId, users.id))
         .leftJoin(branches, eq(orders.branchId, branches.id))
         .leftJoin(deliveryMen, eq(orders.deliveryManId, deliveryMen.id))
+        .leftJoin(addresses, eq(orders.addressId, addresses.id))
         .leftJoin(restaurantZoneDeliveryFees, eq(orders.zoneId, restaurantZoneDeliveryFees.id))
-        .leftJoin(zones, eq(restaurantZoneDeliveryFees.zoneId, zones.id))
+        .leftJoin(zones, or(eq(restaurantZoneDeliveryFees.zoneId, zones.id), eq(orders.zoneId, zones.id)))
         .where(and(...conditions))
         .orderBy(desc(orders.createdAt));
+
+    const result = await Promise.all(
+        rawResult.map(async (o) => {
+            let finalZoneName = o.zoneName;
+            if (!finalZoneName && o.orderType === "delivery" && o.addressLat && o.addressLng) {
+                const latNum = parseFloat(String(o.addressLat));
+                const lngNum = parseFloat(String(o.addressLng));
+                if (!isNaN(latNum) && !isNaN(lngNum)) {
+                    const detected = await resolveZoneFromCoords(latNum, lngNum, adminRestaurantId);
+                    if (detected) {
+                        finalZoneName = detected.name;
+                    }
+                }
+            }
+            const { addressLat, addressLng, ...rest } = o;
+            return {
+                ...rest,
+                zoneName: finalZoneName,
+            };
+        })
+    );
 
     return SuccessResponse(res, { message: `Get ${status} orders success`, data: result });
 };
