@@ -411,7 +411,7 @@ export const checkout = async (req: Request | any, res: Response) => {
             throw new BadRequest("Your delivery address is outside our covered delivery zones.");
         }
 
-        resolvedZoneId = applicableFee.zoneId;
+        resolvedZoneId = applicableFee.id || applicableFee.zoneId;
         if (!resolvedZoneId) {
             throw new BadRequest("No delivery zone found for this address.");
         }
