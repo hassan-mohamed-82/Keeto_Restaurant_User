@@ -22,6 +22,7 @@ import {
     restaurantZoneDeliveryFees,
     restaurantSettings,
     restaurantSchedules,
+    restaurantBusinessPlans,
 } from "../../models/schema";
 import { eq, and, or, desc, inArray, sql, gte, lte, isNull } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
@@ -1453,6 +1454,7 @@ export const selectDeliveryMan = async (req: Request, res: Response) => {
     return SuccessResponse(res, { message: "Get delivery men success", data: deliveryMenList });
 };
 
+
 //=======================================
 //  select (branch - zone - source)
 //=======================================
@@ -1466,6 +1468,7 @@ export const getSelectData = async (req: Request, res: Response) => {
         throw new BadRequest("Restaurant ID not found");
     }
 
+    // 1. شروط الفروع
     const branchConditions: any[] = [
         eq(branches.restaurantId, adminRestaurantId),
         eq(branches.status, "active"),
@@ -1475,6 +1478,7 @@ export const getSelectData = async (req: Request, res: Response) => {
         branchConditions.push(eq(branches.id, adminBranchId));
     }
 
+    // 2. شروط المناطق (Zones)
     const zoneConditions: any[] = [
         eq(restaurantZoneDeliveryFees.restaurantId, adminRestaurantId),
         eq(restaurantZoneDeliveryFees.status, "active"),
@@ -1490,7 +1494,8 @@ export const getSelectData = async (req: Request, res: Response) => {
         );
     }
 
-    const [branchList, rawZones] = await Promise.all([
+    // 3. تنفيذ الـ Queries بالتوازي (Branches, Zones, Business Plans)
+    const [branchList, rawZones, businessPlans] = await Promise.all([
         db
             .select({
                 id: branches.id,
@@ -1516,6 +1521,18 @@ export const getSelectData = async (req: Request, res: Response) => {
             .from(restaurantZoneDeliveryFees)
             .innerJoin(zones, eq(restaurantZoneDeliveryFees.zoneId, zones.id))
             .where(and(...zoneConditions)),
+
+        db
+            .select({
+                platformType: restaurantBusinessPlans.platformType,
+                aggregatorStatus: restaurantBusinessPlans.aggregatorStatus,
+                mykeetoStatus: restaurantBusinessPlans.mykeetoStatus,
+                isMonthlyActive: restaurantBusinessPlans.isMonthlyActive,
+                isQuarterlyActive: restaurantBusinessPlans.isQuarterlyActive,
+                isAnnuallyActive: restaurantBusinessPlans.isAnnuallyActive,
+            })
+            .from(restaurantBusinessPlans)
+            .where(eq(restaurantBusinessPlans.restaurantId, adminRestaurantId)),
     ]);
 
     // Deduplicate zones in case multiple fee rules exist for the same zone
@@ -1527,6 +1544,7 @@ export const getSelectData = async (req: Request, res: Response) => {
     }
     const zoneList = Array.from(zoneMap.values());
 
+    // 4. جلب المدن المرتبطة بالمناطق
     const cityIds = [...new Set(zoneList.map((z) => z.cityId).filter(Boolean))];
     let cityList: any[] = [];
     if (cityIds.length > 0) {
@@ -1541,12 +1559,35 @@ export const getSelectData = async (req: Request, res: Response) => {
             .where(and(inArray(cities.id, cityIds as string[]), eq(cities.status, "active")));
     }
 
-    const sources = [
+    // 5. تصفية الـ Sources واستبعاد المنصات الغير مفعلة
+    const planMap = new Map(businessPlans.map((p) => [p.platformType, p]));
+
+    const allSources = [
         { id: "online_order_web", name: "Online Order Web", nameAr: "طلب أونلاين ويب", value: "online_order_web" },
         { id: "online_order_app", name: "Online Order App", nameAr: "طلب أونلاين تطبيق", value: "online_order_app" },
         { id: "food_aggregator", name: "Food Aggregator", nameAr: "تطبيقات التوصيل", value: "food_aggregator" },
         { id: "my_keeto", name: "My Keeto", nameAr: "ماي كيتو", value: "my_keeto" },
     ];
+
+    const sources = allSources.filter((source) => {
+        // مطابقة مفتاح المنصة مع enum الـ schema (my_keeto -> mykeeto)
+        const platformKey = source.value === "my_keeto" ? "mykeeto" : source.value;
+        const plan = planMap.get(platformKey as any);
+
+        // إذا كانت المنصة غير موجودة في خطة عمل المطعم، استبعدها
+        if (!plan) return false;
+
+        // فحص حالة food_aggregator و mykeeto الخاصين بالـ status
+        if (source.value === "food_aggregator") {
+            return plan.aggregatorStatus === "active";
+        }
+        if (source.value === "my_keeto") {
+            return plan.mykeetoStatus === "active";
+        }
+
+        // باقي المنصات: يجب أن تكون واحدة على الأقل من فترات الاشتراك مفعلة
+        return plan.isMonthlyActive || plan.isQuarterlyActive || plan.isAnnuallyActive;
+    });
 
     return SuccessResponse(res, {
         message: "Get select data success",
