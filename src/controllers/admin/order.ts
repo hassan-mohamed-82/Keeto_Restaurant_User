@@ -1454,7 +1454,6 @@ export const selectDeliveryMan = async (req: Request, res: Response) => {
     return SuccessResponse(res, { message: "Get delivery men success", data: deliveryMenList });
 };
 
-
 //=======================================
 //  select (branch - zone - source)
 //=======================================
@@ -1527,9 +1526,6 @@ export const getSelectData = async (req: Request, res: Response) => {
                 platformType: restaurantBusinessPlans.platformType,
                 aggregatorStatus: restaurantBusinessPlans.aggregatorStatus,
                 mykeetoStatus: restaurantBusinessPlans.mykeetoStatus,
-                isMonthlyActive: restaurantBusinessPlans.isMonthlyActive,
-                isQuarterlyActive: restaurantBusinessPlans.isQuarterlyActive,
-                isAnnuallyActive: restaurantBusinessPlans.isAnnuallyActive,
             })
             .from(restaurantBusinessPlans)
             .where(eq(restaurantBusinessPlans.restaurantId, adminRestaurantId)),
@@ -1559,7 +1555,7 @@ export const getSelectData = async (req: Request, res: Response) => {
             .where(and(inArray(cities.id, cityIds as string[]), eq(cities.status, "active")));
     }
 
-    // 5. تصفية الـ Sources واستبعاد المنصات الغير مفعلة
+    // 5. تصفية المصادر: إرجاع الكل، وإخفاء my_keeto و food_aggregator فقط لو كانت inactive
     const planMap = new Map(businessPlans.map((p) => [p.platformType, p]));
 
     const allSources = [
@@ -1570,23 +1566,22 @@ export const getSelectData = async (req: Request, res: Response) => {
     ];
 
     const sources = allSources.filter((source) => {
-        // مطابقة مفتاح المنصة مع enum الـ schema (my_keeto -> mykeeto)
-        const platformKey = source.value === "my_keeto" ? "mykeeto" : source.value;
-        const plan = planMap.get(platformKey as any);
-
-        // إذا كانت المنصة غير موجودة في خطة عمل المطعم، استبعدها
-        if (!plan) return false;
-
-        // فحص حالة food_aggregator و mykeeto الخاصين بالـ status
+        // إذا كان المصدر هو food_aggregator
         if (source.value === "food_aggregator") {
-            return plan.aggregatorStatus === "active";
-        }
-        if (source.value === "my_keeto") {
-            return plan.mykeetoStatus === "active";
+            const plan = planMap.get("food_aggregator");
+            // ترجع فقط إذا كانت الخطة موجودة وحالتها active
+            return plan?.aggregatorStatus === "active";
         }
 
-        // باقي المنصات: يجب أن تكون واحدة على الأقل من فترات الاشتراك مفعلة
-        return plan.isMonthlyActive || plan.isQuarterlyActive || plan.isAnnuallyActive;
+        // إذا كان المصدر هو my_keeto
+        if (source.value === "my_keeto") {
+            const plan = planMap.get("mykeeto");
+            // ترجع فقط إذا كانت الخطة موجودة وحالتها active
+            return plan?.mykeetoStatus === "active";
+        }
+
+        // باقي المصادر ترجع دائماً
+        return true;
     });
 
     return SuccessResponse(res, {
