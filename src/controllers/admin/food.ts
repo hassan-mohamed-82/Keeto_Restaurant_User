@@ -329,12 +329,23 @@ export const getFoodById = async (req: Request, res: Response) => {
 
     if (!foodItem[0]) throw new NotFound("Food not found");
 
+    // 1. جلب أسعار الفروع الاستثنائية للوجبة (Branch Overrides)
+    const branchPrices = await db
+        .select({
+            branchId: branchMenuItems.branchId,
+            price: branchMenuItems.price,
+            status: branchMenuItems.status
+        })
+        .from(branchMenuItems)
+        .where(eq(branchMenuItems.foodId, id));
+
+    // 2. جلب الـ Variations والـ Options
     const vars = await db.select().from(foodVariations).where(eq(foodVariations.foodId, id));
     const varIds = vars.map(v => v.id);
     const opts = varIds.length ? await db.select().from(variationOptions).where(inArray(variationOptions.variationId, varIds)) : [];
     const variations = vars.map(v => ({ ...v, options: opts.filter(o => o.variationId === v.id) }));
 
-    // ✅ 3. فك تشفير الإضافات، وجلب بيانات الإضافة بالكامل لتعرضها للمستخدم بشكل واضح
+    // 3. فك تشفير الإضافات
     let safeAddons = foodItem[0].addonsId;
     if (typeof safeAddons === 'string') {
         try { safeAddons = JSON.parse(safeAddons); } catch (e) { safeAddons = []; }
@@ -351,8 +362,9 @@ export const getFoodById = async (req: Request, res: Response) => {
         message: "Get food by id success",
         data: {
             ...foodItem[0],
-            addonsId: cleanAddonsArray,        // هيرجع الـ IDs زي ما هي
-            addonsDetails: addonsDetails, // 🔥 تم إضافة بيانات الإضافة نفسها (اسمها وسعرها)
+            branches: branchPrices, // 🔥 إرجاع أسعار الفروع للأدمن
+            addonsId: cleanAddonsArray,
+            addonsDetails: addonsDetails,
             variations
         }
     });
@@ -1020,4 +1032,4 @@ export const getOutOfStockFoods = async (req: Request, res: Response) => {
         data: result,
     });
 };
-
+
