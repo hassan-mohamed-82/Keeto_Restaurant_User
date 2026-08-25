@@ -86,7 +86,13 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
 
     const zoneId = (req.query?.zoneId as string)?.trim();
     if (zoneId && zoneId !== "null" && zoneId !== "undefined") {
-        conditions.push(eq(orders.zoneId, zoneId));
+        conditions.push(
+            or(
+                eq(orders.zoneId, zoneId),
+                eq(restaurantZoneDeliveryFees.zoneId, zoneId),
+                eq(zones.id, zoneId)
+            )
+        );
     }
 
     const cityId = (req.query?.cityId as string)?.trim();
@@ -135,7 +141,8 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
         .leftJoin(users, eq(orders.userId, users.id))
         .leftJoin(branches, eq(orders.branchId, branches.id))
         .leftJoin(deliveryMen, eq(orders.deliveryManId, deliveryMen.id))
-        .leftJoin(zones, eq(orders.zoneId, zones.id))
+        .leftJoin(restaurantZoneDeliveryFees, eq(orders.zoneId, restaurantZoneDeliveryFees.id))
+        .leftJoin(zones, eq(restaurantZoneDeliveryFees.zoneId, zones.id))
         .where(and(...conditions))
         .orderBy(desc(orders.createdAt));
 
@@ -177,7 +184,13 @@ export const getOrdersByStatus = async (
 
     const zoneId = (req.query?.zoneId as string)?.trim();
     if (zoneId && zoneId !== "null" && zoneId !== "undefined") {
-        conditions.push(eq(orders.zoneId, zoneId));
+        conditions.push(
+            or(
+                eq(orders.zoneId, zoneId),
+                eq(restaurantZoneDeliveryFees.zoneId, zoneId),
+                eq(zones.id, zoneId)
+            )
+        );
     }
 
     const cityId = (req.query?.cityId as string)?.trim();
@@ -226,7 +239,8 @@ export const getOrdersByStatus = async (
         .leftJoin(users, eq(orders.userId, users.id))
         .leftJoin(branches, eq(orders.branchId, branches.id))
         .leftJoin(deliveryMen, eq(orders.deliveryManId, deliveryMen.id))
-        .leftJoin(zones, eq(orders.zoneId, zones.id))
+        .leftJoin(restaurantZoneDeliveryFees, eq(orders.zoneId, restaurantZoneDeliveryFees.id))
+        .leftJoin(zones, eq(restaurantZoneDeliveryFees.zoneId, zones.id))
         .where(and(...conditions))
         .orderBy(desc(orders.createdAt));
 
@@ -281,7 +295,6 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             apartment: addresses.apartment,
             landmark: addresses.landmark,
             location: addresses.location,
-            zoneId: addresses.zoneId,
         },
         zone: {
             id: zones.id,
@@ -301,7 +314,8 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
         .leftJoin(restaurants, eq(orders.restaurantId, restaurants.id))
         .leftJoin(deliveryMen, eq(orders.deliveryManId, deliveryMen.id))
         .leftJoin(addresses, eq(orders.addressId, addresses.id))
-        .leftJoin(zones, eq(addresses.zoneId, zones.id))
+        .leftJoin(restaurantZoneDeliveryFees, eq(orders.zoneId, restaurantZoneDeliveryFees.id))
+        .leftJoin(zones, eq(restaurantZoneDeliveryFees.zoneId, zones.id))
         .where(eq(orders.id, id))
         .limit(1);
 
@@ -316,7 +330,7 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
     }
 
     // ==========================================
-    // 🗺️ Fallback: استنتاج الزون من إحداثيات العنوان إذا كان zone فارغاً
+    // 🗺️ Fallback: استنتاج الزون من إحداثيات العنوان (lat, lng) إذا كان zone فارغاً
     // ==========================================
     let resolvedZone = (orderDetail.zone && orderDetail.zone.id)
         ? orderDetail.zone
@@ -345,7 +359,7 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
         ? orderDetail.branch
         : null;
 
-    const targetZoneId = resolvedZone?.id || orderDetail.address?.zoneId;
+    const targetZoneId = resolvedZone?.id;
 
     if ((!resolvedBranch || !resolvedBranch.id) && targetZoneId && restaurantId) {
         const [matchedBranch] = await db
@@ -598,6 +612,7 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             restaurant: orderDetail.restaurant,
             address: orderDetail.address,
             zone: resolvedZone,
+            zoneName: resolvedZone?.name || null,
             items: formattedItems
         }
     });
@@ -989,6 +1004,7 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
         },
         address: addresses,
         zone: {
+            id: zones.id,
             name: zones.name
         }
     })
@@ -997,7 +1013,8 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
         .leftJoin(branches, eq(orders.branchId, branches.id))
         .leftJoin(restaurants, eq(orders.restaurantId, restaurants.id))
         .leftJoin(addresses, eq(orders.addressId, addresses.id))
-        .leftJoin(zones, eq(addresses.zoneId, zones.id))
+        .leftJoin(restaurantZoneDeliveryFees, eq(orders.zoneId, restaurantZoneDeliveryFees.id))
+        .leftJoin(zones, eq(restaurantZoneDeliveryFees.zoneId, zones.id))
         .where(eq(orders.id, orderId))
         .limit(1);
 
@@ -1012,14 +1029,14 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
     }
 
     // ==========================================
-    // 🗺️ Fallback: استنتاج الزون والفرع للـ PDF إذا كانت فارغة
+    // 🗺️ Fallback: استنتاج الزون والفرع للـ PDF من إحداثيات العنوان إذا كانت فارغة
     // ==========================================
     let pdfZoneName = orderDetail.zone?.name || "";
-    let pdfZoneId = (orderDetail.zone as any)?.id || (orderDetail.address as any)?.zoneId;
+    let pdfZoneId = orderDetail.zone?.id || null;
 
     if (!pdfZoneName && orderDetail.address?.lat && orderDetail.address?.lng) {
-        const addrLat = parseFloat(String((orderDetail.address as any).lat));
-        const addrLng = parseFloat(String((orderDetail.address as any).lng));
+        const addrLat = parseFloat(String(orderDetail.address.lat));
+        const addrLng = parseFloat(String(orderDetail.address.lng));
         if (!isNaN(addrLat) && !isNaN(addrLng)) {
             const detected = await resolveZoneFromCoords(addrLat, addrLng, orderDetail.order.restaurantId);
             if (detected) {
@@ -1272,8 +1289,9 @@ export const getallnumbersoforders = async (req: Request, res: Response) => {
     if (zoneId && zoneId !== "null" && zoneId !== "undefined") {
         conditions.push(
             or(
-                eq(addresses.zoneId, zoneId),
-                eq(branches.zoneId, zoneId)
+                eq(orders.zoneId, zoneId),
+                eq(restaurantZoneDeliveryFees.zoneId, zoneId),
+                eq(zones.id, zoneId)
             )
         );
     }
@@ -1296,7 +1314,8 @@ export const getallnumbersoforders = async (req: Request, res: Response) => {
         .from(orders)
         .leftJoin(branches, eq(orders.branchId, branches.id))
         .leftJoin(addresses, eq(orders.addressId, addresses.id))
-        .leftJoin(zones, eq(addresses.zoneId, zones.id))
+        .leftJoin(restaurantZoneDeliveryFees, eq(orders.zoneId, restaurantZoneDeliveryFees.id))
+        .leftJoin(zones, eq(restaurantZoneDeliveryFees.zoneId, zones.id))
         .where(and(...conditions))
         .groupBy(orders.status);
 
