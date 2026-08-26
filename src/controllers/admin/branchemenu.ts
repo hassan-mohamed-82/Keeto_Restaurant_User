@@ -177,43 +177,52 @@ export const getBranchMenu = async (req: Request, res: Response) => {
     return SuccessResponse(res, { message: "Get branch menu success", data: branchMenu });
 };
 
-
 export const updateBranchMenuItem = async (req: Request, res: Response) => {
-    const { id } = req.params; // ده الـ branchMenuItemId
-    const { price, stockType, stockQty, status } = req.body;
+    const { id } = req.params; // branchMenuItemId
+    
+    // 1. استخدام Default Value لمنع خطأ الـ Destructuring إذا كان req.body غير معرف
+    const { price, stockType, stockQty, status } = req.body || {};
     const restaurantId = req.user?.restaurantId || req.user?.id;
     const userBranchId = req.user?.branchId;
 
     if (!restaurantId) throw new BadRequest("Restaurant ID missing");
 
-    // 1. التأكد إن العنصر ده موجود أصلاً
-    const existingItem = await db.select().from(branchMenuItems)
+    // 2. التأكد من وجود عنصر القائمة
+    const [existingItem] = await db.select().from(branchMenuItems)
         .where(eq(branchMenuItems.id, id)).limit(1);
 
-    if (!existingItem[0]) throw new NotFound("Branch menu item not found");
+    if (!existingItem) throw new NotFound("Branch menu item not found");
 
-    // 2. حماية الصلاحيات (لو مدير فرع، يتأكد إن العنصر ده في فرعه)
-    if (userBranchId && userBranchId !== existingItem[0].branchId) {
+    // 3. التأكد من صلاحية مدير الفرع
+    if (userBranchId && userBranchId !== existingItem.branchId) {
         throw new BadRequest("Unauthorized: You cannot edit another branch's menu");
     }
 
-    // 3. التأكد إن الفرع ده يخص المطعم (لزيادة الأمان)
-    const branchCheck = await db.select().from(branches)
-        .where(and(eq(branches.id, existingItem[0].branchId), eq(branches.restaurantId, restaurantId))).limit(1);
-    if (!branchCheck[0]) throw new NotFound("Branch not found");
+    // 4. التأكد من تبعية الفرع للمطعم
+    const [branchCheck] = await db.select().from(branches)
+        .where(and(eq(branches.id, existingItem.branchId), eq(branches.restaurantId, restaurantId))).limit(1);
+    if (!branchCheck) throw new NotFound("Branch not found");
 
-    // 4. تحديث البيانات
-    const updateData: any = {};
+    // 5. تجميع البيانات المرسلة فقط للتحديث
+    const updateData: Partial<typeof branchMenuItems.$inferInsert> = {};
+    
     if (price !== undefined) updateData.price = price;
-    if (stockType) updateData.stockType = stockType;
+    if (stockType !== undefined) updateData.stockType = stockType;
     if (stockQty !== undefined) updateData.stockQty = stockQty;
-    if (status) updateData.status = status;
+    if (status !== undefined) updateData.status = status;
+
+    // التأكد من إرسال حقل واحد على الأقل للقيم المراد تحديثها
+    if (Object.keys(updateData).length === 0) {
+        throw new BadRequest("No valid fields provided for update");
+    }
+
     updateData.updatedAt = new Date();
 
+    // 6. تنفيذ التحديث
     await db.update(branchMenuItems).set(updateData).where(eq(branchMenuItems.id, id));
 
     // ✅ Invalidate cache
-    await invalidateBranchMenuCache(existingItem[0].branchId, restaurantId);
+    await invalidateBranchMenuCache(existingItem.branchId, restaurantId);
 
     return SuccessResponse(res, { message: "Branch menu item updated successfully" });
 };
