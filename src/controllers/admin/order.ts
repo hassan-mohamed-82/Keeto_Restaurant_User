@@ -621,6 +621,21 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
         }
     }
 
+    // 5. حساب إجمالي عدد طلبات العميل في هذا المطعم
+    let userTotalOrders = 0;
+    if (orderDetail.order.userId && restaurantId) {
+        const [ordersCount] = await db
+            .select({ count: sql<number>`count(${orders.id})` })
+            .from(orders)
+            .where(
+                and(
+                    eq(orders.userId, orderDetail.order.userId),
+                    eq(orders.restaurantId, restaurantId)
+                )
+            );
+        userTotalOrders = Number(ordersCount?.count || 0);
+    }
+
     return SuccessResponse(res, {
         message: "Get order details success",
         data: {
@@ -648,7 +663,10 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             createdAt: orderDetail.order.createdAt,
             updatedAt: orderDetail.order.updatedAt,
             durationOrderPreparing: orderDetail.order.durationOrderPreparing,
-            customer: orderDetail.customer,
+            customer: {
+                ...orderDetail.customer,
+                totalOrders: userTotalOrders,
+            },
 
             // ✅ فصلنا الداتا عشان الرياكت ميضربش ويقرأ الـ ID زي ما هو متعود
             paymentMethod: typeof pmDetails === "object" && pmDetails !== null ? pmDetails.id : pmDetails,
