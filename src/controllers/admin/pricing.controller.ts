@@ -432,9 +432,9 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
             `,
             isAvailable: sql<number>`
                 CASE 
-                    WHEN ${branchChannelPricing.status} IS NOT NULL THEN IF(${branchChannelPricing.status} = 'active', 1, 0)
-                    WHEN ${globalChannelPricing.status} IS NOT NULL THEN IF(${globalChannelPricing.status} = 'active', 1, 0)
-                    WHEN ${branchMenuItems.status} IS NOT NULL THEN IF(${branchMenuItems.status} = 'active', 1, 0)
+                    WHEN ${branchChannelPricing.status} IS NOT NULL THEN (CASE WHEN ${branchChannelPricing.status} = 'active' THEN 1 ELSE 0 END)
+                    WHEN ${globalChannelPricing.status} IS NOT NULL THEN (CASE WHEN ${globalChannelPricing.status} = 'active' THEN 1 ELSE 0 END)
+                    WHEN ${branchMenuItems.status} IS NOT NULL THEN (CASE WHEN ${branchMenuItems.status} = 'active' THEN 1 ELSE 0 END)
                     ELSE 1
                 END
             `,
@@ -442,22 +442,18 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
         .from(food)
         .leftJoin(
             branchMenuItems,
-            branchId 
-                ? and(
-                    eq(branchMenuItems.foodId, food.id),
-                    eq(branchMenuItems.branchId, branchId)
-                  )
-                : eq(sql`1`, sql`0`)
+            and(
+                eq(branchMenuItems.foodId, food.id),
+                branchId ? eq(branchMenuItems.branchId, branchId) : isNull(branchMenuItems.id)
+            )
         )
         .leftJoin(
             branchChannelPricing,
-            branchId 
-                ? and(
-                    eq(branchChannelPricing.foodId, food.id),
-                    eq(branchChannelPricing.branchId, branchId),
-                    serviceModule ? eq(branchChannelPricing.serviceModule, serviceModule) : undefined
-                  )
-                : eq(sql`1`, sql`0`)
+            and(
+                eq(branchChannelPricing.foodId, food.id),
+                branchId ? eq(branchChannelPricing.branchId, branchId) : isNull(branchChannelPricing.id),
+                serviceModule ? eq(branchChannelPricing.serviceModule, serviceModule) : undefined
+            )
         )
         .leftJoin(
             globalChannelPricing,
@@ -499,9 +495,9 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
                 `,
                 isOptionAvailable: sql<number>`
                     CASE 
-                        WHEN ${branchVarChannel.status} IS NOT NULL THEN IF(${branchVarChannel.status} = 'active', 1, 0)
-                        WHEN ${globalVarChannel.status} IS NOT NULL THEN IF(${globalVarChannel.status} = 'active', 1, 0)
-                        WHEN ${branchVarPricing.status} IS NOT NULL THEN IF(${branchVarPricing.status} = 'active', 1, 0)
+                        WHEN ${branchVarChannel.status} IS NOT NULL THEN (CASE WHEN ${branchVarChannel.status} = 'active' THEN 1 ELSE 0 END)
+                        WHEN ${globalVarChannel.status} IS NOT NULL THEN (CASE WHEN ${globalVarChannel.status} = 'active' THEN 1 ELSE 0 END)
+                        WHEN ${branchVarPricing.status} IS NOT NULL THEN (CASE WHEN ${branchVarPricing.status} = 'active' THEN 1 ELSE 0 END)
                         ELSE 1
                     END
                 `,
@@ -513,22 +509,18 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
             )
             .leftJoin(
                 branchVarPricing,
-                branchId
-                    ? and(
-                        eq(branchVarPricing.variantId, variationOptions.id),
-                        eq(branchVarPricing.branchId, branchId)
-                      )
-                    : eq(sql`1`, sql`0`)
+                and(
+                    eq(branchVarPricing.variantId, variationOptions.id),
+                    branchId ? eq(branchVarPricing.branchId, branchId) : isNull(branchVarPricing.id)
+                )
             )
             .leftJoin(
                 branchVarChannel,
-                branchId
-                    ? and(
-                        eq(branchVarChannel.variantId, variationOptions.id),
-                        eq(branchVarChannel.branchId, branchId),
-                        serviceModule ? eq(branchVarChannel.serviceModule, serviceModule) : undefined
-                      )
-                    : eq(sql`1`, sql`0`)
+                and(
+                    eq(branchVarChannel.variantId, variationOptions.id),
+                    branchId ? eq(branchVarChannel.branchId, branchId) : isNull(branchVarChannel.id),
+                    serviceModule ? eq(branchVarChannel.serviceModule, serviceModule) : undefined
+                )
             )
             .leftJoin(
                 globalVarChannel,
