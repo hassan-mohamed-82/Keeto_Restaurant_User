@@ -22,7 +22,7 @@ export const getCustomerRatingsInShift = async (req: Request, res: Response) => 
     const ratedOrders = await db
         .select({
             orderId: orders.id,
-            orderNumber: orders.orderNumber,
+            orderNumber: orders.dailyOrderNumber,
             orderCreatedAt: orders.createdAt,
             orderTotalAmount: orders.totalAmount,
             orderStatus: orders.status,
@@ -56,7 +56,7 @@ export const getCustomerRatingsInShift = async (req: Request, res: Response) => 
             averageRating: number;
             orders: Array<{
                 orderId: string;
-                orderNumber: string;
+                orderNumber: number | null;
                 orderCreatedAt: Date | null;
                 orderTotalAmount: string;
                 orderStatus: string | null;
