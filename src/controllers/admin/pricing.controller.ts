@@ -377,15 +377,16 @@ export const upsertFoodWithPricing = async (req: Request, res: Response) => {
 // Priority: COALESCE(Branch_Module_Price, Global_Module_Price, Branch_Item_Price, Main_Base_Price)
 // ============================================================================
 export const getMenuWithDynamicPricing = async (req: Request, res: Response) => {
-    // 1. Get IDs from req.query OR req.user (JWT Token)
+    // 1. Extract IDs from req.query or fallback to JWT token (req.user)
     const branchId = 
         ((req.query.branchId as string) || req.user?.branchId || "")?.trim() || null;
     let restaurantId = 
         ((req.query.restaurantId as string) || req.user?.restaurantId || "")?.trim() || null;
     
-    const serviceModule = (req.query.serviceModule as string)?.trim() as ServiceModule | undefined;
+    const serviceModuleStr = (req.query.serviceModule as string)?.trim();
+    const serviceModule = serviceModuleStr as "takeaway" | "dine_in" | "delivery" | undefined;
 
-    // 2. Resolve restaurantId if branchId is provided, or require at least one
+    // 2. Validate & resolve restaurantId
     if (branchId) {
         const [branch] = await db
             .select({
@@ -431,10 +432,10 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
             `,
             isAvailable: sql<boolean>`
                 CASE 
-                    WHEN ${branchChannelPricing.status} IS NOT NULL THEN (${branchChannelPricing.status} = 'active')
-                    WHEN ${globalChannelPricing.status} IS NOT NULL THEN (${globalChannelPricing.status} = 'active')
-                    WHEN ${branchMenuItems.status} IS NOT NULL THEN (${branchMenuItems.status} = 'active')
-                    ELSE true
+                    WHEN ${branchChannelPricing.status} IS NOT NULL THEN ${branchChannelPricing.status} = 'active'
+                    WHEN ${globalChannelPricing.status} IS NOT NULL THEN ${globalChannelPricing.status} = 'active'
+                    WHEN ${branchMenuItems.status} IS NOT NULL THEN ${branchMenuItems.status} = 'active'
+                    ELSE 1
                 END
             `,
         })
@@ -451,7 +452,7 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
             and(
                 eq(branchChannelPricing.foodId, food.id),
                 branchId ? eq(branchChannelPricing.branchId, branchId) : sql`1=0`,
-                serviceModule ? eq(branchChannelPricing.serviceModule, serviceModule) : sql`1=1`
+                serviceModule ? eq(branchChannelPricing.serviceModule, serviceModule) : undefined
             )
         )
         .leftJoin(
@@ -459,7 +460,7 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
             and(
                 eq(globalChannelPricing.foodId, food.id),
                 isNull(globalChannelPricing.branchId),
-                serviceModule ? eq(globalChannelPricing.serviceModule, serviceModule) : sql`1=1`
+                serviceModule ? eq(globalChannelPricing.serviceModule, serviceModule) : undefined
             )
         )
         .where(and(eq(food.restaurantid, restaurantId), eq(food.status, "active")));
@@ -494,10 +495,10 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
                 `,
                 isOptionAvailable: sql<boolean>`
                     CASE 
-                        WHEN ${branchVarChannel.status} IS NOT NULL THEN (${branchVarChannel.status} = 'active')
-                        WHEN ${globalVarChannel.status} IS NOT NULL THEN (${globalVarChannel.status} = 'active')
-                        WHEN ${branchVarPricing.status} IS NOT NULL THEN (${branchVarPricing.status} = 'active')
-                        ELSE true
+                        WHEN ${branchVarChannel.status} IS NOT NULL THEN ${branchVarChannel.status} = 'active'
+                        WHEN ${globalVarChannel.status} IS NOT NULL THEN ${globalVarChannel.status} = 'active'
+                        WHEN ${branchVarPricing.status} IS NOT NULL THEN ${branchVarPricing.status} = 'active'
+                        ELSE 1
                     END
                 `,
             })
@@ -518,7 +519,7 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
                 and(
                     eq(branchVarChannel.variantId, variationOptions.id),
                     branchId ? eq(branchVarChannel.branchId, branchId) : sql`1=0`,
-                    serviceModule ? eq(branchVarChannel.serviceModule, serviceModule) : sql`1=1`
+                    serviceModule ? eq(branchVarChannel.serviceModule, serviceModule) : undefined
                 )
             )
             .leftJoin(
@@ -526,7 +527,7 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
                 and(
                     eq(globalVarChannel.variantId, variationOptions.id),
                     isNull(globalVarChannel.branchId),
-                    serviceModule ? eq(globalVarChannel.serviceModule, serviceModule) : sql`1=1`
+                    serviceModule ? eq(globalVarChannel.serviceModule, serviceModule) : undefined
                 )
             )
             .where(eq(foodVariations.status, true));
