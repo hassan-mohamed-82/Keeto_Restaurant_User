@@ -5,9 +5,12 @@ import {
     getFoodForPricing,
     upsertProductChannelPricing,
     upsertVariantChannelPricing,
+    getActiveBranchWithServiceModule,
 } from "../../controllers/admin/pricing.controller";
 
 const router = Router();
+
+router.get("/select", getActiveBranchWithServiceModule);
 
 // Endpoint 1: Upsert food item along with branch overrides & channel pricing
 router.post("/upsert-food", upsertFoodWithPricing);

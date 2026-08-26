@@ -145,6 +145,44 @@ export async function syncVariantPricing(
     }
 }
 
+
+// ============================================================================
+// 1.5 CONTROLLER: Get Active Branch & Service Module (for frontend dropdown)
+// ============================================================================
+export const getActiveBranchWithServiceModule = async (req: Request, res: Response) => {
+    const restaurantId = (req.user?.restaurantId as string)?.trim() || null;
+
+    if (!restaurantId) throw new BadRequest("No restaurant ID available in token");
+
+    // Fetch only active branches
+    const activeBranches = await db
+        .select({
+            id: branches.id,
+            name: branches.name,
+        })
+        .from(branches)
+        .where(
+            and(
+                eq(branches.restaurantId, restaurantId),
+                eq(branches.status, "active")
+            )
+        );
+
+    const serviceModules = [
+        {id: "dine_in", name: "Dine In"},
+        {id: "takeaway", name: "Take Away"},
+        {id: "delivery", name: "Delivery"}
+    ]
+
+    return SuccessResponse(res, {
+        message: "Active branches fetched successfully",
+        data: {
+            activeBranches,
+            serviceModules
+        },
+    });
+};
+
 // ============================================================================
 // 2. CONTROLLER: Upsert Food With Branch & Channel Pricing
 // ============================================================================
@@ -339,26 +377,31 @@ export const upsertFoodWithPricing = async (req: Request, res: Response) => {
 // Priority: COALESCE(Branch_Module_Price, Global_Module_Price, Branch_Item_Price, Main_Base_Price)
 // ============================================================================
 export const getMenuWithDynamicPricing = async (req: Request, res: Response) => {
-    const branchId = (req.query.branchId as string)?.trim();
+    // 1. Get IDs from req.query OR req.user (JWT Token)
+    const branchId =
+        ((req.query.branchId as string) || req.user?.branchId || "")?.trim() || null;
+    let restaurantId =
+        ((req.query.restaurantId as string) || req.user?.restaurantId || "")?.trim() || null;
+    
     const serviceModule = (req.query.serviceModule as ServiceModule)?.trim();
 
-    if (!branchId) {
-        throw new BadRequest("branchId query parameter is required");
+    // 2. Resolve restaurantId if branchId is provided, or require at least one
+    if (branchId) {
+        const [branch] = await db
+            .select({
+                id: branches.id,
+                restaurantId: branches.restaurantId,
+                name: branches.name,
+            })
+            .from(branches)
+            .where(eq(branches.id, branchId))
+            .limit(1);
+
+        if (!branch) throw new NotFound("Branch not found");
+        restaurantId = branch.restaurantId;
+    } else if (!restaurantId) {
+        throw new BadRequest("Neither branchId nor restaurantId was provided in query or token");
     }
-
-    const [branch] = await db
-        .select({
-            id: branches.id,
-            restaurantId: branches.restaurantId,
-            name: branches.name,
-        })
-        .from(branches)
-        .where(eq(branches.id, branchId))
-        .limit(1);
-
-    if (!branch) throw new NotFound("Branch not found");
-
-    const restaurantId = branch.restaurantId;
 
     const branchChannelPricing = alias(productChannelPricing, "b_channel");
     const globalChannelPricing = alias(productChannelPricing, "g_channel");
@@ -400,14 +443,14 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
             branchMenuItems,
             and(
                 eq(branchMenuItems.foodId, food.id),
-                eq(branchMenuItems.branchId, branchId)
+                branchId ? eq(branchMenuItems.branchId, branchId) : sql`1=0`
             )
         )
         .leftJoin(
             branchChannelPricing,
             and(
                 eq(branchChannelPricing.foodId, food.id),
-                eq(branchChannelPricing.branchId, branchId),
+                branchId ? eq(branchChannelPricing.branchId, branchId) : sql`1=0`,
                 serviceModule ? sql`${branchChannelPricing.serviceModule} = ${serviceModule}` : sql`1=0`
             )
         )
@@ -467,14 +510,14 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
                 branchVarPricing,
                 and(
                     eq(branchVarPricing.variantId, variationOptions.id),
-                    eq(branchVarPricing.branchId, branchId)
+                    branchId ? eq(branchVarPricing.branchId, branchId) : sql`1=0`
                 )
             )
             .leftJoin(
                 branchVarChannel,
                 and(
                     eq(branchVarChannel.variantId, variationOptions.id),
-                    eq(branchVarChannel.branchId, branchId),
+                    branchId ? eq(branchVarChannel.branchId, branchId) : sql`1=0`,
                     serviceModule ? sql`${branchVarChannel.serviceModule} = ${serviceModule}` : sql`1=0`
                 )
             )
@@ -526,13 +569,13 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
     return SuccessResponse(res, {
         message: "Dynamic menu fetched successfully",
         data: {
-            branchId,
+            restaurantId,
+            branchId: branchId || null,
             serviceModule: serviceModule || "all",
             menu: finalMenu,
         },
     });
 };
-
 // ============================================================================
 // 4. CONTROLLER: Get Food List for Pricing UI (food + variations + options)
 // GET /pricing/food-for-pricing
