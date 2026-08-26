@@ -197,6 +197,19 @@ export const getAllFoods = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
 
+    // 1. Extract query params
+    const { categoryId, subCategoryId } = req.query;
+
+    // 2. Build dynamic conditions
+    const conditions = [eq(food.restaurantid, restaurantId)];
+
+    if (categoryId) {
+        conditions.push(eq(food.categoryid, categoryId as string));
+    }
+    if (subCategoryId) {
+        conditions.push(eq(food.subcategoryid, subCategoryId as string));
+    }
+
     const rawFoods = await db.select({
         id: food.id, name: food.name, nameAr: food.nameAr, nameFr: food.nameFr,
         description: food.description, descriptionAr: food.descriptionAr, descriptionFr: food.descriptionFr,
@@ -214,7 +227,7 @@ export const getAllFoods = async (req: Request, res: Response) => {
         .leftJoin(restaurants, eq(food.restaurantid, restaurants.id))
         .leftJoin(categories, eq(food.categoryid, categories.id))
         .leftJoin(subcategories, eq(food.subcategoryid, subcategories.id))
-        .where(eq(food.restaurantid, restaurantId));
+        .where(and(...conditions)); // 3. Pass packed conditions here
 
     if (rawFoods.length === 0) {
         return SuccessResponse(res, { message: "Get all foods success", data: [] });
@@ -262,7 +275,6 @@ export const getAllFoods = async (req: Request, res: Response) => {
             ...v, options: allOpts.filter(o => o.variationId === v.id)
         }));
 
-        // ✅ 2. فك تشفير الإضافات
         let safeAddons = f.addonsId;
         if (typeof safeAddons === 'string') {
             try { safeAddons = JSON.parse(safeAddons); } catch (e) { safeAddons = []; }
@@ -282,8 +294,8 @@ export const getAllFoods = async (req: Request, res: Response) => {
             id: f.id, name: f.name, nameAr: f.nameAr, nameFr: f.nameFr,
             description: f.description, descriptionAr: f.descriptionAr, descriptionFr: f.descriptionFr,
             image: f.image, price: f.price, status: f.status,
-            addonsId: cleanAddonsArray, // ✅ إرجاع الـ Array نظيفة
-            addonsDetails: foodAddonsDetails, // 🔥 تفاصيل الإضافات
+            addonsId: cleanAddonsArray,
+            addonsDetails: foodAddonsDetails,
             foodtype: f.foodtype, Nutrition: f.Nutrition, allergen_ingredients: f.allergen_ingredients,
             is_Halal: f.is_Halal, isOutOfStock: f.isOutOfStock, startTime: f.startTime, endTime: f.endTime, search_tags: f.search_tags,
             discount_type: f.discount_type, discount_value: f.discount_value, Maximum_Purchase: f.Maximum_Purchase,
@@ -298,7 +310,6 @@ export const getAllFoods = async (req: Request, res: Response) => {
 
     return SuccessResponse(res, { message: "Get all foods success", data: allFoods });
 };
-
 // =============================================
 // GET Food By ID
 // =============================================
