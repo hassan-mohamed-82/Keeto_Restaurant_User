@@ -12,6 +12,7 @@ import { Server } from "socket.io";
 import { connectDB } from './models/connection';
 import { initOrderNotificationCron } from './services/orderNotificationCron';
 import './config/redis';
+import { initNotificationCleanupCron } from "./services/initNotificationCleanupCron";
 
 dotenv.config();
 
@@ -19,6 +20,7 @@ const app = express();
 app.set("trust proxy", true);
 connectDB();
 initOrderNotificationCron();
+initNotificationCleanupCron();
 
 const httpServer: http.Server = http.createServer(app);
 
