@@ -52,6 +52,9 @@ export const updateSettings = async (req: Request, res: Response): Promise<void>
         if (settings.repeatNotification !== undefined) settingsData.repeatNotification = settings.repeatNotification;
         if (settings.repeatNotificationDuration !== undefined) settingsData.repeatNotificationDuration = settings.repeatNotificationDuration;
         if (settings.repeatNotificationInterval !== undefined) settingsData.repeatNotificationInterval = settings.repeatNotificationInterval;
+        if (settings.orderAlertNotification !== undefined) settingsData.orderAlertNotification = settings.orderAlertNotification;
+        if (settings.orderAlertDurationThreshold !== undefined) settingsData.orderAlertDurationThreshold = settings.orderAlertDurationThreshold;
+        if (settings.orderAlertStatuses !== undefined) settingsData.orderAlertStatuses = settings.orderAlertStatuses;
 
         if (existingSettings.length > 0) {
           // ✅ Update existing settings

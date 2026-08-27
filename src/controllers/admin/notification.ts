@@ -167,6 +167,9 @@ export const getRepeatNotificationSettings = async (req: Request | any, res: Res
             repeatNotification: restaurantSettings.repeatNotification,
             repeatNotificationDuration: restaurantSettings.repeatNotificationDuration,
             repeatNotificationInterval: restaurantSettings.repeatNotificationInterval,
+            orderAlertNotification: restaurantSettings.orderAlertNotification,
+            orderAlertDurationThreshold: restaurantSettings.orderAlertDurationThreshold,
+            orderAlertStatuses: restaurantSettings.orderAlertStatuses,
         })
         .from(restaurantSettings)
         .where(eq(restaurantSettings.restaurantId, adminRestaurantId))
@@ -179,6 +182,9 @@ export const getRepeatNotificationSettings = async (req: Request | any, res: Res
                 repeatNotification: restaurantSettings.repeatNotification,
                 repeatNotificationDuration: restaurantSettings.repeatNotificationDuration,
                 repeatNotificationInterval: restaurantSettings.repeatNotificationInterval,
+                orderAlertNotification: restaurantSettings.orderAlertNotification,
+                orderAlertDurationThreshold: restaurantSettings.orderAlertDurationThreshold,
+                orderAlertStatuses: restaurantSettings.orderAlertStatuses,
             })
             .from(restaurantSettings)
             .where(eq(restaurantSettings.restaurantId, adminRestaurantId))
@@ -191,6 +197,9 @@ export const getRepeatNotificationSettings = async (req: Request | any, res: Res
             repeatNotification: settings?.repeatNotification ?? false,
             repeatNotificationDuration: settings?.repeatNotificationDuration ?? 5,
             repeatNotificationInterval: settings?.repeatNotificationInterval ?? 60,
+            orderAlertNotification: settings?.orderAlertNotification ?? true,
+            orderAlertDurationThreshold: settings?.orderAlertDurationThreshold ?? 20,
+            orderAlertStatuses: settings?.orderAlertStatuses ?? ["accepted", "preparing", "out_for_delivery"],
         }
     });
 };
@@ -204,12 +213,22 @@ export const updateRepeatNotificationSettings = async (req: Request | any, res: 
 
     if (!adminRestaurantId) throw new BadRequest("Restaurant ID not found");
 
-    const { repeatNotification, repeatNotificationDuration, repeatNotificationInterval } = req.body;
+    const {
+        repeatNotification,
+        repeatNotificationDuration,
+        repeatNotificationInterval,
+        orderAlertNotification,
+        orderAlertDurationThreshold,
+        orderAlertStatuses
+    } = req.body;
 
     const updateData: any = {};
     if (repeatNotification !== undefined) updateData.repeatNotification = Boolean(repeatNotification);
     if (repeatNotificationDuration !== undefined) updateData.repeatNotificationDuration = Number(repeatNotificationDuration);
     if (repeatNotificationInterval !== undefined) updateData.repeatNotificationInterval = Number(repeatNotificationInterval);
+    if (orderAlertNotification !== undefined) updateData.orderAlertNotification = Boolean(orderAlertNotification);
+    if (orderAlertDurationThreshold !== undefined) updateData.orderAlertDurationThreshold = Number(orderAlertDurationThreshold);
+    if (orderAlertStatuses !== undefined) updateData.orderAlertStatuses = orderAlertStatuses;
 
     const [existing] = await db
         .select()
@@ -236,6 +255,9 @@ export const updateRepeatNotificationSettings = async (req: Request | any, res: 
             repeatNotification: restaurantSettings.repeatNotification,
             repeatNotificationDuration: restaurantSettings.repeatNotificationDuration,
             repeatNotificationInterval: restaurantSettings.repeatNotificationInterval,
+            orderAlertNotification: restaurantSettings.orderAlertNotification,
+            orderAlertDurationThreshold: restaurantSettings.orderAlertDurationThreshold,
+            orderAlertStatuses: restaurantSettings.orderAlertStatuses,
         })
         .from(restaurantSettings)
         .where(eq(restaurantSettings.restaurantId, adminRestaurantId))

@@ -10,6 +10,7 @@ import helmet from "helmet";
 import http from "http";
 import { Server } from "socket.io";
 import { connectDB } from './models/connection';
+import { initOrderNotificationCron } from './services/orderNotificationCron';
 import './config/redis';
 
 dotenv.config();
@@ -17,6 +18,7 @@ dotenv.config();
 const app = express();
 app.set("trust proxy", true);
 connectDB();
+initOrderNotificationCron();
 
 const httpServer: http.Server = http.createServer(app);
 
