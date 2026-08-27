@@ -124,13 +124,14 @@ export const createFood = async (req: Request, res: Response) => {
                 addonsId: finalAddonsIds, // ✅ حفظ المصفوفة النظيفة
                 startTime, endTime, search_tags: search_tags || null,
                 price, discount_type: discount_type || "percentage",
-                discount_value: discount_value || null, Maximum_Purchase: Maximum_Purchase || null,
+                discount_value: discount_value || null,
+                Maximum_Purchase: Maximum_Purchase || null,
                 stock_type: stock_type || "unlimited", status: status || "active",
                 isOutOfStock: isOutOfStock ?? false,
                 points: points ?? 0,
             });
 
-        // إدخال الخيارات (Variations) إن وجدت
+            // إدخال الخيارات (Variations) إن وجدت
             if (variations && Array.isArray(variations) && variations.length > 0) {
                 for (const variation of variations) {
                     const variationId = uuidv4();
