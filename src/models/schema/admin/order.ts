@@ -68,6 +68,7 @@ export const orders = mysqlTable("orders", {
     cancelReasonId: char("cancel_reason_id", { length: 36 })
         .references(() => selectReasons.id),
     cancelReason: text("cancel_reason"),
+    cancelReasonType: mysqlEnum("cancel_reason_type", ["user", "restaurant"]),
     note: text("note"),
     dailyOrderNumber: int("daily_order_number").default(1),
 

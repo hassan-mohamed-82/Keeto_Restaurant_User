@@ -128,6 +128,7 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
             durationOrderPreparing: orders.durationOrderPreparing,
             cancelReasonId: orders.cancelReasonId,
             cancelReason: orders.cancelReason,
+            cancelReasonType: orders.cancelReasonType,
             note: orders.note,
             deliveryMan: {
                 id: deliveryMen.id,
@@ -251,6 +252,7 @@ export const getOrdersByStatus = async (
             durationOrderPreparing: orders.durationOrderPreparing,
             cancelReasonId: orders.cancelReasonId,
             cancelReason: orders.cancelReason,
+            cancelReasonType: orders.cancelReasonType,
             note: orders.note,
             deliveryMan: {
                 id: deliveryMen.id,
@@ -647,6 +649,7 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             status: orderDetail.order.status,
             cancelReasonId: orderDetail.order.cancelReasonId,
             cancelReason: orderDetail.order.cancelReason,
+            cancelReasonType: orderDetail.order.cancelReasonType,
             note: orderDetail.order.note,
             subtotal: orderDetail.order.subtotal,
             deliveryFee: orderDetail.order.deliveryFee,
@@ -693,16 +696,12 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
 // ==========================================
 export const updateOrderStatus = async (req: Request, res: Response) => {
     const { orderId } = req.params;
-    const { status, cancelReasonId } = req.body;
+    const { status, cancelReasonId, customReason } = req.body;
 
     const adminRestaurantId = req.user?.restaurantId || req.user?.id;
     const adminBranchId = req.user?.branchId;
 
     if (!status) throw new BadRequest("Status is required");
-
-    if (status === "cancelled" && !cancelReasonId) {
-        throw new BadRequest("Cancel reason ID is required when cancelling an order");
-    }
 
     const [existingOrder] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
     if (!existingOrder) throw new NotFound("Order not found");
@@ -736,13 +735,25 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
         throw new BadRequest(`Order is already ${currentStatus}`);
     }
 
-    let reason: any = null;
+    let finalReasonId: string | null = null;
+    let finalReasonText: string | null = null;
+
     if (status === "cancelled") {
-        const [found] = await db.select().from(selectReasons)
-            .where(and(eq(selectReasons.id, cancelReasonId), eq(selectReasons.type, "restaurant")))
-            .limit(1);
-        if (!found) throw new BadRequest("Invalid cancel reason for restaurant");
-        reason = found;
+        const inputCustomReason = customReason as string | undefined;
+
+        if (cancelReasonId) {
+            const [found] = await db.select().from(selectReasons)
+                .where(and(eq(selectReasons.id, cancelReasonId), eq(selectReasons.type, "restaurant")))
+                .limit(1);
+            if (!found) throw new BadRequest("Invalid cancel reason for restaurant");
+            finalReasonId = found.id;
+            finalReasonText = (inputCustomReason && inputCustomReason.trim()) ? inputCustomReason.trim() : found.name;
+        } else if (inputCustomReason && typeof inputCustomReason === "string" && inputCustomReason.trim() !== "") {
+            finalReasonId = null;
+            finalReasonText = inputCustomReason.trim();
+        } else {
+            throw new BadRequest("Cancel reason or cancel reason ID is required when cancelling an order");
+        }
     }
 
     await db.transaction(async (tx) => {
@@ -750,8 +761,9 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
         await tx.update(orders)
             .set({
                 status: status,
-                cancelReasonId: status === "cancelled" ? reason.id : null,
-                cancelReason: status === "cancelled" ? reason.name : null,
+                cancelReasonId: status === "cancelled" ? finalReasonId : null,
+                cancelReason: status === "cancelled" ? finalReasonText : null,
+                cancelReasonType: status === "cancelled" ? "restaurant" : null,
                 updatedAt: new Date()
             })
             .where(eq(orders.id, orderId));
@@ -962,7 +974,7 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
     // ==========================================
     let messageBody = `Your order ${existingOrder.dailyOrderNumber} is now ${status}.`;
     if (status === "cancelled") {
-        messageBody = `Your order ${existingOrder.dailyOrderNumber} was cancelled. Reason: ${reason?.name || "Not specified"}`;
+        messageBody = `Your order ${existingOrder.dailyOrderNumber} was cancelled. Reason: ${finalReasonText || "Not specified"}`;
     }
 
     await sendPushNotification({

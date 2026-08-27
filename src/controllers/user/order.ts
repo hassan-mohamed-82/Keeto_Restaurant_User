@@ -769,6 +769,7 @@ export const getActiveOrders = async (req: Request | any, res: Response) => {
             note: orders.note,
             cancelReasonId: orders.cancelReasonId,
             cancelReason: orders.cancelReason,
+            cancelReasonType: orders.cancelReasonType,
             deliveryMan: {
                 id: deliveryMen.id,
                 name: deliveryMen.name,
@@ -830,6 +831,7 @@ export const getOrderHistory = async (req: Request | any, res: Response) => {
             note: orders.note,
             cancelReasonId: orders.cancelReasonId,
             cancelReason: orders.cancelReason,
+            cancelReasonType: orders.cancelReasonType,
             deliveryMan: {
                 id: deliveryMen.id,
                 name: deliveryMen.name,
@@ -887,6 +889,7 @@ export const getOrderDetails = async (req: Request | any, res: Response) => {
             durationOrderPreparing: orders.durationOrderPreparing,
             cancelReasonId: orders.cancelReasonId,
             cancelReason: orders.cancelReason,
+            cancelReasonType: orders.cancelReasonType,
             note: orders.note,
             rating: orders.rating,
             ratingComment: orders.ratingComment,
@@ -982,9 +985,13 @@ export const cancelOrder = async (req: Request | any, res: Response) => {
     if (!req.user) throw new UnauthorizedError("Unauthenticated");
     const userId = req.user.id;
     const { orderId } = req.params;
-    const { cancelReasonId } = req.body;
+    const { cancelReasonId, customReason } = req.body;
 
-    if (!cancelReasonId) throw new BadRequest("Cancel reason ID is required");
+    const inputCustomReason = customReason as string | undefined;
+
+    if (!cancelReasonId && (!inputCustomReason || typeof inputCustomReason !== "string" || inputCustomReason.trim() === "")) {
+        throw new BadRequest("Cancel reason or cancel reason ID is required");
+    }
 
     // 1. جلب الطلب والتأكد أنه للمستخدم وأنه قابل للإلغاء
     const [order] = await db.select().from(orders).where(and(eq(orders.id, orderId), eq(orders.userId, userId))).limit(1);
@@ -994,8 +1001,18 @@ export const cancelOrder = async (req: Request | any, res: Response) => {
     }
 
     // 2. التحقق من سبب الإلغاء
-    const [reason] = await db.select().from(selectReasons).where(and(eq(selectReasons.id, cancelReasonId), eq(selectReasons.type, "user"))).limit(1);
-    if (!reason) throw new BadRequest("Invalid cancel reason for user");
+    let finalReasonId: string | null = null;
+    let finalReasonText: string | null = null;
+
+    if (cancelReasonId) {
+        const [reason] = await db.select().from(selectReasons).where(and(eq(selectReasons.id, cancelReasonId), eq(selectReasons.type, "user"))).limit(1);
+        if (!reason) throw new BadRequest("Invalid cancel reason for user");
+        finalReasonId = reason.id;
+        finalReasonText = (inputCustomReason && inputCustomReason.trim()) ? inputCustomReason.trim() : reason.name;
+    } else {
+        finalReasonId = null;
+        finalReasonText = (inputCustomReason as string).trim();
+    }
 
     // 3. تحديث حالة الطلب وإرجاع المبالغ المالية (إلغاء أرباح المطعم والعمولة)
     await db.transaction(async (tx) => {
@@ -1003,8 +1020,10 @@ export const cancelOrder = async (req: Request | any, res: Response) => {
         await tx.update(orders)
             .set({
                 status: "cancelled",
-                cancelReasonId: reason.id,
-                cancelReason: reason.name
+                cancelReasonId: finalReasonId,
+                cancelReason: finalReasonText,
+                cancelReasonType: "user",
+                updatedAt: new Date()
             })
             .where(eq(orders.id, orderId));
 
@@ -1083,4 +1102,24 @@ export const cancelOrder = async (req: Request | any, res: Response) => {
     });
 
     return SuccessResponse(res, { message: "Order cancelled successfully" });
+};
+
+// ==========================================
+// 7. جلب أسباب الإلغاء الخاصة بالمستخدم
+// ==========================================
+export const getUserCancelReasons = async (req: Request, res: Response) => {
+    const reasons = await db
+        .select()
+        .from(selectReasons)
+        .where(
+            and(
+                eq(selectReasons.status, "active"),
+                eq(selectReasons.type, "user")
+            )
+        );
+
+    return SuccessResponse(res, {
+        message: "Active cancel reasons fetched successfully",
+        data: reasons
+    });
 };

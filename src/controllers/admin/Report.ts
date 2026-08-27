@@ -66,7 +66,7 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
             branchId: orders.branchId,
             branchName: branches.name,
             createdAt: orders.createdAt,
-            cancelReasonType: selectReasons.type, // نوع الإلغاء
+            cancelReasonType: sql<string | null>`COALESCE(${orders.cancelReasonType}, ${selectReasons.type})`, // نوع الإلغاء
         })
         .from(orders)
         .leftJoin(branches, eq(orders.branchId, branches.id))
@@ -469,7 +469,7 @@ export const getDashboardReports = async (req: Request | any, res: Response) => 
             couponCode: orders.couponCode,
             orderSource: orders.orderSource,
             createdAt: orders.createdAt,
-            cancelReasonType: selectReasons.type,
+            cancelReasonType: sql<string | null>`COALESCE(${orders.cancelReasonType}, ${selectReasons.type})`,
             branchName: branches.name,
             zoneName: zones.name,
         })
