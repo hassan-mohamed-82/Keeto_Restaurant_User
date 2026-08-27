@@ -980,9 +980,12 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
     await sendPushNotification({
         recipientType: "user",
         recipientId: existingOrder.userId,
+        branchId: existingOrder.branchId || null,
         title: "Order Update",
         body: messageBody,
         data: {
+            restaurantId: existingOrder.restaurantId,
+            branchId: existingOrder.branchId || null,
             orderId: existingOrder.id,
             orderNumber: existingOrder.orderNumber,
             dailyOrderNumber: existingOrder.dailyOrderNumber,

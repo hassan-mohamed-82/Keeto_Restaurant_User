@@ -705,6 +705,7 @@ export const checkout = async (req: Request | any, res: Response) => {
         title: "طلب جديد! 🛒",
         body: `تم استلام طلب جديد #${createdDailyOrderNumber} بقيمة ${totalAmount} ج.م الساعة ${cairoTimeFormatted}.`,
         data: {
+            restaurantId,
             orderId,
             orderNumber,
             branchId: resolvedBranchId || null,

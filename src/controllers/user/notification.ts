@@ -51,6 +51,7 @@ export const markNotificationAsRead = async (req: Request | any, res: Response) 
         .from(notifications)
         .where(and(
             eq(notifications.id, id),
+            eq(notifications.recipientType, "user"),
             eq(notifications.recipientId, userId)
         ))
         .limit(1);
@@ -59,7 +60,11 @@ export const markNotificationAsRead = async (req: Request | any, res: Response) 
 
     await db.update(notifications)
         .set({ isRead: true })
-        .where(eq(notifications.id, id));
+        .where(and(
+            eq(notifications.id, id),
+            eq(notifications.recipientType, "user"),
+            eq(notifications.recipientId, userId)
+        ));
 
     return SuccessResponse(res, { message: "Notification marked as read" });
 };
