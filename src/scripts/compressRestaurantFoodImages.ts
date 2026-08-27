@@ -5,7 +5,7 @@ import { db } from "../models/connection"; // عدلي المسار حسب مش�
 import { eq } from "drizzle-orm";
 import { food } from "../models/schema";
 
-const TARGET_RESTAURANT_ID = "72acb976-7218-44b9-be01-36bdf321d1f3";
+const TARGET_RESTAURANT_ID = "729426f5-a6b8-4345-adf6-6e31942d69ea";
 const rootDir = path.resolve(__dirname, "../");
 
 async function testCompressImage(imageUrl: string) {
