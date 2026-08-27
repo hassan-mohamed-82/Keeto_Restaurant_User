@@ -9,13 +9,14 @@ import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import http from "http";
 import { Server } from "socket.io";
-import { connectDB } from './models/connection'; 
+import { connectDB } from './models/connection';
 import './config/redis';
 
 dotenv.config();
 
 const app = express();
-connectDB(); 
+app.set("trust proxy", true);
+connectDB();
 
 const httpServer: http.Server = http.createServer(app);
 
@@ -46,8 +47,11 @@ app.use(cookieParser());
 app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ extended: true, limit: "20mb" }));
 
-// إعداد المسارات الثابتة (Static Files)
-app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
+// إعداد المسارات الثابتة (Static Files مع التخزين المؤقت)
+app.use("/uploads", express.static(path.join(__dirname, "../uploads"), {
+  maxAge: "30d",
+  immutable: true
+}));
 app.use(express.static(path.join(process.cwd(), "public")));
 
 // اختبار عمل الـ API
