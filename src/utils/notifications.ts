@@ -32,7 +32,7 @@ export const sendPushNotification = async (params: {
                 .select({
                     repeatNotification: restaurantSettings.repeatNotification,
                     repeatNotificationDuration: restaurantSettings.repeatNotificationDuration,
-                    repeatNotificationInterval: restaurantSettings.repeatNotificationInterval,
+                    repeatNotificationStatuses: restaurantSettings.repeatNotificationStatuses,
                 })
                 .from(restaurantSettings)
                 .where(eq(restaurantSettings.restaurantId, recipientId))
@@ -42,7 +42,7 @@ export const sendPushNotification = async (params: {
                 payloadData = {
                     repeatNotification: settings.repeatNotification ?? false,
                     repeatNotificationDuration: settings.repeatNotificationDuration ?? 5,
-                    repeatNotificationInterval: settings.repeatNotificationInterval ?? 60,
+                    repeatNotificationStatuses: settings.repeatNotificationStatuses,
                     ...payloadData,
                 };
             }

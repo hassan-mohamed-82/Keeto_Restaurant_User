@@ -166,10 +166,7 @@ export const getRepeatNotificationSettings = async (req: Request | any, res: Res
         .select({
             repeatNotification: restaurantSettings.repeatNotification,
             repeatNotificationDuration: restaurantSettings.repeatNotificationDuration,
-            repeatNotificationInterval: restaurantSettings.repeatNotificationInterval,
-            orderAlertNotification: restaurantSettings.orderAlertNotification,
-            orderAlertDurationThreshold: restaurantSettings.orderAlertDurationThreshold,
-            orderAlertStatuses: restaurantSettings.orderAlertStatuses,
+            repeatNotificationStatuses: restaurantSettings.repeatNotificationStatuses,
         })
         .from(restaurantSettings)
         .where(eq(restaurantSettings.restaurantId, adminRestaurantId))
@@ -181,10 +178,7 @@ export const getRepeatNotificationSettings = async (req: Request | any, res: Res
             .select({
                 repeatNotification: restaurantSettings.repeatNotification,
                 repeatNotificationDuration: restaurantSettings.repeatNotificationDuration,
-                repeatNotificationInterval: restaurantSettings.repeatNotificationInterval,
-                orderAlertNotification: restaurantSettings.orderAlertNotification,
-                orderAlertDurationThreshold: restaurantSettings.orderAlertDurationThreshold,
-                orderAlertStatuses: restaurantSettings.orderAlertStatuses,
+                repeatNotificationStatuses: restaurantSettings.repeatNotificationStatuses,
             })
             .from(restaurantSettings)
             .where(eq(restaurantSettings.restaurantId, adminRestaurantId))
@@ -196,10 +190,7 @@ export const getRepeatNotificationSettings = async (req: Request | any, res: Res
         data: {
             repeatNotification: settings?.repeatNotification ?? false,
             repeatNotificationDuration: settings?.repeatNotificationDuration ?? 5,
-            repeatNotificationInterval: settings?.repeatNotificationInterval ?? 60,
-            orderAlertNotification: settings?.orderAlertNotification ?? true,
-            orderAlertDurationThreshold: settings?.orderAlertDurationThreshold ?? 20,
-            orderAlertStatuses: settings?.orderAlertStatuses ?? ["accepted", "preparing", "out_for_delivery"],
+            repeatNotificationStatuses: settings?.repeatNotificationStatuses ?? ["pending"],
         }
     });
 };
@@ -216,19 +207,13 @@ export const updateRepeatNotificationSettings = async (req: Request | any, res: 
     const {
         repeatNotification,
         repeatNotificationDuration,
-        repeatNotificationInterval,
-        orderAlertNotification,
-        orderAlertDurationThreshold,
-        orderAlertStatuses
+        repeatNotificationStatuses
     } = req.body;
 
     const updateData: any = {};
     if (repeatNotification !== undefined) updateData.repeatNotification = Boolean(repeatNotification);
     if (repeatNotificationDuration !== undefined) updateData.repeatNotificationDuration = Number(repeatNotificationDuration);
-    if (repeatNotificationInterval !== undefined) updateData.repeatNotificationInterval = Number(repeatNotificationInterval);
-    if (orderAlertNotification !== undefined) updateData.orderAlertNotification = Boolean(orderAlertNotification);
-    if (orderAlertDurationThreshold !== undefined) updateData.orderAlertDurationThreshold = Number(orderAlertDurationThreshold);
-    if (orderAlertStatuses !== undefined) updateData.orderAlertStatuses = orderAlertStatuses;
+    if (repeatNotificationStatuses !== undefined) updateData.repeatNotificationStatuses = repeatNotificationStatuses;
 
     const [existing] = await db
         .select()
@@ -254,10 +239,7 @@ export const updateRepeatNotificationSettings = async (req: Request | any, res: 
         .select({
             repeatNotification: restaurantSettings.repeatNotification,
             repeatNotificationDuration: restaurantSettings.repeatNotificationDuration,
-            repeatNotificationInterval: restaurantSettings.repeatNotificationInterval,
-            orderAlertNotification: restaurantSettings.orderAlertNotification,
-            orderAlertDurationThreshold: restaurantSettings.orderAlertDurationThreshold,
-            orderAlertStatuses: restaurantSettings.orderAlertStatuses,
+            repeatNotificationStatuses: restaurantSettings.repeatNotificationStatuses,
         })
         .from(restaurantSettings)
         .where(eq(restaurantSettings.restaurantId, adminRestaurantId))
