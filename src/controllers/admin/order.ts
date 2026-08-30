@@ -496,43 +496,59 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
 
         let totalCalculatedVarPrice = 0;
 
-        if (Array.isArray(cleanVariations) && cleanVariations.length > 0) {
-            cleanVariations = await Promise.all(cleanVariations.map(async (v: any) => {
-                let variationName = "Unknown";
-                let variationNameAr = "غير معروف";
-                let optionName = "Unknown";
-                let optionNameAr = "غير معروف";
+if (Array.isArray(cleanVariations) && cleanVariations.length > 0) {
+    cleanVariations = await Promise.all(cleanVariations.map(async (v: any) => {
+        // 1. مرونة في استخراج الـ IDs من الـ JSON
+        const varId = v.variationId || v.id || v.variation_id;
+        const optId = v.optionId || v.option_id || (v.option && v.option.id);
 
-                if (v.variationId) {
-                    const [varDb] = await db.select().from(foodVariations).where(eq(foodVariations.id, v.variationId)).limit(1);
-                    if (varDb) {
-                        variationName = varDb.name || variationName;
-                        variationNameAr = varDb.nameAr || variationNameAr;
-                    }
-                }
+        let variationName = v.variationName || v.name || "Unknown";
+        let variationNameAr = v.variationNameAr || v.nameAr || "غير معروف";
+        let optionName = v.optionName || v.value || "Unknown";
+        let optionNameAr = v.optionNameAr || v.valueAr || "غير معروف";
 
-                if (v.optionId) {
-                    const [optDb] = await db.select().from(variationOptions).where(eq(variationOptions.id, v.optionId)).limit(1);
-                    if (optDb) {
-                        optionName = optDb.optionName || optionName;
-                        optionNameAr = optDb.optionNameAr || optionNameAr;
+        // 2. البحث في جدول foodVariations في حال لم تكن الخواص موجودة كـ snapshot
+        if (varId) {
+            const [varDb] = await db
+                .select()
+                .from(foodVariations)
+                .where(eq(foodVariations.id, varId))
+                .limit(1);
 
-                        // 💰 جلب سعر الفارييشن
-                        const price = parseFloat((optDb as any).price || optDb.additionalPrice || "0");
-                        totalCalculatedVarPrice += price;
-                    }
-                }
-
-                return {
-                    ...v,
-                    variationName,
-                    variationNameAr,
-                    optionName,
-                    optionNameAr
-                };
-            }));
+            if (varDb) {
+                variationName = varDb.name || variationName;
+                variationNameAr = varDb.nameAr || variationNameAr;
+            }
         }
 
+        // 3. البحث في جدول variationOptions
+        if (optId) {
+            const [optDb] = await db
+                .select()
+                .from(variationOptions)
+                .where(eq(variationOptions.id, optId))
+                .limit(1);
+
+            if (optDb) {
+                optionName = optDb.optionName || optionName;
+                optionNameAr = optDb.optionNameAr || optionNameAr;
+
+                const price = parseFloat((optDb as any).price || optDb.additionalPrice || "0");
+                totalCalculatedVarPrice += price;
+            }
+        }
+
+        return {
+            ...v,
+            variationId: varId,
+            optionId: optId,
+            variationName,
+            variationNameAr,
+            optionName,
+            optionNameAr
+        };
+    }));
+}
         const finalVarPrice = parseFloat(item.variationsPrice || "0") > 0 ? parseFloat(item.variationsPrice || "0") : totalCalculatedVarPrice;
         const finalAddonsPrice = parseFloat(item.addonsPrice || "0");
         const finalTotalPrice = (parseFloat(item.basePrice || "0") + finalVarPrice + finalAddonsPrice) * item.quantity;
