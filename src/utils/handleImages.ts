@@ -14,7 +14,7 @@ export async function saveBase64Image(
   let data = base64;
 
   if (matches && matches.length === 3) {
-    const rawExt = matches[1].split("/")[1];
+    const rawExt = matches[1].split("/")[1];    
     // Sanitize extension to prevent path traversal
     ext = rawExt.replace(/[^a-zA-Z0-9]/g, "") || "png";
     data = matches[2];
@@ -34,13 +34,13 @@ export async function saveBase64Image(
     throw err;
   }
 
-  // ✨ Handle HTTPS, proxy headers, and double-domain fixing
+  // ✨ الاعتماد على الـ Host القادم من السيرفر بدون تعديل التكرار
   let rawProtocol = req.get("x-forwarded-proto") || req.protocol || "https";
   let host = req.get("x-forwarded-host") || req.get("host") || "";
 
   // Fix domain doubling (e.g. keeto.org.keeto.org -> keeto.org)
-  host = host.replace(/(\.[a-zA-Z0-9-]+\.[a-zA-Z]+)\1+/g, "$1");
-
+  //host = host.replace(/(\.[a-zA-Z0-9-]+\.[a-zA-Z]+)\1+/g, "$1");
+  
   // Force HTTPS in production / remote environments
   if (!host.includes("localhost") && !host.includes("127.0.0.1")) {
     rawProtocol = "https";
@@ -56,9 +56,9 @@ export function sanitizeImageUrl(url: string | null | undefined): string | null 
   let sanitized = url;
 
   // 1. Remove doubled domain suffix
-  sanitized = sanitized.replace(/(\.[a-zA-Z0-9-]+\.[a-zA-Z]+)\1+/g, "$1");
+  //sanitized = sanitized.replace(/(\.[a-zA-Z0-9-]+\.[a-zA-Z]+)\1+/g, "$1");
 
-  // 2. Force HTTPS for non-localhost URLs
+  // تحويل http لـ https فقط للروابط الخارجية
   if (sanitized.startsWith("http://") && !sanitized.includes("localhost") && !sanitized.includes("127.0.0.1")) {
     sanitized = sanitized.replace(/^http:\/\//i, "https://");
   }
