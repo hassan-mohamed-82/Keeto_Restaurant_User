@@ -20,22 +20,22 @@ async function syncAndUpdateUsers() {
     }
 
     const result = await response.json();
-    
-    // قراءة البيانات مباشرة من result.users
     const apiUsers = Array.isArray(result) 
       ? result 
       : result.users || result.data || [];
 
-    console.log(`📦 Received ${apiUsers.length} users from API.`);
+    const totalUsers = apiUsers.length;
+    console.log(`📦 Received ${totalUsers} users from API. Starting batch processing...`);
 
     let createdCount = 0;
     let updatedCount = 0;
+    let processed = 0;
 
     for (const oldUser of apiUsers) {
+      processed++;
       const email = oldUser.email || null;
       const phone = oldUser.phone || null;
       const oldPoints = Number(oldUser.points || 0);
-      const oldOrdersCount = Number(oldUser.orders_count || oldUser.total_orders || 0);
 
       let existingUser = null;
       if (email || phone) {
@@ -62,9 +62,6 @@ async function syncAndUpdateUsers() {
         if (!existingUser.alternatePhone && oldUser.phone_2) {
           updateData.alternatePhone = oldUser.phone_2;
         }
-        if (oldOrdersCount > 0) {
-          updateData.totalOrders = (existingUser.totalOrders || 0) + oldOrdersCount;
-        }
 
         if (Object.keys(updateData).length > 0) {
           await db.update(users).set(updateData).where(eq(users.id, targetUserId));
@@ -85,7 +82,6 @@ async function syncAndUpdateUsers() {
           googleId: oldUser.google_id || null,
           isVerified: Boolean(oldUser.email_verified_at),
           status: oldUser.status == 1 || oldUser.status === 'active' ? 'active' : 'blocked',
-          totalOrders: oldOrdersCount,
           isDeleted: Boolean(oldUser.deleted_at),
           createdAt: oldUser.created_at ? new Date(oldUser.created_at) : new Date(),
         });
@@ -115,10 +111,14 @@ async function syncAndUpdateUsers() {
             userId: targetUserId,
             restaurantId: TARGET_RESTAURANT_ID,
             points: oldPoints,
-            createdAt: new Date(),
             updatedAt: new Date(),
           });
         }
+      }
+
+      // طباعة التقدم كل 500 مستخدم
+      if (processed % 500 === 0 || processed === totalUsers) {
+        console.log(`⏳ Progress: ${processed}/${totalUsers} users processed...`);
       }
     }
 
