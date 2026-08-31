@@ -1334,14 +1334,14 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
     // 4. إنشاء الـ PDF بحجم إيصال حراري
     const doc = new PDFDocument({ margin: 20, size: [250, 600] });
 
+    // تسجيل خط يدعم اللغة العربية بكافة تشكيلاتها
     const fontPath = path.join(process.cwd(), 'assets', 'fonts', 'Arial.ttf');
-    if (fs.existsSync(fontPath)) {
-        doc.font(fontPath);
-    } else {
-        const cairoPath = path.join(process.cwd(), 'assets', 'fonts', 'Cairo-Regular.ttf');
-        if (fs.existsSync(cairoPath)) {
-            doc.font(cairoPath);
-        }
+    const cairoPath = path.join(process.cwd(), 'assets', 'fonts', 'Cairo-Regular.ttf');
+    const chosenFontPath = fs.existsSync(fontPath) ? fontPath : (fs.existsSync(cairoPath) ? cairoPath : null);
+
+    if (chosenFontPath) {
+        doc.registerFont('CairoFont', chosenFontPath);
+        doc.font('CairoFont');
     }
 
     res.setHeader('Content-Type', 'application/pdf');
@@ -1377,7 +1377,7 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
     doc.text(`Client: ${fixArabicText(orderDetail.customer?.name) || 'Guest'}`);
     doc.text(`Phone: ${orderDetail.customer?.phone || 'N/A'}`);
     doc.text(`Order Type: ${orderDetail.order.orderType}`);
-    doc.text(`Payment: ${paymentName}`);
+    doc.text(`Payment: ${fixArabicText(paymentName)}`);
 
     doc.moveDown(0.5);
     doc.moveTo(10, doc.y).lineTo(240, doc.y).dash(2, { space: 2 }).stroke();
@@ -1402,10 +1402,10 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
 
     // Items Header
     const itemStartY = doc.y;
-    doc.text('Item', 10, itemStartY, { width: 100 });
-    doc.text('Qty', 110, itemStartY, { width: 30, align: 'right' });
-    doc.text('Price', 140, itemStartY, { width: 45, align: 'right' });
-    doc.text('Total', 185, itemStartY, { width: 55, align: 'right' });
+    doc.text('Item', 10, itemStartY, { width: 95 });
+    doc.text('Qty', 105, itemStartY, { width: 30, align: 'right' });
+    doc.text('Price', 135, itemStartY, { width: 45, align: 'right' });
+    doc.text('Total', 180, itemStartY, { width: 60, align: 'right' });
     doc.moveDown(0.2);
 
     doc.moveTo(10, doc.y).lineTo(240, doc.y).stroke();
@@ -1414,14 +1414,14 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
     // Items Loop
     for (const item of formattedItems) {
         const currentY = doc.y;
-        const name = fixArabicText(item.foodNameAr || item.foodName) || fixArabicText(item.foodName) || 'Item';
+        const name = fixArabicText(item.foodNameAr || item.foodName) || 'Item';
 
-        doc.text(name, 10, currentY, { width: 100 });
+        doc.text(name, 10, currentY, { width: 95 });
         const nextY = doc.y;
 
-        doc.text(item.quantity.toString(), 110, currentY, { width: 30, align: 'right' });
-        doc.text(parseFloat(item.basePrice as string).toFixed(2), 140, currentY, { width: 45, align: 'right' });
-        doc.text(item.finalTotalPrice.toFixed(2), 185, currentY, { width: 55, align: 'right' });
+        doc.text(item.quantity.toString(), 105, currentY, { width: 30, align: 'right' });
+        doc.text(parseFloat(item.basePrice as string).toFixed(2), 135, currentY, { width: 45, align: 'right' });
+        doc.text(item.finalTotalPrice.toFixed(2), 180, currentY, { width: 60, align: 'right' });
 
         doc.y = nextY;
 
@@ -1433,7 +1433,7 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
                 const vName = fixArabicText(v.name);
                 doc.text(`  + ${vName}`, 10, vY, { width: 120 });
                 if (v.price > 0) {
-                    doc.text(v.price.toFixed(2), 140, vY, { width: 45, align: 'right' });
+                    doc.text(v.price.toFixed(2), 135, vY, { width: 45, align: 'right' });
                 }
             }
             doc.fontSize(10);
