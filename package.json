@@ -14,7 +14,8 @@
     "seed:fresh": "tsx src/seeds/index.ts --fresh",
     "start:prod": "node dist/src/server.js",
     "migrate-log": "node migrate.js",
-    "reset-db": "tsx src/models/reset.ts"
+    "reset-db": "tsx src/models/reset.ts",
+    "sync-users": "tsx src/scripts/sync-users.ts"
   },
   "keywords": [],
   "author": "",
