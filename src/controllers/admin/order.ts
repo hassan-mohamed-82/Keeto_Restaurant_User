@@ -1334,9 +1334,14 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
     // 4. إنشاء الـ PDF بحجم إيصال حراري
     const doc = new PDFDocument({ margin: 20, size: [250, 600] });
 
-    const fontPath = path.join(process.cwd(), 'assets', 'fonts', 'Cairo-Regular.ttf');
+    const fontPath = path.join(process.cwd(), 'assets', 'fonts', 'Arial.ttf');
     if (fs.existsSync(fontPath)) {
         doc.font(fontPath);
+    } else {
+        const cairoPath = path.join(process.cwd(), 'assets', 'fonts', 'Cairo-Regular.ttf');
+        if (fs.existsSync(cairoPath)) {
+            doc.font(cairoPath);
+        }
     }
 
     res.setHeader('Content-Type', 'application/pdf');
