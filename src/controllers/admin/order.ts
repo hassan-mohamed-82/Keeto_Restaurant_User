@@ -33,6 +33,7 @@ import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors/NotFound";
 import { v4 as uuidv4 } from "uuid";
 import { selectReasons } from "../../models/schema/admin/selectReasons";
+import { fixArabicText } from "../../utils/fixArabic";
 import { sendPushNotification } from "../../utils/notifications";
 import { UnauthorizedError } from "../../Errors";
 import {
@@ -123,21 +124,8 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
             deliveryFee: orders.deliveryFee,
             serviceFee: orders.serviceFee,
             appCommission: orders.appCommission,
-            // Discount fields
-            discountId: orders.discountId,
             discountAmount: orders.discountAmount,
-            discountType: orders.discountType,
-            discountValue: orders.discountValue,
-            discountSource: orders.discountSource,
-            discountName: discounts.name,
-            discountNameAr: discounts.nameAr,
-            discountNameFr: discounts.nameFr,
-            // Coupon fields
-            couponId: orders.couponId,
             couponCode: orders.couponCode,
-            couponName: coupons.name,
-            couponNameAr: coupons.nameAr,
-            couponNameFr: coupons.nameFr,
             totalAmount: orders.totalAmount,
             status: orders.status,
             durationOrderPreparing: orders.durationOrderPreparing,
@@ -164,8 +152,6 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
         .leftJoin(addresses, eq(orders.addressId, addresses.id))
         .leftJoin(restaurantZoneDeliveryFees, eq(orders.zoneId, restaurantZoneDeliveryFees.id))
         .leftJoin(zones, or(eq(restaurantZoneDeliveryFees.zoneId, zones.id), eq(orders.zoneId, zones.id)))
-        .leftJoin(discounts, eq(orders.discountId, discounts.id))
-        .leftJoin(coupons, eq(orders.couponId, coupons.id))
         .where(and(...conditions))
         .orderBy(desc(orders.createdAt));
 
@@ -182,26 +168,31 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
                     }
                 }
             }
-            const { addressLat, addressLng, discountId, discountAmount, discountType, discountValue, discountSource, discountName, discountNameAr, discountNameFr, couponId, couponCode, couponName, couponNameAr, couponNameFr, ...rest } = o;
+
+            let couponDetails: any = null;
+            if (o.couponCode) {
+                try {
+                    const [c] = await db.select({
+                        id: coupons.id,
+                        name: coupons.name,
+                        nameAr: coupons.nameAr,
+                        nameFr: coupons.nameFr,
+                        code: coupons.code,
+                    }).from(coupons).where(eq(coupons.code, o.couponCode)).limit(1);
+                    if (c) couponDetails = c;
+                } catch (e) {}
+            }
+
+            const { addressLat, addressLng, ...rest } = o;
             return {
                 ...rest,
                 zoneName: finalZoneName,
-                discountAmount,
-                couponCode,
                 discount: {
-                    discountId: discountId ?? null,
-                    discountAmount: discountAmount ?? null,
-                    discountType: discountType ?? null,
-                    discountValue: discountValue ?? null,
-                    discountSource: discountSource ?? null,
-                    discountName: discountName ?? null,
-                    discountNameAr: discountNameAr ?? null,
-                    discountNameFr: discountNameFr ?? null,
-                    couponId: couponId ?? null,
-                    couponCode: couponCode ?? null,
-                    couponName: couponName ?? null,
-                    couponNameAr: couponNameAr ?? null,
-                    couponNameFr: couponNameFr ?? null,
+                    discountAmount: o.discountAmount ?? "0.00",
+                    couponCode: o.couponCode ?? null,
+                    couponName: couponDetails?.name ?? null,
+                    couponNameAr: couponDetails?.nameAr ?? null,
+                    couponNameFr: couponDetails?.nameFr ?? null,
                 },
             };
         })
@@ -279,21 +270,8 @@ export const getOrdersByStatus = async (
             deliveryFee: orders.deliveryFee,
             serviceFee: orders.serviceFee,
             appCommission: orders.appCommission,
-            // Discount fields
-            discountId: orders.discountId,
             discountAmount: orders.discountAmount,
-            discountType: orders.discountType,
-            discountValue: orders.discountValue,
-            discountSource: orders.discountSource,
-            discountName: discounts.name,
-            discountNameAr: discounts.nameAr,
-            discountNameFr: discounts.nameFr,
-            // Coupon fields
-            couponId: orders.couponId,
             couponCode: orders.couponCode,
-            couponName: coupons.name,
-            couponNameAr: coupons.nameAr,
-            couponNameFr: coupons.nameFr,
             totalAmount: orders.totalAmount,
             status: orders.status,
             durationOrderPreparing: orders.durationOrderPreparing,
@@ -320,8 +298,6 @@ export const getOrdersByStatus = async (
         .leftJoin(addresses, eq(orders.addressId, addresses.id))
         .leftJoin(restaurantZoneDeliveryFees, eq(orders.zoneId, restaurantZoneDeliveryFees.id))
         .leftJoin(zones, or(eq(restaurantZoneDeliveryFees.zoneId, zones.id), eq(orders.zoneId, zones.id)))
-        .leftJoin(discounts, eq(orders.discountId, discounts.id))
-        .leftJoin(coupons, eq(orders.couponId, coupons.id))
         .where(and(...conditions))
         .orderBy(desc(orders.createdAt));
 
@@ -338,26 +314,31 @@ export const getOrdersByStatus = async (
                     }
                 }
             }
-            const { addressLat, addressLng, discountId, discountAmount, discountType, discountValue, discountSource, discountName, discountNameAr, discountNameFr, couponId, couponCode, couponName, couponNameAr, couponNameFr, ...rest } = o;
+
+            let couponDetails: any = null;
+            if (o.couponCode) {
+                try {
+                    const [c] = await db.select({
+                        id: coupons.id,
+                        name: coupons.name,
+                        nameAr: coupons.nameAr,
+                        nameFr: coupons.nameFr,
+                        code: coupons.code,
+                    }).from(coupons).where(eq(coupons.code, o.couponCode)).limit(1);
+                    if (c) couponDetails = c;
+                } catch (e) {}
+            }
+
+            const { addressLat, addressLng, ...rest } = o;
             return {
                 ...rest,
                 zoneName: finalZoneName,
-                discountAmount,
-                couponCode,
                 discount: {
-                    discountId: discountId ?? null,
-                    discountAmount: discountAmount ?? null,
-                    discountType: discountType ?? null,
-                    discountValue: discountValue ?? null,
-                    discountSource: discountSource ?? null,
-                    discountName: discountName ?? null,
-                    discountNameAr: discountNameAr ?? null,
-                    discountNameFr: discountNameFr ?? null,
-                    couponId: couponId ?? null,
-                    couponCode: couponCode ?? null,
-                    couponName: couponName ?? null,
-                    couponNameAr: couponNameAr ?? null,
-                    couponNameFr: couponNameFr ?? null,
+                    discountAmount: o.discountAmount ?? "0.00",
+                    couponCode: o.couponCode ?? null,
+                    couponName: couponDetails?.name ?? null,
+                    couponNameAr: couponDetails?.nameAr ?? null,
+                    couponNameFr: couponDetails?.nameFr ?? null,
                 },
             };
         })
@@ -1357,9 +1338,9 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
     doc.pipe(res);
 
     // Header
-    doc.fontSize(16).text(orderDetail.restaurant?.name || 'Restaurant', { align: 'center' });
+    doc.fontSize(16).text(fixArabicText(orderDetail.restaurant?.name) || 'Restaurant', { align: 'center' });
     if (pdfBranchName) {
-        doc.fontSize(12).text(pdfBranchName, { align: 'center' });
+        doc.fontSize(12).text(fixArabicText(pdfBranchName), { align: 'center' });
     }
 
     doc.moveDown(0.5);
@@ -1380,8 +1361,8 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
     doc.text(`Date: ${cairoDateStr}`);
     doc.text(`Time: ${cairoTimeStr}`);
 
-    doc.text(`Branch: ${pdfBranchName || 'N/A'}`);
-    doc.text(`Client: ${orderDetail.customer?.name || 'Guest'}`);
+    doc.text(`Branch: ${fixArabicText(pdfBranchName) || 'N/A'}`);
+    doc.text(`Client: ${fixArabicText(orderDetail.customer?.name) || 'Guest'}`);
     doc.text(`Phone: ${orderDetail.customer?.phone || 'N/A'}`);
     doc.text(`Order Type: ${orderDetail.order.orderType}`);
     doc.text(`Payment: ${paymentName}`);
@@ -1394,10 +1375,11 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
     // Delivery Address if applicable
     if (orderDetail.order.orderType === 'delivery' && orderDetail.address) {
         doc.text('Delivery Address:', { underline: true });
-        doc.text(`Zone: ${pdfZoneName}`);
-        doc.text(`Street: ${orderDetail.address.street || ''}`);
+        doc.text(`Zone: ${fixArabicText(pdfZoneName)}`);
+        doc.text(`Street: ${fixArabicText(orderDetail.address.street) || ''}`);
         let details = `Bldg: ${orderDetail.address.number || ''}`;
         if (orderDetail.address.floor) details += ` | Floor: ${orderDetail.address.floor}`;
+        if (orderDetail.address.landmark) details += ` | ${fixArabicText(orderDetail.address.landmark)}`;
         doc.text(details);
 
         doc.moveDown(0.5);
@@ -1420,7 +1402,7 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
     // Items Loop
     for (const item of formattedItems) {
         const currentY = doc.y;
-        const name = item.foodName || item.foodNameAr || 'Item';
+        const name = fixArabicText(item.foodNameAr || item.foodName) || fixArabicText(item.foodName) || 'Item';
 
         doc.text(name, 10, currentY, { width: 100 });
         const nextY = doc.y;
@@ -1436,7 +1418,8 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
             doc.fontSize(8);
             for (const v of item.variationDetails) {
                 const vY = doc.y;
-                doc.text(`  + ${v.name}`, 10, vY, { width: 120 });
+                const vName = fixArabicText(v.name);
+                doc.text(`  + ${vName}`, 10, vY, { width: 120 });
                 if (v.price > 0) {
                     doc.text(v.price.toFixed(2), 140, vY, { width: 45, align: 'right' });
                 }
