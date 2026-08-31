@@ -1,5 +1,7 @@
 import { Request, Response } from "express";
 import PDFDocument from "pdfkit";
+import path from "path";
+import fs from "fs";
 import { db } from "../../models/connection";
 import {
     orders, orderItems, food, users, paymentMethods,
@@ -1331,6 +1333,11 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
 
     // 4. إنشاء الـ PDF بحجم إيصال حراري
     const doc = new PDFDocument({ margin: 20, size: [250, 600] });
+
+    const fontPath = path.join(process.cwd(), 'assets', 'fonts', 'Cairo-Regular.ttf');
+    if (fs.existsSync(fontPath)) {
+        doc.font(fontPath);
+    }
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="Receipt_${orderDetail.order.dailyOrderNumber}.pdf"`);
