@@ -1,9 +1,9 @@
 import { mysqlTable, varchar, char, timestamp, decimal, mysqlEnum, text, int, json, boolean } from "drizzle-orm/mysql-core";
-import { sql } from "drizzle-orm";
+import { sql, relations } from "drizzle-orm";
 import { restaurants } from "./restaurants";
 import { food } from "./food";
 import { users } from "../user/Users";
-import { branches } from "../../schema";
+import { branches, coupons, discounts } from "../../schema";
 import { addresses } from "../user/address";
 import { selectReasons } from "./selectReasons";
 import { deliveryMen } from "./delivery_man";
@@ -23,20 +23,20 @@ export const orders = mysqlTable("orders", {
 
     branchId: char("branch_id", { length: 36 })
         .references(() => branches.id),
-    // .notNull(),
 
     addressId: char("address_id", { length: 36 })
         .references(() => addresses.id),
 
     zoneId: char("zone_id", { length: 36 }),
 
-    deliveryManId: char("delivery_man_id", { length: 36 })
-        .references(() => deliveryMen.id),
+    orderSource: mysqlEnum("order_source", [
+        "online_order_web",
+        "online_order_app",
+        "food_aggregator",
+        "my_keeto"
+    ]).notNull(),
 
-    orderSource: mysqlEnum("order_source", ["online_order_web", "online_order_app", "food_aggregator", "my_keeto"]).notNull(),
-
-    // ✅ التعديل هنا: رجعناها لـ varchar عشان تقبل الـ ID (UUID) اللي مبعوت من الـ Body
-    paymentMethod: varchar("payment_method", { length: 100 }).notNull(),
+    paymentMethod: char("payment_method", { length: 36 }),
 
     orderType: mysqlEnum("order_type", ["delivery", "takeaway", "dine_in"]).default("delivery"),
 
@@ -44,8 +44,20 @@ export const orders = mysqlTable("orders", {
     deliveryFee: decimal("delivery_fee", { precision: 10, scale: 2 }).default("0.00"),
     serviceFee: decimal("service_fee", { precision: 10, scale: 2 }).default("0.00"),
     appCommission: decimal("app_commission", { precision: 10, scale: 2 }).default("0.00"),
+
+    // --- Discount & Coupon Fields ---
+    discountId: char("discount_id", { length: 36 })
+        .references(() => discounts.id, { onDelete: "set null" }),
     discountAmount: decimal("discount_amount", { precision: 10, scale: 2 }).default("0.00"),
+    discountType: mysqlEnum("discount_type", ["percentage", "fixed_amount"]),
+    discountValue: decimal("discount_value", { precision: 10, scale: 2 }),
+    discountSource: mysqlEnum("discount_source", ["food_level", "restaurant_discount", "global_discount", "coupon"]),
+
+    couponId: char("coupon_id", { length: 36 })
+        .references(() => coupons.id, { onDelete: "set null" }),
     couponCode: varchar("coupon_code", { length: 50 }),
+    // ---------------------------------
+
     totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull(),
 
     status: mysqlEnum("status", [
@@ -69,7 +81,11 @@ export const orders = mysqlTable("orders", {
         .references(() => selectReasons.id),
     cancelReason: text("cancel_reason"),
     cancelReasonType: mysqlEnum("cancel_reason_type", ["user", "restaurant"]),
+
     note: text("note"),
+
+    deliveryManId: char("delivery_man_id", { length: 36 })
+        .references(() => deliveryMen.id),
     dailyOrderNumber: int("daily_order_number").default(1),
 
     rating: int("rating"),
@@ -111,3 +127,41 @@ export const orderItems = mysqlTable("order_items", {
     note: text("note"),
 
 });
+
+// ==========================================
+// 3. Drizzle ORM Relations (للربط البرمجي)
+// ==========================================
+export const ordersRelations = relations(orders, ({ one, many }) => ({
+    user: one(users, {
+        fields: [orders.userId],
+        references: [users.id],
+    }),
+    restaurant: one(restaurants, {
+        fields: [orders.restaurantId],
+        references: [restaurants.id],
+    }),
+    branch: one(branches, {
+        fields: [orders.branchId],
+        references: [branches.id],
+    }),
+    discount: one(discounts, {
+        fields: [orders.discountId],
+        references: [discounts.id],
+    }),
+    coupon: one(coupons, {
+        fields: [orders.couponId],
+        references: [coupons.id],
+    }),
+    items: many(orderItems),
+}));
+
+export const orderItemsRelations = relations(orderItems, ({ one }) => ({
+    order: one(orders, {
+        fields: [orderItems.orderId],
+        references: [orders.id],
+    }),
+    food: one(food, {
+        fields: [orderItems.foodId],
+        references: [food.id],
+    }),
+}));

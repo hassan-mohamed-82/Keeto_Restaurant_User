@@ -519,8 +519,15 @@ export const checkout = async (req: Request | any, res: Response) => {
     // 🛡️ 10. Execute Order (Transaction)
     // ==========================================
     const now = new Date();
-    const startOfToday = new Date(now);
-    startOfToday.setHours(0, 0, 0, 0);
+    
+    // ⏰ حساب بداية دورة الترقيم اليومي للطلب بناءً على وقت إعادة تعيين المطعم (Restart Daily Order Number Time)
+    const resetTimeStr = (settings as any)?.resetDailyOrderNumberTime || "00:00";
+    const [resetHour, resetMinute] = resetTimeStr.split(":").map(Number);
+    const dailyOrderResetStart = new Date(now);
+    dailyOrderResetStart.setHours(isNaN(resetHour) ? 0 : resetHour, isNaN(resetMinute) ? 0 : resetMinute, 0, 0);
+    if (now.getTime() < dailyOrderResetStart.getTime()) {
+        dailyOrderResetStart.setDate(dailyOrderResetStart.getDate() - 1);
+    }
 
     let createdDailyOrderNumber = 1;
 
@@ -563,7 +570,7 @@ export const checkout = async (req: Request | any, res: Response) => {
             .where(
                 and(
                     eq(orders.restaurantId, restaurantId),
-                    gte(orders.createdAt, startOfToday)
+                    gte(orders.createdAt, dailyOrderResetStart)
                 )
             );
 

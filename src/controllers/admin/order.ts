@@ -23,6 +23,8 @@ import {
     restaurantSettings,
     restaurantSchedules,
     restaurantBusinessPlans,
+    discounts,
+    coupons,
 } from "../../models/schema";
 import { eq, and, or, desc, inArray, sql, gte, lte, isNull } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
@@ -121,8 +123,21 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
             deliveryFee: orders.deliveryFee,
             serviceFee: orders.serviceFee,
             appCommission: orders.appCommission,
+            // Discount fields
+            discountId: orders.discountId,
             discountAmount: orders.discountAmount,
+            discountType: orders.discountType,
+            discountValue: orders.discountValue,
+            discountSource: orders.discountSource,
+            discountName: discounts.name,
+            discountNameAr: discounts.nameAr,
+            discountNameFr: discounts.nameFr,
+            // Coupon fields
+            couponId: orders.couponId,
             couponCode: orders.couponCode,
+            couponName: coupons.name,
+            couponNameAr: coupons.nameAr,
+            couponNameFr: coupons.nameFr,
             totalAmount: orders.totalAmount,
             status: orders.status,
             durationOrderPreparing: orders.durationOrderPreparing,
@@ -149,6 +164,8 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
         .leftJoin(addresses, eq(orders.addressId, addresses.id))
         .leftJoin(restaurantZoneDeliveryFees, eq(orders.zoneId, restaurantZoneDeliveryFees.id))
         .leftJoin(zones, or(eq(restaurantZoneDeliveryFees.zoneId, zones.id), eq(orders.zoneId, zones.id)))
+        .leftJoin(discounts, eq(orders.discountId, discounts.id))
+        .leftJoin(coupons, eq(orders.couponId, coupons.id))
         .where(and(...conditions))
         .orderBy(desc(orders.createdAt));
 
@@ -165,10 +182,27 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
                     }
                 }
             }
-            const { addressLat, addressLng, ...rest } = o;
+            const { addressLat, addressLng, discountId, discountAmount, discountType, discountValue, discountSource, discountName, discountNameAr, discountNameFr, couponId, couponCode, couponName, couponNameAr, couponNameFr, ...rest } = o;
             return {
                 ...rest,
                 zoneName: finalZoneName,
+                discountAmount,
+                couponCode,
+                discount: {
+                    discountId: discountId ?? null,
+                    discountAmount: discountAmount ?? null,
+                    discountType: discountType ?? null,
+                    discountValue: discountValue ?? null,
+                    discountSource: discountSource ?? null,
+                    discountName: discountName ?? null,
+                    discountNameAr: discountNameAr ?? null,
+                    discountNameFr: discountNameFr ?? null,
+                    couponId: couponId ?? null,
+                    couponCode: couponCode ?? null,
+                    couponName: couponName ?? null,
+                    couponNameAr: couponNameAr ?? null,
+                    couponNameFr: couponNameFr ?? null,
+                },
             };
         })
     );
@@ -245,8 +279,21 @@ export const getOrdersByStatus = async (
             deliveryFee: orders.deliveryFee,
             serviceFee: orders.serviceFee,
             appCommission: orders.appCommission,
+            // Discount fields
+            discountId: orders.discountId,
             discountAmount: orders.discountAmount,
+            discountType: orders.discountType,
+            discountValue: orders.discountValue,
+            discountSource: orders.discountSource,
+            discountName: discounts.name,
+            discountNameAr: discounts.nameAr,
+            discountNameFr: discounts.nameFr,
+            // Coupon fields
+            couponId: orders.couponId,
             couponCode: orders.couponCode,
+            couponName: coupons.name,
+            couponNameAr: coupons.nameAr,
+            couponNameFr: coupons.nameFr,
             totalAmount: orders.totalAmount,
             status: orders.status,
             durationOrderPreparing: orders.durationOrderPreparing,
@@ -273,6 +320,8 @@ export const getOrdersByStatus = async (
         .leftJoin(addresses, eq(orders.addressId, addresses.id))
         .leftJoin(restaurantZoneDeliveryFees, eq(orders.zoneId, restaurantZoneDeliveryFees.id))
         .leftJoin(zones, or(eq(restaurantZoneDeliveryFees.zoneId, zones.id), eq(orders.zoneId, zones.id)))
+        .leftJoin(discounts, eq(orders.discountId, discounts.id))
+        .leftJoin(coupons, eq(orders.couponId, coupons.id))
         .where(and(...conditions))
         .orderBy(desc(orders.createdAt));
 
@@ -289,10 +338,27 @@ export const getOrdersByStatus = async (
                     }
                 }
             }
-            const { addressLat, addressLng, ...rest } = o;
+            const { addressLat, addressLng, discountId, discountAmount, discountType, discountValue, discountSource, discountName, discountNameAr, discountNameFr, couponId, couponCode, couponName, couponNameAr, couponNameFr, ...rest } = o;
             return {
                 ...rest,
                 zoneName: finalZoneName,
+                discountAmount,
+                couponCode,
+                discount: {
+                    discountId: discountId ?? null,
+                    discountAmount: discountAmount ?? null,
+                    discountType: discountType ?? null,
+                    discountValue: discountValue ?? null,
+                    discountSource: discountSource ?? null,
+                    discountName: discountName ?? null,
+                    discountNameAr: discountNameAr ?? null,
+                    discountNameFr: discountNameFr ?? null,
+                    couponId: couponId ?? null,
+                    couponCode: couponCode ?? null,
+                    couponName: couponName ?? null,
+                    couponNameAr: couponNameAr ?? null,
+                    couponNameFr: couponNameFr ?? null,
+                },
             };
         })
     );
@@ -654,6 +720,30 @@ if (Array.isArray(cleanVariations) && cleanVariations.length > 0) {
         userTotalOrders = Number(ordersCount?.count || 0);
     }
 
+    // Fetch discount and coupon names for the detail view
+    let discountDetails: any = null;
+    if (orderDetail.order.discountId) {
+        const [disc] = await db.select({
+            id: discounts.id,
+            name: discounts.name,
+            nameAr: discounts.nameAr,
+            nameFr: discounts.nameFr,
+        }).from(discounts).where(eq(discounts.id, orderDetail.order.discountId)).limit(1);
+        if (disc) discountDetails = disc;
+    }
+
+    let couponDetails: any = null;
+    if (orderDetail.order.couponId) {
+        const [coup] = await db.select({
+            id: coupons.id,
+            name: coupons.name,
+            nameAr: coupons.nameAr,
+            nameFr: coupons.nameFr,
+            code: coupons.code,
+        }).from(coupons).where(eq(coupons.id, orderDetail.order.couponId)).limit(1);
+        if (coup) couponDetails = coup;
+    }
+
     return SuccessResponse(res, {
         message: "Get order details success",
         data: {
@@ -671,9 +761,26 @@ if (Array.isArray(cleanVariations) && cleanVariations.length > 0) {
             deliveryFee: orderDetail.order.deliveryFee,
             serviceFee: orderDetail.order.serviceFee,
             appCommission: orderDetail.order.appCommission,
+            // Kept flat for backward-compat
             discountAmount: orderDetail.order.discountAmount,
             couponCode: orderDetail.order.couponCode,
             totalAmount: orderDetail.order.totalAmount,
+            // Structured discount object with names
+            discount: {
+                discountId: orderDetail.order.discountId ?? null,
+                discountAmount: orderDetail.order.discountAmount ?? null,
+                discountType: orderDetail.order.discountType ?? null,
+                discountValue: orderDetail.order.discountValue ?? null,
+                discountSource: orderDetail.order.discountSource ?? null,
+                discountName: discountDetails?.name ?? null,
+                discountNameAr: discountDetails?.nameAr ?? null,
+                discountNameFr: discountDetails?.nameFr ?? null,
+                couponId: orderDetail.order.couponId ?? null,
+                couponCode: orderDetail.order.couponCode ?? null,
+                couponName: couponDetails?.name ?? null,
+                couponNameAr: couponDetails?.nameAr ?? null,
+                couponNameFr: couponDetails?.nameFr ?? null,
+            },
             rating: orderDetail.order.rating,
             ratingComment: orderDetail.order.ratingComment,
             isPointsRedeemed: orderDetail.order.isPointsRedeemed,
@@ -831,9 +938,12 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
             // ==========================================
             // 💰 3. التسوية العكسية لمحفظة المطعم (Restaurant Wallet Reversal)
             // ==========================================
-            const [payment] = await tx.select().from(paymentMethods).where(eq(paymentMethods.id, existingOrder.paymentMethod)).limit(1);
-            const pmName = (payment?.name || "").toLowerCase();
-            const isCashPayment = pmName.includes("cash") || pmName.includes("استلام");
+            let isCashPayment = false;
+            if (existingOrder.paymentMethod) {
+                const [payment] = await tx.select().from(paymentMethods).where(eq(paymentMethods.id, existingOrder.paymentMethod)).limit(1);
+                const pmName = (payment?.name || "").toLowerCase();
+                isCashPayment = pmName.includes("cash") || pmName.includes("استلام");
+            }
 
             const appCommission = parseFloat(existingOrder.appCommission as string || "0");
             const serviceFee = parseFloat(existingOrder.serviceFee as string || "0");

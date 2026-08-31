@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { branches, restaurants, restrauntadmin, rolesadmin } from "../../models/schema";
+import { branches, restaurants, restrauntadmin, rolesadmin, restaurantSchedules } from "../../models/schema";
 import { eq } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
@@ -90,6 +90,15 @@ export async function login(req: Request, res: Response) {
         role = roleResult;
     }
 
+    // 5.5 جلب جدول مواعيد المطعم (Restaurant Schedules)
+    let schedules: any[] = [];
+    if (user.restaurantId) {
+        schedules = await db
+            .select()
+            .from(restaurantSchedules)
+            .where(eq(restaurantSchedules.restaurantId, user.restaurantId));
+    }
+
     // 6. تجهيز الـ Token Payload الديناميكي
     const tokenPayload = {
         id: user.id,
@@ -124,6 +133,7 @@ export async function login(req: Request, res: Response) {
             branchName,
             branchNameAr,
             branchNameFr
-        }
+        },
+        schedules
     }, 200);
 }

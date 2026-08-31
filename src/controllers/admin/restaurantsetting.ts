@@ -52,6 +52,7 @@ export const updateSettings = async (req: Request, res: Response): Promise<void>
         if (settings.repeatNotification !== undefined) settingsData.repeatNotification = settings.repeatNotification;
         if (settings.repeatNotificationDuration !== undefined) settingsData.repeatNotificationDuration = settings.repeatNotificationDuration;
         if (settings.repeatNotificationStatuses !== undefined) settingsData.repeatNotificationStatuses = settings.repeatNotificationStatuses;
+        if (settings.resetDailyOrderNumberTime !== undefined) settingsData.resetDailyOrderNumberTime = settings.resetDailyOrderNumberTime;
 
         if (existingSettings.length > 0) {
           // ✅ Update existing settings
