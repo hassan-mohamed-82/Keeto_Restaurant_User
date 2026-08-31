@@ -18,6 +18,8 @@ export const userRestaurantPoints = mysqlTable("user_restaurant_points", {
     points: int("points").default(0).notNull(),
 
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
+
+    createdAt: timestamp("created_at").defaultNow(),
 }, (table) => ({
     userRestIdx: uniqueIndex("unique_user_restaurant_points").on(table.userId, table.restaurantId),
 }));
