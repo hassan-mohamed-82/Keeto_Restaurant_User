@@ -51,6 +51,7 @@ export const verifyFacebookToken = async (req: Request, res: Response) => {
         email,
         name,
         isVerified: true, // بنعتبره موثق لأنه جاي من فيسبوك
+        totalOrders: 0,
       });
       
       // بنعمل Object لليوزر عشان نستخدمه في الـ JWT تحت
@@ -68,7 +69,8 @@ export const verifyFacebookToken = async (req: Request, res: Response) => {
         isVerified: true, 
         status:"active",
         isDeleted: false,
-        createdAt: new Date() 
+        createdAt: new Date() ,
+        totalOrders: 0,
       };
     } else {
       // 👤 Login (existing user)
