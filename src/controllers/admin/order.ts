@@ -691,16 +691,16 @@ if (Array.isArray(cleanVariations) && cleanVariations.length > 0) {
     // 5. حساب إجمالي عدد طلبات العميل في هذا المطعم
     let userTotalOrders = 0;
     if (orderDetail.order.userId && restaurantId) {
-        const [ordersCount] = await db
-            .select({ count: sql<number>`count(${orders.id})` })
-            .from(orders)
+        const [userPoints] = await db
+            .select({ totalOrders: userRestaurantPoints.totalOrders })
+            .from(userRestaurantPoints)
             .where(
                 and(
-                    eq(orders.userId, orderDetail.order.userId),
-                    eq(orders.restaurantId, restaurantId)
+                    eq(userRestaurantPoints.userId, orderDetail.order.userId),
+                    eq(userRestaurantPoints.restaurantId, restaurantId)
                 )
             );
-        userTotalOrders = Number(ordersCount?.count || 0);
+        userTotalOrders = Number(userPoints?.totalOrders || 0);
     }
 
     // Fetch discount and coupon names for the detail view
