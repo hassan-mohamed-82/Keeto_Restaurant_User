@@ -15,7 +15,8 @@
     "start:prod": "node dist/src/server.js",
     "migrate-log": "node migrate.js",
     "reset-db": "tsx src/models/reset.ts",
-    "sync-users": "tsx src/scripts/sync-users.ts"
+    "sync-users": "tsx src/scripts/sync-users.ts",
+    "import-lamada": "tsx src/scripts/import-lamada.ts"
   },
   "keywords": [],
   "author": "",
