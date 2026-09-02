@@ -20,6 +20,8 @@ import { SuccessResponse } from "../../utils/response";
 import { UnauthorizedError } from "../../Errors";
 import { BadRequest } from "../../Errors/BadRequest";
 import PDFDocument from "pdfkit";
+import path from "path";
+import fs from "fs";
 import { invoices } from "../../models/schema/admin/invoices";
 
 type OrderStatus = "pending" | "accepted" | "preparing" | "out_for_delivery" | "delivered" | "cancelled" | "rejected" | "refund";
@@ -373,6 +375,15 @@ export const downloadSavedInvoicePDF = async (req: Request | any, res: Response)
     // 3. نعمل الـ PDF بالبيانات المحفوظة سلفاً
     const doc = new PDFDocument({ margin: 50 });
     
+    const fontPath = path.join(process.cwd(), 'assets', 'fonts', 'Arial.ttf');
+    const cairoPath = path.join(process.cwd(), 'assets', 'fonts', 'Cairo-Regular.ttf');
+    const chosenFontPath = fs.existsSync(fontPath) ? fontPath : (fs.existsSync(cairoPath) ? cairoPath : null);
+
+    if (chosenFontPath) {
+        doc.registerFont('CairoFont', chosenFontPath);
+        doc.font('CairoFont');
+    }
+
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${invoice.invoiceNumber}.pdf"`);
     
