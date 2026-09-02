@@ -789,9 +789,54 @@ if (Array.isArray(cleanVariations) && cleanVariations.length > 0) {
             branchId: resolvedBranch?.id || orderDetail.order.branchId || null,
             branch: resolvedBranch || orderDetail.branch || null,
             restaurant: orderDetail.restaurant,
+
+            // Live address (current data from addresses table)
             address: orderDetail.address,
             zone: resolvedZone,
             zoneName: resolvedZone?.name || null,
+
+            // ✅ Snapshot: بيانات عنوان التوصيل كما كانت وقت تسجيل الأوردر
+            shippingAddress: orderDetail.order.shippingAddress
+                ? {
+                    title:              orderDetail.order.shippingAddress.title ?? null,
+                    street:             orderDetail.order.shippingAddress.street ?? null,
+                    building:           orderDetail.order.shippingAddress.building ?? null,
+                    floor:              orderDetail.order.shippingAddress.floor ?? null,
+                    apartment:          orderDetail.order.shippingAddress.apartment ?? null,
+                    landmark:           orderDetail.order.shippingAddress.landmark ?? null,
+                    location:           orderDetail.order.shippingAddress.location ?? null,
+                    fulladdress:        orderDetail.order.shippingAddress.fulladdress ?? null,
+                    lat:                orderDetail.order.shippingAddress.lat ?? null,
+                    lng:                orderDetail.order.shippingAddress.lng ?? null,
+                    phone:              orderDetail.order.shippingAddress.phone ?? null,
+                    addressZoneId:      orderDetail.order.shippingAddress.addressZoneId ?? null,
+                    restaurantZoneId:   orderDetail.order.shippingAddress.restaurantZoneId ?? null,
+                    addressZoneName:    orderDetail.order.shippingAddress.addressZoneName ?? null,
+                    addressZoneNameAr:  orderDetail.order.shippingAddress.addressZoneNameAr ?? null,
+                }
+                : null,
+
+            // ✅ Snapshot: بيانات الفرع كما كانت وقت تسجيل الأوردر
+            branchSnapshot: orderDetail.order.branchSnapshot
+                ? {
+                    id:          orderDetail.order.branchSnapshot.id ?? null,
+                    name:        orderDetail.order.branchSnapshot.name ?? null,
+                    nameAr:      orderDetail.order.branchSnapshot.nameAr ?? null,
+                    nameFr:      orderDetail.order.branchSnapshot.nameFr ?? null,
+                    address:     orderDetail.order.branchSnapshot.address ?? null,
+                    addressAr:   orderDetail.order.branchSnapshot.addressAr ?? null,
+                    addressFr:   orderDetail.order.branchSnapshot.addressFr ?? null,
+                    phone:       orderDetail.order.branchSnapshot.phone ?? null,
+                    status:      orderDetail.order.branchSnapshot.status ?? null,
+                    zoneId:      orderDetail.order.branchSnapshot.zoneId ?? null,
+                    zoneName:    orderDetail.order.branchSnapshot.zoneName ?? null,
+                    zoneNameAr:  orderDetail.order.branchSnapshot.zoneNameAr ?? null,
+                    cityId:      orderDetail.order.branchSnapshot.cityId ?? null,
+                    cityName:    orderDetail.order.branchSnapshot.cityName ?? null,
+                    cityNameAr:  orderDetail.order.branchSnapshot.cityNameAr ?? null,
+                }
+                : null,
+
             items: formattedItems
         }
     });
