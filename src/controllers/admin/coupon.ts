@@ -20,6 +20,7 @@ export const createCoupon = async (req: Request, res: Response) => {
         discountType, discountValue,
         maxDiscount, minOrderAmount,
         usageLimit, perUserLimit,
+        userUsageType,          // 'fixed' | 'unlimited'
         startDate, endDate, isActive
     } = req.body;
 
@@ -27,6 +28,12 @@ export const createCoupon = async (req: Request, res: Response) => {
     if (!name) throw new BadRequest("Coupon name is required");
     if (!discountType) throw new BadRequest("Discount type is required (percentage | fixed_amount | free_delivery)");
     if (discountValue === undefined || discountValue === null) throw new BadRequest("Discount value is required");
+
+    // Validate userUsageType
+    const resolvedUserUsageType: "fixed" | "unlimited" = userUsageType === "unlimited" ? "unlimited" : "fixed";
+    if (resolvedUserUsageType === "fixed" && (perUserLimit === undefined || perUserLimit === null || Number(perUserLimit) < 1)) {
+        throw new BadRequest("perUserLimit is required and must be >= 1 when userUsageType is 'fixed'");
+    }
 
     const normalizedCode = code.toUpperCase().trim();
 
@@ -62,11 +69,12 @@ export const createCoupon = async (req: Request, res: Response) => {
         maxDiscount: maxDiscount ? maxDiscount.toString() : null,
         minOrderAmount: minOrderAmount ? minOrderAmount.toString() : "0.00",
         usageLimit: usageLimit || null,
-        perUserLimit: perUserLimit !== undefined ? perUserLimit : 1,
+        userUsageType: resolvedUserUsageType,
+        perUserLimit: resolvedUserUsageType === "unlimited" ? null : (perUserLimit ?? 1),
         startDate: startDate ? new Date(startDate) : null,
         endDate: endDate ? new Date(endDate) : null,
         isActive: isActive !== undefined ? isActive : true,
-        isGlobal: false, 
+        isGlobal: false,
     });
 
     // 2. ربط الكوبون بالمطعم الحالي تلقائياً في جدول الربط
@@ -154,6 +162,7 @@ export const updateCoupon = async (req: Request, res: Response) => {
         discountType, discountValue,
         maxDiscount, minOrderAmount,
         usageLimit, perUserLimit,
+        userUsageType,          // 'fixed' | 'unlimited'
         startDate, endDate, isActive
     } = req.body;
 
@@ -186,7 +195,21 @@ export const updateCoupon = async (req: Request, res: Response) => {
     if (maxDiscount !== undefined) updateData.maxDiscount = maxDiscount ? maxDiscount.toString() : null;
     if (minOrderAmount !== undefined) updateData.minOrderAmount = minOrderAmount.toString();
     if (usageLimit !== undefined) updateData.usageLimit = usageLimit;
-    if (perUserLimit !== undefined) updateData.perUserLimit = perUserLimit;
+    if (userUsageType !== undefined) {
+        const resolvedType: "fixed" | "unlimited" = userUsageType === "unlimited" ? "unlimited" : "fixed";
+        updateData.userUsageType = resolvedType;
+        // If switching to fixed, require perUserLimit
+        if (resolvedType === "fixed") {
+            const limit = perUserLimit ?? existing.coupons.perUserLimit;
+            if (!limit || Number(limit) < 1) throw new BadRequest("perUserLimit is required and must be >= 1 when userUsageType is 'fixed'");
+            updateData.perUserLimit = Number(limit);
+        } else {
+            // unlimited — clear the per-user limit
+            updateData.perUserLimit = null;
+        }
+    } else if (perUserLimit !== undefined) {
+        updateData.perUserLimit = perUserLimit;
+    }
     if (startDate !== undefined) updateData.startDate = startDate ? new Date(startDate) : null;
     if (endDate !== undefined) updateData.endDate = endDate ? new Date(endDate) : null;
     if (isActive !== undefined) updateData.isActive = isActive;
