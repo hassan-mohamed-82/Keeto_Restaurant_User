@@ -55,6 +55,7 @@ export const getBlockedRestaurantUsers = async (req: Request, res: Response) => 
         throw new BadRequest("Restaurant ID is required");
     }
 
+    // Returns users who are blocked either by this restaurant OR globally by Keeto
     const data = await db.select({
         id: restaurant_users.id,
         userId: users.id,
@@ -62,8 +63,8 @@ export const getBlockedRestaurantUsers = async (req: Request, res: Response) => 
         phone: users.phone,
         email: users.email,
         photo: users.photo,
-        status: restaurant_users.status,
-        userStatus: users.status,
+        status: restaurant_users.status,   // blocked by this restaurant
+        userStatus: users.status,                  // blocked globally by Keeto
         createdAt: restaurant_users.createdAt,
         updatedAt: restaurant_users.updatedAt,
         restaurant: {
@@ -76,7 +77,10 @@ export const getBlockedRestaurantUsers = async (req: Request, res: Response) => 
         .innerJoin(restaurants, eq(restaurant_users.restaurantId, restaurants.id))
         .where(and(
             eq(restaurant_users.restaurantId, restaurantId),
-            eq(restaurant_users.status, "blocked")
+            or(
+                eq(restaurant_users.status, "blocked"),  // blocked by restaurant
+                eq(users.status, "blocked")              // blocked globally by Keeto
+            )
         ));
 
     return SuccessResponse(res, { message: "Blocked restaurant users fetched successfully", data }, 200);
@@ -119,6 +123,13 @@ export const updateRestaurantUser = async (req: Request, res: Response) => {
 
     // 2. Update status in restaurant_users for this restaurant
     if (status && (status === "active" || status === "blocked")) {
+        // If trying to activate a user who is globally blocked by Keeto, reject it
+        if (status === "active" && existingUser?.status === "blocked") {
+            throw new BadRequest(
+                "Cannot activate this user. Keeto has blocked this user globally and only Keeto admins can unblock them."
+            );
+        }
+
         if (existingLink) {
             await db.update(restaurant_users)
                 .set({
