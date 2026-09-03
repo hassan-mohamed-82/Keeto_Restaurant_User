@@ -386,6 +386,11 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
     const serviceModuleStr = (req.query.serviceModule as string)?.trim();
     const serviceModule = serviceModuleStr as "takeaway" | "dine_in" | "delivery" | undefined;
 
+    const subcategoryId = 
+        ((req.query.subcategoryId || req.query.subCategoryId || req.query.subcategoryid) as string)?.trim() || null;
+    const categoryId = 
+        ((req.query.categoryId || req.query.categoryid) as string)?.trim() || null;
+
     // 2. Validate & resolve restaurantId
     if (branchId) {
         const [branch] = await db
@@ -407,6 +412,19 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
     const branchChannelPricing = alias(productChannelPricing, "b_channel");
     const globalChannelPricing = alias(productChannelPricing, "g_channel");
 
+    const foodConditions = [
+        eq(food.restaurantid, restaurantId),
+        eq(food.status, "active"),
+    ];
+
+    if (subcategoryId) {
+        foodConditions.push(eq(food.subcategoryid, subcategoryId));
+    }
+
+    if (categoryId) {
+        foodConditions.push(eq(food.categoryid, categoryId));
+    }
+
     // Dynamic SQL calculation using COALESCE hierarchy
     const menuItems = await db
         .select({
@@ -419,6 +437,7 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
             categoryId: food.categoryid,
             subcategoryId: food.subcategoryid,
             mainBasePrice: food.price,
+            isOutOfStock: food.isOutOfStock,
             branchOverridePrice: branchMenuItems.price,
             branchChannelPrice: branchChannelPricing.price,
             globalChannelPrice: globalChannelPricing.price,
@@ -463,7 +482,7 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
                 serviceModule ? eq(globalChannelPricing.serviceModule, serviceModule) : undefined
             )
         )
-        .where(and(eq(food.restaurantid, restaurantId), eq(food.status, "active")));
+        .where(and(...foodConditions));
 
     // Dynamic Variant Calculations
     const branchVarPricing = alias(branchVariantPricing, "b_var_pricing");
@@ -564,6 +583,7 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
 
     const finalMenu = menuItems.map((item) => ({
         ...item,
+        isOutOfStock: Boolean(item.isOutOfStock),
         isAvailable: Boolean(item.isAvailable),
         variations: variationsByFoodId[item.id] || [],
     }));
@@ -573,6 +593,8 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
         data: {
             restaurantId,
             branchId: branchId || null,
+            subcategoryId: subcategoryId || null,
+            categoryId: categoryId || null,
             serviceModule: serviceModule || "all",
             menu: finalMenu,
         },
