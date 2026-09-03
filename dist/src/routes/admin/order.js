@@ -8,6 +8,8 @@ const router = (0, express_1.Router)();
 // ✅ Get reasons - يحتاج صلاحية read
 router.get("/reasons", (0, hasPermission_1.hasPermission)("orders", "read"), (0, catchAsync_1.catchAsync)(order_1.getReasons));
 router.get("/numbers", (0, hasPermission_1.hasPermission)("orders", "read", true), (0, catchAsync_1.catchAsync)(order_1.getallnumbersoforders));
+router.get("/select", (0, hasPermission_1.hasPermission)("orders", "read", true), (0, catchAsync_1.catchAsync)(order_1.selectDeliveryMan));
+router.get("/select-data", (0, hasPermission_1.hasPermission)("orders", "read", true), (0, catchAsync_1.catchAsync)(order_1.getSelectData));
 // ✅ كل الأوردرات - يحتاج صلاحية read + التحقق من الفرع
 router.get("/", (0, hasPermission_1.hasPermission)("orders", "read", true), (0, catchAsync_1.catchAsync)(order_1.getRestaurantOrders));
 // ✅ أوردرات بحالة معينة - يحتاج صلاحية read + التحقق من الفرع
@@ -24,5 +26,8 @@ router.get("/:id", (0, hasPermission_1.hasPermission)("orders", "read", true), (
 router.get("/:orderId/invoice", (0, hasPermission_1.hasPermission)("orders", "read", true), (0, catchAsync_1.catchAsync)(order_1.generateOrderInvoicePDF));
 // ✅ تحديث حالة الأوردر - يحتاج صلاحية update + التحقق من الفرع
 router.put("/:orderId", (0, hasPermission_1.hasPermission)("orders", "update", true), (0, catchAsync_1.catchAsync)(order_1.updateOrderStatus));
-// ✅ الحصول على أرقام جميع الأوردرات (عدادات حسب الحالة)
+// ✅ تعيين مندوب توصيل لطلب - يحتاج صلاحية update
+router.put("/:orderId/assign-delivery", (0, hasPermission_1.hasPermission)("orders", "update", true), (0, catchAsync_1.catchAsync)(order_1.assignDelivery));
+// ✅ تحديث مدة تحضير الأوردر (بـ دقائق) - يحتاج صلاحية update
+router.put("/:orderId/duration", (0, hasPermission_1.hasPermission)("orders", "update", true), (0, catchAsync_1.catchAsync)(order_1.setOrderPreparingDuration));
 exports.default = router;

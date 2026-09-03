@@ -57,6 +57,22 @@ const updateSettings = async (req, res) => {
                     settingsData.minDeliveryTime = settings.minDeliveryTime;
                 if (settings.maxDeliveryTime !== undefined)
                     settingsData.maxDeliveryTime = settings.maxDeliveryTime;
+                if (settings.firstColor !== undefined)
+                    settingsData.firstColor = settings.firstColor;
+                if (settings.secondColor !== undefined)
+                    settingsData.secondColor = settings.secondColor;
+                if (settings.firstTextColor !== undefined)
+                    settingsData.firstTextColor = settings.firstTextColor;
+                if (settings.secondTextColor !== undefined)
+                    settingsData.secondTextColor = settings.secondTextColor;
+                if (settings.repeatNotification !== undefined)
+                    settingsData.repeatNotification = settings.repeatNotification;
+                if (settings.repeatNotificationDuration !== undefined)
+                    settingsData.repeatNotificationDuration = settings.repeatNotificationDuration;
+                if (settings.repeatNotificationStatuses !== undefined)
+                    settingsData.repeatNotificationStatuses = settings.repeatNotificationStatuses;
+                if (settings.resetDailyOrderNumberTime !== undefined)
+                    settingsData.resetDailyOrderNumberTime = settings.resetDailyOrderNumberTime;
                 if (existingSettings.length > 0) {
                     // ✅ Update existing settings
                     await tx.update(schema_1.restaurantSettings)

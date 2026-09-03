@@ -11,6 +11,7 @@ exports.users = (0, mysql_core_1.mysqlTable)("users", {
     email: (0, mysql_core_1.varchar)("email", { length: 255 }).unique(),
     // ⚠️ التعديل هنا: شيلنا notNull() عشان فيس بوك مش بيرجع رقم التليفون
     phone: (0, mysql_core_1.varchar)("phone", { length: 20 }),
+    alternatePhone: (0, mysql_core_1.varchar)("alternate_phone", { length: 20 }),
     fcmToken: (0, mysql_core_1.text)("fcm_token"),
     // ⚠️ التعديل هنا: شيلنا notNull() لأن تسجيل الفيس بوك ملوش باسورد
     password: (0, mysql_core_1.varchar)("password", { length: 255 }),
@@ -18,6 +19,8 @@ exports.users = (0, mysql_core_1.mysqlTable)("users", {
     facebookId: (0, mysql_core_1.varchar)("facebook_id", { length: 255 }).unique(),
     googleId: (0, mysql_core_1.varchar)("google_id", { length: 255 }).unique(),
     isVerified: (0, mysql_core_1.boolean)("is_verified").default(false),
+    isDeleted: (0, mysql_core_1.boolean)("is_deleted").default(false),
     status: (0, mysql_core_1.mysqlEnum)("status", ["active", "blocked"]).default("active"),
+    totalOrders: (0, mysql_core_1.int)("total_orders").default(0),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
 });

@@ -11,6 +11,8 @@ const response_1 = require("../../utils/response");
 const Errors_1 = require("../../Errors");
 const BadRequest_1 = require("../../Errors/BadRequest");
 const pdfkit_1 = __importDefault(require("pdfkit"));
+const path_1 = __importDefault(require("path"));
+const fs_1 = __importDefault(require("fs"));
 const invoices_1 = require("../../models/schema/admin/invoices");
 const getMyRestaurantReport = async (req, res) => {
     if (!req.user)
@@ -52,7 +54,7 @@ const getMyRestaurantReport = async (req, res) => {
         branchId: schema_1.orders.branchId,
         branchName: schema_1.branches.name,
         createdAt: schema_1.orders.createdAt,
-        cancelReasonType: schema_1.selectReasons.type, // نوع الإلغاء
+        cancelReasonType: (0, drizzle_orm_1.sql) `COALESCE(${schema_1.orders.cancelReasonType}, ${schema_1.selectReasons.type})`, // نوع الإلغاء
     })
         .from(schema_1.orders)
         .leftJoin(schema_1.branches, (0, drizzle_orm_1.eq)(schema_1.orders.branchId, schema_1.branches.id))
@@ -315,6 +317,13 @@ const downloadSavedInvoicePDF = async (req, res) => {
     const [restaurantInfo] = await connection_1.db.select().from(schema_1.restaurants).where((0, drizzle_orm_1.eq)(schema_1.restaurants.id, restaurantId));
     // 3. نعمل الـ PDF بالبيانات المحفوظة سلفاً
     const doc = new pdfkit_1.default({ margin: 50 });
+    const fontPath = path_1.default.join(process.cwd(), 'assets', 'fonts', 'Arial.ttf');
+    const cairoPath = path_1.default.join(process.cwd(), 'assets', 'fonts', 'Cairo-Regular.ttf');
+    const chosenFontPath = fs_1.default.existsSync(fontPath) ? fontPath : (fs_1.default.existsSync(cairoPath) ? cairoPath : null);
+    if (chosenFontPath) {
+        doc.registerFont('CairoFont', chosenFontPath);
+        doc.font('CairoFont');
+    }
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${invoice.invoiceNumber}.pdf"`);
     doc.pipe(res);
@@ -402,7 +411,7 @@ const getDashboardReports = async (req, res) => {
         couponCode: schema_1.orders.couponCode,
         orderSource: schema_1.orders.orderSource,
         createdAt: schema_1.orders.createdAt,
-        cancelReasonType: schema_1.selectReasons.type,
+        cancelReasonType: (0, drizzle_orm_1.sql) `COALESCE(${schema_1.orders.cancelReasonType}, ${schema_1.selectReasons.type})`,
         branchName: schema_1.branches.name,
         zoneName: schema_1.zones.name,
     })
@@ -455,10 +464,11 @@ const getDashboardReports = async (req, res) => {
             branchesNetSales[bName] = (branchesNetSales[bName] || 0) + amount;
             // مصادر الطلب (Order Source)
             const source = o.orderSource || "unknown";
-            const platformName = source === "my_keeto" ? "App"
-                : source === "online_order" ? "Website"
-                    : source === "food_aggregator" ? "Aggregator"
-                        : source;
+            const platformName = source === "my_keeto" ? "my_keeto"
+                : source === "online_order_web" ? "Website"
+                    : source === "online_order_app" ? "App"
+                        : source === "food_aggregator" ? "Aggregator"
+                            : source;
             orderSourcesObj[platformName] = (orderSourcesObj[platformName] || 0) + 1;
             // الخريطة الجغرافية
             const zName = o.zoneName || "Unknown Zone";

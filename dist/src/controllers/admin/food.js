@@ -1,8 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.changeFoodStatus = exports.toggleVariationOptionStatus = exports.toggleVariationStatus = exports.getFoodRecipe = exports.assignIngredientsToFood = exports.getFoodSelectData = exports.deleteFood = exports.updateFood = exports.getFoodById = exports.getAllFoods = exports.createFood = void 0;
+exports.getOutOfStockFoods = exports.changeFoodStatus = exports.toggleVariationOptionStatus = exports.toggleVariationStatus = exports.getFoodSelectData = exports.deleteFood = exports.updateFood = exports.getFoodById = exports.getAllFoods = exports.createFood = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
+const food_helper_1 = require("../../helpers/food.helper");
 // ✅ تم إضافة and, or, isNull هنا عشان نصلح مشكلة الشروط المتعددة
 const drizzle_orm_1 = require("drizzle-orm");
 const response_1 = require("../../utils/response");
@@ -19,7 +20,7 @@ const createFood = async (req, res) => {
         if (!restaurantId) {
             throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
         }
-        const { name, description, image, categoryid, subcategoryid, foodtype, Nutrition, allergen_ingredients, is_Halal, startTime, endTime, search_tags, price, discount_type, discount_value, Maximum_Purchase, stock_type, status, variations, nameAr, nameFr, descriptionAr, descriptionFr } = req.body;
+        const { name, description, image, categoryid, subcategoryid, foodtype, Nutrition, allergen_ingredients, is_Halal, startTime, endTime, search_tags, price, discount_type, discount_value, Maximum_Purchase, stock_type, status, variations, points, nameAr, nameFr, descriptionAr, descriptionFr, isOutOfStock } = req.body;
         const incomingAddons = req.body.addonsId ?? req.body.addons ?? req.body.addonIds ?? req.body['addonsId[]'] ?? req.body['addons[]'];
         // 1. التحقق من الحقول المطلوبة
         if (!name || !description || !image || !categoryid || !startTime || !endTime || !price) {
@@ -89,8 +90,11 @@ const createFood = async (req, res) => {
                 addonsId: finalAddonsIds, // ✅ حفظ المصفوفة النظيفة
                 startTime, endTime, search_tags: search_tags || null,
                 price, discount_type: discount_type || "percentage",
-                discount_value: discount_value || null, Maximum_Purchase: Maximum_Purchase || null,
+                discount_value: discount_value || null,
+                Maximum_Purchase: Maximum_Purchase || null,
                 stock_type: stock_type || "unlimited", status: status || "active",
+                isOutOfStock: isOutOfStock ?? false,
+                points: points ?? 0,
             });
             // إدخال الخيارات (Variations) إن وجدت
             if (variations && Array.isArray(variations) && variations.length > 0) {
@@ -116,6 +120,26 @@ const createFood = async (req, res) => {
                     }
                 }
             }
+            // ✅ حفظ branches في branchMenuItems إن وُجدت وغير فارغة
+            const incomingBranches = req.body.branches;
+            if (Array.isArray(incomingBranches) && incomingBranches.length > 0) {
+                const activeBranches = await tx
+                    .select({ id: schema_1.branches.id })
+                    .from(schema_1.branches)
+                    .where((0, drizzle_orm_1.eq)(schema_1.branches.restaurantId, restaurantId));
+                const activeBranchIds = new Set(activeBranches.map((b) => b.id));
+                for (const b of incomingBranches) {
+                    if (!b.branchId || !activeBranchIds.has(b.branchId))
+                        continue;
+                    await tx.insert(schema_1.branchMenuItems).values({
+                        id: (0, uuid_1.v4)(),
+                        branchId: b.branchId,
+                        foodId,
+                        price: b.price !== undefined && b.price !== null ? String(b.price) : "0.00",
+                        status: b.status === "inactive" ? "inactive" : "active",
+                    });
+                }
+            }
         });
         return (0, response_1.SuccessResponse)(res, {
             message: "Create food success",
@@ -135,14 +159,24 @@ const getAllFoods = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
+    // 1. Extract query params
+    const { categoryId, subCategoryId } = req.query;
+    // 2. Build dynamic conditions
+    const conditions = [(0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId)];
+    if (categoryId) {
+        conditions.push((0, drizzle_orm_1.eq)(schema_1.food.categoryid, categoryId));
+    }
+    if (subCategoryId) {
+        conditions.push((0, drizzle_orm_1.eq)(schema_1.food.subcategoryid, subCategoryId));
+    }
     const rawFoods = await connection_1.db.select({
         id: schema_1.food.id, name: schema_1.food.name, nameAr: schema_1.food.nameAr, nameFr: schema_1.food.nameFr,
         description: schema_1.food.description, descriptionAr: schema_1.food.descriptionAr, descriptionFr: schema_1.food.descriptionFr,
         image: schema_1.food.image, restaurantid: schema_1.food.restaurantid, categoryid: schema_1.food.categoryid, subcategoryid: schema_1.food.subcategoryid,
         foodtype: schema_1.food.foodtype, Nutrition: schema_1.food.Nutrition, allergen_ingredients: schema_1.food.allergen_ingredients,
-        is_Halal: schema_1.food.is_Halal, addonsId: schema_1.food.addonsId, startTime: schema_1.food.startTime, endTime: schema_1.food.endTime,
+        is_Halal: schema_1.food.is_Halal, isOutOfStock: schema_1.food.isOutOfStock, addonsId: schema_1.food.addonsId, startTime: schema_1.food.startTime, endTime: schema_1.food.endTime,
         search_tags: schema_1.food.search_tags, price: schema_1.food.price, discount_type: schema_1.food.discount_type, discount_value: schema_1.food.discount_value,
-        Maximum_Purchase: schema_1.food.Maximum_Purchase, stock_type: schema_1.food.stock_type, status: schema_1.food.status,
+        Maximum_Purchase: schema_1.food.Maximum_Purchase, points: schema_1.food.points, stock_type: schema_1.food.stock_type, status: schema_1.food.status,
         createdAt: schema_1.food.createdAt, updatedAt: schema_1.food.updatedAt,
         restaurant: schema_1.restaurants,
         category_name: schema_1.categories.name, category_nameAr: schema_1.categories.nameAr, category_nameFr: schema_1.categories.nameFr,
@@ -152,7 +186,7 @@ const getAllFoods = async (req, res) => {
         .leftJoin(schema_1.restaurants, (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, schema_1.restaurants.id))
         .leftJoin(schema_1.categories, (0, drizzle_orm_1.eq)(schema_1.food.categoryid, schema_1.categories.id))
         .leftJoin(schema_1.subcategories, (0, drizzle_orm_1.eq)(schema_1.food.subcategoryid, schema_1.subcategories.id))
-        .where((0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId));
+        .where((0, drizzle_orm_1.and)(...conditions)); // 3. Pass packed conditions here
     if (rawFoods.length === 0) {
         return (0, response_1.SuccessResponse)(res, { message: "Get all foods success", data: [] });
     }
@@ -181,11 +215,23 @@ const getAllFoods = async (req, res) => {
     if (uniqueAddonsIds.length > 0) {
         allAddonsDetails = await connection_1.db.select().from(schema_1.addons).where((0, drizzle_orm_1.inArray)(schema_1.addons.id, uniqueAddonsIds));
     }
+    const allIngredients = foodIds.length > 0
+        ? await connection_1.db.select({
+            foodId: schema_1.foodIngredients.foodId,
+            ingredientId: schema_1.ingredients.id,
+            name: schema_1.ingredients.name,
+            nameAr: schema_1.ingredients.nameAr,
+            inStock: schema_1.ingredients.inStock,
+            isRemovable: schema_1.foodIngredients.isRemovable
+        })
+            .from(schema_1.foodIngredients)
+            .innerJoin(schema_1.ingredients, (0, drizzle_orm_1.eq)(schema_1.foodIngredients.ingredientId, schema_1.ingredients.id))
+            .where((0, drizzle_orm_1.inArray)(schema_1.foodIngredients.foodId, foodIds))
+        : [];
     const allFoods = rawFoods.map(f => {
         const foodVars = allVars.filter(v => v.foodId === f.id).map(v => ({
             ...v, options: allOpts.filter(o => o.variationId === v.id)
         }));
-        // ✅ 2. فك تشفير الإضافات
         let safeAddons = f.addonsId;
         if (typeof safeAddons === 'string') {
             try {
@@ -197,17 +243,26 @@ const getAllFoods = async (req, res) => {
         }
         const cleanAddonsArray = Array.isArray(safeAddons) ? safeAddons.filter((id) => typeof id === 'string' && id.trim() !== '') : [];
         const foodAddonsDetails = allAddonsDetails.filter(a => cleanAddonsArray.includes(a.id));
+        const assignedIngredients = allIngredients.filter(i => i.foodId === f.id).map(i => ({
+            id: i.ingredientId,
+            name: i.name,
+            nameAr: i.nameAr,
+            inStock: i.inStock,
+            isRemovable: i.isRemovable
+        }));
         return {
             id: f.id, name: f.name, nameAr: f.nameAr, nameFr: f.nameFr,
             description: f.description, descriptionAr: f.descriptionAr, descriptionFr: f.descriptionFr,
             image: f.image, price: f.price, status: f.status,
-            addonsId: cleanAddonsArray, // ✅ إرجاع الـ Array نظيفة
-            addonsDetails: foodAddonsDetails, // 🔥 تفاصيل الإضافات
+            addonsId: cleanAddonsArray,
+            addonsDetails: foodAddonsDetails,
             foodtype: f.foodtype, Nutrition: f.Nutrition, allergen_ingredients: f.allergen_ingredients,
-            is_Halal: f.is_Halal, startTime: f.startTime, endTime: f.endTime, search_tags: f.search_tags,
+            is_Halal: f.is_Halal, isOutOfStock: f.isOutOfStock, startTime: f.startTime, endTime: f.endTime, search_tags: f.search_tags,
             discount_type: f.discount_type, discount_value: f.discount_value, Maximum_Purchase: f.Maximum_Purchase,
+            points: f.points ?? 0,
             stock_type: f.stock_type, createdAt: f.createdAt, updatedAt: f.updatedAt,
             variations: foodVars, restaurant: f.restaurant,
+            ingredients: assignedIngredients,
             category: f.category_name ? { name: f.category_name, nameAr: f.category_nameAr, nameFr: f.category_nameFr } : null,
             subcategory: f.subcategory_name ? { name: f.subcategory_name, nameAr: f.subcategory_nameAr, nameFr: f.subcategory_nameFr } : null,
         };
@@ -228,9 +283,9 @@ const getFoodById = async (req, res) => {
         description: schema_1.food.description, descriptionAr: schema_1.food.descriptionAr, descriptionFr: schema_1.food.descriptionFr,
         image: schema_1.food.image, restaurantid: schema_1.food.restaurantid, categoryid: schema_1.food.categoryid, subcategoryid: schema_1.food.subcategoryid,
         foodtype: schema_1.food.foodtype, Nutrition: schema_1.food.Nutrition, allergen_ingredients: schema_1.food.allergen_ingredients,
-        is_Halal: schema_1.food.is_Halal, addonsId: schema_1.food.addonsId, startTime: schema_1.food.startTime, endTime: schema_1.food.endTime,
+        is_Halal: schema_1.food.is_Halal, isOutOfStock: schema_1.food.isOutOfStock, addonsId: schema_1.food.addonsId, startTime: schema_1.food.startTime, endTime: schema_1.food.endTime,
         search_tags: schema_1.food.search_tags, price: schema_1.food.price, discount_type: schema_1.food.discount_type, discount_value: schema_1.food.discount_value,
-        Maximum_Purchase: schema_1.food.Maximum_Purchase, stock_type: schema_1.food.stock_type, status: schema_1.food.status,
+        Maximum_Purchase: schema_1.food.Maximum_Purchase, points: schema_1.food.points, stock_type: schema_1.food.stock_type, status: schema_1.food.status,
         createdAt: schema_1.food.createdAt, updatedAt: schema_1.food.updatedAt,
         restaurant: { id: schema_1.restaurants.id, name: schema_1.restaurants.name },
         category: { id: schema_1.categories.id, name: schema_1.categories.name, nameAr: schema_1.categories.nameAr, nameFr: schema_1.categories.nameFr },
@@ -244,11 +299,21 @@ const getFoodById = async (req, res) => {
         .limit(1);
     if (!foodItem[0])
         throw new NotFound_1.NotFound("Food not found");
+    // 1. جلب أسعار الفروع الاستثنائية للوجبة (Branch Overrides)
+    const branchPrices = await connection_1.db
+        .select({
+        branchId: schema_1.branchMenuItems.branchId,
+        price: schema_1.branchMenuItems.price,
+        status: schema_1.branchMenuItems.status
+    })
+        .from(schema_1.branchMenuItems)
+        .where((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.foodId, id));
+    // 2. جلب الـ Variations والـ Options
     const vars = await connection_1.db.select().from(schema_1.foodVariations).where((0, drizzle_orm_1.eq)(schema_1.foodVariations.foodId, id));
     const varIds = vars.map(v => v.id);
     const opts = varIds.length ? await connection_1.db.select().from(schema_1.variationOptions).where((0, drizzle_orm_1.inArray)(schema_1.variationOptions.variationId, varIds)) : [];
     const variations = vars.map(v => ({ ...v, options: opts.filter(o => o.variationId === v.id) }));
-    // ✅ 3. فك تشفير الإضافات، وجلب بيانات الإضافة بالكامل لتعرضها للمستخدم بشكل واضح
+    // 3. فك تشفير الإضافات
     let safeAddons = foodItem[0].addonsId;
     if (typeof safeAddons === 'string') {
         try {
@@ -268,8 +333,9 @@ const getFoodById = async (req, res) => {
         message: "Get food by id success",
         data: {
             ...foodItem[0],
-            addonsId: cleanAddonsArray, // هيرجع الـ IDs زي ما هي
-            addonsDetails: addonsDetails, // 🔥 تم إضافة بيانات الإضافة نفسها (اسمها وسعرها)
+            branches: branchPrices, // 🔥 إرجاع أسعار الفروع للأدمن
+            addonsId: cleanAddonsArray,
+            addonsDetails: addonsDetails,
             variations
         }
     });
@@ -301,7 +367,8 @@ const updateFood = async (req, res) => {
         "price", "status", "image",
         "foodtype", "Nutrition", "allergen_ingredients", "is_Halal",
         "startTime", "endTime", "search_tags",
-        "discount_type", "discount_value", "Maximum_Purchase", "stock_type"
+        "discount_type", "discount_value", "Maximum_Purchase", "stock_type",
+        "points", "isOutOfStock"
     ];
     const updateData = {
         updatedAt: new Date(),
@@ -415,6 +482,97 @@ const updateFood = async (req, res) => {
             }
         }
     }
+    // ===========================
+    // ✅ Branch Menu Items Update (if branches array provided and non-empty)
+    // ===========================
+    if (data.branches && Array.isArray(data.branches) && data.branches.length > 0) {
+        const activeBranches = await connection_1.db
+            .select({ id: schema_1.branches.id })
+            .from(schema_1.branches)
+            .where((0, drizzle_orm_1.eq)(schema_1.branches.restaurantId, restaurantId));
+        const activeBranchIds = new Set(activeBranches.map((b) => b.id));
+        for (const b of data.branches) {
+            if (!b.branchId || !activeBranchIds.has(b.branchId))
+                continue;
+            const priceVal = b.price !== undefined && b.price !== null ? String(b.price) : "0.00";
+            const statusVal = b.status === "inactive" ? "inactive" : "active";
+            const [existing] = await connection_1.db
+                .select({ id: schema_1.branchMenuItems.id })
+                .from(schema_1.branchMenuItems)
+                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.branchId, b.branchId), (0, drizzle_orm_1.eq)(schema_1.branchMenuItems.foodId, id)))
+                .limit(1);
+            if (existing) {
+                await connection_1.db.update(schema_1.branchMenuItems)
+                    .set({ price: priceVal, status: statusVal, updatedAt: new Date() })
+                    .where((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.id, existing.id));
+            }
+            else {
+                await connection_1.db.insert(schema_1.branchMenuItems).values({
+                    id: (0, uuid_1.v4)(),
+                    branchId: b.branchId,
+                    foodId: id,
+                    price: priceVal,
+                    status: statusVal,
+                });
+            }
+        }
+    }
+    // ===========================
+    // ✅ Product Channel Pricing Update (if channels provided)
+    // ===========================
+    if (data.channels && Array.isArray(data.channels) && data.channels.length > 0) {
+        for (const ch of data.channels) {
+            const { serviceModule, price, status, branchId: chBranchId } = ch;
+            if (!serviceModule || price === undefined)
+                continue;
+            const priceVal = String(price);
+            const targetBranchId = chBranchId || null;
+            const statusVal = status === "inactive" ? "inactive" : "active";
+            const whereClause = targetBranchId
+                ? (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.productChannelPricing.foodId, id), (0, drizzle_orm_1.eq)(schema_1.productChannelPricing.branchId, targetBranchId), (0, drizzle_orm_1.eq)(schema_1.productChannelPricing.serviceModule, serviceModule))
+                : (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.productChannelPricing.foodId, id), (0, drizzle_orm_1.isNull)(schema_1.productChannelPricing.branchId), (0, drizzle_orm_1.eq)(schema_1.productChannelPricing.serviceModule, serviceModule));
+            const [existing] = await connection_1.db.select({ id: schema_1.productChannelPricing.id }).from(schema_1.productChannelPricing).where(whereClause).limit(1);
+            if (existing) {
+                await connection_1.db.update(schema_1.productChannelPricing)
+                    .set({ price: priceVal, status: statusVal, updatedAt: new Date() })
+                    .where((0, drizzle_orm_1.eq)(schema_1.productChannelPricing.id, existing.id));
+            }
+            else {
+                await connection_1.db.insert(schema_1.productChannelPricing).values({
+                    id: (0, uuid_1.v4)(), foodId: id, branchId: targetBranchId,
+                    serviceModule, price: priceVal, status: statusVal,
+                });
+            }
+        }
+    }
+    // ===========================
+    // ✅ Variant Channel Pricing Update (if variantChannels provided)
+    // ===========================
+    if (data.variantChannels && Array.isArray(data.variantChannels) && data.variantChannels.length > 0) {
+        for (const vc of data.variantChannels) {
+            const { variantId, serviceModule, price, status, branchId: vcBranchId } = vc;
+            if (!variantId || !serviceModule || price === undefined)
+                continue;
+            const priceVal = String(price);
+            const targetBranchId = vcBranchId || null;
+            const statusVal = status === "inactive" ? "inactive" : "active";
+            const whereClause = targetBranchId
+                ? (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.variantChannelPricing.variantId, variantId), (0, drizzle_orm_1.eq)(schema_1.variantChannelPricing.branchId, targetBranchId), (0, drizzle_orm_1.eq)(schema_1.variantChannelPricing.serviceModule, serviceModule))
+                : (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.variantChannelPricing.variantId, variantId), (0, drizzle_orm_1.isNull)(schema_1.variantChannelPricing.branchId), (0, drizzle_orm_1.eq)(schema_1.variantChannelPricing.serviceModule, serviceModule));
+            const [existing] = await connection_1.db.select({ id: schema_1.variantChannelPricing.id }).from(schema_1.variantChannelPricing).where(whereClause).limit(1);
+            if (existing) {
+                await connection_1.db.update(schema_1.variantChannelPricing)
+                    .set({ price: priceVal, status: statusVal, updatedAt: new Date() })
+                    .where((0, drizzle_orm_1.eq)(schema_1.variantChannelPricing.id, existing.id));
+            }
+            else {
+                await connection_1.db.insert(schema_1.variantChannelPricing).values({
+                    id: (0, uuid_1.v4)(), variantId, branchId: targetBranchId,
+                    serviceModule, price: priceVal, status: statusVal,
+                });
+            }
+        }
+    }
     return (0, response_1.SuccessResponse)(res, {
         message: "Update food success",
     });
@@ -482,69 +640,23 @@ const getFoodSelectData = async (req, res) => {
         .from(schema_1.ingredients)
         .leftJoin(schema_1.ingredientCategories, (0, drizzle_orm_1.eq)(schema_1.ingredients.categoryId, schema_1.ingredientCategories.id))
         .where((0, drizzle_orm_1.eq)(schema_1.ingredients.restaurantId, restaurantId));
+    // GET ALL ACTIVE BRANCHES 
+    const activeBranches = await connection_1.db
+        .select({ id: schema_1.branches.id, name: schema_1.branches.name })
+        .from(schema_1.branches)
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branches.status, "active"), (0, drizzle_orm_1.eq)(schema_1.branches.restaurantId, restaurantId)));
     return (0, response_1.SuccessResponse)(res, {
         message: "Get food select data success",
         data: {
             categories: myCategories,
             subcategories: mySubcategories,
             addons: myAddons,
-            ingredients: list
+            ingredients: list,
+            branches: activeBranches,
         }
     });
 };
 exports.getFoodSelectData = getFoodSelectData;
-// =========================================================
-// 🍳 إدارة الوصفة (Recipe / Food Ingredients)
-// =========================================================
-const assignIngredientsToFood = async (req, res) => {
-    const { id } = req.params;
-    const { ingredientsList } = req.body;
-    const restaurantId = req.user?.restaurantId || req.user?.id;
-    if (!restaurantId)
-        throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
-    if (!Array.isArray(ingredientsList))
-        throw new BadRequest_1.BadRequest("ingredientsList must be an array");
-    const existingFood = await connection_1.db.select().from(schema_1.food).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.id, id), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId))).limit(1);
-    if (!existingFood[0])
-        throw new NotFound_1.NotFound("Food not found or does not belong to you");
-    await connection_1.db.transaction(async (tx) => {
-        await tx.delete(schema_1.foodIngredients).where((0, drizzle_orm_1.eq)(schema_1.foodIngredients.foodId, id));
-        if (ingredientsList.length > 0) {
-            const valuesToInsert = ingredientsList.map((item) => ({
-                id: (0, uuid_1.v4)(),
-                foodId: id,
-                ingredientId: item.ingredientId,
-                isRemovable: item.isRemovable || false
-            }));
-            await tx.insert(schema_1.foodIngredients).values(valuesToInsert);
-        }
-    });
-    return (0, response_1.SuccessResponse)(res, { message: "Food recipe saved successfully" });
-};
-exports.assignIngredientsToFood = assignIngredientsToFood;
-const getFoodRecipe = async (req, res) => {
-    const { id } = req.params;
-    const restaurantId = req.user?.restaurantId || req.user?.id;
-    if (!restaurantId)
-        throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
-    const existingFood = await connection_1.db.select().from(schema_1.food).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.id, id), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId))).limit(1);
-    if (!existingFood[0])
-        throw new NotFound_1.NotFound("Food not found");
-    const recipe = await connection_1.db.select({
-        id: schema_1.foodIngredients.id,
-        ingredientId: schema_1.ingredients.id,
-        name: schema_1.ingredients.name,
-        inStock: schema_1.ingredients.inStock,
-        isRemovable: schema_1.foodIngredients.isRemovable,
-        categoryName: schema_1.ingredientCategories.name
-    })
-        .from(schema_1.foodIngredients)
-        .innerJoin(schema_1.ingredients, (0, drizzle_orm_1.eq)(schema_1.foodIngredients.ingredientId, schema_1.ingredients.id))
-        .leftJoin(schema_1.ingredientCategories, (0, drizzle_orm_1.eq)(schema_1.ingredients.categoryId, schema_1.ingredientCategories.id))
-        .where((0, drizzle_orm_1.eq)(schema_1.foodIngredients.foodId, id));
-    return (0, response_1.SuccessResponse)(res, { message: "Get food recipe success", data: recipe });
-};
-exports.getFoodRecipe = getFoodRecipe;
 // =========================================================
 // 🍳 Toggle Variation Status
 // =========================================================
@@ -613,3 +725,203 @@ const changeFoodStatus = async (req, res) => {
     return (0, response_1.SuccessResponse)(res, { message: "Food status updated successfully" });
 };
 exports.changeFoodStatus = changeFoodStatus;
+// =============================================
+// GET Out-Of-Stock Foods
+// =============================================
+/**
+ * - Restaurant login (owner / subadmin without branchId):
+ *   Returns all foods where isOutOfStock = true (global OOS),
+ *   each food carries `unavailableBranches` from the food.helper.
+ *
+ * - Branch login (branch_manager / any user with branchId):
+ *   Returns foods that are out-of-stock for THIS branch only
+ *   (stockType='limited' && stockQty<=0  OR  status='inactive' in branch_menu_items).
+ */
+const getOutOfStockFoods = async (req, res) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    const branchId = req.user?.branchId;
+    if (!restaurantId)
+        throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
+    // =========================================================
+    // BRANCH VIEW: Return foods OOS for this specific branch
+    // =========================================================
+    if (branchId) {
+        // Verify the branch belongs to this restaurant
+        const branchCheck = await connection_1.db
+            .select({ id: schema_1.branches.id })
+            .from(schema_1.branches)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branches.id, branchId), (0, drizzle_orm_1.eq)(schema_1.branches.restaurantId, restaurantId)))
+            .limit(1);
+        if (!branchCheck[0])
+            throw new BadRequest_1.BadRequest("Branch not found or does not belong to your restaurant");
+        // Foods that are OOS (limited stock exhausted) or inactive in branch_menu_items
+        const oosItems = await connection_1.db
+            .select({
+            foodId: schema_1.branchMenuItems.foodId,
+            branchStockType: schema_1.branchMenuItems.stockType,
+            branchStockQty: schema_1.branchMenuItems.stockQty,
+            branchStatus: schema_1.branchMenuItems.status,
+            // Food fields
+            id: schema_1.food.id,
+            name: schema_1.food.name,
+            nameAr: schema_1.food.nameAr,
+            nameFr: schema_1.food.nameFr,
+            description: schema_1.food.description,
+            descriptionAr: schema_1.food.descriptionAr,
+            descriptionFr: schema_1.food.descriptionFr,
+            image: schema_1.food.image,
+            price: schema_1.food.price,
+            status: schema_1.food.status,
+            isOutOfStock: schema_1.food.isOutOfStock,
+            stock_type: schema_1.food.stock_type,
+            foodtype: schema_1.food.foodtype,
+            startTime: schema_1.food.startTime,
+            endTime: schema_1.food.endTime,
+            discount_type: schema_1.food.discount_type,
+            discount_value: schema_1.food.discount_value,
+            Maximum_Purchase: schema_1.food.Maximum_Purchase,
+            points: schema_1.food.points,
+            createdAt: schema_1.food.createdAt,
+            updatedAt: schema_1.food.updatedAt,
+            category_name: schema_1.categories.name,
+            category_nameAr: schema_1.categories.nameAr,
+            category_nameFr: schema_1.categories.nameFr,
+        })
+            .from(schema_1.branchMenuItems)
+            .innerJoin(schema_1.food, (0, drizzle_orm_1.eq)(schema_1.branchMenuItems.foodId, schema_1.food.id))
+            .leftJoin(schema_1.categories, (0, drizzle_orm_1.eq)(schema_1.food.categoryid, schema_1.categories.id))
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.branchId, branchId), (0, drizzle_orm_1.or)(
+        // Limited stock exhausted
+        (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.stockType, "limited"), (0, drizzle_orm_1.lte)(schema_1.branchMenuItems.stockQty, 0)), 
+        // Manually marked as inactive in this branch
+        (0, drizzle_orm_1.eq)(schema_1.branchMenuItems.status, "inactive"))));
+        const result = oosItems.map((item) => ({
+            id: item.id,
+            name: item.name,
+            nameAr: item.nameAr,
+            nameFr: item.nameFr,
+            description: item.description,
+            descriptionAr: item.descriptionAr,
+            descriptionFr: item.descriptionFr,
+            image: item.image,
+            price: item.price,
+            isOutOfStock: item.isOutOfStock,
+            globalStock_type: item.stock_type,
+            foodtype: item.foodtype,
+            startTime: item.startTime,
+            endTime: item.endTime,
+            discount_type: item.discount_type,
+            discount_value: item.discount_value,
+            Maximum_Purchase: item.Maximum_Purchase,
+            points: item.points ?? 0,
+            createdAt: item.createdAt,
+            updatedAt: item.updatedAt,
+            category: item.category_name
+                ? { name: item.category_name, nameAr: item.category_nameAr, nameFr: item.category_nameFr }
+                : null,
+            // Branch-level stock info
+            branch: {
+                id: branchId,
+                stockType: item.branchStockType,
+                stockQty: item.branchStockQty,
+                status: item.branchStatus,
+                reason: item.branchStatus === "inactive"
+                    ? "inactive_in_branch"
+                    : "stock_exhausted",
+            },
+        }));
+        return (0, response_1.SuccessResponse)(res, {
+            message: "Get out-of-stock foods for branch success",
+            data: result,
+        });
+    }
+    // =========================================================
+    // RESTAURANT VIEW: Return globally OOS foods + foods with unavailable branches
+    // =========================================================
+    const rawFoods = await connection_1.db
+        .select({
+        id: schema_1.food.id,
+        name: schema_1.food.name,
+        nameAr: schema_1.food.nameAr,
+        nameFr: schema_1.food.nameFr,
+        description: schema_1.food.description,
+        descriptionAr: schema_1.food.descriptionAr,
+        descriptionFr: schema_1.food.descriptionFr,
+        image: schema_1.food.image,
+        price: schema_1.food.price,
+        status: schema_1.food.status,
+        isOutOfStock: schema_1.food.isOutOfStock,
+        stock_type: schema_1.food.stock_type,
+        foodtype: schema_1.food.foodtype,
+        startTime: schema_1.food.startTime,
+        endTime: schema_1.food.endTime,
+        discount_type: schema_1.food.discount_type,
+        discount_value: schema_1.food.discount_value,
+        Maximum_Purchase: schema_1.food.Maximum_Purchase,
+        points: schema_1.food.points,
+        createdAt: schema_1.food.createdAt,
+        updatedAt: schema_1.food.updatedAt,
+        category_name: schema_1.categories.name,
+        category_nameAr: schema_1.categories.nameAr,
+        category_nameFr: schema_1.categories.nameFr,
+        subcategory_name: schema_1.subcategories.name,
+        subcategory_nameAr: schema_1.subcategories.nameAr,
+        subcategory_nameFr: schema_1.subcategories.nameFr,
+    })
+        .from(schema_1.food)
+        .leftJoin(schema_1.categories, (0, drizzle_orm_1.eq)(schema_1.food.categoryid, schema_1.categories.id))
+        .leftJoin(schema_1.subcategories, (0, drizzle_orm_1.eq)(schema_1.food.subcategoryid, schema_1.subcategories.id))
+        .where((0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId)); // fetch all foods — filter below
+    if (rawFoods.length === 0) {
+        return (0, response_1.SuccessResponse)(res, {
+            message: "Get out-of-stock foods success",
+            data: [],
+        });
+    }
+    // Get unavailable branches for ALL foods
+    const foodIds = rawFoods.map((f) => f.id);
+    const unavailableBranchesMap = await (0, food_helper_1.getUnavailableBranchesForFoods)(foodIds);
+    // Keep only: globally OOS  OR  has at least one unavailable branch
+    const filtered = rawFoods.filter((f) => f.isOutOfStock || (unavailableBranchesMap.get(f.id)?.length ?? 0) > 0);
+    if (filtered.length === 0) {
+        return (0, response_1.SuccessResponse)(res, {
+            message: "Get out-of-stock foods success",
+            data: [],
+        });
+    }
+    const result = filtered.map((f) => ({
+        id: f.id,
+        name: f.name,
+        nameAr: f.nameAr,
+        nameFr: f.nameFr,
+        description: f.description,
+        descriptionAr: f.descriptionAr,
+        descriptionFr: f.descriptionFr,
+        image: f.image,
+        price: f.price,
+        status: f.status,
+        isOutOfStock: f.isOutOfStock,
+        stock_type: f.stock_type,
+        foodtype: f.foodtype,
+        startTime: f.startTime,
+        endTime: f.endTime,
+        discount_type: f.discount_type,
+        discount_value: f.discount_value,
+        Maximum_Purchase: f.Maximum_Purchase,
+        points: f.points ?? 0,
+        createdAt: f.createdAt,
+        updatedAt: f.updatedAt,
+        category: f.category_name
+            ? { name: f.category_name, nameAr: f.category_nameAr, nameFr: f.category_nameFr }
+            : null,
+        subcategory: f.subcategory_name
+            ? { name: f.subcategory_name, nameAr: f.subcategory_nameAr, nameFr: f.subcategory_nameFr }
+            : null,
+        unavailableBranches: unavailableBranchesMap.get(f.id) ?? [],
+    }));
+    return (0, response_1.SuccessResponse)(res, {
+        message: "Get out-of-stock foods success",
+        data: result,
+    });
+};
+exports.getOutOfStockFoods = getOutOfStockFoods;

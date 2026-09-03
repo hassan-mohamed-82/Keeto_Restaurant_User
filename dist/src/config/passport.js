@@ -45,8 +45,9 @@ const verifyGoogleToken = async (req, res) => {
                 email,
                 name,
                 isVerified: true,
+                totalOrders: 0,
             });
-            user = { id: newId, name, email, googleId, phone: null, photo: null, fcmToken: null, password: null, isVerified: true, status: "active", createdAt: new Date(), facebookId: null };
+            user = { id: newId, name, email, googleId, phone: null, alternatePhone: null, photo: null, fcmToken: null, password: null, isVerified: true, status: "active", createdAt: new Date(), facebookId: null, isDeleted: false, totalOrders: 0 };
         }
         else {
             // 👤 Login (existing user)

@@ -38,7 +38,7 @@ async function login(req, res) {
     if (user.status === "inactive") {
         throw new Errors_1.UnauthorizedError("Your account is deactivated. Please contact support.");
     }
-    // 4. التحقق من حالة المطعم التابع له الحساب (لحماية السيستم إذا قام السوبر أدمن بحظر المطعم)
+    // 4. التحقق من حالة المطعم وجلب اسمه
     let restaurantName = null;
     if (user.restaurantId) {
         const [restaurant] = await connection_1.db
@@ -53,6 +53,26 @@ async function login(req, res) {
             restaurantName = restaurant.name;
         }
     }
+    // 🌐 4.5 جلب أسماء الفرع باللغات المختلفة
+    let branchName = null;
+    let branchNameAr = null;
+    let branchNameFr = null;
+    if (user.branchId) {
+        const [branch] = await connection_1.db
+            .select({
+            name: schema_1.branches.name,
+            nameAr: schema_1.branches.nameAr,
+            nameFr: schema_1.branches.nameFr,
+        })
+            .from(schema_1.branches)
+            .where((0, drizzle_orm_1.eq)(schema_1.branches.id, user.branchId))
+            .limit(1);
+        if (branch) {
+            branchName = branch.name;
+            branchNameAr = branch.nameAr;
+            branchNameFr = branch.nameFr;
+        }
+    }
     // 5. جلب الـ Role إذا كان المستخدم موظفاً وله دور محدد
     let role = null;
     if (user.roleId) {
@@ -63,14 +83,24 @@ async function login(req, res) {
             .limit(1);
         role = roleResult;
     }
+    // 5.5 جلب جدول مواعيد المطعم (Restaurant Schedules)
+    let schedules = [];
+    if (user.restaurantId) {
+        schedules = await connection_1.db
+            .select()
+            .from(schema_1.restaurantSchedules)
+            .where((0, drizzle_orm_1.eq)(schema_1.restaurantSchedules.restaurantId, user.restaurantId));
+    }
     // 6. تجهيز الـ Token Payload الديناميكي
-    // الـ Owner يملك صلاحيات كاملة (branchId: null)، والـ Staff يتربط بفرعه الفردي
     const tokenPayload = {
         id: user.id,
         restaurantId: user.restaurantId,
         name: user.name,
         restaurantName,
-        branchId: user.branchId, // سيكون تلقائياً null في حالة الـ owner
+        branchId: user.branchId,
+        branchName,
+        branchNameAr,
+        branchNameFr,
         type: user.type, // "owner" | "branch_manager" | "staff"
     };
     const token = (0, jwt_1.generateRestaurantAdminToken)(tokenPayload);
@@ -86,10 +116,14 @@ async function login(req, res) {
             roleId: user.roleId,
             permissions: user.permissions || [],
             status: user.status,
-            type: user.type, // الـ الفرونت إند سيتعرف على المالك من خلال "owner"
+            type: user.type,
             restaurantId: user.restaurantId,
             restaurantName,
-            branchId: user.branchId
-        }
+            branchId: user.branchId,
+            branchName,
+            branchNameAr,
+            branchNameFr
+        },
+        schedules
     }, 200);
 }

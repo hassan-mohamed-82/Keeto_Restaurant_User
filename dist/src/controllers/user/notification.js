@@ -44,13 +44,13 @@ const markNotificationAsRead = async (req, res) => {
     const [notification] = await connection_1.db
         .select()
         .from(schema_1.notifications)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.notifications.id, id), (0, drizzle_orm_1.eq)(schema_1.notifications.recipientId, userId)))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.notifications.id, id), (0, drizzle_orm_1.eq)(schema_1.notifications.recipientType, "user"), (0, drizzle_orm_1.eq)(schema_1.notifications.recipientId, userId)))
         .limit(1);
     if (!notification)
         throw new NotFound_1.NotFound("Notification not found");
     await connection_1.db.update(schema_1.notifications)
         .set({ isRead: true })
-        .where((0, drizzle_orm_1.eq)(schema_1.notifications.id, id));
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.notifications.id, id), (0, drizzle_orm_1.eq)(schema_1.notifications.recipientType, "user"), (0, drizzle_orm_1.eq)(schema_1.notifications.recipientId, userId)));
     return (0, response_1.SuccessResponse)(res, { message: "Notification marked as read" });
 };
 exports.markNotificationAsRead = markNotificationAsRead;

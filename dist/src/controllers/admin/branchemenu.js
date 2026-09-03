@@ -83,15 +83,23 @@ exports.assignFoodToBranch = assignFoodToBranch;
 // =============================================
 const getBranchMenu = async (req, res) => {
     const { branchId } = req.params;
+    // Get the restaurant ID for this branch
+    const branchCheck = await connection_1.db.select({ restaurantId: schema_1.branches.restaurantId })
+        .from(schema_1.branches)
+        .where((0, drizzle_orm_1.eq)(schema_1.branches.id, branchId))
+        .limit(1);
+    if (!branchCheck[0])
+        throw new NotFound_1.NotFound("Branch not found");
+    const restaurantId = branchCheck[0].restaurantId;
     // ✅ Redis Cache
     const cacheKey = `admin:branch_menu:${branchId}`;
     const cachedData = await redis_1.default.get(cacheKey);
     if (cachedData) {
         return (0, response_1.SuccessResponse)(res, { message: "Get branch menu success", data: JSON.parse(cachedData) });
     }
-    // هنجيب الداتا المتغيرة (السعر/الحالة) من جدول الفرع، وندمجها مع الداتا الثابتة من جدول الأكل
-    const branchMenu = await connection_1.db.select({
-        menuItemId: schema_1.branchMenuItems.id,
+    // الكتالوج الموحد مدمج مع استثناءات الفرع
+    const rawBranchMenu = await connection_1.db.select({
+        menuItemId: schema_1.branchMenuItems.id, // قد يكون null إذا لم يكن هناك استثناء
         foodId: schema_1.food.id,
         name: schema_1.food.name,
         nameAr: schema_1.food.nameAr,
@@ -100,60 +108,85 @@ const getBranchMenu = async (req, res) => {
         descriptionAr: schema_1.food.descriptionAr,
         descriptionFr: schema_1.food.descriptionFr,
         image: schema_1.food.image,
+        foodIsOutOfStock: schema_1.food.isOutOfStock,
         categoryId: schema_1.food.categoryid,
         categoryName: schema_1.categories.name,
         categoryNameAr: schema_1.categories.nameAr,
         categoryNameFr: schema_1.categories.nameFr,
-        // البيانات اللي بتخص الفرع ده بس:
-        price: schema_1.branchMenuItems.price,
-        status: schema_1.branchMenuItems.status,
-        stockType: schema_1.branchMenuItems.stockType,
-        stockQty: schema_1.branchMenuItems.stockQty,
+        // البيانات الخاصة بالفرع باستخدام COALESCE لاعتماد الأساسي في حالة غياب الاستثناء
+        price: (0, drizzle_orm_1.sql) `COALESCE(${schema_1.branchMenuItems.price}, ${schema_1.food.price})`.as('price'),
+        status: (0, drizzle_orm_1.sql) `COALESCE(${schema_1.branchMenuItems.status}, 'active')`.as('status'),
+        stockType: (0, drizzle_orm_1.sql) `COALESCE(${schema_1.branchMenuItems.stockType}, ${schema_1.food.stock_type})`.as('stock_type'),
+        stockQty: (0, drizzle_orm_1.sql) `COALESCE(${schema_1.branchMenuItems.stockQty}, 0)`.as('stock_qty'),
     })
-        .from(schema_1.branchMenuItems)
-        .innerJoin(schema_1.food, (0, drizzle_orm_1.eq)(schema_1.branchMenuItems.foodId, schema_1.food.id))
+        .from(schema_1.food)
+        .leftJoin(schema_1.branchMenuItems, (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.foodId, schema_1.food.id), (0, drizzle_orm_1.eq)(schema_1.branchMenuItems.branchId, branchId)))
         .leftJoin(schema_1.categories, (0, drizzle_orm_1.eq)(schema_1.food.categoryid, schema_1.categories.id))
-        .where((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.branchId, branchId));
+        .where((0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId));
+    // استخراج المنتجات غير المتاحة بسبب مكون أساسي مفقود في الفرع
+    const lockedEssentialIngredients = await connection_1.db.select({
+        foodId: schema_1.branchIngredientLocks.foodId
+    })
+        .from(schema_1.branchIngredientLocks)
+        .innerJoin(schema_1.foodIngredients, (0, drizzle_orm_1.eq)(schema_1.branchIngredientLocks.ingredientId, schema_1.foodIngredients.ingredientId))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branchIngredientLocks.branchId, branchId), (0, drizzle_orm_1.eq)(schema_1.branchIngredientLocks.isAvailable, false), (0, drizzle_orm_1.eq)(schema_1.foodIngredients.isEssential, true), (0, drizzle_orm_1.eq)(schema_1.foodIngredients.foodId, schema_1.branchIngredientLocks.foodId)));
+    const unavailableFoodIds = new Set(lockedEssentialIngredients.map(lock => lock.foodId));
+    // إضافة حقل isAvailable لكل منتج
+    const branchMenu = rawBranchMenu.map(item => {
+        const isAvailable = item.status === "active" &&
+            !item.foodIsOutOfStock &&
+            !unavailableFoodIds.has(item.foodId);
+        return {
+            ...item,
+            isAvailable
+        };
+    });
     // ✅ Cache for 30 minutes
     await redis_1.default.set(cacheKey, JSON.stringify(branchMenu), 'EX', 1800);
     return (0, response_1.SuccessResponse)(res, { message: "Get branch menu success", data: branchMenu });
 };
 exports.getBranchMenu = getBranchMenu;
 const updateBranchMenuItem = async (req, res) => {
-    const { id } = req.params; // ده الـ branchMenuItemId
-    const { price, stockType, stockQty, status } = req.body;
+    const { id } = req.params; // branchMenuItemId
+    // 1. استخدام Default Value لمنع خطأ الـ Destructuring إذا كان req.body غير معرف
+    const { price, stockType, stockQty, status } = req.body || {};
     const restaurantId = req.user?.restaurantId || req.user?.id;
     const userBranchId = req.user?.branchId;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID missing");
-    // 1. التأكد إن العنصر ده موجود أصلاً
-    const existingItem = await connection_1.db.select().from(schema_1.branchMenuItems)
+    // 2. التأكد من وجود عنصر القائمة
+    const [existingItem] = await connection_1.db.select().from(schema_1.branchMenuItems)
         .where((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.id, id)).limit(1);
-    if (!existingItem[0])
+    if (!existingItem)
         throw new NotFound_1.NotFound("Branch menu item not found");
-    // 2. حماية الصلاحيات (لو مدير فرع، يتأكد إن العنصر ده في فرعه)
-    if (userBranchId && userBranchId !== existingItem[0].branchId) {
+    // 3. التأكد من صلاحية مدير الفرع
+    if (userBranchId && userBranchId !== existingItem.branchId) {
         throw new BadRequest_1.BadRequest("Unauthorized: You cannot edit another branch's menu");
     }
-    // 3. التأكد إن الفرع ده يخص المطعم (لزيادة الأمان)
-    const branchCheck = await connection_1.db.select().from(schema_1.branches)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branches.id, existingItem[0].branchId), (0, drizzle_orm_1.eq)(schema_1.branches.restaurantId, restaurantId))).limit(1);
-    if (!branchCheck[0])
+    // 4. التأكد من تبعية الفرع للمطعم
+    const [branchCheck] = await connection_1.db.select().from(schema_1.branches)
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branches.id, existingItem.branchId), (0, drizzle_orm_1.eq)(schema_1.branches.restaurantId, restaurantId))).limit(1);
+    if (!branchCheck)
         throw new NotFound_1.NotFound("Branch not found");
-    // 4. تحديث البيانات
+    // 5. تجميع البيانات المرسلة فقط للتحديث
     const updateData = {};
     if (price !== undefined)
         updateData.price = price;
-    if (stockType)
+    if (stockType !== undefined)
         updateData.stockType = stockType;
     if (stockQty !== undefined)
         updateData.stockQty = stockQty;
-    if (status)
+    if (status !== undefined)
         updateData.status = status;
+    // التأكد من إرسال حقل واحد على الأقل للقيم المراد تحديثها
+    if (Object.keys(updateData).length === 0) {
+        throw new BadRequest_1.BadRequest("No valid fields provided for update");
+    }
     updateData.updatedAt = new Date();
+    // 6. تنفيذ التحديث
     await connection_1.db.update(schema_1.branchMenuItems).set(updateData).where((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.id, id));
     // ✅ Invalidate cache
-    await invalidateBranchMenuCache(existingItem[0].branchId, restaurantId);
+    await invalidateBranchMenuCache(existingItem.branchId, restaurantId);
     return (0, response_1.SuccessResponse)(res, { message: "Branch menu item updated successfully" });
 };
 exports.updateBranchMenuItem = updateBranchMenuItem;

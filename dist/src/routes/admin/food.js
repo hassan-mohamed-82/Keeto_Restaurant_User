@@ -4,6 +4,7 @@ const express_1 = require("express");
 const catchAsync_1 = require("../../utils/catchAsync");
 const hasPermission_1 = require("../../middlewares/hasPermission");
 const food_1 = require("../../controllers/admin/food");
+const foodIngredients_1 = require("../../controllers/admin/foodIngredients");
 const router = (0, express_1.Router)();
 // ✅ Select data - يحتاج صلاحية read فقط
 router.get("/select", (0, hasPermission_1.hasPermission)("foods", "read"), (0, catchAsync_1.catchAsync)(food_1.getFoodSelectData));
@@ -11,6 +12,8 @@ router.get("/select", (0, hasPermission_1.hasPermission)("foods", "read"), (0, c
 router.post("/", (0, hasPermission_1.hasPermission)("foods", "create"), (0, catchAsync_1.catchAsync)(food_1.createFood));
 // ✅ Get all foods - يحتاج صلاحية read
 router.get("/", (0, hasPermission_1.hasPermission)("foods", "read"), (0, catchAsync_1.catchAsync)(food_1.getAllFoods));
+// ✅ Get out-of-stock foods - restaurant sees all OOS foods + unavailable branches; branch sees only its own OOS
+router.get("/out-of-stock", (0, hasPermission_1.hasPermission)("foods", "read"), (0, catchAsync_1.catchAsync)(food_1.getOutOfStockFoods));
 // ✅ Get food by id - يحتاج صلاحية read
 router.get("/:id", (0, hasPermission_1.hasPermission)("foods", "read"), (0, catchAsync_1.catchAsync)(food_1.getFoodById));
 // ✅ Update food - يحتاج صلاحية update
@@ -18,9 +21,9 @@ router.put("/:id", (0, hasPermission_1.hasPermission)("foods", "update"), (0, ca
 // ✅ Delete food - يحتاج صلاحية delete
 router.delete("/:id", (0, hasPermission_1.hasPermission)("foods", "delete"), (0, catchAsync_1.catchAsync)(food_1.deleteFood));
 // ✅ Assign ingredients - يحتاج صلاحية update
-router.post("/assign-ingredients/:id", (0, hasPermission_1.hasPermission)("foods", "update"), (0, catchAsync_1.catchAsync)(food_1.assignIngredientsToFood));
+router.post("/assign-ingredients/:id", (0, hasPermission_1.hasPermission)("foods", "update"), (0, catchAsync_1.catchAsync)(foodIngredients_1.assignIngredientsToFood));
 // ✅ Get recipe - يحتاج صلاحية read
-router.get("/recipe/:id", (0, hasPermission_1.hasPermission)("foods", "read"), (0, catchAsync_1.catchAsync)(food_1.getFoodRecipe));
+router.get("/recipe/:id", (0, hasPermission_1.hasPermission)("foods", "read"), (0, catchAsync_1.catchAsync)(foodIngredients_1.getFoodRecipe));
 // ✅ Toggle variation status - يحتاج صلاحية update
 router.put("/variation/:id/status", (0, hasPermission_1.hasPermission)("foods", "update"), (0, catchAsync_1.catchAsync)(food_1.toggleVariationStatus));
 // ✅ Toggle option status - يحتاج صلاحية update

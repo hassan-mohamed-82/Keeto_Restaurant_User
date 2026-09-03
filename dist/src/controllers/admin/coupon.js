@@ -16,7 +16,8 @@ const createCoupon = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Unauthorized");
-    const { code, name, nameAr, nameFr, discountType, discountValue, maxDiscount, minOrderAmount, usageLimit, perUserLimit, startDate, endDate, isActive } = req.body;
+    const { code, name, nameAr, nameFr, discountType, discountValue, maxDiscount, minOrderAmount, usageLimit, perUserLimit, userUsageType, // 'fixed' | 'unlimited'
+    startDate, endDate, isActive } = req.body;
     if (!code)
         throw new BadRequest_1.BadRequest("Coupon code is required");
     if (!name)
@@ -25,6 +26,11 @@ const createCoupon = async (req, res) => {
         throw new BadRequest_1.BadRequest("Discount type is required (percentage | fixed_amount | free_delivery)");
     if (discountValue === undefined || discountValue === null)
         throw new BadRequest_1.BadRequest("Discount value is required");
+    // Validate userUsageType
+    const resolvedUserUsageType = userUsageType === "unlimited" ? "unlimited" : "fixed";
+    if (resolvedUserUsageType === "fixed" && (perUserLimit === undefined || perUserLimit === null || Number(perUserLimit) < 1)) {
+        throw new BadRequest_1.BadRequest("perUserLimit is required and must be >= 1 when userUsageType is 'fixed'");
+    }
     const normalizedCode = code.toUpperCase().trim();
     const conflicts = await connection_1.db
         .select({ id: schema_1.coupons.id })
@@ -47,7 +53,8 @@ const createCoupon = async (req, res) => {
         maxDiscount: maxDiscount ? maxDiscount.toString() : null,
         minOrderAmount: minOrderAmount ? minOrderAmount.toString() : "0.00",
         usageLimit: usageLimit || null,
-        perUserLimit: perUserLimit !== undefined ? perUserLimit : 1,
+        userUsageType: resolvedUserUsageType,
+        perUserLimit: resolvedUserUsageType === "unlimited" ? null : (perUserLimit ?? 1),
         startDate: startDate ? new Date(startDate) : null,
         endDate: endDate ? new Date(endDate) : null,
         isActive: isActive !== undefined ? isActive : true,
@@ -115,7 +122,8 @@ const updateCoupon = async (req, res) => {
         .limit(1);
     if (!existing)
         throw new NotFound_1.NotFound("Coupon not found or you don't have permission to edit it");
-    const { code, name, nameAr, nameFr, discountType, discountValue, maxDiscount, minOrderAmount, usageLimit, perUserLimit, startDate, endDate, isActive } = req.body;
+    const { code, name, nameAr, nameFr, discountType, discountValue, maxDiscount, minOrderAmount, usageLimit, perUserLimit, userUsageType, // 'fixed' | 'unlimited'
+    startDate, endDate, isActive } = req.body;
     const normalizedCode = code ? code.toUpperCase().trim() : existing.coupons.code;
     // فحص الاسم المتكرر عند تعديل الكود لمنع تضاربه داخل نفس المطعم
     if (code && normalizedCode !== existing.coupons.code) {
@@ -147,8 +155,24 @@ const updateCoupon = async (req, res) => {
         updateData.minOrderAmount = minOrderAmount.toString();
     if (usageLimit !== undefined)
         updateData.usageLimit = usageLimit;
-    if (perUserLimit !== undefined)
+    if (userUsageType !== undefined) {
+        const resolvedType = userUsageType === "unlimited" ? "unlimited" : "fixed";
+        updateData.userUsageType = resolvedType;
+        // If switching to fixed, require perUserLimit
+        if (resolvedType === "fixed") {
+            const limit = perUserLimit ?? existing.coupons.perUserLimit;
+            if (!limit || Number(limit) < 1)
+                throw new BadRequest_1.BadRequest("perUserLimit is required and must be >= 1 when userUsageType is 'fixed'");
+            updateData.perUserLimit = Number(limit);
+        }
+        else {
+            // unlimited — clear the per-user limit
+            updateData.perUserLimit = null;
+        }
+    }
+    else if (perUserLimit !== undefined) {
         updateData.perUserLimit = perUserLimit;
+    }
     if (startDate !== undefined)
         updateData.startDate = startDate ? new Date(startDate) : null;
     if (endDate !== undefined)

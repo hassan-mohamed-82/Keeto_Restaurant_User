@@ -144,6 +144,8 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
             zoneName: sql<string | null>`CASE WHEN ${orders.orderType} = 'delivery' THEN ${zones.name} ELSE NULL END`,
             addressLat: addresses.lat,
             addressLng: addresses.lng,
+            shippingAddress: orders.shippingAddress,
+            branchSnapshot: orders.branchSnapshot,
             createdAt: orders.createdAt,
             updatedAt: orders.updatedAt,
         })
@@ -159,7 +161,38 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
 
     const restaurantOrders = await Promise.all(
         rawRestaurantOrders.map(async (o) => {
+            let shippingAddressData: any = o.shippingAddress;
+            if (typeof shippingAddressData === "string") {
+                try {
+                    shippingAddressData = JSON.parse(shippingAddressData);
+                    if (typeof shippingAddressData === "string") {
+                        shippingAddressData = JSON.parse(shippingAddressData);
+                    }
+                } catch (e) {
+                    shippingAddressData = null;
+                }
+            }
+
+            let branchSnapshotData: any = o.branchSnapshot;
+            if (typeof branchSnapshotData === "string") {
+                try {
+                    branchSnapshotData = JSON.parse(branchSnapshotData);
+                    if (typeof branchSnapshotData === "string") {
+                        branchSnapshotData = JSON.parse(branchSnapshotData);
+                    }
+                } catch (e) {
+                    branchSnapshotData = null;
+                }
+            }
+
             let finalZoneName = o.zoneName;
+            if (!finalZoneName && o.orderType === "delivery") {
+                if (branchSnapshotData?.zoneName) {
+                    finalZoneName = branchSnapshotData.zoneName;
+                } else if (shippingAddressData?.addressZoneName) {
+                    finalZoneName = shippingAddressData.addressZoneName;
+                }
+            }
             if (!finalZoneName && o.orderType === "delivery" && o.addressLat && o.addressLng) {
                 const latNum = parseFloat(String(o.addressLat));
                 const lngNum = parseFloat(String(o.addressLng));
@@ -189,6 +222,44 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
             return {
                 ...rest,
                 zoneName: finalZoneName,
+                shippingAddress: shippingAddressData && typeof shippingAddressData === "object"
+                    ? {
+                        title:              shippingAddressData.title ?? null,
+                        street:             shippingAddressData.street ?? null,
+                        building:           shippingAddressData.building ?? null,
+                        floor:              shippingAddressData.floor ?? null,
+                        apartment:          shippingAddressData.apartment ?? null,
+                        landmark:           shippingAddressData.landmark ?? null,
+                        location:           shippingAddressData.location ?? null,
+                        fulladdress:        shippingAddressData.fulladdress ?? null,
+                        lat:                shippingAddressData.lat ?? null,
+                        lng:                shippingAddressData.lng ?? null,
+                        phone:              shippingAddressData.phone ?? null,
+                        addressZoneId:      shippingAddressData.addressZoneId ?? null,
+                        restaurantZoneId:   shippingAddressData.restaurantZoneId ?? null,
+                        addressZoneName:    shippingAddressData.addressZoneName ?? null,
+                        addressZoneNameAr:  shippingAddressData.addressZoneNameAr ?? null,
+                    }
+                    : null,
+                branchSnapshot: branchSnapshotData && typeof branchSnapshotData === "object"
+                    ? {
+                        id:          branchSnapshotData.id ?? null,
+                        name:        branchSnapshotData.name ?? null,
+                        nameAr:      branchSnapshotData.nameAr ?? null,
+                        nameFr:      branchSnapshotData.nameFr ?? null,
+                        address:     branchSnapshotData.address ?? null,
+                        addressAr:   branchSnapshotData.addressAr ?? null,
+                        addressFr:   branchSnapshotData.addressFr ?? null,
+                        phone:       branchSnapshotData.phone ?? null,
+                        status:      branchSnapshotData.status ?? null,
+                        zoneId:      branchSnapshotData.zoneId ?? null,
+                        zoneName:    branchSnapshotData.zoneName ?? null,
+                        zoneNameAr:  branchSnapshotData.zoneNameAr ?? null,
+                        cityId:      branchSnapshotData.cityId ?? null,
+                        cityName:    branchSnapshotData.cityName ?? null,
+                        cityNameAr:  branchSnapshotData.cityNameAr ?? null,
+                    }
+                    : null,
                 discount: {
                     discountAmount: o.discountAmount ?? "0.00",
                     couponCode: o.couponCode ?? null,
@@ -290,6 +361,8 @@ export const getOrdersByStatus = async (
             zoneName: sql<string | null>`CASE WHEN ${orders.orderType} = 'delivery' THEN ${zones.name} ELSE NULL END`,
             addressLat: addresses.lat,
             addressLng: addresses.lng,
+            shippingAddress: orders.shippingAddress,
+            branchSnapshot: orders.branchSnapshot,
             createdAt: orders.createdAt,
             updatedAt: orders.updatedAt,
         })
@@ -305,7 +378,38 @@ export const getOrdersByStatus = async (
 
     const result = await Promise.all(
         rawResult.map(async (o) => {
+            let shippingAddressData: any = o.shippingAddress;
+            if (typeof shippingAddressData === "string") {
+                try {
+                    shippingAddressData = JSON.parse(shippingAddressData);
+                    if (typeof shippingAddressData === "string") {
+                        shippingAddressData = JSON.parse(shippingAddressData);
+                    }
+                } catch (e) {
+                    shippingAddressData = null;
+                }
+            }
+
+            let branchSnapshotData: any = o.branchSnapshot;
+            if (typeof branchSnapshotData === "string") {
+                try {
+                    branchSnapshotData = JSON.parse(branchSnapshotData);
+                    if (typeof branchSnapshotData === "string") {
+                        branchSnapshotData = JSON.parse(branchSnapshotData);
+                    }
+                } catch (e) {
+                    branchSnapshotData = null;
+                }
+            }
+
             let finalZoneName = o.zoneName;
+            if (!finalZoneName && o.orderType === "delivery") {
+                if (branchSnapshotData?.zoneName) {
+                    finalZoneName = branchSnapshotData.zoneName;
+                } else if (shippingAddressData?.addressZoneName) {
+                    finalZoneName = shippingAddressData.addressZoneName;
+                }
+            }
             if (!finalZoneName && o.orderType === "delivery" && o.addressLat && o.addressLng) {
                 const latNum = parseFloat(String(o.addressLat));
                 const lngNum = parseFloat(String(o.addressLng));
@@ -335,6 +439,44 @@ export const getOrdersByStatus = async (
             return {
                 ...rest,
                 zoneName: finalZoneName,
+                shippingAddress: shippingAddressData && typeof shippingAddressData === "object"
+                    ? {
+                        title:              shippingAddressData.title ?? null,
+                        street:             shippingAddressData.street ?? null,
+                        building:           shippingAddressData.building ?? null,
+                        floor:              shippingAddressData.floor ?? null,
+                        apartment:          shippingAddressData.apartment ?? null,
+                        landmark:           shippingAddressData.landmark ?? null,
+                        location:           shippingAddressData.location ?? null,
+                        fulladdress:        shippingAddressData.fulladdress ?? null,
+                        lat:                shippingAddressData.lat ?? null,
+                        lng:                shippingAddressData.lng ?? null,
+                        phone:              shippingAddressData.phone ?? null,
+                        addressZoneId:      shippingAddressData.addressZoneId ?? null,
+                        restaurantZoneId:   shippingAddressData.restaurantZoneId ?? null,
+                        addressZoneName:    shippingAddressData.addressZoneName ?? null,
+                        addressZoneNameAr:  shippingAddressData.addressZoneNameAr ?? null,
+                    }
+                    : null,
+                branchSnapshot: branchSnapshotData && typeof branchSnapshotData === "object"
+                    ? {
+                        id:          branchSnapshotData.id ?? null,
+                        name:        branchSnapshotData.name ?? null,
+                        nameAr:      branchSnapshotData.nameAr ?? null,
+                        nameFr:      branchSnapshotData.nameFr ?? null,
+                        address:     branchSnapshotData.address ?? null,
+                        addressAr:   branchSnapshotData.addressAr ?? null,
+                        addressFr:   branchSnapshotData.addressFr ?? null,
+                        phone:       branchSnapshotData.phone ?? null,
+                        status:      branchSnapshotData.status ?? null,
+                        zoneId:      branchSnapshotData.zoneId ?? null,
+                        zoneName:    branchSnapshotData.zoneName ?? null,
+                        zoneNameAr:  branchSnapshotData.zoneNameAr ?? null,
+                        cityId:      branchSnapshotData.cityId ?? null,
+                        cityName:    branchSnapshotData.cityName ?? null,
+                        cityNameAr:  branchSnapshotData.cityNameAr ?? null,
+                    }
+                    : null,
                 discount: {
                     discountAmount: o.discountAmount ?? "0.00",
                     couponCode: o.couponCode ?? null,
@@ -727,6 +869,31 @@ if (Array.isArray(cleanVariations) && cleanVariations.length > 0) {
         if (coup) couponDetails = coup;
     }
 
+    // 🟢 حل مشكلة فك تشفير الـ JSON لبيانات الـ Snapshot إذا رجعت كـ String من قاعدة البيانات
+    let shippingAddressData: any = orderDetail.order.shippingAddress;
+    if (typeof shippingAddressData === "string") {
+        try {
+            shippingAddressData = JSON.parse(shippingAddressData);
+            if (typeof shippingAddressData === "string") {
+                shippingAddressData = JSON.parse(shippingAddressData);
+            }
+        } catch (e) {
+            console.error("Error parsing shippingAddress:", e);
+        }
+    }
+
+    let branchSnapshotData: any = orderDetail.order.branchSnapshot;
+    if (typeof branchSnapshotData === "string") {
+        try {
+            branchSnapshotData = JSON.parse(branchSnapshotData);
+            if (typeof branchSnapshotData === "string") {
+                branchSnapshotData = JSON.parse(branchSnapshotData);
+            }
+        } catch (e) {
+            console.error("Error parsing branchSnapshot:", e);
+        }
+    }
+
     return SuccessResponse(res, {
         message: "Get order details success",
         data: {
@@ -796,44 +963,44 @@ if (Array.isArray(cleanVariations) && cleanVariations.length > 0) {
             zoneName: resolvedZone?.name || null,
 
             // ✅ Snapshot: بيانات عنوان التوصيل كما كانت وقت تسجيل الأوردر
-            shippingAddress: orderDetail.order.shippingAddress
+            shippingAddress: shippingAddressData && typeof shippingAddressData === "object"
                 ? {
-                    title:              orderDetail.order.shippingAddress.title ?? null,
-                    street:             orderDetail.order.shippingAddress.street ?? null,
-                    building:           orderDetail.order.shippingAddress.building ?? null,
-                    floor:              orderDetail.order.shippingAddress.floor ?? null,
-                    apartment:          orderDetail.order.shippingAddress.apartment ?? null,
-                    landmark:           orderDetail.order.shippingAddress.landmark ?? null,
-                    location:           orderDetail.order.shippingAddress.location ?? null,
-                    fulladdress:        orderDetail.order.shippingAddress.fulladdress ?? null,
-                    lat:                orderDetail.order.shippingAddress.lat ?? null,
-                    lng:                orderDetail.order.shippingAddress.lng ?? null,
-                    phone:              orderDetail.order.shippingAddress.phone ?? null,
-                    addressZoneId:      orderDetail.order.shippingAddress.addressZoneId ?? null,
-                    restaurantZoneId:   orderDetail.order.shippingAddress.restaurantZoneId ?? null,
-                    addressZoneName:    orderDetail.order.shippingAddress.addressZoneName ?? null,
-                    addressZoneNameAr:  orderDetail.order.shippingAddress.addressZoneNameAr ?? null,
+                    title:              shippingAddressData.title ?? null,
+                    street:             shippingAddressData.street ?? null,
+                    building:           shippingAddressData.building ?? null,
+                    floor:              shippingAddressData.floor ?? null,
+                    apartment:          shippingAddressData.apartment ?? null,
+                    landmark:           shippingAddressData.landmark ?? null,
+                    location:           shippingAddressData.location ?? null,
+                    fulladdress:        shippingAddressData.fulladdress ?? null,
+                    lat:                shippingAddressData.lat ?? null,
+                    lng:                shippingAddressData.lng ?? null,
+                    phone:              shippingAddressData.phone ?? null,
+                    addressZoneId:      shippingAddressData.addressZoneId ?? null,
+                    restaurantZoneId:   shippingAddressData.restaurantZoneId ?? null,
+                    addressZoneName:    shippingAddressData.addressZoneName ?? null,
+                    addressZoneNameAr:  shippingAddressData.addressZoneNameAr ?? null,
                 }
                 : null,
 
             // ✅ Snapshot: بيانات الفرع كما كانت وقت تسجيل الأوردر
-            branchSnapshot: orderDetail.order.branchSnapshot
+            branchSnapshot: branchSnapshotData && typeof branchSnapshotData === "object"
                 ? {
-                    id:          orderDetail.order.branchSnapshot.id ?? null,
-                    name:        orderDetail.order.branchSnapshot.name ?? null,
-                    nameAr:      orderDetail.order.branchSnapshot.nameAr ?? null,
-                    nameFr:      orderDetail.order.branchSnapshot.nameFr ?? null,
-                    address:     orderDetail.order.branchSnapshot.address ?? null,
-                    addressAr:   orderDetail.order.branchSnapshot.addressAr ?? null,
-                    addressFr:   orderDetail.order.branchSnapshot.addressFr ?? null,
-                    phone:       orderDetail.order.branchSnapshot.phone ?? null,
-                    status:      orderDetail.order.branchSnapshot.status ?? null,
-                    zoneId:      orderDetail.order.branchSnapshot.zoneId ?? null,
-                    zoneName:    orderDetail.order.branchSnapshot.zoneName ?? null,
-                    zoneNameAr:  orderDetail.order.branchSnapshot.zoneNameAr ?? null,
-                    cityId:      orderDetail.order.branchSnapshot.cityId ?? null,
-                    cityName:    orderDetail.order.branchSnapshot.cityName ?? null,
-                    cityNameAr:  orderDetail.order.branchSnapshot.cityNameAr ?? null,
+                    id:          branchSnapshotData.id ?? null,
+                    name:        branchSnapshotData.name ?? null,
+                    nameAr:      branchSnapshotData.nameAr ?? null,
+                    nameFr:      branchSnapshotData.nameFr ?? null,
+                    address:     branchSnapshotData.address ?? null,
+                    addressAr:   branchSnapshotData.addressAr ?? null,
+                    addressFr:   branchSnapshotData.addressFr ?? null,
+                    phone:       branchSnapshotData.phone ?? null,
+                    status:      branchSnapshotData.status ?? null,
+                    zoneId:      branchSnapshotData.zoneId ?? null,
+                    zoneName:    branchSnapshotData.zoneName ?? null,
+                    zoneNameAr:  branchSnapshotData.zoneNameAr ?? null,
+                    cityId:      branchSnapshotData.cityId ?? null,
+                    cityName:    branchSnapshotData.cityName ?? null,
+                    cityNameAr:  branchSnapshotData.cityNameAr ?? null,
                 }
                 : null,
 
@@ -1267,25 +1434,49 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
         throw new BadRequest("Unauthorized: Order does not belong to your branch");
     }
 
-    // ==========================================
-    // 🗺️ Fallback: استنتاج الزون والفرع للـ PDF من إحداثيات العنوان إذا كانت فارغة
-    // ==========================================
-    let pdfZoneName = orderDetail.zone?.name || "";
-    let pdfZoneId = orderDetail.zone?.id || null;
-
-    if (!pdfZoneName && orderDetail.address?.lat && orderDetail.address?.lng) {
-        const addrLat = parseFloat(String(orderDetail.address.lat));
-        const addrLng = parseFloat(String(orderDetail.address.lng));
-        if (!isNaN(addrLat) && !isNaN(addrLng)) {
-            const detected = await resolveZoneFromCoords(addrLat, addrLng, orderDetail.order.restaurantId);
-            if (detected) {
-                pdfZoneName = detected.name;
-                pdfZoneId = detected.id;
+    // 🟢 فك تشفير JSON للـ shippingAddress والـ branchSnapshot
+    let shippingAddressData: any = orderDetail.order.shippingAddress;
+    if (typeof shippingAddressData === "string") {
+        try {
+            shippingAddressData = JSON.parse(shippingAddressData);
+            if (typeof shippingAddressData === "string") {
+                shippingAddressData = JSON.parse(shippingAddressData);
             }
+        } catch (e) {
+            console.error("Error parsing shippingAddress for PDF:", e);
         }
     }
 
-    let pdfBranchName = orderDetail.branch?.name || "";
+    let branchSnapshotData: any = orderDetail.order.branchSnapshot;
+    if (typeof branchSnapshotData === "string") {
+        try {
+            branchSnapshotData = JSON.parse(branchSnapshotData);
+            if (typeof branchSnapshotData === "string") {
+                branchSnapshotData = JSON.parse(branchSnapshotData);
+            }
+        } catch (e) {
+            console.error("Error parsing branchSnapshot for PDF:", e);
+        }
+    }
+
+    // ==========================================
+    // 🗺️ Fallback: استنتاج الزون والفرع للـ PDF من السناب شوت أو إحداثيات العنوان
+    // ==========================================
+    let pdfZoneName = branchSnapshotData?.zoneName || shippingAddressData?.addressZoneName || shippingAddressData?.addressZoneNameAr || orderDetail.zone?.name || "";
+    let pdfZoneId = branchSnapshotData?.zoneId || shippingAddressData?.addressZoneId || orderDetail.zone?.id || null;
+
+    const addrLat = shippingAddressData?.lat ? parseFloat(String(shippingAddressData.lat)) : (orderDetail.address?.lat ? parseFloat(String(orderDetail.address.lat)) : null);
+    const addrLng = shippingAddressData?.lng ? parseFloat(String(shippingAddressData.lng)) : (orderDetail.address?.lng ? parseFloat(String(orderDetail.address.lng)) : null);
+
+    if (!pdfZoneName && addrLat !== null && addrLng !== null && !isNaN(addrLat) && !isNaN(addrLng)) {
+        const detected = await resolveZoneFromCoords(addrLat, addrLng, orderDetail.order.restaurantId);
+        if (detected) {
+            pdfZoneName = detected.name;
+            pdfZoneId = detected.id;
+        }
+    }
+
+    let pdfBranchName = branchSnapshotData?.name || orderDetail.branch?.name || "";
     if (!pdfBranchName && pdfZoneId && orderDetail.order.restaurantId) {
         const [matchedBranch] = await db
             .select({ name: branches.name })
@@ -1420,7 +1611,7 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
 
     doc.text(`Branch: ${fixArabicText(pdfBranchName) || 'N/A'}`);
     doc.text(`Client: ${fixArabicText(orderDetail.customer?.name) || 'Guest'}`);
-    doc.text(`Phone: ${orderDetail.customer?.phone || 'N/A'}`);
+    doc.text(`Phone: ${shippingAddressData?.phone || orderDetail.customer?.phone || 'N/A'}`);
     doc.text(`Order Type: ${orderDetail.order.orderType}`);
     doc.text(`Payment: ${fixArabicText(paymentName)}`);
 
@@ -1430,19 +1621,34 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
     doc.moveDown(0.5);
 
     // Delivery Address if applicable
-    if (orderDetail.order.orderType === 'delivery' && orderDetail.address) {
-        doc.text('Delivery Address:', { underline: true });
-        doc.text(`Zone: ${fixArabicText(pdfZoneName)}`);
-        doc.text(`Street: ${fixArabicText(orderDetail.address.street) || ''}`);
-        let details = `Bldg: ${orderDetail.address.number || ''}`;
-        if (orderDetail.address.floor) details += ` | Floor: ${orderDetail.address.floor}`;
-        if (orderDetail.address.landmark) details += ` | ${fixArabicText(orderDetail.address.landmark)}`;
-        doc.text(details);
+    if (orderDetail.order.orderType === 'delivery') {
+        const hasSnapshotAddress = shippingAddressData && typeof shippingAddressData === 'object';
+        const hasLiveAddress = !!orderDetail.address;
 
-        doc.moveDown(0.5);
-        doc.moveTo(10, doc.y).lineTo(240, doc.y).dash(2, { space: 2 }).stroke();
-        doc.undash();
-        doc.moveDown(0.5);
+        if (hasSnapshotAddress || hasLiveAddress) {
+            const addrStreet = shippingAddressData?.street || orderDetail.address?.street || '';
+            const addrBuilding = shippingAddressData?.building || orderDetail.address?.number || '';
+            const addrFloor = shippingAddressData?.floor || orderDetail.address?.floor || '';
+            const addrApartment = shippingAddressData?.apartment || orderDetail.address?.apartment || '';
+            const addrLandmark = shippingAddressData?.landmark || orderDetail.address?.landmark || '';
+            const addrFull = shippingAddressData?.fulladdress || '';
+
+            doc.text('Delivery Address:', { underline: true });
+            if (pdfZoneName) doc.text(`Zone: ${fixArabicText(pdfZoneName)}`);
+            if (addrStreet) doc.text(`Street: ${fixArabicText(addrStreet)}`);
+            let details = '';
+            if (addrBuilding) details += `Bldg: ${addrBuilding}`;
+            if (addrFloor) details += `${details ? ' | ' : ''}Floor: ${addrFloor}`;
+            if (addrApartment) details += `${details ? ' | ' : ''}Apt: ${addrApartment}`;
+            if (addrLandmark) details += `${details ? ' | ' : ''}${fixArabicText(addrLandmark)}`;
+            if (details) doc.text(details);
+            if (addrFull && !addrStreet) doc.text(`Address: ${fixArabicText(addrFull)}`);
+
+            doc.moveDown(0.5);
+            doc.moveTo(10, doc.y).lineTo(240, doc.y).dash(2, { space: 2 }).stroke();
+            doc.undash();
+            doc.moveDown(0.5);
+        }
     }
 
     // Items Header

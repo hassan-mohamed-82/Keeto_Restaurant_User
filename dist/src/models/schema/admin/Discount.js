@@ -27,6 +27,7 @@ exports.discounts = (0, mysql_core_1.mysqlTable)("discounts", {
     isActive: (0, mysql_core_1.boolean)("is_active").default(true),
     // الحقل الجديد لمعرفة العروض العامة الشاملة لكل النظام
     isGlobal: (0, mysql_core_1.boolean)("is_global").default(false),
+    logo: (0, mysql_core_1.varchar)("logo", { length: 500 }),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow().onUpdateNow(),
 });

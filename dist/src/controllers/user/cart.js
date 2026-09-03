@@ -38,6 +38,13 @@ const addToCart = async (req, res) => {
     const [itemFood] = await connection_1.db.select().from(schema_1.food).where((0, drizzle_orm_1.eq)(schema_1.food.id, foodId)).limit(1);
     if (!itemFood)
         throw new BadRequest_1.BadRequest("Food not found");
+    // 🛡️ Check if user is blocked by this restaurant
+    const [restaurantUserLink] = await connection_1.db.select()
+        .from(schema_1.restaurant_users)
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.restaurant_users.restaurantId, itemFood.restaurantid), (0, drizzle_orm_1.eq)(schema_1.restaurant_users.userId, userId))).limit(1);
+    if (restaurantUserLink && restaurantUserLink.status === "blocked") {
+        throw new BadRequest_1.BadRequest("You are blocked by this restaurant");
+    }
     const existingCart = await connection_1.db.select().from(schema_1.cartItems)
         .where((0, drizzle_orm_1.eq)(schema_1.cartItems.userId, userId))
         .limit(1);

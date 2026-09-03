@@ -24,6 +24,8 @@ exports.cartItems = (0, mysql_core_1.mysqlTable)("cart_items", {
     totalPrice: (0, mysql_core_1.varchar)("total_price", { length: 50 }).notNull(),
     // 🔥 variations محفوظة بشكل snapshot
     variations: (0, mysql_core_1.json)("variations"),
+    // 🔥 addons محفوظة بشكل snapshot
+    addons: (0, mysql_core_1.json)("addons"),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow().onUpdateNow(),
     note: (0, mysql_core_1.varchar)("note", { length: 500 }),

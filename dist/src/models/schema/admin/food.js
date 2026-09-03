@@ -34,9 +34,10 @@ exports.food = (0, mysql_core_1.mysqlTable)("food", {
         .default("percentage"),
     discount_value: (0, mysql_core_1.decimal)("discount_value", { precision: 10, scale: 2 }),
     Maximum_Purchase: (0, mysql_core_1.int)("Maximum_Purchase"),
+    points: (0, mysql_core_1.int)("points").default(0),
     stock_type: (0, mysql_core_1.mysqlEnum)("stock_type", ["limited", "unlimited", "daily"])
         .default("unlimited"),
-    // ❌ تم حذف variations نهائيًا
+    isOutOfStock: (0, mysql_core_1.boolean)("is_out_of_stock").default(false),
     status: (0, mysql_core_1.mysqlEnum)("status", ["active", "inactive"])
         .default("active"),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),

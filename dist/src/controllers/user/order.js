@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.cancelOrder = exports.getOrderPrerequisites = exports.getOrderDetails = exports.getOrderHistory = exports.getActiveOrders = exports.checkout = void 0;
+exports.getUserCancelReasons = exports.cancelOrder = exports.getOrderPrerequisites = exports.getOrderDetails = exports.getOrderHistory = exports.getActiveOrders = exports.checkout = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -10,6 +10,10 @@ const NotFound_1 = require("../../Errors/NotFound");
 const uuid_1 = require("uuid");
 const Errors_1 = require("../../Errors");
 const notifications_1 = require("../../utils/notifications");
+const geo_1 = require("../../utils/geo");
+const discount_1 = require("../../utils/discount");
+const userBlockCheck_1 = require("../../utils/userBlockCheck");
+const restaurantFeatures_1 = require("./restaurantFeatures");
 // 👇 1. دالة تظبيط الوقت لتوقيت مصر عشان نص الإشعار
 const formatToEgyptTime = (date) => {
     return new Intl.DateTimeFormat("ar-EG", {
@@ -25,15 +29,16 @@ const formatToEgyptTime = (date) => {
 // ==========================================
 // 1. إنشاء الطلب (Checkout)
 // ==========================================
+const roundMoney = (amount) => Math.round(amount * 100) / 100;
 const checkout = async (req, res) => {
     if (!req.user)
         throw new Errors_1.UnauthorizedError("Unauthenticated");
     const userId = req.user.id;
-    const { orderSource, paymentMethod, orderType, idempotencyKey, userZoneId, branchId, addressId, note, couponCode, discountId } = req.body;
+    const { orderSource, paymentMethod, orderType, idempotencyKey, zoneId, branchId, addressId, note, couponCode } = req.body;
     // ==========================================
-    // 🛡️ 1. Validation (التحقق من المدخلات)
+    // 🛡️ 1. Validation
     // ==========================================
-    const validOrderSources = ["online_order", "food_aggregator", "mykeeto"];
+    const validOrderSources = ["online_order_app", "online_order_web", "food_aggregator", "mykeeto", "pos"];
     if (!validOrderSources.includes(orderSource)) {
         throw new BadRequest_1.BadRequest("Invalid order source");
     }
@@ -60,96 +65,184 @@ const checkout = async (req, res) => {
     if (!userCart.length)
         throw new BadRequest_1.BadRequest("Your cart is empty");
     const restaurantId = userCart[0].restaurantId;
+    // 🛡️ Block check: Verify user is not blocked globally or by this restaurant
+    await (0, userBlockCheck_1.validateUserNotBlocked)(userId, restaurantId);
     // ==========================================
     // 4. Get Restaurant & Business Plan
     // ==========================================
     const [restaurant] = await connection_1.db.select().from(schema_1.restaurants).where((0, drizzle_orm_1.eq)(schema_1.restaurants.id, restaurantId)).limit(1);
     if (!restaurant)
         throw new BadRequest_1.BadRequest("Restaurant not found");
-    const [plan] = await connection_1.db.select().from(schema_1.restaurantBusinessPlans).where((0, drizzle_orm_1.eq)(schema_1.restaurantBusinessPlans.restaurantId, restaurantId)).limit(1);
-    if (orderSource === "food_aggregator" && (!plan || !plan.commissionRate)) {
-        throw new BadRequest_1.BadRequest("Order failed. This restaurant has no active business plan.");
+    const [plan] = await connection_1.db.select()
+        .from(schema_1.restaurantBusinessPlans)
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.restaurantBusinessPlans.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.restaurantBusinessPlans.platformType, orderSource)))
+        .limit(1);
+    if (!plan) {
+        throw new BadRequest_1.BadRequest(`Order failed. This restaurant has no active business plan for ${orderSource}.`);
     }
     // ==========================================
-    // 5. Calculate Subtotal from Cart Snapshots
+    // 🛡️ 4.5 فحص مواعيد المطعم وإعدادات التشغيل
+    // ==========================================
+    const schedulesList = await connection_1.db.select().from(schema_1.restaurantSchedules).where((0, drizzle_orm_1.eq)(schema_1.restaurantSchedules.restaurantId, restaurantId));
+    const [settings] = await connection_1.db.select().from(schema_1.restaurantSettings).where((0, drizzle_orm_1.eq)(schema_1.restaurantSettings.restaurantId, restaurantId)).limit(1);
+    const validOrderTypes = ["delivery", "takeaway", "dine_in"];
+    if (!orderType || !validOrderTypes.includes(orderType)) {
+        throw new BadRequest_1.BadRequest("orderType is required and must be one of: delivery, takeaway, dine_in");
+    }
+    const resolvedOrderType = orderType;
+    const status = (0, restaurantFeatures_1.calculateCurrentStatus)(settings, schedulesList);
+    if (!status.isOpenNow)
+        throw new BadRequest_1.BadRequest(`Order failed. ${status.reason}`);
+    if (resolvedOrderType === "delivery" && !status.canDeliveryNow)
+        throw new BadRequest_1.BadRequest("Order failed. Delivery service is currently disabled for this restaurant.");
+    if (resolvedOrderType === "takeaway" && !status.canTakeawayNow)
+        throw new BadRequest_1.BadRequest("Order failed. Takeaway service is currently disabled for this restaurant.");
+    const defaultPreparingDuration = settings?.maxDeliveryTime ?? 30;
+    // ==========================================
+    // ⚡ 5. Batch Fetching
+    // ==========================================
+    const foodIds = [...new Set(userCart.map(item => item.foodId))];
+    const allOptionIds = [];
+    const allAddonIds = [];
+    userCart.forEach(item => {
+        let safeVars = typeof item.variations === 'string' ? JSON.parse(item.variations) : item.variations;
+        if (typeof safeVars === 'string')
+            safeVars = JSON.parse(safeVars);
+        let parsedVars = [];
+        let parsedAddons = [];
+        if (Array.isArray(safeVars)) {
+            parsedVars = safeVars;
+        }
+        else if (safeVars && typeof safeVars === 'object') {
+            parsedVars = Array.isArray(safeVars.variations) ? safeVars.variations : [];
+            parsedAddons = Array.isArray(safeVars.addons) ? safeVars.addons : [];
+        }
+        let safeAddons = typeof item.addons === 'string' ? JSON.parse(item.addons) : item.addons;
+        if (typeof safeAddons === 'string')
+            safeAddons = JSON.parse(safeAddons);
+        if (Array.isArray(safeAddons)) {
+            parsedAddons = [...parsedAddons, ...safeAddons];
+        }
+        parsedVars.forEach((v) => { if (v.optionId)
+            allOptionIds.push(v.optionId); });
+        parsedAddons.forEach((a) => { if (a.addonId || a.id)
+            allAddonIds.push(a.addonId || a.id); });
+    });
+    const [foodList, optionsList, addonsListDb] = await Promise.all([
+        connection_1.db.select().from(schema_1.food).where((0, drizzle_orm_1.inArray)(schema_1.food.id, foodIds)),
+        allOptionIds.length > 0
+            ? connection_1.db.select().from(schema_1.variationOptions).where((0, drizzle_orm_1.inArray)(schema_1.variationOptions.id, [...new Set(allOptionIds)]))
+            : [],
+        allAddonIds.length > 0
+            ? connection_1.db.select().from(schema_1.addons).where((0, drizzle_orm_1.inArray)(schema_1.addons.id, [...new Set(allAddonIds)]))
+            : []
+    ]);
+    const foodMap = new Map(foodList.map(f => [f.id, f]));
+    const optionsMap = new Map(optionsList.map(o => [o.id, o]));
+    const addonsMap = new Map(addonsListDb.map(a => [a.id, a]));
+    // ==========================================
+    // 5.1 Calculate Subtotal, Variations & Addons
     // ==========================================
     let subtotal = 0;
-    const itemsToInsert = [];
+    let initialSubtotal = 0;
+    const itemsWithData = [];
     for (const item of userCart) {
-        const basePrice = parseFloat(item.unitPrice || "0");
-        let varPrice = 0;
-        const vars = typeof item.variations === 'string' ? JSON.parse(item.variations) : item.variations;
-        // ⚠️ تأكد إن السعر في الفرونت إند اسمه additionalPrice، لو اسمه حاجة تانية غيرها هنا
-        if (Array.isArray(vars)) {
-            varPrice = vars.reduce((sum, v) => sum + parseFloat(v.additionalPrice || "0"), 0);
+        const foodItem = foodMap.get(item.foodId);
+        if (!foodItem)
+            throw new BadRequest_1.BadRequest(`Food item with ID ${item.foodId} not found`);
+        const originalBasePrice = parseFloat(foodItem.price || "0");
+        let safeVars = typeof item.variations === 'string' ? JSON.parse(item.variations) : item.variations;
+        if (typeof safeVars === 'string')
+            safeVars = JSON.parse(safeVars);
+        let parsedVariations = [];
+        let parsedAddons = [];
+        if (Array.isArray(safeVars)) {
+            parsedVariations = safeVars;
         }
-        const itemTotal = (basePrice + varPrice) * item.quantity;
+        else if (safeVars && typeof safeVars === 'object') {
+            parsedVariations = Array.isArray(safeVars.variations) ? safeVars.variations : [];
+            parsedAddons = Array.isArray(safeVars.addons) ? safeVars.addons : [];
+        }
+        let safeAddons = typeof item.addons === 'string' ? JSON.parse(item.addons) : item.addons;
+        if (typeof safeAddons === 'string')
+            safeAddons = JSON.parse(safeAddons);
+        if (Array.isArray(safeAddons)) {
+            parsedAddons = [...parsedAddons, ...safeAddons];
+        }
+        let varPrice = 0;
+        let addonPrice = 0;
+        for (const v of parsedVariations) {
+            if (v.optionId) {
+                const dbOption = optionsMap.get(v.optionId);
+                if (dbOption) {
+                    const dbOptionPrice = parseFloat((dbOption.additionalPrice || "0"));
+                    varPrice += dbOptionPrice;
+                    v.additionalPrice = dbOptionPrice.toString();
+                }
+            }
+            else {
+                varPrice += parseFloat(v.additionalPrice || v.price || v.amount || "0");
+            }
+        }
+        for (const a of parsedAddons) {
+            const addonId = a.addonId || a.id;
+            const dbAddon = addonsMap.get(addonId);
+            if (dbAddon) {
+                const dbAddonPrice = parseFloat((dbAddon.price || "0"));
+                addonPrice += dbAddonPrice;
+                a.price = dbAddonPrice.toString();
+            }
+            else {
+                addonPrice += parseFloat(a.price || "0");
+            }
+        }
+        let initialDiscountPrice = originalBasePrice;
+        if (foodItem.discount_value && Number(foodItem.discount_value) > 0) {
+            if (foodItem.discount_type === "percentage") {
+                initialDiscountPrice = Math.max(0, originalBasePrice - (originalBasePrice * Number(foodItem.discount_value) / 100));
+            }
+            else if (foodItem.discount_type === "amount" || foodItem.discount_type === "fixed") {
+                initialDiscountPrice = Math.max(0, originalBasePrice - Number(foodItem.discount_value));
+            }
+        }
+        initialSubtotal += (initialDiscountPrice + varPrice + addonPrice) * item.quantity;
+        itemsWithData.push({ cartItem: item, foodItem, originalBasePrice, varPrice, addonPrice, vars: parsedVariations, addonsList: parsedAddons });
+    }
+    const availableDiscounts = await (0, discount_1.getAvailableDiscounts)(restaurantId);
+    const discountState = { remainingMaxDiscounts: new Map(), appliedDiscounts: new Set() };
+    const itemsToInsert = [];
+    for (const data of itemsWithData) {
+        const { cartItem, foodItem, originalBasePrice, varPrice, addonPrice, vars, addonsList } = data;
+        const { price: discountedBasePrice } = (0, discount_1.applyPriorityDiscount)({ id: foodItem.id, discountType: foodItem.discount_type, discountValue: foodItem.discount_value }, originalBasePrice, initialSubtotal, availableDiscounts, discountState, true);
+        const itemTotal = roundMoney((discountedBasePrice + varPrice + addonPrice) * cartItem.quantity);
         subtotal += itemTotal;
         itemsToInsert.push({
             id: (0, uuid_1.v4)(),
-            foodId: item.foodId,
-            quantity: item.quantity,
-            basePrice: basePrice.toString(),
-            variationsPrice: varPrice.toString(),
-            totalPrice: itemTotal.toString(),
-            variations: vars, // ✅ التعديل هنا: إضافة الفارييشنز عشان متكونش null
-            note: item.note || null
+            foodId: cartItem.foodId,
+            quantity: cartItem.quantity,
+            basePrice: discountedBasePrice.toFixed(2),
+            variationsPrice: varPrice.toFixed(2),
+            addonsPrice: addonPrice.toFixed(2),
+            totalPrice: itemTotal.toFixed(2),
+            variations: vars,
+            addons: addonsList,
+            note: cartItem.note || null
         });
     }
-    const serviceFee = plan ? parseFloat(plan.serviceFee || "0") : 0;
-    let appCommission = orderSource === "food_aggregator" ? subtotal * (parseFloat(plan?.commissionRate || "0") / 100) : 0;
+    subtotal = roundMoney(subtotal);
     // ==========================================
-    // 5.5 Check Coupons and Discounts
+    // 5.2 Fees & Commission
+    // ==========================================
+    const serviceFee = parseFloat(plan.serviceFee || "0");
+    const commissionRate = parseFloat(plan.commissionRate || "0");
+    const appCommission = roundMoney(subtotal * (commissionRate / 100));
+    // ==========================================
+    // 5.5 Check Coupons
     // ==========================================
     const nowTemp = new Date();
     let totalDiscount = 0;
     let appliedCoupon = null;
-    let appliedDiscount = null;
     let isFreeDelivery = false;
-    // 1. Check Discount (discountId)
-    if (discountId) {
-        const [discount] = await connection_1.db.select().from(schema_1.discounts).where((0, drizzle_orm_1.eq)(schema_1.discounts.id, discountId)).limit(1);
-        if (!discount || !discount.isActive)
-            throw new BadRequest_1.BadRequest("Invalid or inactive discount");
-        if (discount.startDate && new Date(discount.startDate) > nowTemp)
-            throw new BadRequest_1.BadRequest("Discount not yet active");
-        if (discount.endDate && new Date(discount.endDate) < nowTemp)
-            throw new BadRequest_1.BadRequest("Discount expired");
-        if (discount.usageLimit && discount.usedCount >= discount.usageLimit)
-            throw new BadRequest_1.BadRequest("Discount usage limit reached");
-        if (parseFloat(discount.minOrderAmount || "0") > subtotal)
-            throw new BadRequest_1.BadRequest(`Minimum order amount of ${discount.minOrderAmount} required for this discount`);
-        if (!discount.isGlobal) {
-            const [discRest] = await connection_1.db.select().from(schema_1.discountRestaurants)
-                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.discountRestaurants.discountId, discountId), (0, drizzle_orm_1.eq)(schema_1.discountRestaurants.restaurantId, restaurantId))).limit(1);
-            if (!discRest)
-                throw new BadRequest_1.BadRequest("Discount is not applicable to this restaurant");
-        }
-        // Check specific foods
-        const specificFoods = await connection_1.db.select().from(schema_1.discountFoods).where((0, drizzle_orm_1.eq)(schema_1.discountFoods.discountId, discountId));
-        let applicableSubtotal = subtotal;
-        if (specificFoods.length > 0) {
-            const foodIds = specificFoods.map(f => f.foodId);
-            applicableSubtotal = itemsToInsert.filter(i => foodIds.includes(i.foodId)).reduce((sum, i) => sum + parseFloat(i.totalPrice), 0);
-            if (applicableSubtotal === 0)
-                throw new BadRequest_1.BadRequest("Discount is not applicable to any items in your cart");
-        }
-        const value = parseFloat(discount.discountValue);
-        if (discount.discountType === "fixed_amount") {
-            totalDiscount += value;
-        }
-        else if (discount.discountType === "percentage") {
-            let pDiscount = applicableSubtotal * (value / 100);
-            if (discount.maxDiscount) {
-                const max = parseFloat(discount.maxDiscount);
-                if (pDiscount > max)
-                    pDiscount = max;
-            }
-            totalDiscount += pDiscount;
-        }
-        appliedDiscount = discount;
-    }
-    // 2. Check Coupon (couponCode)
     if (couponCode) {
         const [coupon] = await connection_1.db.select().from(schema_1.coupons).where((0, drizzle_orm_1.eq)(schema_1.coupons.code, couponCode)).limit(1);
         if (!coupon || !coupon.isActive)
@@ -168,7 +261,6 @@ const checkout = async (req, res) => {
             if (!coupRest)
                 throw new BadRequest_1.BadRequest("Coupon is not applicable to this restaurant");
         }
-        // Check per-user limit
         if (coupon.perUserLimit) {
             const usages = await connection_1.db.select({ count: (0, drizzle_orm_1.sql) `count(*)` }).from(schema_1.couponUsages)
                 .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.couponUsages.couponId, coupon.id), (0, drizzle_orm_1.eq)(schema_1.couponUsages.userId, userId)));
@@ -193,181 +285,235 @@ const checkout = async (req, res) => {
         }
         appliedCoupon = coupon;
     }
+    totalDiscount = roundMoney(totalDiscount);
     // ==========================================
-    // 6. Smart Delivery Logic (Zone + Radius Hybrid)
+    // 6. Dynamic Delivery & Turf Zone Logic (Updated)
     // ==========================================
     let deliveryFee = 0;
-    if (orderType === "delivery") {
+    let resolvedZoneId = zoneId || null;
+    let resolvedBranchId = branchId || null;
+    if (resolvedOrderType === "delivery") {
         if (!addressId)
             throw new BadRequest_1.BadRequest("Delivery address is required");
-        if (!branchId)
-            throw new BadRequest_1.BadRequest("Branch is required for delivery orders");
         const [userAddress] = await connection_1.db.select().from(schema_1.addresses)
             .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.addresses.id, addressId), (0, drizzle_orm_1.eq)(schema_1.addresses.userId, userId))).limit(1);
         if (!userAddress)
             throw new BadRequest_1.BadRequest("Invalid delivery address");
-        const [branch] = await connection_1.db.select().from(schema_1.branches)
-            .where((0, drizzle_orm_1.eq)(schema_1.branches.id, branchId)).limit(1);
+        const lat = parseFloat(userAddress.lat || "0");
+        const lng = parseFloat(userAddress.lng || "0");
+        if (!lat || !lng) {
+            throw new BadRequest_1.BadRequest("Delivery address requires valid latitude and longitude coordinates.");
+        }
+        // Fetch all active delivery fees for this restaurant (including branchId)
+        const restaurantFees = await connection_1.db.select({
+            id: schema_1.restaurantZoneDeliveryFees.id,
+            zoneId: schema_1.restaurantZoneDeliveryFees.zoneId,
+            branchId: schema_1.restaurantZoneDeliveryFees.branchId,
+            deliveryFee: schema_1.restaurantZoneDeliveryFees.deliveryFee,
+            coverageType: schema_1.restaurantZoneDeliveryFees.coverageType,
+            customCoordinates: schema_1.restaurantZoneDeliveryFees.customCoordinates,
+            customRadiusKm: schema_1.restaurantZoneDeliveryFees.customRadiusKm,
+            defaultCoordinates: schema_1.zones.coordinates,
+            defaultRadiusKm: schema_1.zones.coverageAreaRadiusKm
+        })
+            .from(schema_1.restaurantZoneDeliveryFees)
+            .leftJoin(schema_1.zones, (0, drizzle_orm_1.eq)(schema_1.restaurantZoneDeliveryFees.zoneId, schema_1.zones.id))
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.restaurantZoneDeliveryFees.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.restaurantZoneDeliveryFees.status, "active"), branchId ? (0, drizzle_orm_1.eq)(schema_1.restaurantZoneDeliveryFees.branchId, branchId) : undefined));
+        let applicableFee = null;
+        let maxDeliveryFee = -1;
+        for (const fee of restaurantFees) {
+            if ((0, geo_1.isLocationInZone)(lat, lng, fee.zoneId, fee)) {
+                const currentFee = parseFloat(fee.deliveryFee || "0");
+                if (currentFee > maxDeliveryFee) {
+                    maxDeliveryFee = currentFee;
+                    applicableFee = fee;
+                }
+            }
+        }
+        if (!applicableFee) {
+            throw new BadRequest_1.BadRequest("Your delivery address is outside our covered delivery zones.");
+        }
+        resolvedZoneId = applicableFee.id || applicableFee.zoneId;
+        if (!resolvedZoneId) {
+            throw new BadRequest_1.BadRequest("No delivery zone found for this address.");
+        }
+        deliveryFee = parseFloat(applicableFee.deliveryFee || "0");
+        // 🏪 تحديد/التحقق من الفرع المخصص للـ Delivery
+        if (applicableFee.branchId) {
+            resolvedBranchId = applicableFee.branchId;
+        }
+        else if (branchId) {
+            const [selectedBranch] = await connection_1.db.select({ id: schema_1.branches.id })
+                .from(schema_1.branches)
+                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branches.id, branchId), (0, drizzle_orm_1.eq)(schema_1.branches.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.branches.status, "active")))
+                .limit(1);
+            if (!selectedBranch) {
+                throw new BadRequest_1.BadRequest("Selected branch not found or inactive.");
+            }
+            resolvedBranchId = selectedBranch.id;
+        }
+        else {
+            const [matchedBranch] = await connection_1.db.select({ id: schema_1.branches.id })
+                .from(schema_1.branches)
+                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branches.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.branches.zoneId, resolvedZoneId), (0, drizzle_orm_1.eq)(schema_1.branches.status, "active")))
+                .limit(1);
+            if (!matchedBranch) {
+                throw new BadRequest_1.BadRequest("No active branch found serving your delivery zone.");
+            }
+            resolvedBranchId = matchedBranch.id;
+        }
+    }
+    else {
+        // For takeaway or dine_in: branchId is required
+        if (!branchId)
+            throw new BadRequest_1.BadRequest("Branch is required for takeaway or dine-in orders.");
+        const [branch] = await connection_1.db.select({ id: schema_1.branches.id, zoneId: schema_1.branches.zoneId })
+            .from(schema_1.branches)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branches.id, branchId), (0, drizzle_orm_1.eq)(schema_1.branches.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.branches.status, "active")))
+            .limit(1);
         if (!branch)
-            throw new BadRequest_1.BadRequest("Invalid branch selected");
-        const resolvedZoneId = userZoneId || userAddress.zoneId;
-        const [selfFee] = await connection_1.db.select().from(schema_1.restaurantZoneDeliveryFees)
-            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.restaurantZoneDeliveryFees.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.restaurantZoneDeliveryFees.zoneId, resolvedZoneId), (0, drizzle_orm_1.eq)(schema_1.restaurantZoneDeliveryFees.status, "active"))).limit(1);
-        if (!selfFee)
-            throw new BadRequest_1.BadRequest("Restaurant does not deliver to your zone directly");
-        deliveryFee = parseFloat(selfFee.deliveryFee || "0");
+            throw new BadRequest_1.BadRequest("Invalid or inactive branch selected.");
+        resolvedBranchId = branch.id;
+        // zoneId is only meaningful for delivery orders
+        // resolvedZoneId = branch.zoneId;
     }
-    if (isFreeDelivery) {
+    if (isFreeDelivery)
         deliveryFee = 0;
+    // ==========================================
+    // 6.5 Free Delivery Offer Check (schema-based)
+    // ==========================================
+    if (!isFreeDelivery && resolvedOrderType === "delivery") {
+        const nowForOffer = new Date();
+        const [freeDeliveryOffer] = await connection_1.db
+            .select()
+            .from(schema_1.freeDeliveryOffers)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.freeDeliveryOffers.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.freeDeliveryOffers.status, "active")))
+            .limit(1);
+        if (freeDeliveryOffer) {
+            const startOk = !freeDeliveryOffer.startDate || new Date(freeDeliveryOffer.startDate) <= nowForOffer;
+            const endOk = !freeDeliveryOffer.endDate || new Date(freeDeliveryOffer.endDate) >= nowForOffer;
+            const minAmount = parseFloat(freeDeliveryOffer.minOrderAmount || "0");
+            if (startOk && endOk && subtotal >= minAmount) {
+                isFreeDelivery = true;
+                deliveryFee = 0;
+            }
+        }
     }
-    let totalAmount = subtotal + deliveryFee + serviceFee - totalDiscount;
+    let totalAmount = roundMoney(subtotal + deliveryFee + serviceFee - totalDiscount);
     if (totalAmount < 0)
         totalAmount = 0;
     const orderId = (0, uuid_1.v4)();
     const orderNumber = `ORD-${Date.now()}`;
-    // ==========================================
-    // 7. Get Customer Info
-    // ==========================================
     const [userInfo] = await connection_1.db.select({ id: schema_1.users.id, name: schema_1.users.name, phone: schema_1.users.phone, email: schema_1.users.email })
         .from(schema_1.users).where((0, drizzle_orm_1.eq)(schema_1.users.id, userId)).limit(1);
     // ==========================================
-    // 🛡️ 8. فحص محفظة العميل
-    // ==========================================
-    let userWallet = null;
-    if (isWalletPayment) {
-        const walletResult = await connection_1.db.select().from(schema_1.userWallets).where((0, drizzle_orm_1.eq)(schema_1.userWallets.userId, userId)).limit(1);
-        userWallet = walletResult[0];
-        const currentBalance = parseFloat(userWallet?.balance || "0");
-        if (!userWallet || currentBalance < totalAmount) {
-            throw new BadRequest_1.BadRequest("Insufficient wallet balance");
-        }
-    }
-    // ==========================================
-    // 🛡️ 9. جلب محفظة المطعم 
-    // ==========================================
-    let [restaurantWallet] = await connection_1.db.select().from(schema_1.restaurantWallets).where((0, drizzle_orm_1.eq)(schema_1.restaurantWallets.restaurantId, restaurantId)).limit(1);
-    // ==========================================
-    // 9.5 حساب الرقم التسلسلي اليومي للأوردر (الـ Shift)
+    // 🛡️ 10. Execute Order (Transaction)
     // ==========================================
     const now = new Date();
-    const cairoParts = new Intl.DateTimeFormat("en-US", {
-        timeZone: "Africa/Cairo",
-        year: "numeric", month: "2-digit", day: "2-digit",
-        hour: "2-digit", minute: "2-digit", hour12: false
-    }).formatToParts(now);
-    const getP = (type) => cairoParts.find(p => p.type === type)?.value || "00";
-    const cairoYear = getP("year");
-    const cairoMonth = getP("month");
-    const cairoDay = getP("day");
-    const cairoHour = getP("hour");
-    const cairoMinute = getP("minute");
-    const currentTimeStr = `${cairoHour === "24" ? "00" : cairoHour}:${cairoMinute}`;
-    const cairoDayOfWeek = new Date(`${cairoYear}-${cairoMonth}-${cairoDay}T12:00:00`).getDay();
-    let shiftStartTime;
-    const [settings] = await connection_1.db
-        .select()
-        .from(schema_1.restaurantSettings)
-        .where((0, drizzle_orm_1.eq)(schema_1.restaurantSettings.restaurantId, restaurantId))
-        .limit(1);
-    if (settings && !settings.isAlwaysOpen) {
-        const allSchedules = await connection_1.db
-            .select()
-            .from(schema_1.restaurantSchedules)
-            .where((0, drizzle_orm_1.eq)(schema_1.restaurantSchedules.restaurantId, restaurantId));
-        const todaySchedule = allSchedules.find(s => s.dayOfWeek === cairoDayOfWeek);
-        if (todaySchedule && todaySchedule.openingTime && !todaySchedule.isOffDay) {
-            if (currentTimeStr < todaySchedule.openingTime) {
-                const yesterday = new Date(`${cairoYear}-${cairoMonth}-${cairoDay}T12:00:00`);
-                yesterday.setDate(yesterday.getDate() - 1);
-                const yDayOfWeek = yesterday.getDay();
-                const yDateStr = yesterday.toISOString().slice(0, 10);
-                const ySchedule = allSchedules.find(s => s.dayOfWeek === yDayOfWeek);
-                const opTime = ySchedule?.openingTime || "00:00";
-                shiftStartTime = new Date(`${yDateStr}T${opTime}:00+02:00`);
-            }
-            else {
-                shiftStartTime = new Date(`${cairoYear}-${cairoMonth}-${cairoDay}T${todaySchedule.openingTime}:00+02:00`);
-            }
-        }
-        else {
-            shiftStartTime = new Date(`${cairoYear}-${cairoMonth}-${cairoDay}T00:00:00+02:00`);
-        }
+    // ⏰ حساب بداية دورة الترقيم اليومي للطلب بناءً على وقت إعادة تعيين المطعم (Restart Daily Order Number Time)
+    const resetTimeStr = settings?.resetDailyOrderNumberTime || "00:00";
+    const [resetHour, resetMinute] = resetTimeStr.split(":").map(Number);
+    const dailyOrderResetStart = new Date(now);
+    dailyOrderResetStart.setHours(isNaN(resetHour) ? 0 : resetHour, isNaN(resetMinute) ? 0 : resetMinute, 0, 0);
+    if (now.getTime() < dailyOrderResetStart.getTime()) {
+        dailyOrderResetStart.setDate(dailyOrderResetStart.getDate() - 1);
     }
-    else {
-        shiftStartTime = new Date(`${cairoYear}-${cairoMonth}-${cairoDay}T00:00:00+02:00`);
-    }
-    const [ordersCountResult] = await connection_1.db
-        .select({ count: (0, drizzle_orm_1.sql) `count(${schema_1.orders.id})` })
-        .from(schema_1.orders)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId), (0, drizzle_orm_1.gte)(schema_1.orders.createdAt, shiftStartTime)));
-    // 🌟 هنا الرقم التسلسلي لليوم الحالي للشيفت
-    const dailyOrderNumber = Number(ordersCountResult?.count || 0) + 1;
-    // ==========================================
+    let createdDailyOrderNumber = 1;
     await connection_1.db.transaction(async (tx) => {
-        if (isWalletPayment && userWallet) {
-            const balanceBefore = parseFloat(userWallet.balance);
-            const newBalance = balanceBefore - totalAmount;
+        // 🔒 1. Wallet deduction with FOR UPDATE
+        if (isWalletPayment) {
+            const [userWallet] = await tx.select()
+                .from(schema_1.userWallets)
+                .where((0, drizzle_orm_1.eq)(schema_1.userWallets.userId, userId))
+                .for("update");
+            const currentBalance = parseFloat(userWallet?.balance || "0");
+            if (!userWallet || currentBalance < totalAmount) {
+                throw new BadRequest_1.BadRequest("Insufficient wallet balance");
+            }
+            const newBalance = roundMoney(currentBalance - totalAmount);
             await tx.update(schema_1.userWallets)
-                .set({ balance: newBalance.toString() })
+                .set({ balance: newBalance.toFixed(2) })
                 .where((0, drizzle_orm_1.eq)(schema_1.userWallets.userId, userId));
             await tx.insert(schema_1.userWalletTransactions).values({
                 id: (0, uuid_1.v4)(),
                 userId,
                 type: "debit",
                 transactionType: "order_payment",
-                amount: totalAmount.toString(),
-                balanceBefore: balanceBefore.toString(),
+                amount: totalAmount.toFixed(2),
+                balanceBefore: currentBalance.toFixed(2),
                 reference: orderNumber,
                 status: "approved",
                 createdAt: now
             });
         }
-        // تسجيل بيانات الأوردر نفسه
+        // 🔒 2. Daily order number calculation
+        const [ordersCountResult] = await tx
+            .select({ count: (0, drizzle_orm_1.sql) `count(${schema_1.orders.id})` })
+            .from(schema_1.orders)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId), (0, drizzle_orm_1.gte)(schema_1.orders.createdAt, dailyOrderResetStart)));
+        createdDailyOrderNumber = Number(ordersCountResult?.count || 0) + 1;
+        // 3. Create order record
         await tx.insert(schema_1.orders).values({
             id: orderId,
             orderNumber,
             idempotencyKey,
             userId,
             restaurantId,
-            branchId,
+            branchId: resolvedBranchId,
+            zoneId: resolvedZoneId,
             addressId: addressId || null,
             orderSource,
-            paymentMethod, // ✅ هيفضل بالـ ID زي ما طلبت
-            orderType: orderType || "delivery",
-            subtotal: subtotal.toString(),
-            deliveryFee: deliveryFee.toString(),
-            serviceFee: serviceFee.toString(),
-            appCommission: appCommission.toString(),
-            discountAmount: totalDiscount.toString(),
+            paymentMethod,
+            orderType: resolvedOrderType,
+            subtotal: subtotal.toFixed(2),
+            deliveryFee: deliveryFee.toFixed(2),
+            serviceFee: serviceFee.toFixed(2),
+            appCommission: appCommission.toFixed(2),
+            discountAmount: totalDiscount.toFixed(2),
             couponCode: couponCode || null,
-            totalAmount: totalAmount.toString(),
+            totalAmount: totalAmount.toFixed(2),
             note: note || null,
             status: "pending",
-            dailyOrderNumber, // ✅ الرقم التسلسلي اليومي
+            dailyOrderNumber: createdDailyOrderNumber,
+            durationOrderPreparing: defaultPreparingDuration,
             createdAt: now
         });
-        // تفريغ الكارت وتسجيل الأصناف
         await tx.insert(schema_1.orderItems).values(itemsToInsert.map(i => ({ ...i, orderId })));
         await tx.delete(schema_1.cartItems).where((0, drizzle_orm_1.eq)(schema_1.cartItems.userId, userId));
-        // تسجيل استخدام الكوبون والخصم
+        // Superadmin notification
+        await tx.insert(schema_1.notifications).values({
+            recipientType: "superadmin",
+            recipientId: "superadmin",
+            title: "New Order",
+            body: `Order #${createdDailyOrderNumber} has been placed at ${restaurant?.name}.`,
+            data: { orderId, orderNumber, createdDailyOrderNumber, restaurantName: restaurant?.name }
+        });
+        // 4. Coupons and Discounts tracking
         if (appliedCoupon) {
             await tx.insert(schema_1.couponUsages).values({
                 id: (0, uuid_1.v4)(),
                 couponId: appliedCoupon.id,
                 userId,
                 orderId,
-                discountAmount: appliedCoupon.discountType === "free_delivery" ? deliveryFee.toString() : appliedCoupon.discountType === "fixed_amount" ? appliedCoupon.discountValue.toString() : totalDiscount.toString()
+                discountAmount: appliedCoupon.discountType === "free_delivery"
+                    ? deliveryFee.toFixed(2)
+                    : appliedCoupon.discountType === "fixed_amount"
+                        ? appliedCoupon.discountValue.toString()
+                        : totalDiscount.toFixed(2)
             });
             await tx.update(schema_1.coupons)
                 .set({ usedCount: (0, drizzle_orm_1.sql) `used_count + 1` })
                 .where((0, drizzle_orm_1.eq)(schema_1.coupons.id, appliedCoupon.id));
         }
-        if (appliedDiscount) {
-            await tx.update(schema_1.discounts)
-                .set({ usedCount: (0, drizzle_orm_1.sql) `used_count + 1` })
-                .where((0, drizzle_orm_1.eq)(schema_1.discounts.id, appliedDiscount.id));
+        if (discountState.appliedDiscounts.size > 0) {
+            for (const dId of Array.from(discountState.appliedDiscounts)) {
+                await tx.update(schema_1.discounts)
+                    .set({ usedCount: (0, drizzle_orm_1.sql) `used_count + 1` })
+                    .where((0, drizzle_orm_1.eq)(schema_1.discounts.id, dId));
+            }
         }
-        // تسويات محفظة المطعم
+        // 5. Restaurant wallet calculations
+        let [restaurantWallet] = await tx.select().from(schema_1.restaurantWallets).where((0, drizzle_orm_1.eq)(schema_1.restaurantWallets.restaurantId, restaurantId)).for("update");
         if (!restaurantWallet) {
             await tx.insert(schema_1.restaurantWallets).values({
                 id: (0, uuid_1.v4)(),
@@ -381,52 +527,60 @@ const checkout = async (req, res) => {
         const currentRestBalance = parseFloat(restaurantWallet.balance);
         const currentCollectedCash = parseFloat(restaurantWallet.collectedCash);
         const currentTotalEarning = parseFloat(restaurantWallet.totalEarning);
-        const restaurantEarning = subtotal + deliveryFee - appCommission;
-        const appDues = appCommission + serviceFee;
+        const restaurantEarning = roundMoney(subtotal + deliveryFee - appCommission);
+        const appDues = roundMoney(appCommission + serviceFee);
         let newRestBalance = currentRestBalance;
         let newCollectedCash = currentCollectedCash;
         if (isCashPayment) {
-            newRestBalance -= appDues;
-            newCollectedCash += totalAmount;
+            newRestBalance = roundMoney(newRestBalance - appDues);
+            newCollectedCash = roundMoney(newCollectedCash + totalAmount);
         }
         else {
-            newRestBalance += restaurantEarning;
+            newRestBalance = roundMoney(newRestBalance + restaurantEarning);
         }
         await tx.update(schema_1.restaurantWallets)
             .set({
-            balance: newRestBalance.toString(),
-            collectedCash: newCollectedCash.toString(),
-            totalEarning: (currentTotalEarning + restaurantEarning).toString()
+            balance: newRestBalance.toFixed(2),
+            collectedCash: newCollectedCash.toFixed(2),
+            totalEarning: roundMoney(currentTotalEarning + restaurantEarning).toFixed(2)
         })
             .where((0, drizzle_orm_1.eq)(schema_1.restaurantWallets.restaurantId, restaurantId));
-        const isCash = isCashPayment;
         await tx.insert(schema_1.restaurantWalletTransactions).values({
             id: (0, uuid_1.v4)(),
             restaurantId,
             type: "order_payment",
-            amount: isCash ? `-${appDues}` : `${restaurantEarning}`,
-            balanceBefore: currentRestBalance.toString(),
-            balanceAfter: newRestBalance.toString(),
+            amount: isCashPayment ? `-${appDues.toFixed(2)}` : `${restaurantEarning.toFixed(2)}`,
+            balanceBefore: currentRestBalance.toFixed(2),
+            balanceAfter: newRestBalance.toFixed(2),
             method: paymentMethodName,
             reference: orderNumber,
-            note: isCash ? "Commission deducted from cash order" : "Earnings added from digital payment",
+            note: isCashPayment ? "Commission deducted from cash order" : "Earnings added from digital payment",
             createdAt: now
         });
     });
     // ==========================================
     // 11. Send Notification to Restaurant
     // ==========================================
-    const cairoTimeFormatted = new Date(now).toLocaleTimeString("en-US", { timeZone: "Africa/Cairo" });
+    const cairoTimeFormatted = new Intl.DateTimeFormat("ar-EG", {
+        timeZone: "Africa/Cairo",
+        hour: "numeric",
+        minute: "numeric",
+        hour12: true
+    }).format(now);
     await (0, notifications_1.sendPushNotification)({
         recipientType: "restaurant",
         recipientId: restaurantId,
+        branchId: resolvedBranchId || null,
         title: "طلب جديد! 🛒",
-        body: `تم استلام طلب جديد #${orderNumber} بقيمة ${totalAmount} ج.م الساعة ${cairoTimeFormatted}.`,
+        body: `تم استلام طلب جديد #${createdDailyOrderNumber} بقيمة ${totalAmount} ج.م الساعة ${cairoTimeFormatted}.`,
         data: {
+            restaurantId,
             orderId,
             orderNumber,
+            branchId: resolvedBranchId || null,
             type: "new_order",
-            createdAt: now.toISOString()
+            createdAt: now.toISOString(),
+            dailyOrderNumber: createdDailyOrderNumber
         }
     });
     return (0, response_1.SuccessResponse)(res, {
@@ -435,6 +589,7 @@ const checkout = async (req, res) => {
             orderDetails: {
                 orderId,
                 orderNumber,
+                zoneId: resolvedZoneId,
                 subtotal,
                 deliveryFee,
                 serviceFee,
@@ -442,7 +597,8 @@ const checkout = async (req, res) => {
                 couponCode: couponCode || null,
                 totalAmount,
                 createdAt: now.toISOString(),
-                dailyOrderNumber,
+                dailyOrderNumber: createdDailyOrderNumber,
+                durationOrderPreparing: defaultPreparingDuration,
             },
             customerDetails: userInfo
         }
@@ -460,16 +616,42 @@ const getActiveOrders = async (req, res) => {
     const activeOrders = await connection_1.db
         .select({
         orderId: schema_1.orders.id,
+        id: schema_1.orders.id,
         orderNumber: schema_1.orders.orderNumber,
+        dailyOrderNumber: schema_1.orders.dailyOrderNumber,
+        restaurantId: schema_1.orders.restaurantId,
+        branchId: schema_1.orders.branchId,
+        addressId: schema_1.orders.addressId,
         restaurantName: schema_1.restaurants.name,
         restaurantImage: schema_1.restaurants.logo,
+        orderType: schema_1.orders.orderType,
+        orderSource: schema_1.orders.orderSource,
+        paymentMethod: schema_1.orders.paymentMethod,
+        subtotal: schema_1.orders.subtotal,
+        deliveryFee: schema_1.orders.deliveryFee,
+        serviceFee: schema_1.orders.serviceFee,
+        appCommission: schema_1.orders.appCommission,
+        discountAmount: schema_1.orders.discountAmount,
+        couponCode: schema_1.orders.couponCode,
         totalAmount: schema_1.orders.totalAmount,
         status: schema_1.orders.status,
+        durationOrderPreparing: schema_1.orders.durationOrderPreparing,
+        note: schema_1.orders.note,
+        cancelReasonId: schema_1.orders.cancelReasonId,
+        cancelReason: schema_1.orders.cancelReason,
+        cancelReasonType: schema_1.orders.cancelReasonType,
+        deliveryMan: {
+            id: schema_1.deliveryMen.id,
+            name: schema_1.deliveryMen.name,
+            phone: schema_1.deliveryMen.phone,
+        },
         createdAt: schema_1.orders.createdAt,
+        updatedAt: schema_1.orders.updatedAt,
         itemsCount: (0, drizzle_orm_1.sql) `(SELECT COUNT(*) FROM order_items WHERE order_items.order_id = ${schema_1.orders.id})`
     })
         .from(schema_1.orders)
         .leftJoin(schema_1.restaurants, (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, schema_1.restaurants.id))
+        .leftJoin(schema_1.deliveryMen, (0, drizzle_orm_1.eq)(schema_1.orders.deliveryManId, schema_1.deliveryMen.id))
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orders.userId, userId), restaurantId ? (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, String(restaurantId)) : undefined, 
     // 🔥 تجلب فقط الطلبات التي لم تنتهِ بعد
     (0, drizzle_orm_1.inArray)(schema_1.orders.status, ["pending", "accepted", "preparing", "out_for_delivery"])))
@@ -488,16 +670,44 @@ const getOrderHistory = async (req, res) => {
     const historyOrders = await connection_1.db
         .select({
         orderId: schema_1.orders.id,
+        id: schema_1.orders.id,
         orderNumber: schema_1.orders.orderNumber,
+        dailyOrderNumber: schema_1.orders.dailyOrderNumber,
+        restaurantId: schema_1.orders.restaurantId,
+        branchId: schema_1.orders.branchId,
+        addressId: schema_1.orders.addressId,
         restaurantName: schema_1.restaurants.name,
         restaurantImage: schema_1.restaurants.logo,
+        orderType: schema_1.orders.orderType,
+        orderSource: schema_1.orders.orderSource,
+        paymentMethod: schema_1.orders.paymentMethod,
+        subtotal: schema_1.orders.subtotal,
+        deliveryFee: schema_1.orders.deliveryFee,
+        serviceFee: schema_1.orders.serviceFee,
+        appCommission: schema_1.orders.appCommission,
+        discountAmount: schema_1.orders.discountAmount,
+        couponCode: schema_1.orders.couponCode,
         totalAmount: schema_1.orders.totalAmount,
         status: schema_1.orders.status,
+        durationOrderPreparing: schema_1.orders.durationOrderPreparing,
+        rating: schema_1.orders.rating,
+        ratingComment: schema_1.orders.ratingComment,
+        note: schema_1.orders.note,
+        cancelReasonId: schema_1.orders.cancelReasonId,
+        cancelReason: schema_1.orders.cancelReason,
+        cancelReasonType: schema_1.orders.cancelReasonType,
+        deliveryMan: {
+            id: schema_1.deliveryMen.id,
+            name: schema_1.deliveryMen.name,
+            phone: schema_1.deliveryMen.phone,
+        },
         createdAt: schema_1.orders.createdAt,
+        updatedAt: schema_1.orders.updatedAt,
         itemsCount: (0, drizzle_orm_1.sql) `(SELECT COUNT(*) FROM order_items WHERE order_items.order_id = ${schema_1.orders.id})`
     })
         .from(schema_1.orders)
         .leftJoin(schema_1.restaurants, (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, schema_1.restaurants.id))
+        .leftJoin(schema_1.deliveryMen, (0, drizzle_orm_1.eq)(schema_1.orders.deliveryManId, schema_1.deliveryMen.id))
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orders.userId, userId), restaurantId ? (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, String(restaurantId)) : undefined, 
     // 🔥 تجلب فقط الطلبات التي انتهت (تم إضافة المسترجع والملغى)
     (0, drizzle_orm_1.inArray)(schema_1.orders.status, ["delivered", "cancelled", "refund"])))
@@ -516,23 +726,43 @@ const getOrderDetails = async (req, res) => {
     const orderInfo = await connection_1.db
         .select({
         orderId: schema_1.orders.id,
+        id: schema_1.orders.id,
         orderNumber: schema_1.orders.orderNumber,
+        dailyOrderNumber: schema_1.orders.dailyOrderNumber,
         status: schema_1.orders.status,
         createdAt: schema_1.orders.createdAt,
-        paymentMethod: schema_1.orders.paymentMethod, // 👈 تم التعديل هنا (كانت orderItems بالخطأ)
+        updatedAt: schema_1.orders.updatedAt,
+        paymentMethod: schema_1.orders.paymentMethod,
         orderType: schema_1.orders.orderType,
+        orderSource: schema_1.orders.orderSource,
         subtotal: schema_1.orders.subtotal,
         deliveryFee: schema_1.orders.deliveryFee,
         serviceFee: schema_1.orders.serviceFee,
+        appCommission: schema_1.orders.appCommission,
         discountAmount: schema_1.orders.discountAmount,
         couponCode: schema_1.orders.couponCode,
         totalAmount: schema_1.orders.totalAmount,
+        durationOrderPreparing: schema_1.orders.durationOrderPreparing,
+        cancelReasonId: schema_1.orders.cancelReasonId,
+        cancelReason: schema_1.orders.cancelReason,
+        cancelReasonType: schema_1.orders.cancelReasonType,
         note: schema_1.orders.note,
+        rating: schema_1.orders.rating,
+        ratingComment: schema_1.orders.ratingComment,
+        restaurantId: schema_1.orders.restaurantId,
+        branchId: schema_1.orders.branchId,
+        addressId: schema_1.orders.addressId,
         restaurantName: schema_1.restaurants.name,
-        restaurantImage: schema_1.restaurants.logo
+        restaurantImage: schema_1.restaurants.logo,
+        deliveryMan: {
+            id: schema_1.deliveryMen.id,
+            name: schema_1.deliveryMen.name,
+            phone: schema_1.deliveryMen.phone,
+        },
     })
         .from(schema_1.orders)
         .leftJoin(schema_1.restaurants, (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, schema_1.restaurants.id))
+        .leftJoin(schema_1.deliveryMen, (0, drizzle_orm_1.eq)(schema_1.orders.deliveryManId, schema_1.deliveryMen.id))
         .where((0, drizzle_orm_1.eq)(schema_1.orders.id, orderId))
         .limit(1);
     if (!orderInfo.length) {
@@ -602,9 +832,11 @@ const cancelOrder = async (req, res) => {
         throw new Errors_1.UnauthorizedError("Unauthenticated");
     const userId = req.user.id;
     const { orderId } = req.params;
-    const { cancelReasonId } = req.body;
-    if (!cancelReasonId)
-        throw new BadRequest_1.BadRequest("Cancel reason ID is required");
+    const { cancelReasonId, customReason } = req.body;
+    const inputCustomReason = customReason;
+    if (!cancelReasonId && (!inputCustomReason || typeof inputCustomReason !== "string" || inputCustomReason.trim() === "")) {
+        throw new BadRequest_1.BadRequest("Cancel reason or cancel reason ID is required");
+    }
     // 1. جلب الطلب والتأكد أنه للمستخدم وأنه قابل للإلغاء
     const [order] = await connection_1.db.select().from(schema_1.orders).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orders.id, orderId), (0, drizzle_orm_1.eq)(schema_1.orders.userId, userId))).limit(1);
     if (!order)
@@ -613,17 +845,29 @@ const cancelOrder = async (req, res) => {
         throw new BadRequest_1.BadRequest("Order cannot be cancelled at this stage");
     }
     // 2. التحقق من سبب الإلغاء
-    const [reason] = await connection_1.db.select().from(schema_1.selectReasons).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.selectReasons.id, cancelReasonId), (0, drizzle_orm_1.eq)(schema_1.selectReasons.type, "user"))).limit(1);
-    if (!reason)
-        throw new BadRequest_1.BadRequest("Invalid cancel reason for user");
+    let finalReasonId = null;
+    let finalReasonText = null;
+    if (cancelReasonId) {
+        const [reason] = await connection_1.db.select().from(schema_1.selectReasons).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.selectReasons.id, cancelReasonId), (0, drizzle_orm_1.eq)(schema_1.selectReasons.type, "user"))).limit(1);
+        if (!reason)
+            throw new BadRequest_1.BadRequest("Invalid cancel reason for user");
+        finalReasonId = reason.id;
+        finalReasonText = (inputCustomReason && inputCustomReason.trim()) ? inputCustomReason.trim() : reason.name;
+    }
+    else {
+        finalReasonId = null;
+        finalReasonText = inputCustomReason.trim();
+    }
     // 3. تحديث حالة الطلب وإرجاع المبالغ المالية (إلغاء أرباح المطعم والعمولة)
     await connection_1.db.transaction(async (tx) => {
         // تحديث الطلب
         await tx.update(schema_1.orders)
             .set({
             status: "cancelled",
-            cancelReasonId: reason.id,
-            cancelReason: reason.name
+            cancelReasonId: finalReasonId,
+            cancelReason: finalReasonText,
+            cancelReasonType: "user",
+            updatedAt: new Date()
         })
             .where((0, drizzle_orm_1.eq)(schema_1.orders.id, orderId));
         // حسابات المبالغ التي تم دفعها أو خصمها
@@ -696,3 +940,17 @@ const cancelOrder = async (req, res) => {
     return (0, response_1.SuccessResponse)(res, { message: "Order cancelled successfully" });
 };
 exports.cancelOrder = cancelOrder;
+// ==========================================
+// 7. جلب أسباب الإلغاء الخاصة بالمستخدم
+// ==========================================
+const getUserCancelReasons = async (req, res) => {
+    const reasons = await connection_1.db
+        .select()
+        .from(schema_1.selectReasons)
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.selectReasons.status, "active"), (0, drizzle_orm_1.eq)(schema_1.selectReasons.type, "user")));
+    return (0, response_1.SuccessResponse)(res, {
+        message: "Active cancel reasons fetched successfully",
+        data: reasons
+    });
+};
+exports.getUserCancelReasons = getUserCancelReasons;

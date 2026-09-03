@@ -1,0 +1,10 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const catchAsync_1 = require("../../utils/catchAsync");
+const hasPermission_1 = require("../../middlewares/hasPermission");
+const pointsOrders_1 = require("../../controllers/admin/pointsOrders");
+const router = (0, express_1.Router)();
+router.get("/verify/:code", (0, hasPermission_1.hasPermission)("orders", "read"), (0, catchAsync_1.catchAsync)(pointsOrders_1.getOrderByRedeemCode));
+router.post("/approve", (0, hasPermission_1.hasPermission)("orders", "update"), (0, catchAsync_1.catchAsync)(pointsOrders_1.approveRedeemCode));
+exports.default = router;

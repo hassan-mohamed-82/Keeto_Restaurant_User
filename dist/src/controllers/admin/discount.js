@@ -8,6 +8,7 @@ const response_1 = require("../../utils/response");
 const BadRequest_1 = require("../../Errors/BadRequest");
 const NotFound_1 = require("../../Errors/NotFound");
 const uuid_1 = require("uuid");
+const handleImages_1 = require("../../utils/handleImages");
 // ==========================================
 // 1. Create Discount (With Switch Logic)
 // ==========================================
@@ -15,7 +16,7 @@ const createDiscount = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Unauthorized");
-    const { name, nameAr, nameFr, discountType, discountValue, maxDiscount, minOrderAmount, usageLimit, startDate, endDate, isActive, foodIds } = req.body;
+    const { name, nameAr, nameFr, discountType, discountValue, maxDiscount, minOrderAmount, usageLimit, startDate, endDate, isActive, foodIds, logo } = req.body;
     if (!name)
         throw new BadRequest_1.BadRequest("Discount name is required");
     if (!discountType)
@@ -24,6 +25,10 @@ const createDiscount = async (req, res) => {
         throw new BadRequest_1.BadRequest("Discount value is required");
     const shouldBeActive = isActive !== undefined ? isActive : true;
     const discountId = (0, uuid_1.v4)();
+    let FinalLogo = logo;
+    if (logo && logo.startsWith("data:image")) {
+        FinalLogo = await (0, handleImages_1.saveBase64Image)(logo, req, "discounts");
+    }
     // 💡 منطق الـ Switch: إذا كان الخصم الجديد نشطاً، نقوم بإطفاء كل الخصومات النشطة حالياً للمطعم
     if (shouldBeActive) {
         // أ) جلب الـ IDs الخاصة بخصومات هذا المطعم فقط
@@ -55,7 +60,8 @@ const createDiscount = async (req, res) => {
         startDate: startDate ? new Date(startDate) : null,
         endDate: endDate ? new Date(endDate) : null,
         isActive: shouldBeActive,
-        isGlobal: false
+        isGlobal: false,
+        logo: FinalLogo || null
     });
     // 2. ربطه بالمطعم الحالي
     await connection_1.db.insert(schema_1.discountRestaurants).values({
@@ -156,7 +162,11 @@ const updateDiscount = async (req, res) => {
         .limit(1);
     if (!existing)
         throw new NotFound_1.NotFound("Discount not found or cannot be modified");
-    const { name, nameAr, nameFr, discountType, discountValue, maxDiscount, minOrderAmount, usageLimit, startDate, endDate, isActive, foodIds } = req.body;
+    const { name, nameAr, nameFr, discountType, discountValue, maxDiscount, minOrderAmount, usageLimit, startDate, endDate, isActive, foodIds, logo } = req.body;
+    let FinalLogo = logo;
+    if (logo && logo.startsWith("data:image")) {
+        FinalLogo = await (0, handleImages_1.saveBase64Image)(logo, req, "discounts");
+    }
     // 💡 أيضاً في التحديث: إذا قام بتحويل الحالة إلى active، نطفئ باقي الخصومات
     if (isActive === true && !existing.discounts.isActive) {
         const myDiscounts = await connection_1.db
@@ -195,6 +205,8 @@ const updateDiscount = async (req, res) => {
         updateData.endDate = endDate ? new Date(endDate) : null;
     if (isActive !== undefined)
         updateData.isActive = isActive;
+    if (logo !== undefined)
+        updateData.logo = FinalLogo;
     await connection_1.db.update(schema_1.discounts).set(updateData).where((0, drizzle_orm_1.eq)(schema_1.discounts.id, id));
     if (foodIds !== undefined) {
         await connection_1.db.delete(schema_1.discountFoods).where((0, drizzle_orm_1.eq)(schema_1.discountFoods.discountId, id));

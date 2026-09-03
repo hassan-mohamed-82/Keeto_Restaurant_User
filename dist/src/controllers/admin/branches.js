@@ -13,7 +13,7 @@ const createBranch = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID missing");
-    const { name, address, phoneNumber, zoneId, nameAr, nameFr, addressAr, addressFr, deliveryRadiusKm, lat, lng } = req.body;
+    const { name, address, phoneNumber, zoneId, nameAr, nameFr, addressAr, addressFr, deliveryRadiusKm, lat, lng, status, inactiveReason } = req.body;
     if (!name || !address || !zoneId) {
         throw new BadRequest_1.BadRequest("Missing required fields (name, address, zoneId)");
     }
@@ -35,7 +35,8 @@ const createBranch = async (req, res) => {
         lng,
         phoneNumber: phoneNumber || null,
         zoneId,
-        status: "active"
+        status: status || "active",
+        inactiveReason: status === "inactive" ? inactiveReason : null,
     });
     return (0, response_1.SuccessResponse)(res, { message: "Branch created successfully", data: { id } }, 201);
 };
@@ -57,6 +58,7 @@ const getMyBranches = async (req, res) => {
         lng: schema_1.branches.lng,
         phoneNumber: schema_1.branches.phoneNumber,
         status: schema_1.branches.status,
+        inactiveReason: schema_1.branches.inactiveReason,
         zone: {
             id: schema_1.zones.id,
             name: schema_1.zones.name,
@@ -88,6 +90,7 @@ const getBranchById = async (req, res) => {
         lng: schema_1.branches.lng,
         phoneNumber: schema_1.branches.phoneNumber,
         status: schema_1.branches.status,
+        inactiveReason: schema_1.branches.inactiveReason,
         zone: {
             id: schema_1.zones.id,
             name: schema_1.zones.name,
@@ -106,7 +109,7 @@ const getBranchById = async (req, res) => {
 exports.getBranchById = getBranchById;
 const updateBranch = async (req, res) => {
     const { id } = req.params;
-    const { name, address, phoneNumber, zoneId, status, nameAr, nameFr, addressAr, addressFr, deliveryRadiusKm, lat, lng } = req.body;
+    const { name, address, phoneNumber, zoneId, status, nameAr, nameFr, addressAr, addressFr, deliveryRadiusKm, lat, lng, inactiveReason } = req.body;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID missing");
@@ -146,6 +149,8 @@ const updateBranch = async (req, res) => {
     }
     if (status)
         updateData.status = status;
+    if (inactiveReason !== undefined && status === "inactive")
+        updateData.inactiveReason = inactiveReason;
     await connection_1.db
         .update(schema_1.branches)
         .set(updateData)
@@ -171,10 +176,13 @@ const deleteBranch = async (req, res) => {
 exports.deleteBranch = deleteBranch;
 const updateBranchStatus = async (req, res) => {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, inactiveReason } = req.body;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID missing");
+    // if (status === "inactive" && !reason) {
+    //     throw new BadRequest("A reason is required when setting branch status to inactive");
+    // }
     const existingBranch = await connection_1.db
         .select()
         .from(schema_1.branches)
@@ -184,7 +192,10 @@ const updateBranchStatus = async (req, res) => {
         throw new NotFound_1.NotFound("Branch not found or you don't have permission to edit it");
     await connection_1.db
         .update(schema_1.branches)
-        .set({ status })
+        .set({
+        status,
+        inactiveReason: status === "inactive" ? inactiveReason : null,
+    })
         .where((0, drizzle_orm_1.eq)(schema_1.branches.id, id));
     return (0, response_1.SuccessResponse)(res, { message: "Branch status updated successfully" });
 };

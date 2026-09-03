@@ -3,8 +3,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.foodIngredients = exports.ingredients = exports.ingredientCategories = void 0;
 const mysql_core_1 = require("drizzle-orm/mysql-core");
 const drizzle_orm_1 = require("drizzle-orm");
-const restaurants_1 = require("../admin/restaurants"); // تأكد من المسارات
-const food_1 = require("../admin/food"); // تأكد من المسارات
+const restaurants_1 = require("../admin/restaurants");
+const food_1 = require("../admin/food");
 // 1. جدول تصنيفات المكونات (مثال: فواكه، ألبان، لحوم، بهارات)
 exports.ingredientCategories = (0, mysql_core_1.mysqlTable)("ingredient_categories", {
     id: (0, mysql_core_1.char)("id", { length: 36 }).primaryKey().default((0, drizzle_orm_1.sql) `(UUID())`),
@@ -33,4 +33,6 @@ exports.foodIngredients = (0, mysql_core_1.mysqlTable)("food_ingredients", {
     ingredientId: (0, mysql_core_1.char)("ingredient_id", { length: 36 }).references(() => exports.ingredients.id).notNull(),
     // 👇 (اختياري) لو عايز تسمح لليوزر يطلب الأكلة بدون المكون ده (زي "بدون بصل")
     isRemovable: (0, mysql_core_1.boolean)("is_removable").default(false),
+    // هل هذا المكون أساسي لتوفر الأكلة؟ لو true، غياب المكون = الأكلة غير متاحة
+    isEssential: (0, mysql_core_1.boolean)("is_essential").default(true).notNull(),
 });

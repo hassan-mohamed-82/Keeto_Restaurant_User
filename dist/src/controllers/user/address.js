@@ -20,7 +20,7 @@ const addUserAddress = async (req, res) => {
         if (!req.user)
             throw new Errors_1.UnauthorizedError("Unauthenticated");
         const userId = req.user.id;
-        const { lat, lng, type, title, street, number, floor, zoneId } = req.body;
+        const { lat, lng, type, title, street, number, floor, zoneId, apartment } = req.body;
         const newAddress = await connection_1.db.insert(schema_1.addresses).values({
             id: (0, uuid_1.v4)(),
             userId,
@@ -32,6 +32,7 @@ const addUserAddress = async (req, res) => {
             number,
             zoneId,
             floor,
+            apartment,
         });
         return (0, response_1.SuccessResponse)(res, { message: "Address added successfully", data: newAddress });
     }
@@ -60,14 +61,14 @@ const updateUserAddress = async (req, res) => {
         throw new Errors_1.UnauthorizedError("Unauthenticated");
     const userId = req.user.id;
     const { addressId } = req.params;
-    const { lat, lng, type, title, street, number, floor, zoneId } = req.body;
+    const { lat, lng, type, title, street, number, floor, zoneId, apartment } = req.body;
     const existingAddress = await connection_1.db.select().from(schema_1.addresses).where((0, drizzle_orm_1.eq)(schema_1.addresses.id, addressId)).limit(1);
     if (!existingAddress[0]) {
         throw new Errors_1.NotFound("Address not found");
     }
     await connection_1.db
         .update(schema_1.addresses)
-        .set({ lat, lng, type, title, street, number, floor, zoneId })
+        .set({ lat, lng, type, title, street, number, floor, zoneId, apartment })
         .where((0, drizzle_orm_1.eq)(schema_1.addresses.id, addressId));
     return (0, response_1.SuccessResponse)(res, { message: "Address updated successfully" });
 };
