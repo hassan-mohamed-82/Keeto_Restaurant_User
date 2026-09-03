@@ -1,12 +1,21 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { restrauntadmin, rolesadmin, branches } from "../../models/schema";
+import { restrauntadmin, role_restaurant, branches } from "../../models/schema";
 import { eq, and, ne } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { NotFound } from "../../Errors/NotFound";
 import { BadRequest } from "../../Errors/BadRequest";
 import bcrypt from "bcrypt";
 import { v4 as uuidv4 } from "uuid";
+
+
+// Get all roles
+export const getAllRoles = async (req: Request, res: Response) => {
+    const restaurantId = (req.user?.restaurantId || req.user?.id || req.user?.branchId) as string;
+    if (!restaurantId) throw new BadRequest("Restaurant context missing");
+    const rolesList = await db.select().from(role_restaurant).where(eq(role_restaurant.restaurantId, restaurantId));
+    return SuccessResponse(res, { message: "Get all roles success", data: rolesList });
+};
 
 // ==========================================
 // 1. إضافة موظف جديد (Staff / Branch Manager)
@@ -39,7 +48,7 @@ export const createStaff = async (req: Request, res: Response) => {
 
     // لو تم إرسال Role ID نتأكد إنه موجود
     if (roleId) {
-        const roleExists = await db.select().from(rolesadmin).where(eq(rolesadmin.id, roleId)).limit(1);
+        const roleExists = await db.select().from(role_restaurant).where(eq(role_restaurant.id, roleId)).limit(1);
         if (!roleExists[0]) throw new BadRequest("Role not found");
     }
 
@@ -84,13 +93,13 @@ export const getAllStaff = async (req: Request, res: Response) => {
                 name: branches.name,
             },
             role: {
-                id: rolesadmin.id,
-                name: rolesadmin.name,
+                id: role_restaurant.id,
+                name: role_restaurant.name,
             },
         })
         .from(restrauntadmin)
         .leftJoin(branches, eq(restrauntadmin.branchId, branches.id))
-        .leftJoin(rolesadmin, eq(restrauntadmin.roleId, rolesadmin.id))
+        .leftJoin(role_restaurant, eq(restrauntadmin.roleId, role_restaurant.id))
         .where(
             and(
                 eq(restrauntadmin.restaurantId, restaurantId),

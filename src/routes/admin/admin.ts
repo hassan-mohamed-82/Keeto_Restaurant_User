@@ -1,10 +1,15 @@
 import { Router } from "express";
 import { hasPermission } from "../../middlewares/hasPermission";
-import { createStaff, deleteStaff, getAllStaff, getStaffById, updateStaff } from "../../controllers/admin/restrauntadmin";
+import {
+    createStaff, deleteStaff, getAllStaff, getStaffById, updateStaff, getAllRoles
+} from "../../controllers/admin/restrauntadmin";
 import { updateFcmToken } from "../../controllers/admin/fcmToken";
 import { catchAsync } from "../../utils/catchAsync";
 
 const router = Router();
+
+//Get all roles
+router.get("/roles", hasPermission("admins", "read"), catchAsync(getAllRoles));
 
 // ✅ Create staff - يحتاج صلاحية create (admins module)
 router.post("/", hasPermission("admins", "create"), catchAsync(createStaff));

@@ -25,12 +25,9 @@ export const MODULES = [
     "restaurantZoneDeliveryfees",
     "restaurant QR",
     "restaurantadmin",
-    "roles",
     "subcategory",
     "zone",
-    "delivery_man"
-
-    
+    "delivery_man" 
 ] as const;
 
 export const ACTION_NAMES = ["View", "Add", "Edit", "Delete", "Status"] as const;
