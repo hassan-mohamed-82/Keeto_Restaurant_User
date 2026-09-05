@@ -38,6 +38,29 @@ export interface UpsertFoodPricingInput {
 }
 
 export interface GetMenuQueryParams {
-    branchId: string;
-    serviceModule?: ServiceModule;
+    branchId?: string | string[];
+    branchIds?: string | string[];
+    serviceModule?: ServiceModule | ServiceModule[] | "all";
+    serviceModules?: ServiceModule | ServiceModule[] | "all";
+    subcategoryId?: string;
+    categoryId?: string;
+    restaurantId?: string;
 }
+
+export interface BatchProductChannelPriceInput {
+    foodId: string;
+    branchId?: string | string[] | null;
+    serviceModule: ServiceModule | ServiceModule[] | "all" | string | string[];
+    price: number | string;
+    status?: "active" | "inactive";
+}
+
+export interface BatchVariantChannelPriceInput {
+    variantId: string;
+    branchId?: string | string[] | null;
+    serviceModule: ServiceModule | ServiceModule[] | "all" | string | string[];
+    price: number | string;
+    status?: "active" | "inactive";
+}
+
+
