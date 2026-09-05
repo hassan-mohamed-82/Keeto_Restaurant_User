@@ -915,27 +915,37 @@ export const upsertProductChannelPricing = async (req: Request, res: Response) =
             if (entry.price === undefined || entry.price === null || entry.price === "")
                 throw new BadRequest("price is required");
 
-            // branchId can be an array of branch IDs, single branch ID, null (global), or undefined
+            // branchId can be an array of branch IDs, "all" (all branches + global), single branch ID, null (global), or undefined
             const rawBranch = entry.branchId;
             let targetBranches: Array<string | null>;
             if (rawBranch === undefined || rawBranch === null || rawBranch === "" || rawBranch === "global") {
                 targetBranches = [null];
             } else {
-                const parsed = parseArrayParam(rawBranch);
-                targetBranches = parsed.length > 0 ? parsed : [null];
+                const parsedBranches = parseArrayParam(rawBranch);
+                if (parsedBranches.includes("all")) {
+                    const allRestaurantBranches = await tx
+                        .select({ id: branches.id })
+                        .from(branches)
+                        .where(and(eq(branches.restaurantId, restaurantId), eq(branches.status, "active")));
+                    const branchIds = allRestaurantBranches.map((b: any) => b.id);
+                    targetBranches = [...branchIds, null];
+                } else {
+                    targetBranches = parsedBranches.length > 0 ? parsedBranches : [null];
+                }
             }
 
             // serviceModule can be an array ("takeaway", "delivery"), single string, or "all"
             const rawModule = entry.serviceModule;
             let targetModules: ServiceModule[];
-            if (!rawModule || rawModule === "all" || (Array.isArray(rawModule) && rawModule.includes("all" as any))) {
+            const parsedModules = parseArrayParam(rawModule);
+            if (!rawModule || rawModule === "all" || parsedModules.includes("all" as any) || parsedModules.length === 0) {
                 targetModules = ["takeaway", "dine_in", "delivery"];
             } else {
-                targetModules = parseArrayParam(rawModule) as ServiceModule[];
+                targetModules = parsedModules as ServiceModule[];
             }
 
             if (targetModules.length === 0)
-                throw new BadRequest("serviceModule is required (e.g. takeaway, dine_in, delivery)");
+                throw new BadRequest("serviceModule is required (e.g. takeaway, dine_in, delivery, all)");
 
             const priceVal = String(entry.price);
             const statusVal: "active" | "inactive" = entry.status === "inactive" ? "inactive" : "active";
@@ -1002,27 +1012,37 @@ export const upsertVariantChannelPricing = async (req: Request, res: Response) =
             if (entry.price === undefined || entry.price === null || entry.price === "")
                 throw new BadRequest("price is required");
 
-            // branchId can be an array of branch IDs, single branch ID, null (global), or undefined
+            // branchId can be an array of branch IDs, "all" (all branches + global), single branch ID, null (global), or undefined
             const rawBranch = entry.branchId;
             let targetBranches: Array<string | null>;
             if (rawBranch === undefined || rawBranch === null || rawBranch === "" || rawBranch === "global") {
                 targetBranches = [null];
             } else {
-                const parsed = parseArrayParam(rawBranch);
-                targetBranches = parsed.length > 0 ? parsed : [null];
+                const parsedBranches = parseArrayParam(rawBranch);
+                if (parsedBranches.includes("all")) {
+                    const allRestaurantBranches = await tx
+                        .select({ id: branches.id })
+                        .from(branches)
+                        .where(and(eq(branches.restaurantId, restaurantId), eq(branches.status, "active")));
+                    const branchIds = allRestaurantBranches.map((b: any) => b.id);
+                    targetBranches = [...branchIds, null];
+                } else {
+                    targetBranches = parsedBranches.length > 0 ? parsedBranches : [null];
+                }
             }
 
             // serviceModule can be an array ("takeaway", "delivery"), single string, or "all"
             const rawModule = entry.serviceModule;
             let targetModules: ServiceModule[];
-            if (!rawModule || rawModule === "all" || (Array.isArray(rawModule) && rawModule.includes("all" as any))) {
+            const parsedModules = parseArrayParam(rawModule);
+            if (!rawModule || rawModule === "all" || parsedModules.includes("all" as any) || parsedModules.length === 0) {
                 targetModules = ["takeaway", "dine_in", "delivery"];
             } else {
-                targetModules = parseArrayParam(rawModule) as ServiceModule[];
+                targetModules = parsedModules as ServiceModule[];
             }
 
             if (targetModules.length === 0)
-                throw new BadRequest("serviceModule is required (e.g. takeaway, dine_in, delivery)");
+                throw new BadRequest("serviceModule is required (e.g. takeaway, dine_in, delivery, all)");
 
             const priceVal = String(entry.price);
             const statusVal: "active" | "inactive" = entry.status === "inactive" ? "inactive" : "active";
@@ -1069,5 +1089,6 @@ export const upsertVariantChannelPricing = async (req: Request, res: Response) =
 
     return SuccessResponse(res, { message: "Variant channel pricing saved successfully" });
 };
+
 
 
