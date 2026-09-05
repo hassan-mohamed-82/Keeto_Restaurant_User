@@ -1571,9 +1571,9 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
     const doc = new PDFDocument({ margin: 20, size: [250, 600] });
 
     // تسجيل خط يدعم اللغة العربية بكافة تشكيلاتها
-    const fontPath = path.join(process.cwd(), 'assets', 'fonts', 'Arial.ttf');
     const cairoPath = path.join(process.cwd(), 'assets', 'fonts', 'Cairo-Regular.ttf');
-    const chosenFontPath = fs.existsSync(fontPath) ? fontPath : (fs.existsSync(cairoPath) ? cairoPath : null);
+    const fontPath = path.join(process.cwd(), 'assets', 'fonts', 'Arial.ttf');
+    const chosenFontPath = fs.existsSync(cairoPath) ? cairoPath : (fs.existsSync(fontPath) ? fontPath : null);
 
     if (chosenFontPath) {
         doc.registerFont('CairoFont', chosenFontPath);
@@ -1640,8 +1640,8 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
             if (addrBuilding) details += `Bldg: ${addrBuilding}`;
             if (addrFloor) details += `${details ? ' | ' : ''}Floor: ${addrFloor}`;
             if (addrApartment) details += `${details ? ' | ' : ''}Apt: ${addrApartment}`;
-            if (addrLandmark) details += `${details ? ' | ' : ''}${fixArabicText(addrLandmark)}`;
             if (details) doc.text(details);
+            if (addrLandmark) doc.text(`Landmark: ${fixArabicText(addrLandmark)}`);
             if (addrFull && !addrStreet) doc.text(`Address: ${fixArabicText(addrFull)}`);
 
             doc.moveDown(0.5);
