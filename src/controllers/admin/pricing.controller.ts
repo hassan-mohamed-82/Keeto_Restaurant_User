@@ -399,21 +399,48 @@ export const upsertFoodWithPricing = async (req: Request, res: Response) => {
 // ============================================================================
 export const getMenuWithDynamicPricing = async (req: Request, res: Response) => {
     // 1. Extract IDs from req.query (with fallback to req.body or JWT token)
-    const branchParam =
-        req.query.branchIds ||
-        req.query.branchId ||
-        req.body?.branchIds ||
-        req.body?.branchId;
-    const branchIds = parseArrayParam(branchParam);
-    if (branchIds.length === 0 && req.user?.branchId) {
-        branchIds.push(req.user.branchId);
-    }
-
     let restaurantId =
         ((req.query.restaurantId as string) ||
             req.body?.restaurantId ||
             req.user?.restaurantId ||
             "")?.trim() || null;
+
+    const branchParam =
+        req.query.branchIds ||
+        req.query.branchId ||
+        req.body?.branchIds ||
+        req.body?.branchId;
+    const rawBranchIds = parseArrayParam(branchParam);
+    if (rawBranchIds.length === 0 && req.user?.branchId) {
+        rawBranchIds.push(req.user.branchId);
+    }
+
+    let branchIds: string[] = [];
+    if (rawBranchIds.includes("all")) {
+        if (!restaurantId && req.user?.id) {
+            restaurantId = req.user.id;
+        }
+        if (restaurantId) {
+            const allRestBranches = await db
+                .select({ id: branches.id })
+                .from(branches)
+                .where(and(eq(branches.restaurantId, restaurantId), eq(branches.status, "active")));
+            branchIds = allRestBranches.map((b) => b.id);
+        }
+    } else if (rawBranchIds.length > 0) {
+        const foundBranches = await db
+            .select({
+                id: branches.id,
+                restaurantId: branches.restaurantId,
+                name: branches.name,
+            })
+            .from(branches)
+            .where(inArray(branches.id, rawBranchIds));
+
+        if (foundBranches.length === 0) throw new NotFound("Branch(es) not found");
+        restaurantId = foundBranches[0].restaurantId;
+        branchIds = foundBranches.map((b) => b.id);
+    }
 
     const moduleParam =
         req.query.serviceModules ||
@@ -435,27 +462,11 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
             req.query.categoryid ||
             req.body?.categoryId) as string)?.trim() || null;
 
-    // 2. Validate & resolve restaurantId
-    if (branchIds.length > 0) {
-        const foundBranches = await db
-            .select({
-                id: branches.id,
-                restaurantId: branches.restaurantId,
-                name: branches.name,
-            })
-            .from(branches)
-            .where(inArray(branches.id, branchIds));
-
-        if (foundBranches.length === 0) throw new NotFound("Branch(es) not found");
-        restaurantId = foundBranches[0].restaurantId;
-    } else if (!restaurantId) {
-        throw new BadRequest("Neither branchId(s) nor restaurantId was provided in query, body, or token");
-    }
-
     const isSingleBranch = branchIds.length === 1;
     const isSingleModule = serviceModules.length === 1;
     const singleBranchId = isSingleBranch ? branchIds[0] : null;
     const singleModule = isSingleModule ? serviceModules[0] : undefined;
+
 
     const foodConditions = [
         eq(food.restaurantid, restaurantId),
