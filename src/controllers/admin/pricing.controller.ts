@@ -169,9 +169,9 @@ export const getActiveBranchWithServiceModule = async (req: Request, res: Respon
         );
 
     const serviceModules = [
-        {id: "dine_in", name: "Dine In"},
-        {id: "takeaway", name: "Take Away"},
-        {id: "delivery", name: "Delivery"}
+        { id: "dine_in", name: "Dine In" },
+        { id: "takeaway", name: "Take Away" },
+        { id: "delivery", name: "Delivery" }
     ]
 
     return SuccessResponse(res, {
@@ -378,17 +378,17 @@ export const upsertFoodWithPricing = async (req: Request, res: Response) => {
 // ============================================================================
 export const getMenuWithDynamicPricing = async (req: Request, res: Response) => {
     // 1. Extract IDs from req.query or fallback to JWT token (req.user)
-    const branchId = 
+    const branchId =
         ((req.query.branchId as string) || req.user?.branchId || "")?.trim() || null;
-    let restaurantId = 
+    let restaurantId =
         ((req.query.restaurantId as string) || req.user?.restaurantId || "")?.trim() || null;
-    
+
     const serviceModuleStr = (req.query.serviceModule as string)?.trim();
     const serviceModule = serviceModuleStr as "takeaway" | "dine_in" | "delivery" | undefined;
 
-    const subcategoryId = 
+    const subcategoryId =
         ((req.query.subcategoryId || req.query.subCategoryId || req.query.subcategoryid) as string)?.trim() || null;
-    const categoryId = 
+    const categoryId =
         ((req.query.categoryId || req.query.categoryid) as string)?.trim() || null;
 
     // 2. Validate & resolve restaurantId
@@ -642,15 +642,15 @@ export const getFoodForPricing = async (req: Request, res: Response) => {
     const allOptions =
         varIds.length > 0
             ? await db
-                  .select({
-                      id: variationOptions.id,
-                      variationId: variationOptions.variationId,
-                      optionName: variationOptions.optionName,
-                      optionNameAr: variationOptions.optionNameAr,
-                      additionalPrice: variationOptions.additionalPrice,
-                  })
-                  .from(variationOptions)
-                  .where(eq(variationOptions.status, true))
+                .select({
+                    id: variationOptions.id,
+                    variationId: variationOptions.variationId,
+                    optionName: variationOptions.optionName,
+                    optionNameAr: variationOptions.optionNameAr,
+                    additionalPrice: variationOptions.additionalPrice,
+                })
+                .from(variationOptions)
+                .where(eq(variationOptions.status, true))
             : [];
 
     const result = rawFoods.map((f) => {
@@ -669,7 +669,7 @@ export const getFoodForPricing = async (req: Request, res: Response) => {
 // ============================================================================
 // 5. CONTROLLER: Upsert Product Channel Pricing
 // POST /pricing/product-channel
-// Body: { foodId, branchId?, serviceModule, price, isAvailable? }
+// Body: { foodId, branchId?, serviceModule, price, status }
 // ============================================================================
 export const upsertProductChannelPricing = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
@@ -695,15 +695,15 @@ export const upsertProductChannelPricing = async (req: Request, res: Response) =
 
             const whereClause = targetBranchId
                 ? and(
-                      eq(productChannelPricing.foodId, foodId),
-                      eq(productChannelPricing.branchId, targetBranchId),
-                      eq(productChannelPricing.serviceModule, serviceModule)
-                  )
+                    eq(productChannelPricing.foodId, foodId),
+                    eq(productChannelPricing.branchId, targetBranchId),
+                    eq(productChannelPricing.serviceModule, serviceModule)
+                )
                 : and(
-                      eq(productChannelPricing.foodId, foodId),
-                      isNull(productChannelPricing.branchId),
-                      eq(productChannelPricing.serviceModule, serviceModule)
-                  );
+                    eq(productChannelPricing.foodId, foodId),
+                    isNull(productChannelPricing.branchId),
+                    eq(productChannelPricing.serviceModule, serviceModule)
+                );
 
             const [existing] = await tx
                 .select({ id: productChannelPricing.id })
@@ -735,7 +735,7 @@ export const upsertProductChannelPricing = async (req: Request, res: Response) =
 // ============================================================================
 // 6. CONTROLLER: Upsert Variant Channel Pricing
 // POST /pricing/variant-channel
-// Body: { variantId, branchId?, serviceModule, price, isAvailable? }
+// Body: { variantId, branchId?, serviceModule, price, status }
 // ============================================================================
 export const upsertVariantChannelPricing = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
@@ -761,15 +761,15 @@ export const upsertVariantChannelPricing = async (req: Request, res: Response) =
 
             const whereClause = targetBranchId
                 ? and(
-                      eq(variantChannelPricing.variantId, variantId),
-                      eq(variantChannelPricing.branchId, targetBranchId),
-                      eq(variantChannelPricing.serviceModule, serviceModule)
-                  )
+                    eq(variantChannelPricing.variantId, variantId),
+                    eq(variantChannelPricing.branchId, targetBranchId),
+                    eq(variantChannelPricing.serviceModule, serviceModule)
+                )
                 : and(
-                      eq(variantChannelPricing.variantId, variantId),
-                      isNull(variantChannelPricing.branchId),
-                      eq(variantChannelPricing.serviceModule, serviceModule)
-                  );
+                    eq(variantChannelPricing.variantId, variantId),
+                    isNull(variantChannelPricing.branchId),
+                    eq(variantChannelPricing.serviceModule, serviceModule)
+                );
 
             const [existing] = await tx
                 .select({ id: variantChannelPricing.id })
