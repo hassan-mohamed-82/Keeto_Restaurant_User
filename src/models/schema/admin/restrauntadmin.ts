@@ -1,9 +1,9 @@
 import { mysqlTable, varchar, char, timestamp, mysqlEnum, json , text } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
-import { rolesadmin } from "./rolesadmin";
 import { Permission } from "../../../types/custom";
 import { restaurants } from "./restaurants";
 import { branches } from "./branches";
+import { role_restaurant } from "./role_restaurant";
 
 export const restrauntadmin = mysqlTable("restrauntadmins", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(uuid())`),
@@ -31,8 +31,8 @@ export const restrauntadmin = mysqlTable("restrauntadmins", {
         .default("branch_manager"),
 
     // نظام الصلاحيات المفضل (عبر الـ Role)
-    roleId: char("role_id", { length: 36 }).references(() => rolesadmin.id),
-    
+roleId: char("role_id", { length: 36 }).references(() => role_restaurant.id, { onDelete: "set null" }),
+
     // اختياري: لو حابة تدي صلاحيات استثنائية مخصصة للشخص ده برضه بره الرول العامة بتاعته
     permissions: json("permissions").$type<Permission[]>().default([]),
     
