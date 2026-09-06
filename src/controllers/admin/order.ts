@@ -1336,15 +1336,26 @@ export const setOrderPreparingDuration = async (req: Request, res: Response) => 
 
     let finalDuration = duration;
 
-    // إذا لم يرسل الآدمن duration، نعتمد maxDeliveryTime للمطعم
+    // إذا لم يرسل الآدمن duration، نعتمد الوقت الأقصى حسب نوع الأوردر (delivery / takeaway / dine_in)
     if (typeof finalDuration !== 'number') {
         const [settings] = await db
-            .select({ maxDeliveryTime: restaurantSettings.maxDeliveryTime })
+            .select({
+                maxDeliveryTime: restaurantSettings.maxDeliveryTime,
+                maxTakeAwayTime: restaurantSettings.maxTakeAwayTime,
+                maxDineInTime: restaurantSettings.maxDineInTime,
+            })
             .from(restaurantSettings)
             .where(eq(restaurantSettings.restaurantId, existingOrder.restaurantId))
             .limit(1);
 
-        finalDuration = settings?.maxDeliveryTime ?? 30;
+        const orderType = existingOrder.orderType || 'delivery';
+        if (orderType === 'takeaway') {
+            finalDuration = settings?.maxTakeAwayTime ?? 25;
+        } else if (orderType === 'dine_in') {
+            finalDuration = settings?.maxDineInTime ?? 25;
+        } else {
+            finalDuration = settings?.maxDeliveryTime ?? 25;
+        }
     }
 
     if (finalDuration < 0) {
