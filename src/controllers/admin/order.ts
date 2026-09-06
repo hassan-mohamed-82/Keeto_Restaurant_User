@@ -215,7 +215,7 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
                         code: coupons.code,
                     }).from(coupons).where(eq(coupons.code, o.couponCode)).limit(1);
                     if (c) couponDetails = c;
-                } catch (e) {}
+                } catch (e) { }
             }
 
             const { addressLat, addressLng, ...rest } = o;
@@ -224,40 +224,40 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
                 zoneName: finalZoneName,
                 shippingAddress: shippingAddressData && typeof shippingAddressData === "object"
                     ? {
-                        title:              shippingAddressData.title ?? null,
-                        street:             shippingAddressData.street ?? null,
-                        building:           shippingAddressData.building ?? null,
-                        floor:              shippingAddressData.floor ?? null,
-                        apartment:          shippingAddressData.apartment ?? null,
-                        landmark:           shippingAddressData.landmark ?? null,
-                        location:           shippingAddressData.location ?? null,
-                        fulladdress:        shippingAddressData.fulladdress ?? null,
-                        lat:                shippingAddressData.lat ?? null,
-                        lng:                shippingAddressData.lng ?? null,
-                        phone:              shippingAddressData.phone ?? null,
-                        addressZoneId:      shippingAddressData.addressZoneId ?? null,
-                        restaurantZoneId:   shippingAddressData.restaurantZoneId ?? null,
-                        addressZoneName:    shippingAddressData.addressZoneName ?? null,
-                        addressZoneNameAr:  shippingAddressData.addressZoneNameAr ?? null,
+                        title: shippingAddressData.title ?? null,
+                        street: shippingAddressData.street ?? null,
+                        building: shippingAddressData.building ?? null,
+                        floor: shippingAddressData.floor ?? null,
+                        apartment: shippingAddressData.apartment ?? null,
+                        landmark: shippingAddressData.landmark ?? null,
+                        location: shippingAddressData.location ?? null,
+                        fulladdress: shippingAddressData.fulladdress ?? null,
+                        lat: shippingAddressData.lat ?? null,
+                        lng: shippingAddressData.lng ?? null,
+                        phone: shippingAddressData.phone ?? null,
+                        addressZoneId: shippingAddressData.addressZoneId ?? null,
+                        restaurantZoneId: shippingAddressData.restaurantZoneId ?? null,
+                        addressZoneName: shippingAddressData.addressZoneName ?? null,
+                        addressZoneNameAr: shippingAddressData.addressZoneNameAr ?? null,
                     }
                     : null,
                 branchSnapshot: branchSnapshotData && typeof branchSnapshotData === "object"
                     ? {
-                        id:          branchSnapshotData.id ?? null,
-                        name:        branchSnapshotData.name ?? null,
-                        nameAr:      branchSnapshotData.nameAr ?? null,
-                        nameFr:      branchSnapshotData.nameFr ?? null,
-                        address:     branchSnapshotData.address ?? null,
-                        addressAr:   branchSnapshotData.addressAr ?? null,
-                        addressFr:   branchSnapshotData.addressFr ?? null,
-                        phone:       branchSnapshotData.phone ?? null,
-                        status:      branchSnapshotData.status ?? null,
-                        zoneId:      branchSnapshotData.zoneId ?? null,
-                        zoneName:    branchSnapshotData.zoneName ?? null,
-                        zoneNameAr:  branchSnapshotData.zoneNameAr ?? null,
-                        cityId:      branchSnapshotData.cityId ?? null,
-                        cityName:    branchSnapshotData.cityName ?? null,
-                        cityNameAr:  branchSnapshotData.cityNameAr ?? null,
+                        id: branchSnapshotData.id ?? null,
+                        name: branchSnapshotData.name ?? null,
+                        nameAr: branchSnapshotData.nameAr ?? null,
+                        nameFr: branchSnapshotData.nameFr ?? null,
+                        address: branchSnapshotData.address ?? null,
+                        addressAr: branchSnapshotData.addressAr ?? null,
+                        addressFr: branchSnapshotData.addressFr ?? null,
+                        phone: branchSnapshotData.phone ?? null,
+                        status: branchSnapshotData.status ?? null,
+                        zoneId: branchSnapshotData.zoneId ?? null,
+                        zoneName: branchSnapshotData.zoneName ?? null,
+                        zoneNameAr: branchSnapshotData.zoneNameAr ?? null,
+                        cityId: branchSnapshotData.cityId ?? null,
+                        cityName: branchSnapshotData.cityName ?? null,
+                        cityNameAr: branchSnapshotData.cityNameAr ?? null,
                     }
                     : null,
                 discount: {
@@ -432,7 +432,7 @@ export const getOrdersByStatus = async (
                         code: coupons.code,
                     }).from(coupons).where(eq(coupons.code, o.couponCode)).limit(1);
                     if (c) couponDetails = c;
-                } catch (e) {}
+                } catch (e) { }
             }
 
             const { addressLat, addressLng, ...rest } = o;
@@ -441,40 +441,40 @@ export const getOrdersByStatus = async (
                 zoneName: finalZoneName,
                 shippingAddress: shippingAddressData && typeof shippingAddressData === "object"
                     ? {
-                        title:              shippingAddressData.title ?? null,
-                        street:             shippingAddressData.street ?? null,
-                        building:           shippingAddressData.building ?? null,
-                        floor:              shippingAddressData.floor ?? null,
-                        apartment:          shippingAddressData.apartment ?? null,
-                        landmark:           shippingAddressData.landmark ?? null,
-                        location:           shippingAddressData.location ?? null,
-                        fulladdress:        shippingAddressData.fulladdress ?? null,
-                        lat:                shippingAddressData.lat ?? null,
-                        lng:                shippingAddressData.lng ?? null,
-                        phone:              shippingAddressData.phone ?? null,
-                        addressZoneId:      shippingAddressData.addressZoneId ?? null,
-                        restaurantZoneId:   shippingAddressData.restaurantZoneId ?? null,
-                        addressZoneName:    shippingAddressData.addressZoneName ?? null,
-                        addressZoneNameAr:  shippingAddressData.addressZoneNameAr ?? null,
+                        title: shippingAddressData.title ?? null,
+                        street: shippingAddressData.street ?? null,
+                        building: shippingAddressData.building ?? null,
+                        floor: shippingAddressData.floor ?? null,
+                        apartment: shippingAddressData.apartment ?? null,
+                        landmark: shippingAddressData.landmark ?? null,
+                        location: shippingAddressData.location ?? null,
+                        fulladdress: shippingAddressData.fulladdress ?? null,
+                        lat: shippingAddressData.lat ?? null,
+                        lng: shippingAddressData.lng ?? null,
+                        phone: shippingAddressData.phone ?? null,
+                        addressZoneId: shippingAddressData.addressZoneId ?? null,
+                        restaurantZoneId: shippingAddressData.restaurantZoneId ?? null,
+                        addressZoneName: shippingAddressData.addressZoneName ?? null,
+                        addressZoneNameAr: shippingAddressData.addressZoneNameAr ?? null,
                     }
                     : null,
                 branchSnapshot: branchSnapshotData && typeof branchSnapshotData === "object"
                     ? {
-                        id:          branchSnapshotData.id ?? null,
-                        name:        branchSnapshotData.name ?? null,
-                        nameAr:      branchSnapshotData.nameAr ?? null,
-                        nameFr:      branchSnapshotData.nameFr ?? null,
-                        address:     branchSnapshotData.address ?? null,
-                        addressAr:   branchSnapshotData.addressAr ?? null,
-                        addressFr:   branchSnapshotData.addressFr ?? null,
-                        phone:       branchSnapshotData.phone ?? null,
-                        status:      branchSnapshotData.status ?? null,
-                        zoneId:      branchSnapshotData.zoneId ?? null,
-                        zoneName:    branchSnapshotData.zoneName ?? null,
-                        zoneNameAr:  branchSnapshotData.zoneNameAr ?? null,
-                        cityId:      branchSnapshotData.cityId ?? null,
-                        cityName:    branchSnapshotData.cityName ?? null,
-                        cityNameAr:  branchSnapshotData.cityNameAr ?? null,
+                        id: branchSnapshotData.id ?? null,
+                        name: branchSnapshotData.name ?? null,
+                        nameAr: branchSnapshotData.nameAr ?? null,
+                        nameFr: branchSnapshotData.nameFr ?? null,
+                        address: branchSnapshotData.address ?? null,
+                        addressAr: branchSnapshotData.addressAr ?? null,
+                        addressFr: branchSnapshotData.addressFr ?? null,
+                        phone: branchSnapshotData.phone ?? null,
+                        status: branchSnapshotData.status ?? null,
+                        zoneId: branchSnapshotData.zoneId ?? null,
+                        zoneName: branchSnapshotData.zoneName ?? null,
+                        zoneNameAr: branchSnapshotData.zoneNameAr ?? null,
+                        cityId: branchSnapshotData.cityId ?? null,
+                        cityName: branchSnapshotData.cityName ?? null,
+                        cityNameAr: branchSnapshotData.cityNameAr ?? null,
                     }
                     : null,
                 discount: {
@@ -687,59 +687,59 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
 
         let totalCalculatedVarPrice = 0;
 
-if (Array.isArray(cleanVariations) && cleanVariations.length > 0) {
-    cleanVariations = await Promise.all(cleanVariations.map(async (v: any) => {
-        // 1. مرونة في استخراج الـ IDs من الـ JSON
-        const varId = v.variationId || v.id || v.variation_id;
-        const optId = v.optionId || v.option_id || (v.option && v.option.id);
+        if (Array.isArray(cleanVariations) && cleanVariations.length > 0) {
+            cleanVariations = await Promise.all(cleanVariations.map(async (v: any) => {
+                // 1. مرونة في استخراج الـ IDs من الـ JSON
+                const varId = v.variationId || v.id || v.variation_id;
+                const optId = v.optionId || v.option_id || (v.option && v.option.id);
 
-        let variationName = v.variationName || v.name || "Unknown";
-        let variationNameAr = v.variationNameAr || v.nameAr || "غير معروف";
-        let optionName = v.optionName || v.value || "Unknown";
-        let optionNameAr = v.optionNameAr || v.valueAr || "غير معروف";
+                let variationName = v.variationName || v.name || "Unknown";
+                let variationNameAr = v.variationNameAr || v.nameAr || "غير معروف";
+                let optionName = v.optionName || v.value || "Unknown";
+                let optionNameAr = v.optionNameAr || v.valueAr || "غير معروف";
 
-        // 2. البحث في جدول foodVariations في حال لم تكن الخواص موجودة كـ snapshot
-        if (varId) {
-            const [varDb] = await db
-                .select()
-                .from(foodVariations)
-                .where(eq(foodVariations.id, varId))
-                .limit(1);
+                // 2. البحث في جدول foodVariations في حال لم تكن الخواص موجودة كـ snapshot
+                if (varId) {
+                    const [varDb] = await db
+                        .select()
+                        .from(foodVariations)
+                        .where(eq(foodVariations.id, varId))
+                        .limit(1);
 
-            if (varDb) {
-                variationName = varDb.name || variationName;
-                variationNameAr = varDb.nameAr || variationNameAr;
-            }
+                    if (varDb) {
+                        variationName = varDb.name || variationName;
+                        variationNameAr = varDb.nameAr || variationNameAr;
+                    }
+                }
+
+                // 3. البحث في جدول variationOptions
+                if (optId) {
+                    const [optDb] = await db
+                        .select()
+                        .from(variationOptions)
+                        .where(eq(variationOptions.id, optId))
+                        .limit(1);
+
+                    if (optDb) {
+                        optionName = optDb.optionName || optionName;
+                        optionNameAr = optDb.optionNameAr || optionNameAr;
+
+                        const price = parseFloat((optDb as any).price || optDb.additionalPrice || "0");
+                        totalCalculatedVarPrice += price;
+                    }
+                }
+
+                return {
+                    ...v,
+                    variationId: varId,
+                    optionId: optId,
+                    variationName,
+                    variationNameAr,
+                    optionName,
+                    optionNameAr
+                };
+            }));
         }
-
-        // 3. البحث في جدول variationOptions
-        if (optId) {
-            const [optDb] = await db
-                .select()
-                .from(variationOptions)
-                .where(eq(variationOptions.id, optId))
-                .limit(1);
-
-            if (optDb) {
-                optionName = optDb.optionName || optionName;
-                optionNameAr = optDb.optionNameAr || optionNameAr;
-
-                const price = parseFloat((optDb as any).price || optDb.additionalPrice || "0");
-                totalCalculatedVarPrice += price;
-            }
-        }
-
-        return {
-            ...v,
-            variationId: varId,
-            optionId: optId,
-            variationName,
-            variationNameAr,
-            optionName,
-            optionNameAr
-        };
-    }));
-}
         const finalVarPrice = parseFloat(item.variationsPrice || "0") > 0 ? parseFloat(item.variationsPrice || "0") : totalCalculatedVarPrice;
         const finalAddonsPrice = parseFloat(item.addonsPrice || "0");
         const finalTotalPrice = (parseFloat(item.basePrice || "0") + finalVarPrice + finalAddonsPrice) * item.quantity;
@@ -965,42 +965,42 @@ if (Array.isArray(cleanVariations) && cleanVariations.length > 0) {
             // ✅ Snapshot: بيانات عنوان التوصيل كما كانت وقت تسجيل الأوردر
             shippingAddress: shippingAddressData && typeof shippingAddressData === "object"
                 ? {
-                    title:              shippingAddressData.title ?? null,
-                    street:             shippingAddressData.street ?? null,
-                    building:           shippingAddressData.building ?? null,
-                    floor:              shippingAddressData.floor ?? null,
-                    apartment:          shippingAddressData.apartment ?? null,
-                    landmark:           shippingAddressData.landmark ?? null,
-                    location:           shippingAddressData.location ?? null,
-                    fulladdress:        shippingAddressData.fulladdress ?? null,
-                    lat:                shippingAddressData.lat ?? null,
-                    lng:                shippingAddressData.lng ?? null,
-                    phone:              shippingAddressData.phone ?? null,
-                    addressZoneId:      shippingAddressData.addressZoneId ?? null,
-                    restaurantZoneId:   shippingAddressData.restaurantZoneId ?? null,
-                    addressZoneName:    shippingAddressData.addressZoneName ?? null,
-                    addressZoneNameAr:  shippingAddressData.addressZoneNameAr ?? null,
+                    title: shippingAddressData.title ?? null,
+                    street: shippingAddressData.street ?? null,
+                    building: shippingAddressData.building ?? null,
+                    floor: shippingAddressData.floor ?? null,
+                    apartment: shippingAddressData.apartment ?? null,
+                    landmark: shippingAddressData.landmark ?? null,
+                    location: shippingAddressData.location ?? null,
+                    fulladdress: shippingAddressData.fulladdress ?? null,
+                    lat: shippingAddressData.lat ?? null,
+                    lng: shippingAddressData.lng ?? null,
+                    phone: shippingAddressData.phone ?? null,
+                    addressZoneId: shippingAddressData.addressZoneId ?? null,
+                    restaurantZoneId: shippingAddressData.restaurantZoneId ?? null,
+                    addressZoneName: shippingAddressData.addressZoneName ?? null,
+                    addressZoneNameAr: shippingAddressData.addressZoneNameAr ?? null,
                 }
                 : null,
 
             // ✅ Snapshot: بيانات الفرع كما كانت وقت تسجيل الأوردر
             branchSnapshot: branchSnapshotData && typeof branchSnapshotData === "object"
                 ? {
-                    id:          branchSnapshotData.id ?? null,
-                    name:        branchSnapshotData.name ?? null,
-                    nameAr:      branchSnapshotData.nameAr ?? null,
-                    nameFr:      branchSnapshotData.nameFr ?? null,
-                    address:     branchSnapshotData.address ?? null,
-                    addressAr:   branchSnapshotData.addressAr ?? null,
-                    addressFr:   branchSnapshotData.addressFr ?? null,
-                    phone:       branchSnapshotData.phone ?? null,
-                    status:      branchSnapshotData.status ?? null,
-                    zoneId:      branchSnapshotData.zoneId ?? null,
-                    zoneName:    branchSnapshotData.zoneName ?? null,
-                    zoneNameAr:  branchSnapshotData.zoneNameAr ?? null,
-                    cityId:      branchSnapshotData.cityId ?? null,
-                    cityName:    branchSnapshotData.cityName ?? null,
-                    cityNameAr:  branchSnapshotData.cityNameAr ?? null,
+                    id: branchSnapshotData.id ?? null,
+                    name: branchSnapshotData.name ?? null,
+                    nameAr: branchSnapshotData.nameAr ?? null,
+                    nameFr: branchSnapshotData.nameFr ?? null,
+                    address: branchSnapshotData.address ?? null,
+                    addressAr: branchSnapshotData.addressAr ?? null,
+                    addressFr: branchSnapshotData.addressFr ?? null,
+                    phone: branchSnapshotData.phone ?? null,
+                    status: branchSnapshotData.status ?? null,
+                    zoneId: branchSnapshotData.zoneId ?? null,
+                    zoneName: branchSnapshotData.zoneName ?? null,
+                    zoneNameAr: branchSnapshotData.zoneNameAr ?? null,
+                    cityId: branchSnapshotData.cityId ?? null,
+                    cityName: branchSnapshotData.cityName ?? null,
+                    cityNameAr: branchSnapshotData.cityNameAr ?? null,
                 }
                 : null,
 
@@ -1199,6 +1199,7 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
         // ⭐ LOYALTY POINTS: إضافة نقاط المطعم عند التوصيل (DELIVERED)
         // ==========================================
         if (status === "delivered") {
+            // 1. جلب الوجبات والكميات المشتراة في الطلب
             const items = await tx
                 .select({ foodId: orderItems.foodId, quantity: orderItems.quantity })
                 .from(orderItems)
@@ -1207,84 +1208,72 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
             if (items.length > 0) {
                 const foodIds = items.map(i => i.foodId);
 
-                const enrolledRows = await tx
-                    .select({ foodId: pointsProducts.foodId, isActive: pointsProducts.isActive })
-                    .from(pointsProducts)
-                    .where(
-                        and(
-                            eq(pointsProducts.restaurantId, existingOrder.restaurantId),
-                            inArray(pointsProducts.foodId, foodIds)
-                        )
-                    );
+                // 2. جلب النقاط الخاصة بكل وجبة مباشرة من جدول الـ food
+                const foodPoints = await tx
+                    .select({ id: food.id, points: food.points })
+                    .from(food)
+                    .where(inArray(food.id, foodIds));
 
-                const enrolledMap = new Map(
-                    enrolledRows.filter(r => r.isActive).map(r => [r.foodId, true])
-                );
+                const foodPointsMap = new Map(foodPoints.map(f => [f.id, f.points ?? 0]));
 
-                if (enrolledMap.size > 0) {
-                    const enrolledFoodIds = foodIds.filter(id => enrolledMap.has(id));
-                    const foodPoints = await tx
-                        .select({ id: food.id, points: food.points })
-                        .from(food)
-                        .where(inArray(food.id, enrolledFoodIds));
+                // 3. حساب إجمالي النقاط (نقاط الوجبة × الكمية)
+                let totalPointsEarned = 0;
+                for (const item of items) {
+                    const pointsPerItem = foodPointsMap.get(item.foodId) ?? 0;
+                    totalPointsEarned += pointsPerItem * item.quantity;
+                }
 
-                    const foodPointsMap = new Map(foodPoints.map(f => [f.id, f.points ?? 0]));
-
-                    let totalPointsEarned = 0;
-                    for (const item of items) {
-                        if (enrolledMap.has(item.foodId)) {
-                            totalPointsEarned += (foodPointsMap.get(item.foodId) ?? 0) * item.quantity;
-                        }
-                    }
-
-                    if (totalPointsEarned > 0) {
-                        let [userPointRecord] = await tx
-                            .select()
-                            .from(userRestaurantPoints)
-                            .where(
-                                and(
-                                    eq(userRestaurantPoints.userId, existingOrder.userId),
-                                    eq(userRestaurantPoints.restaurantId, existingOrder.restaurantId)
-                                )
+                // 4. إضافة النقاط لرصيد المستخدم إذا كانت أكبر من صفر
+                if (totalPointsEarned > 0) {
+                    let [userPointRecord] = await tx
+                        .select()
+                        .from(userRestaurantPoints)
+                        .where(
+                            and(
+                                eq(userRestaurantPoints.userId, existingOrder.userId),
+                                eq(userRestaurantPoints.restaurantId, existingOrder.restaurantId)
                             )
-                            .limit(1);
+                        )
+                        .limit(1);
 
-                        if (!userPointRecord) {
-                            const newPointId = uuidv4();
-                            await tx.insert(userRestaurantPoints).values({
-                                id: newPointId,
-                                userId: existingOrder.userId,
-                                restaurantId: existingOrder.restaurantId,
-                                points: 0,
-                            });
-                            [userPointRecord] = await tx
-                                .select()
-                                .from(userRestaurantPoints)
-                                .where(eq(userRestaurantPoints.id, newPointId))
-                                .limit(1);
-                        }
-
-                        const pointsBefore = userPointRecord.points ?? 0;
-                        const pointsAfter = pointsBefore + totalPointsEarned;
-
-                        await tx
-                            .update(userRestaurantPoints)
-                            .set({ points: pointsAfter, updatedAt: new Date() })
-                            .where(eq(userRestaurantPoints.id, userPointRecord.id));
-
-                        await tx.insert(userPointsTransactions).values({
-                            id: uuidv4(),
+                    // إنشاء سجل نقاط للمستخدم في هذا المطعم إذا لم يكن موجوداً من قبل
+                    if (!userPointRecord) {
+                        const newPointId = uuidv4();
+                        await tx.insert(userRestaurantPoints).values({
+                            id: newPointId,
                             userId: existingOrder.userId,
                             restaurantId: existingOrder.restaurantId,
-                            type: "earn",
-                            points: totalPointsEarned,
-                            balanceBefore: pointsBefore,
-                            balanceAfter: pointsAfter,
-                            orderId: orderId,
-                            note: `Earned ${totalPointsEarned} points from order #${existingOrder.orderNumber}`,
-                            createdAt: new Date(),
+                            points: 0,
                         });
+                        [userPointRecord] = await tx
+                            .select()
+                            .from(userRestaurantPoints)
+                            .where(eq(userRestaurantPoints.id, newPointId))
+                            .limit(1);
                     }
+
+                    const pointsBefore = userPointRecord.points ?? 0;
+                    const pointsAfter = pointsBefore + totalPointsEarned;
+
+                    // تحديث الرصيد التراكمي
+                    await tx
+                        .update(userRestaurantPoints)
+                        .set({ points: pointsAfter, updatedAt: new Date() })
+                        .where(eq(userRestaurantPoints.id, userPointRecord.id));
+
+                    // تسجيل عملية كسب النقاط في جدول السجل Transactions
+                    await tx.insert(userPointsTransactions).values({
+                        id: uuidv4(),
+                        userId: existingOrder.userId,
+                        restaurantId: existingOrder.restaurantId,
+                        type: "earn",
+                        points: totalPointsEarned,
+                        balanceBefore: pointsBefore,
+                        balanceAfter: pointsAfter,
+                        orderId: orderId,
+                        note: `Earned ${totalPointsEarned} points from order #${existingOrder.orderNumber}`,
+                        createdAt: new Date(),
+                    });
                 }
             }
         }
