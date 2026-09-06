@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
 import { notifications, restaurantSettings } from "../../models/schema";
-import { eq, and, desc, sql, count } from "drizzle-orm";
+import { eq, and, desc, sql, count, or } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { UnauthorizedError } from "../../Errors";
 import { NotFound } from "../../Errors/NotFound";
@@ -26,9 +26,16 @@ export const getMyNotifications = async (req: Request | any, res: Response) => {
     const offset = (page - 1) * limit;
 
     // Base conditions for this restaurant/branch
+    const recipientCondition = targetBranchId
+        ? or(
+            eq(notifications.recipientId, adminRestaurantId),
+            eq(notifications.recipientId, targetBranchId)
+        )
+        : eq(notifications.recipientId, adminRestaurantId);
+
     const baseConditions: any[] = [
         eq(notifications.recipientType, "restaurant"),
-        eq(notifications.recipientId, adminRestaurantId)
+        recipientCondition
     ];
 
     if (targetBranchId) {
@@ -36,6 +43,7 @@ export const getMyNotifications = async (req: Request | any, res: Response) => {
             sql`(
                 JSON_UNQUOTE(JSON_EXTRACT(${notifications.data}, '$.branchId')) = ${targetBranchId}
                 OR JSON_EXTRACT(${notifications.data}, '$.branchId') IS NULL
+                OR ${notifications.recipientId} = ${targetBranchId}
             )`
         );
     }
@@ -112,16 +120,26 @@ export const getMyNotifications = async (req: Request | any, res: Response) => {
 export const markNotificationAsRead = async (req: Request | any, res: Response) => {
     if (!req.user) throw new UnauthorizedError("Unauthenticated");
     const adminRestaurantId = req.user.restaurantId || req.user.id;
+    const adminBranchId = req.user.branchId;
+    const queryBranchId = req.query.branchId as string | undefined;
+    const targetBranchId = adminBranchId || queryBranchId;
 
     if (!adminRestaurantId) throw new BadRequest("Restaurant ID not found");
     const { id } = req.params;
+
+    const recipientCondition = targetBranchId
+        ? or(
+            eq(notifications.recipientId, adminRestaurantId),
+            eq(notifications.recipientId, targetBranchId)
+        )
+        : eq(notifications.recipientId, adminRestaurantId);
 
     const [notification] = await db
         .select()
         .from(notifications)
         .where(and(
             eq(notifications.id, id),
-            eq(notifications.recipientId, adminRestaurantId)
+            recipientCondition
         ))
         .limit(1);
 
@@ -150,9 +168,16 @@ export const markAllNotificationsAsRead = async (req: Request | any, res: Respon
 
     if (!adminRestaurantId) throw new BadRequest("Restaurant ID not found");
 
+    const recipientCondition = targetBranchId
+        ? or(
+            eq(notifications.recipientId, adminRestaurantId),
+            eq(notifications.recipientId, targetBranchId)
+        )
+        : eq(notifications.recipientId, adminRestaurantId);
+
     const conditions: any[] = [
         eq(notifications.recipientType, "restaurant"),
-        eq(notifications.recipientId, adminRestaurantId),
+        recipientCondition,
         // eq(notifications.isRead, false)
     ];
 
@@ -161,6 +186,7 @@ export const markAllNotificationsAsRead = async (req: Request | any, res: Respon
             sql`(
                 JSON_UNQUOTE(JSON_EXTRACT(${notifications.data}, '$.branchId')) = ${targetBranchId}
                 OR JSON_EXTRACT(${notifications.data}, '$.branchId') IS NULL
+                OR ${notifications.recipientId} = ${targetBranchId}
             )`
         );
     }
