@@ -1637,9 +1637,9 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
             if (pdfZoneName) doc.text(`Zone: ${fixArabicText(pdfZoneName)}`);
             if (addrStreet) doc.text(`Street: ${fixArabicText(addrStreet)}`);
             let details = '';
-            if (addrBuilding) details += `Bldg: ${addrBuilding}`;
-            if (addrFloor) details += `${details ? ' | ' : ''}Floor: ${addrFloor}`;
-            if (addrApartment) details += `${details ? ' | ' : ''}Apt: ${addrApartment}`;
+            if (addrBuilding) details += `Bldg: ${fixArabicText(addrBuilding)}`;
+            if (addrFloor) details += `${details ? ' | ' : ''}Floor: ${fixArabicText(addrFloor)}`;
+            if (addrApartment) details += `${details ? ' | ' : ''}Apt: ${fixArabicText(addrApartment)}`;
             if (details) doc.text(details);
             if (addrLandmark) doc.text(`Landmark: ${fixArabicText(addrLandmark)}`);
             if (addrFull && !addrStreet) doc.text(`Address: ${fixArabicText(addrFull)}`);
