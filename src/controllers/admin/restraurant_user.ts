@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { users, restaurant_users, restaurants } from "../../models/schema";
-import { eq, and, or } from "drizzle-orm";
+import { users, restaurant_users, restaurants, userRestaurantPoints } from "../../models/schema";
+import { eq, and, or, sql } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors";
@@ -28,6 +28,7 @@ export const getRestaurantUsers = async (req: Request, res: Response) => {
         phone: users.phone,
         email: users.email,
         photo: users.photo,
+        points: sql<number>`COALESCE(${userRestaurantPoints.points}, 0)`,
         status: restaurant_users.status,
         userStatus: users.status,
         createdAt: restaurant_users.createdAt,
@@ -40,6 +41,13 @@ export const getRestaurantUsers = async (req: Request, res: Response) => {
         .from(restaurant_users)
         .innerJoin(users, eq(restaurant_users.userId, users.id))
         .innerJoin(restaurants, eq(restaurant_users.restaurantId, restaurants.id))
+        .leftJoin(
+            userRestaurantPoints,
+            and(
+                eq(userRestaurantPoints.userId, users.id),
+                eq(userRestaurantPoints.restaurantId, restaurant_users.restaurantId)
+            )
+        )
         .where(and(...conditions));
 
     return SuccessResponse(res, { message: "Restaurant users fetched successfully", data }, 200);
@@ -63,6 +71,7 @@ export const getBlockedRestaurantUsers = async (req: Request, res: Response) => 
         phone: users.phone,
         email: users.email,
         photo: users.photo,
+        points: sql<number>`COALESCE(${userRestaurantPoints.points}, 0)`,
         status: restaurant_users.status,   // blocked by this restaurant
         userStatus: users.status,                  // blocked globally by Keeto
         createdAt: restaurant_users.createdAt,
@@ -75,6 +84,13 @@ export const getBlockedRestaurantUsers = async (req: Request, res: Response) => 
         .from(restaurant_users)
         .innerJoin(users, eq(restaurant_users.userId, users.id))
         .innerJoin(restaurants, eq(restaurant_users.restaurantId, restaurants.id))
+        .leftJoin(
+            userRestaurantPoints,
+            and(
+                eq(userRestaurantPoints.userId, users.id),
+                eq(userRestaurantPoints.restaurantId, restaurant_users.restaurantId)
+            )
+        )
         .where(and(
             eq(restaurant_users.restaurantId, restaurantId),
             or(
@@ -216,6 +232,7 @@ export const getRestaurantUserById = async (req: Request, res: Response) => {
         phone: users.phone,
         email: users.email,
         photo: users.photo,
+        points: sql<number>`COALESCE(${userRestaurantPoints.points}, 0)`,
         status: restaurant_users.status,
         userStatus: users.status,
         createdAt: restaurant_users.createdAt,
@@ -228,6 +245,13 @@ export const getRestaurantUserById = async (req: Request, res: Response) => {
         .from(restaurant_users)
         .innerJoin(users, eq(restaurant_users.userId, users.id))
         .innerJoin(restaurants, eq(restaurant_users.restaurantId, restaurants.id))
+        .leftJoin(
+            userRestaurantPoints,
+            and(
+                eq(userRestaurantPoints.userId, users.id),
+                eq(userRestaurantPoints.restaurantId, restaurant_users.restaurantId)
+            )
+        )
         .where(
             and(
                 eq(restaurant_users.restaurantId, restaurantId),
