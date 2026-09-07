@@ -9,7 +9,7 @@ import bcrypt from "bcrypt";
 import { generateRestaurantAdminToken } from "../../utils/jwt";
 
 export async function login(req: Request, res: Response) {
-    const { email, password } = req.body;
+    const { email, password , fcmToken } = req.body;
     if (!email || !password) {
         throw new BadRequest("Email and password are required");
     }
@@ -99,6 +99,16 @@ export async function login(req: Request, res: Response) {
             .where(eq(restaurantSchedules.restaurantId, user.restaurantId));
     }
 
+    // 5.6 تحديث الـ FCM Token في جدول الأدمن والمطعم في حال تم إرساله عند تسجيل الدخول
+    let currentFcmToken = user.fcmToken;
+    if (fcmToken !== undefined) {
+        const tokenToSave = fcmToken && String(fcmToken).trim() !== "" ? String(fcmToken).trim() : null;
+        await db
+            .update(restrauntadmin)
+            .set({ fcmToken: tokenToSave })
+            .where(eq(restrauntadmin.id, user.id));
+    }
+
     // 6. تجهيز الـ Token Payload الديناميكي
     const tokenPayload = {
         id: user.id,
@@ -132,7 +142,8 @@ export async function login(req: Request, res: Response) {
             branchId: user.branchId,
             branchName,
             branchNameAr,
-            branchNameFr
+            branchNameFr,
+            fcmToken: currentFcmToken
         },
         schedules
     }, 200);

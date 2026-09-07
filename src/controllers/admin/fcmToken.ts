@@ -15,17 +15,19 @@ export const updateFcmToken = async (req: Request | any, res: Response) => {
 
     const tokenToSave = fcmToken && String(fcmToken).trim() !== "" ? String(fcmToken).trim() : null;
 
-    if (req.user.type === "owner") {
-        // Main restaurant owner
-        await db.update(restaurants)
-            .set({ fcmToken: tokenToSave })
-            .where(eq(restaurants.id, req.user.restaurantId));
-    } else {
-        // Sub-admin or branch manager
+    // 1. تحديث الـ Token في جدول الأدمن (restrauntadmin) لجميع الأنواع
+    if (req.user.id) {
         await db.update(restrauntadmin)
             .set({ fcmToken: tokenToSave })
             .where(eq(restrauntadmin.id, req.user.id));
     }
+
+    // 2. إذا كان صاحب المطعم (owner)، نحدث أيضاً جدول المطعم (restaurants)
+    // if (req.user.type === "owner" && req.user.restaurantId) {
+    //     await db.update(restaurants)
+    //         .set({ fcmToken: tokenToSave })
+    //         .where(eq(restaurants.id, req.user.restaurantId));
+    // }
 
     return SuccessResponse(res, { message: tokenToSave ? "FCM token updated successfully" : "FCM token removed successfully" });
 };

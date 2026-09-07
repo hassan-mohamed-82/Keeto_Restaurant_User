@@ -59,7 +59,10 @@ export const updateProfile = async (req: Request, res: Response) => {
     const updateData: any = {};
     if (name !== undefined) updateData.name = name;
     if (phoneNumber !== undefined) updateData.phoneNumber = phoneNumber;
-    if (fcmToken !== undefined) updateData.fcmToken = fcmToken;
+    if (fcmToken !== undefined) {
+        const tokenToSave = fcmToken && String(fcmToken).trim() !== "" ? String(fcmToken).trim() : null;
+        updateData.fcmToken = tokenToSave;
+    }
 
     if (Object.keys(updateData).length > 0) {
         await db
