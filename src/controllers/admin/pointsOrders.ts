@@ -262,7 +262,7 @@ export const approveRedeemCode = async (req: Request, res: Response) => {
             orderNumber,
             userId: redeemReq.userId,
             restaurantId,
-            orderSource: "online_order_web",
+            orderSource: "online_order_app",
             paymentMethod: null,
             orderType: "takeaway",
             subtotal: "0.00",
