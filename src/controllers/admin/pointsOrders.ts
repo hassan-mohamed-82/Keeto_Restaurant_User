@@ -77,7 +77,7 @@ export const getOrderByRedeemCode = async (req: Request, res: Response) => {
 // 🟢 2. قبول أو رفض طلب الاستبدال ومعالجة خصم النقاط وانتهاء الصلاحية
 export const approveRedeemCode = async (req: Request, res: Response) => {
     const restaurantId = getRestaurantId(req);
-    const { redeemRequestId, action } = req.body; // action: "approve" | "reject"
+    const { redeemRequestId, action , branchId } = req.body; // action: "approve" | "reject"
 
     if (!redeemRequestId) throw new BadRequest("redeemRequestId is required");
     if (!action || !["approve", "reject"].includes(action)) {
@@ -265,6 +265,7 @@ export const approveRedeemCode = async (req: Request, res: Response) => {
             orderSource: "online_order_app",
             paymentMethod: null,
             orderType: "takeaway",
+            branchId:branchId,
             subtotal: "0.00",
             deliveryFee: "0.00",
             serviceFee: "0.00",
