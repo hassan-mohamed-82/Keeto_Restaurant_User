@@ -58,3 +58,4 @@ export * from "./schema/admin/recommendedFood";
 export * from "./schema/admin/freeDeliveryOffer";
 export * from "./schema/admin/channelPricing";
 export * from "./schema/admin/role_restaurant";
+export * from "./schema/admin/redeemRequests";

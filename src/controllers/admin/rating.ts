@@ -21,6 +21,8 @@ export const getMyRestaurantRatings = async (req: Request, res: Response) => {
             id: users.id,
             name: users.name,
             photo: users.photo,
+            phone: users.phone,
+            alternativePhone: users.alternatePhone,
         }
     })
         .from(restaurantRatings)

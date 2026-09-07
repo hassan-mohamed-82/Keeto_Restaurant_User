@@ -1029,7 +1029,8 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
 
     const currentStatus = existingOrder.status as string;
 
-    const finalStatuses = ["delivered", "cancelled", "refund"];
+    //const finalStatuses = ["delivered", "cancelled", "refund"];
+    const finalStatuses = ["cancelled", "refund"];
     if (finalStatuses.includes(currentStatus)) {
         throw new BadRequest(`Order is already ${currentStatus} and cannot be changed`);
     }
