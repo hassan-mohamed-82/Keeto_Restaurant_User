@@ -5,7 +5,7 @@ import { getOrderByRedeemCode, approveRedeemCode } from "../../controllers/admin
 
 const router = Router();
 
+router.post("/", hasPermission("orders", "update"), catchAsync(approveRedeemCode));
 router.get("/verify/:code", hasPermission("orders", "read"), catchAsync(getOrderByRedeemCode));
-router.post("/approve", hasPermission("orders", "update"), catchAsync(approveRedeemCode));
 
 export default router;

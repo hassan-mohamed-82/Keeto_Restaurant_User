@@ -24,7 +24,7 @@ const getRestaurantId = (req: Request): string => {
 };
 
 // 🟢 1. جلب تفاصيل طلب الاستبدال بواسطة الـ Code (أو الـ ID)
-export const getRedeemRequestByCode = async (req: Request, res: Response) => {
+export const getOrderByRedeemCode = async (req: Request, res: Response) => {
     const restaurantId = getRestaurantId(req);
     const code = (req.params.code || req.query.code || req.params.redeemRequestId) as string;
 
@@ -75,7 +75,7 @@ export const getRedeemRequestByCode = async (req: Request, res: Response) => {
 };
 
 // 🟢 2. قبول أو رفض طلب الاستبدال ومعالجة خصم النقاط وانتهاء الصلاحية
-export const processRedeemRequest = async (req: Request, res: Response) => {
+export const approveRedeemCode = async (req: Request, res: Response) => {
     const restaurantId = getRestaurantId(req);
     const { redeemRequestId, action } = req.body; // action: "approve" | "reject"
 
