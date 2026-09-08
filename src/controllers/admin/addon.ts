@@ -53,7 +53,7 @@ export const createAddon = async (req: Request | any, res: Response) => {
 };
 
 export const getAllAddons = async (req: Request, res: Response) => {
-      const restaurantId = req.user?.restaurantId || req.user?.id; 
+    const restaurantId = req.user?.restaurantId || req.user?.id; 
     if (!restaurantId) throw new BadRequest("Restaurant ID missing");
     const allAddons = await db
         .select({
