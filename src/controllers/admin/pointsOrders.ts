@@ -16,6 +16,7 @@ import { NotFound } from "../../Errors/NotFound";
 import { SuccessResponse } from "../../utils/response";
 import { v4 as uuidv4 } from "uuid";
 import { sendPushNotification } from "../../utils/notifications";
+import { checkFoodAvailabilityInBranch } from "../../helpers/food.helper";
 
 const getRestaurantId = (req: Request): string => {
     const id = req.user?.restaurantId || req.user?.id;
@@ -23,10 +24,11 @@ const getRestaurantId = (req: Request): string => {
     return id;
 };
 
-// 🟢 1. جلب تفاصيل طلب الاستبدال بواسطة الـ Code (أو الـ ID)
+// 🟢 1. جلب تفاصيل طلب الاستبدال بواسطة الـ Code (أو الـ ID) مع فحص توفر الوجبة بالفرع
 export const getOrderByRedeemCode = async (req: Request, res: Response) => {
     const restaurantId = getRestaurantId(req);
     const code = (req.params.code || req.query.code || req.params.redeemRequestId) as string;
+    const branchId = (req.query.branchId || req.user?.branchId) as string | undefined;
 
     if (!code) throw new BadRequest("Redeem code or ID is required");
 
@@ -65,11 +67,22 @@ export const getOrderByRedeemCode = async (req: Request, res: Response) => {
 
     const isExpired = new Date() > new Date(request.expiresAt);
 
+    // فحص توفر الوجبة ومكوناتها وخياراتها بالفرع والمطعم
+    const availability = await checkFoodAvailabilityInBranch({
+        foodId: request.foodId,
+        restaurantId,
+        branchId: branchId || null,
+    });
+
     return SuccessResponse(res, {
         message: "Redeem request fetched successfully",
         data: {
             ...request,
             isExpired,
+            branchId: branchId || null,
+            isAvailableInBranch: availability.isAvailable,
+            unavailabilityReason: availability.reason || null,
+            availabilityDetails: availability.details || null,
         }
     });
 };
@@ -77,7 +90,8 @@ export const getOrderByRedeemCode = async (req: Request, res: Response) => {
 // 🟢 2. قبول أو رفض طلب الاستبدال ومعالجة خصم النقاط وانتهاء الصلاحية
 export const approveRedeemCode = async (req: Request, res: Response) => {
     const restaurantId = getRestaurantId(req);
-    const { redeemRequestId, action , branchId } = req.body; // action: "approve" | "reject"
+    const { redeemRequestId, action, branchId } = req.body; // action: "approve" | "reject"
+    const targetBranchId = (branchId || req.query.branchId || req.user?.branchId) as string | undefined;
 
     if (!redeemRequestId) throw new BadRequest("redeemRequestId is required");
     if (!action || !["approve", "reject"].includes(action)) {
@@ -171,6 +185,19 @@ export const approveRedeemCode = async (req: Request, res: Response) => {
     // ==========================================
     // 🟢 2. حالة القبول (APPROVE) - الخصم يتم هنا
     // ==========================================
+    // التحقق من توفر الوجبة ومكوناتها وخياراتها بالفرع والمطعم قبل القبول وإنشاء الطلب
+    const availability = await checkFoodAvailabilityInBranch({
+        foodId: redeemReq.foodId,
+        restaurantId,
+        branchId: targetBranchId || null,
+    });
+
+    if (!availability.isAvailable) {
+        throw new BadRequest(
+            availability.reason || "الوجبة غير متوفرة للاستبدال حالياً في هذا الفرع أو نفدت من المخزون"
+        );
+    }
+
     const newOrderId = uuidv4();
     const orderNumber = `ORD-${Date.now()}`;
 
@@ -265,7 +292,7 @@ export const approveRedeemCode = async (req: Request, res: Response) => {
             orderSource: "online_order_app",
             paymentMethod: null,
             orderType: "takeaway",
-            branchId:branchId,
+            branchId: targetBranchId || null,
             subtotal: "0.00",
             deliveryFee: "0.00",
             serviceFee: "0.00",
