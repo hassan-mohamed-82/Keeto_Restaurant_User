@@ -12,4 +12,5 @@ router.use("/auth", authRouter);
 // ضفنا الـ Underscore هنا 👇
 router.use(authenticated, authorizedCashier());
 
+router.use("/auth", authRouter);
 export default router;
