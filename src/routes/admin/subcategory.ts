@@ -8,6 +8,7 @@ import {
   deleteSubcategory,
   getallcategory,
   updateBranchSubcategoryStatus,
+  updateBranchSubcategoryOutOfStock,
   getSubcategoryBranchAvailability,
   getActiveSubcategoriesByBranch,
 } from "../../controllers/admin/subcategory";
@@ -21,6 +22,10 @@ router.get("/branch/:branchId/active", catchAsync(getActiveSubcategoriesByBranch
 // Branch status & availability
 router.get("/:id/branches-availability", catchAsync(getSubcategoryBranchAvailability));
 router.put("/:id/branch/:branchId/status", catchAsync(updateBranchSubcategoryStatus));
+
+// Subcategory out-of-stock
+router.put("/:id/branch/:branchId/out-of-stock", catchAsync(updateBranchSubcategoryOutOfStock));
+router.put("/:id/out-of-stock", catchAsync(updateBranchSubcategoryOutOfStock));
 
 // Standard CRUD
 router.post("/", catchAsync(createSubcategory));
