@@ -26,12 +26,12 @@ export const restrauntadmin = mysqlTable("restrauntadmins", {
     phoneNumber: varchar("phone_number", { length: 255 }).notNull(),
 
     // هيكل الأدوار واضح ومحدد
-    type: mysqlEnum("type", ["owner", "subadmin", "branch_manager", "staff"])
+    type: mysqlEnum("type", ["owner", "subadmin", "branch_manager", "staff", "cashier"])
         .notNull()
         .default("branch_manager"),
 
     // نظام الصلاحيات المفضل (عبر الـ Role)
-roleId: char("role_id", { length: 36 }).references(() => role_restaurant.id, { onDelete: "set null" }),
+    roleId: char("role_id", { length: 36 }).references(() => role_restaurant.id, { onDelete: "set null" }),
 
     // اختياري: لو حابة تدي صلاحيات استثنائية مخصصة للشخص ده برضه بره الرول العامة بتاعته
     permissions: json("permissions").$type<Permission[]>().default([]),

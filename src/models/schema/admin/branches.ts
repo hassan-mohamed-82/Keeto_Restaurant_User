@@ -28,6 +28,8 @@ export const branches = mysqlTable("branches", {
     lng: varchar("lng", { length: 255 }),
     status: mysqlEnum("status", ["active", "inactive"]).default("active"),
     inactiveReason: text("inactive_reason"),
+    cash_status: boolean("cash_status").default(true),
+    visa_status: boolean("visa_status").default(true),
     createdAt: timestamp("created_at").defaultNow(),
 });
 

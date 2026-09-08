@@ -1,3 +1,4 @@
+
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
 import { branches, restaurants, restrauntadmin, rolesadmin, restaurantSchedules } from "../../models/schema";
@@ -8,7 +9,7 @@ import { UnauthorizedError } from "../../Errors";
 import bcrypt from "bcrypt";
 import { generateRestaurantAdminToken } from "../../utils/jwt";
 
-export async function login(req: Request, res: Response) {
+export async function login_cashier(req: Request, res: Response) {
     const { email, password , fcmToken } = req.body;
     if (!email || !password) {
         throw new BadRequest("Email and password are required");
@@ -21,7 +22,7 @@ export async function login(req: Request, res: Response) {
         .select()
         .from(restrauntadmin)
         .where(and(eq(restrauntadmin.email, email.trim().toLowerCase()),
-        inArray(restrauntadmin.type, ["owner", "subadmin", "branch_manager", "staff"])))
+        eq(restrauntadmin.type, "cashier")))
         .limit(1);
 
     // إذا لم يتم العثور على الحساب
@@ -127,7 +128,7 @@ export async function login(req: Request, res: Response) {
 
     // 7. صياغة الاستجابة الموحدة لتناسب الـ Frontend
     return SuccessResponse(res, {
-        message: `${user.type === "owner" ? "Owner" : "Staff"} logged in successfully`,
+        message: `Cashier logged in successfully`,
         token,
         admin: {
             id: user.id,

@@ -48,7 +48,7 @@ export const generateRestaurantAdminToken = (data: {
     id: string;
     name: string;
     // 🔄 ضفنا هنا "owner" و "staff" لتقبلها الدالة في الـ Login مباشرة دون اعتراض
-    type: "subadmin" | "branch_manager" | "owner" | "staff";
+    type: "subadmin" | "branch_manager" | "owner" | "staff" | "cashier";
     restaurantId: string;
     branchId?: string | null;
 }): string => {

@@ -13,7 +13,7 @@ export interface AppUser {
     role: Role;
 
     // restaurant system
-    type?: "owner" | "subadmin" | "branch_manager" | "staff";
+    type?: "owner" | "subadmin" | "branch_manager" | "staff" | "cashier";
 
     restaurantId?: string | null;
     branchId?: string | null;
