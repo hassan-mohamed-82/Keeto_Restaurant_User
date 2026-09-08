@@ -913,7 +913,8 @@ const updateOrderStatus = async (req, res) => {
     if (adminBranchId && existingOrder.branchId !== adminBranchId)
         throw new BadRequest_1.BadRequest("Unauthorized");
     const currentStatus = existingOrder.status;
-    const finalStatuses = ["delivered", "cancelled", "refund"];
+    //const finalStatuses = ["delivered", "cancelled", "refund"];
+    const finalStatuses = ["cancelled", "refund"];
     if (finalStatuses.includes(currentStatus)) {
         throw new BadRequest_1.BadRequest(`Order is already ${currentStatus} and cannot be changed`);
     }
@@ -1063,69 +1064,67 @@ const updateOrderStatus = async (req, res) => {
         // ⭐ LOYALTY POINTS: إضافة نقاط المطعم عند التوصيل (DELIVERED)
         // ==========================================
         if (status === "delivered") {
+            // 1. جلب الوجبات والكميات المشتراة في الطلب
             const items = await tx
                 .select({ foodId: schema_1.orderItems.foodId, quantity: schema_1.orderItems.quantity })
                 .from(schema_1.orderItems)
                 .where((0, drizzle_orm_1.eq)(schema_1.orderItems.orderId, orderId));
             if (items.length > 0) {
                 const foodIds = items.map(i => i.foodId);
-                const enrolledRows = await tx
-                    .select({ foodId: schema_1.pointsProducts.foodId, isActive: schema_1.pointsProducts.isActive })
-                    .from(schema_1.pointsProducts)
-                    .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.pointsProducts.restaurantId, existingOrder.restaurantId), (0, drizzle_orm_1.inArray)(schema_1.pointsProducts.foodId, foodIds)));
-                const enrolledMap = new Map(enrolledRows.filter(r => r.isActive).map(r => [r.foodId, true]));
-                if (enrolledMap.size > 0) {
-                    const enrolledFoodIds = foodIds.filter(id => enrolledMap.has(id));
-                    const foodPoints = await tx
-                        .select({ id: schema_1.food.id, points: schema_1.food.points })
-                        .from(schema_1.food)
-                        .where((0, drizzle_orm_1.inArray)(schema_1.food.id, enrolledFoodIds));
-                    const foodPointsMap = new Map(foodPoints.map(f => [f.id, f.points ?? 0]));
-                    let totalPointsEarned = 0;
-                    for (const item of items) {
-                        if (enrolledMap.has(item.foodId)) {
-                            totalPointsEarned += (foodPointsMap.get(item.foodId) ?? 0) * item.quantity;
-                        }
-                    }
-                    if (totalPointsEarned > 0) {
-                        let [userPointRecord] = await tx
-                            .select()
-                            .from(schema_1.userRestaurantPoints)
-                            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.userRestaurantPoints.userId, existingOrder.userId), (0, drizzle_orm_1.eq)(schema_1.userRestaurantPoints.restaurantId, existingOrder.restaurantId)))
-                            .limit(1);
-                        if (!userPointRecord) {
-                            const newPointId = (0, uuid_1.v4)();
-                            await tx.insert(schema_1.userRestaurantPoints).values({
-                                id: newPointId,
-                                userId: existingOrder.userId,
-                                restaurantId: existingOrder.restaurantId,
-                                points: 0,
-                            });
-                            [userPointRecord] = await tx
-                                .select()
-                                .from(schema_1.userRestaurantPoints)
-                                .where((0, drizzle_orm_1.eq)(schema_1.userRestaurantPoints.id, newPointId))
-                                .limit(1);
-                        }
-                        const pointsBefore = userPointRecord.points ?? 0;
-                        const pointsAfter = pointsBefore + totalPointsEarned;
-                        await tx
-                            .update(schema_1.userRestaurantPoints)
-                            .set({ points: pointsAfter, updatedAt: new Date() })
-                            .where((0, drizzle_orm_1.eq)(schema_1.userRestaurantPoints.id, userPointRecord.id));
-                        await tx.insert(schema_1.userPointsTransactions).values({
-                            id: (0, uuid_1.v4)(),
+                // 2. جلب النقاط الخاصة بكل وجبة مباشرة من جدول الـ food
+                const foodPoints = await tx
+                    .select({ id: schema_1.food.id, points: schema_1.food.points })
+                    .from(schema_1.food)
+                    .where((0, drizzle_orm_1.inArray)(schema_1.food.id, foodIds));
+                const foodPointsMap = new Map(foodPoints.map(f => [f.id, f.points ?? 0]));
+                // 3. حساب إجمالي النقاط (نقاط الوجبة × الكمية)
+                let totalPointsEarned = 0;
+                for (const item of items) {
+                    const pointsPerItem = foodPointsMap.get(item.foodId) ?? 0;
+                    totalPointsEarned += pointsPerItem * item.quantity;
+                }
+                // 4. إضافة النقاط لرصيد المستخدم إذا كانت أكبر من صفر
+                if (totalPointsEarned > 0) {
+                    let [userPointRecord] = await tx
+                        .select()
+                        .from(schema_1.userRestaurantPoints)
+                        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.userRestaurantPoints.userId, existingOrder.userId), (0, drizzle_orm_1.eq)(schema_1.userRestaurantPoints.restaurantId, existingOrder.restaurantId)))
+                        .limit(1);
+                    // إنشاء سجل نقاط للمستخدم في هذا المطعم إذا لم يكن موجوداً من قبل
+                    if (!userPointRecord) {
+                        const newPointId = (0, uuid_1.v4)();
+                        await tx.insert(schema_1.userRestaurantPoints).values({
+                            id: newPointId,
                             userId: existingOrder.userId,
                             restaurantId: existingOrder.restaurantId,
-                            type: "earn",
-                            points: totalPointsEarned,
-                            balanceBefore: pointsBefore,
-                            balanceAfter: pointsAfter,
-                            orderId: orderId,
-                            note: `Earned ${totalPointsEarned} points from order #${existingOrder.orderNumber}`,
-                            createdAt: new Date(),
+                            points: 0,
                         });
+                        [userPointRecord] = await tx
+                            .select()
+                            .from(schema_1.userRestaurantPoints)
+                            .where((0, drizzle_orm_1.eq)(schema_1.userRestaurantPoints.id, newPointId))
+                            .limit(1);
                     }
+                    const pointsBefore = userPointRecord.points ?? 0;
+                    const pointsAfter = pointsBefore + totalPointsEarned;
+                    // تحديث الرصيد التراكمي
+                    await tx
+                        .update(schema_1.userRestaurantPoints)
+                        .set({ points: pointsAfter, updatedAt: new Date() })
+                        .where((0, drizzle_orm_1.eq)(schema_1.userRestaurantPoints.id, userPointRecord.id));
+                    // تسجيل عملية كسب النقاط في جدول السجل Transactions
+                    await tx.insert(schema_1.userPointsTransactions).values({
+                        id: (0, uuid_1.v4)(),
+                        userId: existingOrder.userId,
+                        restaurantId: existingOrder.restaurantId,
+                        type: "earn",
+                        points: totalPointsEarned,
+                        balanceBefore: pointsBefore,
+                        balanceAfter: pointsAfter,
+                        orderId: orderId,
+                        note: `Earned ${totalPointsEarned} points from order #${existingOrder.orderNumber}`,
+                        createdAt: new Date(),
+                    });
                 }
             }
         }
@@ -1172,14 +1171,27 @@ const setOrderPreparingDuration = async (req, res) => {
     if (adminBranchId && existingOrder.branchId !== adminBranchId)
         throw new BadRequest_1.BadRequest('Unauthorized');
     let finalDuration = duration;
-    // إذا لم يرسل الآدمن duration، نعتمد maxDeliveryTime للمطعم
+    // إذا لم يرسل الآدمن duration، نعتمد الوقت الأقصى حسب نوع الأوردر (delivery / takeaway / dine_in)
     if (typeof finalDuration !== 'number') {
         const [settings] = await connection_1.db
-            .select({ maxDeliveryTime: schema_1.restaurantSettings.maxDeliveryTime })
+            .select({
+            maxDeliveryTime: schema_1.restaurantSettings.maxDeliveryTime,
+            maxTakeAwayTime: schema_1.restaurantSettings.maxTakeAwayTime,
+            maxDineInTime: schema_1.restaurantSettings.maxDineInTime,
+        })
             .from(schema_1.restaurantSettings)
             .where((0, drizzle_orm_1.eq)(schema_1.restaurantSettings.restaurantId, existingOrder.restaurantId))
             .limit(1);
-        finalDuration = settings?.maxDeliveryTime ?? 30;
+        const orderType = existingOrder.orderType || 'delivery';
+        if (orderType === 'takeaway') {
+            finalDuration = settings?.maxTakeAwayTime ?? 25;
+        }
+        else if (orderType === 'dine_in') {
+            finalDuration = settings?.maxDineInTime ?? 25;
+        }
+        else {
+            finalDuration = settings?.maxDeliveryTime ?? 25;
+        }
     }
     if (finalDuration < 0) {
         throw new BadRequest_1.BadRequest('Invalid duration value');
@@ -1385,9 +1397,9 @@ const generateOrderInvoicePDF = async (req, res) => {
     // 4. إنشاء الـ PDF بحجم إيصال حراري
     const doc = new pdfkit_1.default({ margin: 20, size: [250, 600] });
     // تسجيل خط يدعم اللغة العربية بكافة تشكيلاتها
-    const fontPath = path_1.default.join(process.cwd(), 'assets', 'fonts', 'Arial.ttf');
     const cairoPath = path_1.default.join(process.cwd(), 'assets', 'fonts', 'Cairo-Regular.ttf');
-    const chosenFontPath = fs_1.default.existsSync(fontPath) ? fontPath : (fs_1.default.existsSync(cairoPath) ? cairoPath : null);
+    const fontPath = path_1.default.join(process.cwd(), 'assets', 'fonts', 'Arial.ttf');
+    const chosenFontPath = fs_1.default.existsSync(cairoPath) ? cairoPath : (fs_1.default.existsSync(fontPath) ? fontPath : null);
     if (chosenFontPath) {
         doc.registerFont('CairoFont', chosenFontPath);
         doc.font('CairoFont');
@@ -1440,15 +1452,15 @@ const generateOrderInvoicePDF = async (req, res) => {
                 doc.text(`Street: ${(0, fixArabic_1.fixArabicText)(addrStreet)}`);
             let details = '';
             if (addrBuilding)
-                details += `Bldg: ${addrBuilding}`;
+                details += `Bldg: ${(0, fixArabic_1.fixArabicText)(addrBuilding)}`;
             if (addrFloor)
-                details += `${details ? ' | ' : ''}Floor: ${addrFloor}`;
+                details += `${details ? ' | ' : ''}Floor: ${(0, fixArabic_1.fixArabicText)(addrFloor)}`;
             if (addrApartment)
-                details += `${details ? ' | ' : ''}Apt: ${addrApartment}`;
-            if (addrLandmark)
-                details += `${details ? ' | ' : ''}${(0, fixArabic_1.fixArabicText)(addrLandmark)}`;
+                details += `${details ? ' | ' : ''}Apt: ${(0, fixArabic_1.fixArabicText)(addrApartment)}`;
             if (details)
                 doc.text(details);
+            if (addrLandmark)
+                doc.text(`Landmark: ${(0, fixArabic_1.fixArabicText)(addrLandmark)}`);
             if (addrFull && !addrStreet)
                 doc.text(`Address: ${(0, fixArabic_1.fixArabicText)(addrFull)}`);
             doc.moveDown(0.5);

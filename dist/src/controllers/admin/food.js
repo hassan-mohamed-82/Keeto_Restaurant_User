@@ -739,7 +739,8 @@ exports.changeFoodStatus = changeFoodStatus;
  */
 const getOutOfStockFoods = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
-    const branchId = req.user?.branchId;
+    // 🟢 1. Extract branchId from user session OR URL query parameter
+    const branchId = (req.user?.branchId || req.query.branchId);
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
     // =========================================================
@@ -871,17 +872,15 @@ const getOutOfStockFoods = async (req, res) => {
         .from(schema_1.food)
         .leftJoin(schema_1.categories, (0, drizzle_orm_1.eq)(schema_1.food.categoryid, schema_1.categories.id))
         .leftJoin(schema_1.subcategories, (0, drizzle_orm_1.eq)(schema_1.food.subcategoryid, schema_1.subcategories.id))
-        .where((0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId)); // fetch all foods — filter below
+        .where((0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId));
     if (rawFoods.length === 0) {
         return (0, response_1.SuccessResponse)(res, {
             message: "Get out-of-stock foods success",
             data: [],
         });
     }
-    // Get unavailable branches for ALL foods
     const foodIds = rawFoods.map((f) => f.id);
     const unavailableBranchesMap = await (0, food_helper_1.getUnavailableBranchesForFoods)(foodIds);
-    // Keep only: globally OOS  OR  has at least one unavailable branch
     const filtered = rawFoods.filter((f) => f.isOutOfStock || (unavailableBranchesMap.get(f.id)?.length ?? 0) > 0);
     if (filtered.length === 0) {
         return (0, response_1.SuccessResponse)(res, {

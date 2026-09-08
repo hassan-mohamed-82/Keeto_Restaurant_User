@@ -3,9 +3,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.restrauntadmin = void 0;
 const mysql_core_1 = require("drizzle-orm/mysql-core");
 const drizzle_orm_1 = require("drizzle-orm");
-const rolesadmin_1 = require("./rolesadmin");
 const restaurants_1 = require("./restaurants");
 const branches_1 = require("./branches");
+const role_restaurant_1 = require("./role_restaurant");
 exports.restrauntadmin = (0, mysql_core_1.mysqlTable)("restrauntadmins", {
     id: (0, mysql_core_1.char)("id", { length: 36 }).primaryKey().default((0, drizzle_orm_1.sql) `(uuid())`),
     fcmToken: (0, mysql_core_1.text)("fcm_token"),
@@ -22,11 +22,11 @@ exports.restrauntadmin = (0, mysql_core_1.mysqlTable)("restrauntadmins", {
     password: (0, mysql_core_1.varchar)("password", { length: 255 }).notNull(),
     phoneNumber: (0, mysql_core_1.varchar)("phone_number", { length: 255 }).notNull(),
     // هيكل الأدوار واضح ومحدد
-    type: (0, mysql_core_1.mysqlEnum)("type", ["owner", "subadmin", "branch_manager", "staff"])
+    type: (0, mysql_core_1.mysqlEnum)("type", ["owner", "subadmin", "branch_manager", "staff", "cashier"])
         .notNull()
         .default("branch_manager"),
     // نظام الصلاحيات المفضل (عبر الـ Role)
-    roleId: (0, mysql_core_1.char)("role_id", { length: 36 }).references(() => rolesadmin_1.rolesadmin.id),
+    roleId: (0, mysql_core_1.char)("role_id", { length: 36 }).references(() => role_restaurant_1.role_restaurant.id, { onDelete: "set null" }),
     // اختياري: لو حابة تدي صلاحيات استثنائية مخصصة للشخص ده برضه بره الرول العامة بتاعته
     permissions: (0, mysql_core_1.json)("permissions").$type().default([]),
     status: (0, mysql_core_1.mysqlEnum)("status", ["active", "inactive"]).default("active"),

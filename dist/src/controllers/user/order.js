@@ -97,7 +97,16 @@ const checkout = async (req, res) => {
         throw new BadRequest_1.BadRequest("Order failed. Delivery service is currently disabled for this restaurant.");
     if (resolvedOrderType === "takeaway" && !status.canTakeawayNow)
         throw new BadRequest_1.BadRequest("Order failed. Takeaway service is currently disabled for this restaurant.");
-    const defaultPreparingDuration = settings?.maxDeliveryTime ?? 30;
+    let defaultPreparingDuration;
+    if (resolvedOrderType === "takeaway") {
+        defaultPreparingDuration = settings?.maxTakeAwayTime ?? 25;
+    }
+    else if (resolvedOrderType === "dine_in") {
+        defaultPreparingDuration = settings?.maxDineInTime ?? 25;
+    }
+    else {
+        defaultPreparingDuration = settings?.maxDeliveryTime ?? 25;
+    }
     // ==========================================
     // ⚡ 5. Batch Fetching
     // ==========================================

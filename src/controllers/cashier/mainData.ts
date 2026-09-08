@@ -17,7 +17,7 @@ export async function categories_list(req: Request, res: Response) {
         throw new BadRequest("language is not valid");
     }
 
-    const categories_items = db
+    const categories_items = await db
     .select({
         id: categories.id,
         name: language === "En" ? categories.name : language === "Ar" ? categories.nameAr : categories.nameFr,
@@ -40,6 +40,9 @@ export async function categories_list(req: Request, res: Response) {
 export async function sub_categories_list(req: Request, res: Response) {
     const { language } = req.body;
     const restaurantId = req.user?.restaurantId || req.user?.id; 
+    if (!restaurantId) {
+        throw new UnauthorizedError("Unauthorized");
+    }
     if (!language) {
         throw new BadRequest("language is required");
     }
@@ -47,7 +50,7 @@ export async function sub_categories_list(req: Request, res: Response) {
         throw new BadRequest("language is not valid");
     }
 
-    const subcategories_items = db
+    const subcategories_items = await db
     .select({
         id: subcategories.id,
         name: language === "En" ? subcategories.name : language === "Ar" ? subcategories.nameAr : subcategories.nameFr,
@@ -72,9 +75,16 @@ export async function sub_categories_list(req: Request, res: Response) {
 
 export async function products(req: Request, res: Response) {
     const { language, categoryId, subcategoryId, serviceModule } = req.body;
-    const restaurantId = req.user?.restaurantid || req.user?.id;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     const branchId = req.user?.branchId || req.user?.id; 
     
+    if (!restaurantId) {
+        throw new UnauthorizedError("Unauthorized");
+    }
+    if (!branchId) {
+        throw new BadRequest("branchId is required");
+    }
+
     // 1. التحقق من صحة المدخلات
     if (!language) {
         throw new BadRequest("language is required");

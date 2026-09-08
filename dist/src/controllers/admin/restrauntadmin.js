@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteStaff = exports.toggleStaffStatus = exports.updateStaff = exports.getStaffById = exports.getAllStaff = exports.createStaff = void 0;
+exports.deleteStaff = exports.toggleStaffStatus = exports.updateStaff = exports.getStaffById = exports.getAllStaff = exports.createStaff = exports.getAllRoles = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -12,6 +12,15 @@ const NotFound_1 = require("../../Errors/NotFound");
 const BadRequest_1 = require("../../Errors/BadRequest");
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const uuid_1 = require("uuid");
+// Get all roles
+const getAllRoles = async (req, res) => {
+    const restaurantId = (req.user?.restaurantId || req.user?.id || req.user?.branchId);
+    if (!restaurantId)
+        throw new BadRequest_1.BadRequest("Restaurant context missing");
+    const rolesList = await connection_1.db.select().from(schema_1.role_restaurant).where((0, drizzle_orm_1.eq)(schema_1.role_restaurant.restaurantId, restaurantId));
+    return (0, response_1.SuccessResponse)(res, { message: "Get all roles success", data: rolesList });
+};
+exports.getAllRoles = getAllRoles;
 // ==========================================
 // 1. إضافة موظف جديد (Staff / Branch Manager)
 // ==========================================
@@ -40,7 +49,7 @@ const createStaff = async (req, res) => {
     }
     // لو تم إرسال Role ID نتأكد إنه موجود
     if (roleId) {
-        const roleExists = await connection_1.db.select().from(schema_1.rolesadmin).where((0, drizzle_orm_1.eq)(schema_1.rolesadmin.id, roleId)).limit(1);
+        const roleExists = await connection_1.db.select().from(schema_1.role_restaurant).where((0, drizzle_orm_1.eq)(schema_1.role_restaurant.id, roleId)).limit(1);
         if (!roleExists[0])
             throw new BadRequest_1.BadRequest("Role not found");
     }
@@ -83,13 +92,13 @@ const getAllStaff = async (req, res) => {
             name: schema_1.branches.name,
         },
         role: {
-            id: schema_1.rolesadmin.id,
-            name: schema_1.rolesadmin.name,
+            id: schema_1.role_restaurant.id,
+            name: schema_1.role_restaurant.name,
         },
     })
         .from(schema_1.restrauntadmin)
         .leftJoin(schema_1.branches, (0, drizzle_orm_1.eq)(schema_1.restrauntadmin.branchId, schema_1.branches.id))
-        .leftJoin(schema_1.rolesadmin, (0, drizzle_orm_1.eq)(schema_1.restrauntadmin.roleId, schema_1.rolesadmin.id))
+        .leftJoin(schema_1.role_restaurant, (0, drizzle_orm_1.eq)(schema_1.restrauntadmin.roleId, schema_1.role_restaurant.id))
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.restrauntadmin.restaurantId, restaurantId), (0, drizzle_orm_1.ne)(schema_1.restrauntadmin.type, "owner") // 🛡️ استثناء المالك حتى لا يظهر كالموظفين العاديين
     ));
     return (0, response_1.SuccessResponse)(res, { message: "Get all staff success", data: staffList });

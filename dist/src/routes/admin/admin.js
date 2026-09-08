@@ -6,6 +6,8 @@ const restrauntadmin_1 = require("../../controllers/admin/restrauntadmin");
 const fcmToken_1 = require("../../controllers/admin/fcmToken");
 const catchAsync_1 = require("../../utils/catchAsync");
 const router = (0, express_1.Router)();
+//Get all roles
+router.get("/roles", (0, hasPermission_1.hasPermission)("admins", "read"), (0, catchAsync_1.catchAsync)(restrauntadmin_1.getAllRoles));
 // ✅ Create staff - يحتاج صلاحية create (admins module)
 router.post("/", (0, hasPermission_1.hasPermission)("admins", "create"), (0, catchAsync_1.catchAsync)(restrauntadmin_1.createStaff));
 // ✅ Get all staff - يحتاج صلاحية read
