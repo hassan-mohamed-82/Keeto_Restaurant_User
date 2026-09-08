@@ -44,6 +44,7 @@ import DeliveryManRouter from "./delivery_man";
 import RecommendedFoodRouter from "./recommendedFood";
 import FreeDeliveryOfferRouter from "./freeDeliveryOffer";
 import PricingRouter from "./pricing";
+import ShiftsRouter from "./pos/shifts";
 const router = Router();
 
 router.use("/auth", authRouter);
@@ -90,5 +91,7 @@ router.use("/delivery-men", DeliveryManRouter);
 router.use("/recommended-foods", RecommendedFoodRouter);
 router.use("/free-delivery", FreeDeliveryOfferRouter);
 router.use("/pricing", PricingRouter);
+router.use("/shifts", ShiftsRouter);
+router.use("/pos/shifts", ShiftsRouter);
 
 export default router;

@@ -10,6 +10,9 @@ router.get("/branch/:branchId/active", (0, catchAsync_1.catchAsync)(subcategory_
 // Branch status & availability
 router.get("/:id/branches-availability", (0, catchAsync_1.catchAsync)(subcategory_1.getSubcategoryBranchAvailability));
 router.put("/:id/branch/:branchId/status", (0, catchAsync_1.catchAsync)(subcategory_1.updateBranchSubcategoryStatus));
+// Subcategory out-of-stock
+router.put("/:id/branch/:branchId/out-of-stock", (0, catchAsync_1.catchAsync)(subcategory_1.updateBranchSubcategoryOutOfStock));
+router.put("/:id/out-of-stock", (0, catchAsync_1.catchAsync)(subcategory_1.updateBranchSubcategoryOutOfStock));
 // Standard CRUD
 router.post("/", (0, catchAsync_1.catchAsync)(subcategory_1.createSubcategory));
 router.get("/", (0, catchAsync_1.catchAsync)(subcategory_1.getAllSubcategories));
