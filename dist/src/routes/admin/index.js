@@ -45,6 +45,7 @@ const delivery_man_1 = __importDefault(require("./delivery_man"));
 const recommendedFood_1 = __importDefault(require("./recommendedFood"));
 const freeDeliveryOffer_1 = __importDefault(require("./freeDeliveryOffer"));
 const pricing_1 = __importDefault(require("./pricing"));
+const shifts_1 = __importDefault(require("./pos/shifts"));
 const router = (0, express_1.Router)();
 router.use("/auth", auth_1.default);
 // ضفنا الـ Underscore هنا 👇
@@ -88,4 +89,6 @@ router.use("/delivery-men", delivery_man_1.default);
 router.use("/recommended-foods", recommendedFood_1.default);
 router.use("/free-delivery", freeDeliveryOffer_1.default);
 router.use("/pricing", pricing_1.default);
+router.use("/shifts", shifts_1.default);
+router.use("/pos/shifts", shifts_1.default);
 exports.default = router;

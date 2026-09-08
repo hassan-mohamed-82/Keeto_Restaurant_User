@@ -407,6 +407,7 @@ const getMenuWithDynamicPricing = async (req, res) => {
             subcategoryId: schema_1.food.subcategoryid,
             mainBasePrice: schema_1.food.price,
             isOutOfStock: schema_1.food.isOutOfStock,
+            points: schema_1.food.points,
             branchOverridePrice: schema_1.branchMenuItems.price,
             branchChannelPrice: branchChannelPricingAlias.price,
             globalChannelPrice: globalChannelPricingAlias.price,

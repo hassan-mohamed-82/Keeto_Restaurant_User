@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getActiveSubcategoriesByBranch = exports.getSubcategoryBranchAvailability = exports.updateBranchSubcategoryStatus = exports.getallcategory = exports.deleteSubcategory = exports.updateSubcategory = exports.getSubcategoryById = exports.getAllSubcategories = exports.createSubcategory = void 0;
+exports.updateBranchSubcategoryOutOfStock = exports.getActiveSubcategoriesByBranch = exports.getSubcategoryBranchAvailability = exports.updateBranchSubcategoryStatus = exports.getallcategory = exports.deleteSubcategory = exports.updateSubcategory = exports.getSubcategoryById = exports.getAllSubcategories = exports.createSubcategory = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -359,22 +359,83 @@ const updateBranchSubcategoryStatus = async (req, res) => {
             status: newStatus,
         });
     }
+    // 🟢 مزامنة حالة كل منتجات هذا الـ subcategory داخل الفرع
+    const subcategoryFoods = await connection_1.db
+        .select({
+        id: schema_1.food.id,
+        status: schema_1.food.status, // الحالة العامة في جدول food
+    })
+        .from(schema_1.food)
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.subcategoryid, subcategoryId), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId)));
+    if (subcategoryFoods.length > 0) {
+        const foodIds = subcategoryFoods.map((f) => f.id);
+        const existingBranchItems = await connection_1.db
+            .select({
+            id: schema_1.branchMenuItems.id,
+            foodId: schema_1.branchMenuItems.foodId,
+            status: schema_1.branchMenuItems.status,
+        })
+            .from(schema_1.branchMenuItems)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.branchId, branchId), (0, drizzle_orm_1.inArray)(schema_1.branchMenuItems.foodId, foodIds)));
+        const existingMap = new Map(existingBranchItems.map((item) => [item.foodId, item]));
+        if (newStatus === "inactive") {
+            // تحويل كل المنتجات إلى inactive في هذا الفرع
+            for (const f of subcategoryFoods) {
+                const existingItem = existingMap.get(f.id);
+                if (existingItem) {
+                    await connection_1.db
+                        .update(schema_1.branchMenuItems)
+                        .set({ status: "inactive", updatedAt: new Date() })
+                        .where((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.id, existingItem.id));
+                }
+                else {
+                    await connection_1.db.insert(schema_1.branchMenuItems).values({
+                        id: (0, uuid_1.v4)(),
+                        branchId,
+                        foodId: f.id,
+                        status: "inactive",
+                    });
+                }
+            }
+        }
+        else {
+            // عند التفعيل: المنتجات النشطة فقط في الكتالوج الرئيسي تُفعل، والمنتج غير النشط لا يُغير
+            for (const f of subcategoryFoods) {
+                if (f.status === "active") {
+                    const existingItem = existingMap.get(f.id);
+                    if (existingItem) {
+                        await connection_1.db
+                            .update(schema_1.branchMenuItems)
+                            .set({ status: "active", updatedAt: new Date() })
+                            .where((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.id, existingItem.id));
+                    }
+                }
+            }
+        }
+    }
     // مسح الكاش
     try {
         await redis_1.default.del(`admin:branch_menu:${branchId}`);
         const userCacheKey = `restaurant_details:${restaurantId}:branch:${branchId}`;
         await redis_1.default.del(userCacheKey);
+        const homeMenuKeys = await redis_1.default.keys("restaurant_details:*");
+        if (homeMenuKeys.length > 0)
+            await redis_1.default.del(...homeMenuKeys);
+        const categoryKeys = await redis_1.default.keys("foods_category:*");
+        if (categoryKeys.length > 0)
+            await redis_1.default.del(...categoryKeys);
     }
     catch (e) {
         // Cache error is non-blocking
     }
     return (0, response_1.SuccessResponse)(res, {
-        message: `Subcategory "${sub.name}" is now ${newStatus} in branch "${branch.name}"`,
+        message: `Subcategory "${sub.name}" is now ${newStatus} in branch "${branch.name}" (products synced)`,
         data: {
             subcategoryId,
             branchId,
             status: newStatus,
             isAvailable: newStatus === "active",
+            syncedProductsCount: subcategoryFoods.length,
         },
     });
 };
@@ -492,3 +553,141 @@ const getActiveSubcategoriesByBranch = async (req, res) => {
     });
 };
 exports.getActiveSubcategoriesByBranch = getActiveSubcategoriesByBranch;
+// ============================================================================
+// 4. جعل كل منتجات التصنيف الفرعي / الرئيسي Out of Stock
+// PUT /subcategories/:id/branch/:branchId/out-of-stock
+// PUT /subcategories/:id/out-of-stock
+// Body: { isOutOfStock?: boolean } (Default: true)
+// ============================================================================
+const updateBranchSubcategoryOutOfStock = async (req, res) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    const userBranchId = req.user?.branchId;
+    const subcategoryId = req.params.id || req.params.subcategoryId || req.body?.subcategoryId || req.query?.subcategoryId;
+    const branchId = req.params.branchId || req.body?.branchId || req.query?.branchId || userBranchId;
+    const isOutOfStock = req.body?.isOutOfStock !== undefined ? Boolean(req.body.isOutOfStock) : true;
+    if (!restaurantId)
+        throw new BadRequest_1.BadRequest("Restaurant context is missing or unauthorized");
+    if (!subcategoryId) {
+        throw new BadRequest_1.BadRequest("subcategoryId is required");
+    }
+    if (branchId && userBranchId && userBranchId !== branchId) {
+        throw new BadRequest_1.BadRequest("Unauthorized: You cannot manage another branch's stock");
+    }
+    let branchName = "";
+    if (branchId) {
+        const [branch] = await connection_1.db
+            .select({ id: schema_1.branches.id, name: schema_1.branches.name })
+            .from(schema_1.branches)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branches.id, branchId), (0, drizzle_orm_1.eq)(schema_1.branches.restaurantId, restaurantId)))
+            .limit(1);
+        if (!branch)
+            throw new NotFound_1.NotFound("Branch not found or does not belong to your restaurant");
+        branchName = branch.name;
+    }
+    let subcategoryName = "";
+    if (subcategoryId) {
+        const [sub] = await connection_1.db
+            .select({ id: schema_1.subcategories.id, name: schema_1.subcategories.name })
+            .from(schema_1.subcategories)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.id, subcategoryId), (0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId)))
+            .limit(1);
+        if (!sub)
+            throw new NotFound_1.NotFound("Subcategory not found or does not belong to your restaurant");
+        subcategoryName = sub.name;
+    }
+    // بناء شروط البحث عن المنتجات
+    const foodConditions = [(0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId)];
+    if (subcategoryId)
+        foodConditions.push((0, drizzle_orm_1.eq)(schema_1.food.subcategoryid, subcategoryId));
+    const targetFoods = await connection_1.db
+        .select({
+        id: schema_1.food.id,
+        name: schema_1.food.name,
+        isOutOfStock: schema_1.food.isOutOfStock,
+    })
+        .from(schema_1.food)
+        .where((0, drizzle_orm_1.and)(...foodConditions));
+    if (targetFoods.length === 0) {
+        return (0, response_1.SuccessResponse)(res, {
+            message: "No foods found for the specified subcategory/category",
+            data: { updatedCount: 0, isOutOfStock },
+        });
+    }
+    const foodIds = targetFoods.map((f) => f.id);
+    // 1. تحديث حقل isOutOfStock في جدول food (food.isOutOfStock = true / false)
+    await connection_1.db
+        .update(schema_1.food)
+        .set({
+        isOutOfStock,
+        updatedAt: new Date(),
+    })
+        .where((0, drizzle_orm_1.and)(...foodConditions));
+    // 2. إذا تم تحديد فرع معين، نحدث أيضاً حالة المخزون في branch_menu_items
+    if (branchId) {
+        const existingBranchItems = await connection_1.db
+            .select({ id: schema_1.branchMenuItems.id, foodId: schema_1.branchMenuItems.foodId })
+            .from(schema_1.branchMenuItems)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.branchId, branchId), (0, drizzle_orm_1.inArray)(schema_1.branchMenuItems.foodId, foodIds)));
+        const existingMap = new Map(existingBranchItems.map((item) => [item.foodId, item.id]));
+        const targetStockType = isOutOfStock ? "limited" : "unlimited";
+        const targetStockQty = isOutOfStock ? 0 : (req.body?.stockQty ?? 0);
+        for (const fId of foodIds) {
+            const existingId = existingMap.get(fId);
+            if (existingId) {
+                await connection_1.db
+                    .update(schema_1.branchMenuItems)
+                    .set({
+                    stockType: targetStockType,
+                    stockQty: targetStockQty,
+                    updatedAt: new Date(),
+                })
+                    .where((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.id, existingId));
+            }
+            else {
+                await connection_1.db.insert(schema_1.branchMenuItems).values({
+                    id: (0, uuid_1.v4)(),
+                    branchId,
+                    foodId: fId,
+                    stockType: targetStockType,
+                    stockQty: targetStockQty,
+                    status: "active",
+                });
+            }
+        }
+    }
+    // مسح الكاش
+    try {
+        if (branchId) {
+            await redis_1.default.del(`admin:branch_menu:${branchId}`);
+            const userCacheKey = `restaurant_details:${restaurantId}:branch:${branchId}`;
+            await redis_1.default.del(userCacheKey);
+        }
+        const homeMenuKeys = await redis_1.default.keys("restaurant_details:*");
+        if (homeMenuKeys.length > 0)
+            await redis_1.default.del(...homeMenuKeys);
+        const categoryKeys = await redis_1.default.keys("foods_category:*");
+        if (categoryKeys.length > 0)
+            await redis_1.default.del(...categoryKeys);
+        const branchMenuKeys = await redis_1.default.keys("admin:branch_menu:*");
+        if (branchMenuKeys.length > 0)
+            await redis_1.default.del(...branchMenuKeys);
+    }
+    catch (e) {
+        // Cache error is non-blocking
+    }
+    const targetLabel = subcategoryName
+        ? `Subcategory "${subcategoryName}"`
+        : "";
+    const branchLabel = branchName ? ` in branch "${branchName}"` : "";
+    return (0, response_1.SuccessResponse)(res, {
+        message: `All ${targetFoods.length} products in ${targetLabel}${branchLabel} are now marked as ${isOutOfStock ? "out of stock" : "in stock"} (food.isOutOfStock = ${isOutOfStock})`,
+        data: {
+            subcategoryId: subcategoryId || null,
+            branchId: branchId || null,
+            isOutOfStock,
+            updatedCount: targetFoods.length,
+            affectedProductIds: foodIds,
+        },
+    });
+};
+exports.updateBranchSubcategoryOutOfStock = updateBranchSubcategoryOutOfStock;

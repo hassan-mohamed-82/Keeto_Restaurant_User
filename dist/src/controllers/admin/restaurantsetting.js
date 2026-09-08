@@ -49,6 +49,12 @@ const updateSettings = async (req, res) => {
                 if (settings.isSameTimeEveryDay !== undefined)
                     settingsData.isSameTimeEveryDay = settings.isSameTimeEveryDay;
                 // Other fields
+                if (settings.productView !== undefined || settings.productview !== undefined) {
+                    const val = (settings.productView ?? settings.productview);
+                    if (val === "select" || val === "normal") {
+                        settingsData.productView = val;
+                    }
+                }
                 if (settings.vegType !== undefined)
                     settingsData.vegType = settings.vegType;
                 if (settings.minOrderAmount !== undefined)
