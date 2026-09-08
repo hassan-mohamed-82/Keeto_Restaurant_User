@@ -18,6 +18,6 @@ export const sliders = mysqlTable("sliders", {
         .notNull(),
     img: varchar("img", { length: 500 }).notNull(),
     periorty:int("periorty").default(0),
-       createdAt: timestamp("created_at").defaultNow(),
+    createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
 });
