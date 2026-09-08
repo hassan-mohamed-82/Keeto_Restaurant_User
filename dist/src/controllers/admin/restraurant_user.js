@@ -26,6 +26,8 @@ const getRestaurantUsers = async (req, res) => {
         phone: schema_1.users.phone,
         email: schema_1.users.email,
         photo: schema_1.users.photo,
+        points: (0, drizzle_orm_1.sql) `COALESCE(${schema_1.userRestaurantPoints.points}, 0)`,
+        totalOrders: (0, drizzle_orm_1.sql) `COALESCE(${schema_1.userRestaurantPoints.totalOrders}, 0)`,
         status: schema_1.restaurant_users.status,
         userStatus: schema_1.users.status,
         createdAt: schema_1.restaurant_users.createdAt,
@@ -38,6 +40,7 @@ const getRestaurantUsers = async (req, res) => {
         .from(schema_1.restaurant_users)
         .innerJoin(schema_1.users, (0, drizzle_orm_1.eq)(schema_1.restaurant_users.userId, schema_1.users.id))
         .innerJoin(schema_1.restaurants, (0, drizzle_orm_1.eq)(schema_1.restaurant_users.restaurantId, schema_1.restaurants.id))
+        .leftJoin(schema_1.userRestaurantPoints, (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.userRestaurantPoints.userId, schema_1.users.id), (0, drizzle_orm_1.eq)(schema_1.userRestaurantPoints.restaurantId, schema_1.restaurant_users.restaurantId)))
         .where((0, drizzle_orm_1.and)(...conditions));
     return (0, response_1.SuccessResponse)(res, { message: "Restaurant users fetched successfully", data }, 200);
 };
@@ -58,6 +61,7 @@ const getBlockedRestaurantUsers = async (req, res) => {
         phone: schema_1.users.phone,
         email: schema_1.users.email,
         photo: schema_1.users.photo,
+        points: (0, drizzle_orm_1.sql) `COALESCE(${schema_1.userRestaurantPoints.points}, 0)`,
         status: schema_1.restaurant_users.status, // blocked by this restaurant
         userStatus: schema_1.users.status, // blocked globally by Keeto
         createdAt: schema_1.restaurant_users.createdAt,
@@ -70,6 +74,7 @@ const getBlockedRestaurantUsers = async (req, res) => {
         .from(schema_1.restaurant_users)
         .innerJoin(schema_1.users, (0, drizzle_orm_1.eq)(schema_1.restaurant_users.userId, schema_1.users.id))
         .innerJoin(schema_1.restaurants, (0, drizzle_orm_1.eq)(schema_1.restaurant_users.restaurantId, schema_1.restaurants.id))
+        .leftJoin(schema_1.userRestaurantPoints, (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.userRestaurantPoints.userId, schema_1.users.id), (0, drizzle_orm_1.eq)(schema_1.userRestaurantPoints.restaurantId, schema_1.restaurant_users.restaurantId)))
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.restaurant_users.restaurantId, restaurantId), (0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.restaurant_users.status, "blocked"), // blocked by restaurant
     (0, drizzle_orm_1.eq)(schema_1.users.status, "blocked") // blocked globally by Keeto
     )));
@@ -177,6 +182,8 @@ const getRestaurantUserById = async (req, res) => {
         phone: schema_1.users.phone,
         email: schema_1.users.email,
         photo: schema_1.users.photo,
+        points: (0, drizzle_orm_1.sql) `COALESCE(${schema_1.userRestaurantPoints.points}, 0)`,
+        totalOrders: (0, drizzle_orm_1.sql) `COALESCE(${schema_1.userRestaurantPoints.totalOrders}, 0)`,
         status: schema_1.restaurant_users.status,
         userStatus: schema_1.users.status,
         createdAt: schema_1.restaurant_users.createdAt,
@@ -189,6 +196,7 @@ const getRestaurantUserById = async (req, res) => {
         .from(schema_1.restaurant_users)
         .innerJoin(schema_1.users, (0, drizzle_orm_1.eq)(schema_1.restaurant_users.userId, schema_1.users.id))
         .innerJoin(schema_1.restaurants, (0, drizzle_orm_1.eq)(schema_1.restaurant_users.restaurantId, schema_1.restaurants.id))
+        .leftJoin(schema_1.userRestaurantPoints, (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.userRestaurantPoints.userId, schema_1.users.id), (0, drizzle_orm_1.eq)(schema_1.userRestaurantPoints.restaurantId, schema_1.restaurant_users.restaurantId)))
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.restaurant_users.restaurantId, restaurantId), (0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.restaurant_users.userId, id), (0, drizzle_orm_1.eq)(schema_1.restaurant_users.id, id))))
         .limit(1);
     if (!userRecord) {

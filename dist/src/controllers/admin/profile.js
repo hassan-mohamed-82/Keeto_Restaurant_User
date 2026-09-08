@@ -57,8 +57,10 @@ const updateProfile = async (req, res) => {
         updateData.name = name;
     if (phoneNumber !== undefined)
         updateData.phoneNumber = phoneNumber;
-    if (fcmToken !== undefined)
-        updateData.fcmToken = fcmToken;
+    if (fcmToken !== undefined) {
+        const tokenToSave = fcmToken && String(fcmToken).trim() !== "" ? String(fcmToken).trim() : null;
+        updateData.fcmToken = tokenToSave;
+    }
     if (Object.keys(updateData).length > 0) {
         await connection_1.db
             .update(schema_1.restrauntadmin)

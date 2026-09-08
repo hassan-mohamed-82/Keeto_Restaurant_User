@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.login = login;
+exports.login_cashier = login_cashier;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -12,7 +12,7 @@ const BadRequest_1 = require("../../Errors/BadRequest");
 const Errors_1 = require("../../Errors");
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const jwt_1 = require("../../utils/jwt");
-async function login(req, res) {
+async function login_cashier(req, res) {
     const { email, password, fcmToken } = req.body;
     if (!email || !password) {
         throw new BadRequest_1.BadRequest("Email and password are required");
@@ -23,7 +23,7 @@ async function login(req, res) {
     const [user] = await connection_1.db
         .select()
         .from(schema_1.restrauntadmin)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.restrauntadmin.email, email.trim().toLowerCase()), (0, drizzle_orm_1.inArray)(schema_1.restrauntadmin.type, ["owner", "subadmin", "branch_manager", "staff"])))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.restrauntadmin.email, email.trim().toLowerCase()), (0, drizzle_orm_1.eq)(schema_1.restrauntadmin.type, "cashier")))
         .limit(1);
     // إذا لم يتم العثور على الحساب
     if (!user) {
@@ -115,7 +115,7 @@ async function login(req, res) {
     const token = (0, jwt_1.generateRestaurantAdminToken)(tokenPayload);
     // 7. صياغة الاستجابة الموحدة لتناسب الـ Frontend
     return (0, response_1.SuccessResponse)(res, {
-        message: `${user.type === "owner" ? "Owner" : "Staff"} logged in successfully`,
+        message: `Cashier logged in successfully`,
         token,
         admin: {
             id: user.id,

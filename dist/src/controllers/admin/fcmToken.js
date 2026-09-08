@@ -14,18 +14,18 @@ const updateFcmToken = async (req, res) => {
         throw new Errors_1.UnauthorizedError("Unauthenticated");
     const { fcmToken } = req.body;
     const tokenToSave = fcmToken && String(fcmToken).trim() !== "" ? String(fcmToken).trim() : null;
-    if (req.user.type === "owner") {
-        // Main restaurant owner
-        await connection_1.db.update(schema_1.restaurants)
-            .set({ fcmToken: tokenToSave })
-            .where((0, drizzle_orm_1.eq)(schema_1.restaurants.id, req.user.restaurantId));
-    }
-    else {
-        // Sub-admin or branch manager
+    // 1. تحديث الـ Token في جدول الأدمن (restrauntadmin) لجميع الأنواع
+    if (req.user.id) {
         await connection_1.db.update(schema_1.restrauntadmin)
             .set({ fcmToken: tokenToSave })
             .where((0, drizzle_orm_1.eq)(schema_1.restrauntadmin.id, req.user.id));
     }
+    // 2. إذا كان صاحب المطعم (owner)، نحدث أيضاً جدول المطعم (restaurants)
+    // if (req.user.type === "owner" && req.user.restaurantId) {
+    //     await db.update(restaurants)
+    //         .set({ fcmToken: tokenToSave })
+    //         .where(eq(restaurants.id, req.user.restaurantId));
+    // }
     return (0, response_1.SuccessResponse)(res, { message: tokenToSave ? "FCM token updated successfully" : "FCM token removed successfully" });
 };
 exports.updateFcmToken = updateFcmToken;

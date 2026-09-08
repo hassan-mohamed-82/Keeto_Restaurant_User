@@ -22,6 +22,8 @@ const getMyRestaurantRatings = async (req, res) => {
             id: schema_1.users.id,
             name: schema_1.users.name,
             photo: schema_1.users.photo,
+            phone: schema_1.users.phone,
+            alternativePhone: schema_1.users.alternatePhone,
         }
     })
         .from(schema_1.restaurantRatings)

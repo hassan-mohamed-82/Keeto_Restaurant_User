@@ -576,7 +576,7 @@ export const productData = async (
         addonsIds.length > 0
             ? db.select({
                 id: addons.id,
-                name: language === "En" ? addons.nameEn : language === "Ar" ? addons.nameAr : addons.nameFr,
+                name: language === "En" ? addons.name : language === "Ar" ? addons.nameAr : addons.nameFr,
                 price: addons.price,
                 status: addons.status,
             })

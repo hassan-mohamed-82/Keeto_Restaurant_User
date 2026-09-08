@@ -20,6 +20,8 @@ exports.branches = (0, mysql_core_1.mysqlTable)("branches", {
     lng: (0, mysql_core_1.varchar)("lng", { length: 255 }),
     status: (0, mysql_core_1.mysqlEnum)("status", ["active", "inactive"]).default("active"),
     inactiveReason: (0, mysql_core_1.text)("inactive_reason"),
+    cash_status: (0, mysql_core_1.boolean)("cash_status").default(true),
+    visa_status: (0, mysql_core_1.boolean)("visa_status").default(true),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
 });
 exports.branchMenuItems = (0, mysql_core_1.mysqlTable)("branch_menu_items", {

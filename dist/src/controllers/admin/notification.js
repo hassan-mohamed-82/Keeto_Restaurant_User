@@ -25,14 +25,18 @@ const getMyNotifications = async (req, res) => {
     const limit = parseInt(req.query.limit) || 20;
     const offset = (page - 1) * limit;
     // Base conditions for this restaurant/branch
+    const recipientCondition = targetBranchId
+        ? (0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.notifications.recipientId, adminRestaurantId), (0, drizzle_orm_1.eq)(schema_1.notifications.recipientId, targetBranchId))
+        : (0, drizzle_orm_1.eq)(schema_1.notifications.recipientId, adminRestaurantId);
     const baseConditions = [
         (0, drizzle_orm_1.eq)(schema_1.notifications.recipientType, "restaurant"),
-        (0, drizzle_orm_1.eq)(schema_1.notifications.recipientId, adminRestaurantId)
+        recipientCondition
     ];
     if (targetBranchId) {
         baseConditions.push((0, drizzle_orm_1.sql) `(
                 JSON_UNQUOTE(JSON_EXTRACT(${schema_1.notifications.data}, '$.branchId')) = ${targetBranchId}
                 OR JSON_EXTRACT(${schema_1.notifications.data}, '$.branchId') IS NULL
+                OR ${schema_1.notifications.recipientId} = ${targetBranchId}
             )`);
     }
     // Filter conditions for current page view
@@ -104,13 +108,19 @@ const markNotificationAsRead = async (req, res) => {
     if (!req.user)
         throw new Errors_1.UnauthorizedError("Unauthenticated");
     const adminRestaurantId = req.user.restaurantId || req.user.id;
+    const adminBranchId = req.user.branchId;
+    const queryBranchId = req.query.branchId;
+    const targetBranchId = adminBranchId || queryBranchId;
     if (!adminRestaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID not found");
     const { id } = req.params;
+    const recipientCondition = targetBranchId
+        ? (0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.notifications.recipientId, adminRestaurantId), (0, drizzle_orm_1.eq)(schema_1.notifications.recipientId, targetBranchId))
+        : (0, drizzle_orm_1.eq)(schema_1.notifications.recipientId, adminRestaurantId);
     const [notification] = await connection_1.db
         .select()
         .from(schema_1.notifications)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.notifications.id, id), (0, drizzle_orm_1.eq)(schema_1.notifications.recipientId, adminRestaurantId)))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.notifications.id, id), recipientCondition))
         .limit(1);
     if (!notification)
         throw new NotFound_1.NotFound("Notification not found");
@@ -134,15 +144,19 @@ const markAllNotificationsAsRead = async (req, res) => {
     const targetBranchId = adminBranchId || queryBranchId;
     if (!adminRestaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID not found");
+    const recipientCondition = targetBranchId
+        ? (0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.notifications.recipientId, adminRestaurantId), (0, drizzle_orm_1.eq)(schema_1.notifications.recipientId, targetBranchId))
+        : (0, drizzle_orm_1.eq)(schema_1.notifications.recipientId, adminRestaurantId);
     const conditions = [
         (0, drizzle_orm_1.eq)(schema_1.notifications.recipientType, "restaurant"),
-        (0, drizzle_orm_1.eq)(schema_1.notifications.recipientId, adminRestaurantId),
+        recipientCondition,
         // eq(notifications.isRead, false)
     ];
     if (targetBranchId) {
         conditions.push((0, drizzle_orm_1.sql) `(
                 JSON_UNQUOTE(JSON_EXTRACT(${schema_1.notifications.data}, '$.branchId')) = ${targetBranchId}
                 OR JSON_EXTRACT(${schema_1.notifications.data}, '$.branchId') IS NULL
+                OR ${schema_1.notifications.recipientId} = ${targetBranchId}
             )`);
     }
     // await db.update(notifications)

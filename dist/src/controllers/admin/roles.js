@@ -90,7 +90,13 @@ const getAdminPermissions = async (req, res) => {
 exports.getAdminPermissions = getAdminPermissions;
 // ✅ Get All Roles
 const getAllRoles = async (req, res) => {
-    const allRoles = await connection_1.db.select().from(role_restaurant_1.role_restaurant);
+    const restaurantId = (req.user?.restaurantId || req.user?.id);
+    if (!restaurantId)
+        throw new BadRequest_1.BadRequest("Restaurant context missing");
+    const allRoles = await connection_1.db
+        .select()
+        .from(role_restaurant_1.role_restaurant)
+        .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.restaurantId, restaurantId));
     const formattedRoles = allRoles.map(formatRole);
     (0, response_1.SuccessResponse)(res, { roles: formattedRoles }, 200);
 };
@@ -98,10 +104,13 @@ exports.getAllRoles = getAllRoles;
 // ✅ Get Role By ID
 const getRoleById = async (req, res) => {
     const { id } = req.params;
+    const restaurantId = (req.user?.restaurantId || req.user?.id);
+    if (!restaurantId)
+        throw new BadRequest_1.BadRequest("Restaurant context missing");
     const role = await connection_1.db
         .select()
         .from(role_restaurant_1.role_restaurant)
-        .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.id, id))
+        .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.id, id) && (0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.restaurantId, restaurantId))
         .limit(1);
     if (!role[0]) {
         throw new NotFound_1.NotFound("Role not found");
@@ -111,6 +120,9 @@ const getRoleById = async (req, res) => {
 exports.getRoleById = getRoleById;
 // ✅ Create Role
 const createRole = async (req, res) => {
+    const restaurantId = (req.user?.restaurantId || req.user?.id);
+    if (!restaurantId)
+        throw new BadRequest_1.BadRequest("Restaurant context missing");
     const { name, permissions } = req.body;
     if (!name) {
         throw new BadRequest_1.BadRequest("Role name is required");
@@ -118,7 +130,7 @@ const createRole = async (req, res) => {
     const existingRole = await connection_1.db
         .select()
         .from(role_restaurant_1.role_restaurant)
-        .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.name, name))
+        .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.name, name) && (0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.restaurantId, restaurantId))
         .limit(1);
     if (existingRole[0]) {
         throw new BadRequest_1.BadRequest("Role with this name already exists");
@@ -127,13 +139,14 @@ const createRole = async (req, res) => {
     // ✅ ابعت array على طول - Drizzle هيتعامل معاه
     await connection_1.db.insert(role_restaurant_1.role_restaurant).values({
         name,
+        restaurantId,
         permissions: permissionsWithIds,
     });
     // جيب الـ role اللي اتعمل
     const createdRole = await connection_1.db
         .select()
         .from(role_restaurant_1.role_restaurant)
-        .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.name, name))
+        .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.name, name) && (0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.restaurantId, restaurantId))
         .limit(1);
     (0, response_1.SuccessResponse)(res, {
         message: "Role created successfully",
@@ -144,11 +157,14 @@ exports.createRole = createRole;
 // ✅ Update Role
 const updateRole = async (req, res) => {
     const { id } = req.params;
+    const restaurantId = (req.user?.restaurantId || req.user?.id);
+    if (!restaurantId)
+        throw new BadRequest_1.BadRequest("Restaurant context missing");
     const { name, permissions, status } = req.body;
     const existingRole = await connection_1.db
         .select()
         .from(role_restaurant_1.role_restaurant)
-        .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.id, id))
+        .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.id, id) && (0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.restaurantId, restaurantId))
         .limit(1);
     if (!existingRole[0]) {
         throw new NotFound_1.NotFound("Role not found");
@@ -157,7 +173,7 @@ const updateRole = async (req, res) => {
         const duplicateName = await connection_1.db
             .select()
             .from(role_restaurant_1.role_restaurant)
-            .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.name, name))
+            .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.name, name) && (0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.restaurantId, restaurantId))
             .limit(1);
         if (duplicateName[0]) {
             throw new BadRequest_1.BadRequest("Role with this name already exists");
@@ -175,11 +191,11 @@ const updateRole = async (req, res) => {
         permissions: updatedPermissions,
         status: status ?? existingRole[0].status,
     })
-        .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.id, id));
+        .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.id, id) && (0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.restaurantId, restaurantId));
     const updatedRole = await connection_1.db
         .select()
         .from(role_restaurant_1.role_restaurant)
-        .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.id, id))
+        .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.id, id) && (0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.restaurantId, restaurantId))
         .limit(1);
     (0, response_1.SuccessResponse)(res, {
         message: "Role updated successfully",
@@ -190,35 +206,41 @@ exports.updateRole = updateRole;
 // ✅ Delete Role
 const deleteRole = async (req, res) => {
     const { id } = req.params;
+    const restaurantId = (req.user?.restaurantId || req.user?.id);
+    if (!restaurantId)
+        throw new BadRequest_1.BadRequest("Restaurant context missing");
     const existingRole = await connection_1.db
         .select()
         .from(role_restaurant_1.role_restaurant)
-        .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.id, id))
+        .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.id, id) && (0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.restaurantId, restaurantId))
         .limit(1);
     if (!existingRole[0]) {
         throw new NotFound_1.NotFound("Role not found");
     }
-    await connection_1.db.delete(role_restaurant_1.role_restaurant).where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.id, id));
+    await connection_1.db.delete(role_restaurant_1.role_restaurant).where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.id, id) && (0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.restaurantId, restaurantId));
     (0, response_1.SuccessResponse)(res, { message: "Role deleted successfully" }, 200);
 };
 exports.deleteRole = deleteRole;
 // ✅ Toggle Role Status
 const toggleRoleStatus = async (req, res) => {
     const { id } = req.params;
+    const restaurantId = (req.user?.restaurantId || req.user?.id);
+    if (!restaurantId)
+        throw new BadRequest_1.BadRequest("Restaurant context missing");
     const existingRole = await connection_1.db
         .select()
         .from(role_restaurant_1.role_restaurant)
-        .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.id, id))
+        .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.id, id) && (0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.restaurantId, restaurantId))
         .limit(1);
     if (!existingRole[0]) {
         throw new NotFound_1.NotFound("Role not found");
     }
     const newStatus = existingRole[0].status === "active" ? "inactive" : "active";
-    await connection_1.db.update(role_restaurant_1.role_restaurant).set({ status: newStatus }).where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.id, id));
+    await connection_1.db.update(role_restaurant_1.role_restaurant).set({ status: newStatus }).where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.id, id) && (0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.restaurantId, restaurantId));
     const updatedRole = await connection_1.db
         .select()
         .from(role_restaurant_1.role_restaurant)
-        .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.id, id))
+        .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.id, id) && (0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.restaurantId, restaurantId))
         .limit(1);
     (0, response_1.SuccessResponse)(res, {
         message: `Role ${newStatus}`,

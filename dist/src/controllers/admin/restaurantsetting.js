@@ -57,6 +57,14 @@ const updateSettings = async (req, res) => {
                     settingsData.minDeliveryTime = settings.minDeliveryTime;
                 if (settings.maxDeliveryTime !== undefined)
                     settingsData.maxDeliveryTime = settings.maxDeliveryTime;
+                if (settings.minTakeAwayTime !== undefined)
+                    settingsData.minTakeAwayTime = settings.minTakeAwayTime;
+                if (settings.maxTakeAwayTime !== undefined)
+                    settingsData.maxTakeAwayTime = settings.maxTakeAwayTime;
+                if (settings.minDineInTime !== undefined)
+                    settingsData.minDineInTime = settings.minDineInTime;
+                if (settings.maxDineInTime !== undefined)
+                    settingsData.maxDineInTime = settings.maxDineInTime;
                 if (settings.firstColor !== undefined)
                     settingsData.firstColor = settings.firstColor;
                 if (settings.secondColor !== undefined)

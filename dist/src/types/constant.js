@@ -28,7 +28,6 @@ exports.MODULES = [
     "restaurantZoneDeliveryfees",
     "restaurant QR",
     "restaurantadmin",
-    "roles",
     "subcategory",
     "zone",
     "delivery_man"
