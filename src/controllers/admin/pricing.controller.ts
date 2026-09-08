@@ -498,6 +498,7 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
                 subcategoryId: food.subcategoryid,
                 mainBasePrice: food.price,
                 isOutOfStock: food.isOutOfStock,
+                points:food.points,
                 branchOverridePrice: branchMenuItems.price,
                 branchChannelPrice: branchChannelPricingAlias.price,
                 globalChannelPrice: globalChannelPricingAlias.price,
