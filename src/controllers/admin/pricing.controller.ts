@@ -767,6 +767,7 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
             mainBasePrice: food.price,
             globalStatus: food.status,
             isOutOfStock: food.isOutOfStock,
+            points: food.points,
         })
         .from(food)
         .where(and(...foodConditions));
@@ -928,6 +929,7 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
             categoryId: f.categoryId,
             subcategoryId: f.subcategoryId,
             mainBasePrice: f.mainBasePrice,
+            points: f.points,
             status,
             isOutOfStock: Boolean(f.isOutOfStock),
             isAvailable: true,
