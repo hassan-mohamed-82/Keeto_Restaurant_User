@@ -45,6 +45,8 @@ import RecommendedFoodRouter from "./recommendedFood";
 import FreeDeliveryOfferRouter from "./freeDeliveryOffer";
 import PricingRouter from "./pricing";
 import ShiftsRouter from "./pos/shifts";
+import ServiceFeesRouter from "./pos/serviceFees";
+import TaxRouter from "./pos/tax";
 const router = Router();
 
 router.use("/auth", authRouter);
@@ -93,5 +95,11 @@ router.use("/free-delivery", FreeDeliveryOfferRouter);
 router.use("/pricing", PricingRouter);
 router.use("/shifts", ShiftsRouter);
 router.use("/pos/shifts", ShiftsRouter);
+router.use("/service-fees", ServiceFeesRouter);
+router.use("/pos/service-fees", ServiceFeesRouter);
+router.use("/taxes", TaxRouter);
+router.use("/pos/taxes", TaxRouter);
+router.use("/tax", TaxRouter);
+router.use("/pos/tax", TaxRouter);
 
 export default router;
