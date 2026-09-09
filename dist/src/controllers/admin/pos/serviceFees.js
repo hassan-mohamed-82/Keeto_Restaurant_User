@@ -20,15 +20,11 @@ function formatServiceFeeItem(item, lang = "en") {
     }, lang);
     return {
         id: item.id,
-        restaurantId: item.restaurantId,
         name: localizedName,
-        nameAr: item.nameAr,
-        nameFr: item.nameFr,
         amount: item.amount,
         type: item.type,
         moduleType: item.moduleType,
         modules: (0, localization_helper_1.parseJsonArray)(item.modules),
-        branchIds: (0, localization_helper_1.parseJsonArray)(item.branchIds),
         status: item.status,
         createdAt: item.createdAt,
         updatedAt: item.updatedAt,

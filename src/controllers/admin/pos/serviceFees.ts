@@ -27,16 +27,12 @@ function formatServiceFeeItem(item: any, lang: Language = "en") {
     );
 
     return {
-        id: item.id,
-        restaurantId: item.restaurantId,
-        name: localizedName,
-        nameAr: item.nameAr,
-        nameFr: item.nameFr,
+        id: item.id, 
+        name: localizedName, 
         amount: item.amount,
         type: item.type,
         moduleType: item.moduleType,
-        modules: parseJsonArray(item.modules),
-        branchIds: parseJsonArray(item.branchIds),
+        modules: parseJsonArray(item.modules), 
         status: item.status,
         createdAt: item.createdAt,
         updatedAt: item.updatedAt,
