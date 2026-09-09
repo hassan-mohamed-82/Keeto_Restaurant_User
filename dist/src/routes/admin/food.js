@@ -33,5 +33,5 @@ router.put("/status/:id", (0, hasPermission_1.hasPermission)("foods", "update"),
 // ✅ Change food status for a specific branch
 router.put("/:id/branch/:branchId/status", (0, hasPermission_1.hasPermission)("foods", "update"), (0, catchAsync_1.catchAsync)(food_1.changeFoodStatus));
 // ✅ Toggle food out-of-stock (global, with optional branchId for subcategory cascade)
-// router.put("/:id/out-of-stock", hasPermission("foods", "update"), catchAsync(toggleFoodOutOfStock));
+router.put("/:id/branch/:branchId/out-of-stock", (0, hasPermission_1.hasPermission)("foods", "update"), (0, catchAsync_1.catchAsync)(food_1.toggleFoodOutOfStock));
 exports.default = router;
