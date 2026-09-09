@@ -742,8 +742,41 @@ export const updateBranchSubcategoryOutOfStock = async (req: Request, res: Respo
         })
         .where(and(...foodConditions));
 
-    // 2. إذا تم تحديد فرع معين، نحدث أيضاً حالة المخزون في branch_menu_items
+    // 2. تحديث الـ stored flag مباشرة على جدول subcategories (global)
+    await db
+        .update(subcategories)
+        .set({ isOutOfStock, updatedAt: new Date() })
+        .where(eq(subcategories.id, subcategoryId));
+
+    // 3. إذا تم تحديد فرع، نحدث branchSubcategories.isOutOfStock + branch_menu_items stock
     if (branchId) {
+        // 3a. Upsert branchSubcategories.isOutOfStock
+        const [existingBranchSub] = await db
+            .select({ id: branchSubcategories.id })
+            .from(branchSubcategories)
+            .where(
+                and(
+                    eq(branchSubcategories.subcategoryId, subcategoryId),
+                    eq(branchSubcategories.branchId, branchId)
+                )
+            )
+            .limit(1);
+
+        if (existingBranchSub) {
+            await db
+                .update(branchSubcategories)
+                .set({ isOutOfStock, updatedAt: new Date() })
+                .where(eq(branchSubcategories.id, existingBranchSub.id));
+        } else {
+            await db.insert(branchSubcategories).values({
+                id: uuidv4(),
+                branchId,
+                subcategoryId,
+                isOutOfStock,
+            });
+        }
+
+        // 3b. Update branch_menu_items stock for each food
         const existingBranchItems = await db
             .select({ id: branchMenuItems.id, foodId: branchMenuItems.foodId })
             .from(branchMenuItems)

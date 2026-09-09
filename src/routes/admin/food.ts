@@ -12,6 +12,7 @@ import {
     toggleVariationOptionStatus,
     changeFoodStatus,
     getOutOfStockFoods,
+    toggleFoodOutOfStock,
 } from "../../controllers/admin/food";
 import {
     assignIngredientsToFood,
@@ -53,7 +54,11 @@ router.put("/variation/:id/status", hasPermission("foods", "update"), catchAsync
 // ✅ Toggle option status - يحتاج صلاحية update
 router.put("/option/:id/status", hasPermission("foods", "update"), catchAsync(toggleVariationOptionStatus));
 
-// ✅ Change food status - يحتاج صلاحية update
+// ✅ Change food status (global) - يحتاج صلاحية update
 router.put("/status/:id", hasPermission("foods", "update"), catchAsync(changeFoodStatus));
+// ✅ Change food status for a specific branch
+// router.patch("/:id/branch/:branchId/status", hasPermission("foods", "update"), catchAsync(changeFoodStatus));
+// ✅ Toggle food out-of-stock (global, with optional branchId for subcategory cascade)
+// router.patch("/:id/out-of-stock", hasPermission("foods", "update"), catchAsync(toggleFoodOutOfStock));
 
 export default router;
