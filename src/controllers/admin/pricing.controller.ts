@@ -729,7 +729,7 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
                     name: sub.name,
                     nameAr: sub.nameAr,
                     nameFr: sub.nameFr,
-                    status,
+                    computedStatus:status,
                     isOutOfStock: rollup?.hasProducts ? rollup.allOutOfStock : false,
                 });
             }
@@ -1008,7 +1008,7 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
                 name: sub.name,
                 nameAr: sub.nameAr,
                 nameFr: sub.nameFr,
-                status,
+                computedStatus:status,
                 isOutOfStock: rollup?.hasProducts ? rollup.allOutOfStock : false,
             });
         }
