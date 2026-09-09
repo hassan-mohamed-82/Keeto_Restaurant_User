@@ -9,12 +9,15 @@ import {
     updateShift,
     deleteShift,
     toggleShiftStatus,
+    getBranches,
 } from "../../../controllers/admin/pos/shifts";
 
 const router = Router();
 
 router.post("/", validate(createShiftSchema), catchAsync(createShift));
 router.get("/", catchAsync(getAllShifts));
+router.get("/branches", catchAsync(getBranches));
+router.post("/branches", catchAsync(getBranches));
 router.get("/:id", catchAsync(getShiftById));
 router.put("/:id", validate(updateShiftSchema), catchAsync(updateShift));
 router.patch("/:id/toggle-status", catchAsync(toggleShiftStatus));

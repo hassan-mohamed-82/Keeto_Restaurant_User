@@ -47,6 +47,7 @@ import PricingRouter from "./pricing";
 import ShiftsRouter from "./pos/shifts";
 import ServiceFeesRouter from "./pos/serviceFees";
 import TaxRouter from "./pos/tax";
+import OffersRouter from "./pos/offers";
 const router = Router();
 
 router.use("/auth", authRouter);
@@ -101,5 +102,7 @@ router.use("/taxes", TaxRouter);
 router.use("/pos/taxes", TaxRouter);
 router.use("/tax", TaxRouter);
 router.use("/pos/tax", TaxRouter);
+router.use("/offers", OffersRouter);
+router.use("/pos/offers", OffersRouter);
 
 export default router;

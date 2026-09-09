@@ -15,6 +15,7 @@ import {
     getServiceFeeListOptions,
     getSubcategories,
     getFoods,
+    getBranches,
 } from "../../../controllers/admin/pos/serviceFees";
 
 const router = Router();
@@ -24,6 +25,8 @@ router.get("/", catchAsync(getAllServiceFees));
 router.get("/options", catchAsync(getServiceFeeListOptions));
 router.get("/select-data", catchAsync(getServiceFeeListOptions));
 router.get("/list", catchAsync(getServiceFeeListOptions));
+router.get("/branches", catchAsync(getBranches));
+router.post("/branches", catchAsync(getBranches));
 router.get("/subcategories", catchAsync(getSubcategories));
 router.post("/subcategories", catchAsync(getSubcategories));
 router.get("/foods", catchAsync(getFoods));
