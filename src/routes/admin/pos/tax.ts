@@ -16,21 +16,28 @@ import {
     getSubcategories,
     getFoods,
     getBranches,
+    getTaxBranches,
+    getTaxFoods,
 } from "../../../controllers/admin/pos/tax";
 
 const router = Router();
 
 router.post("/", validate(createTaxSchema), catchAsync(createTax));
 router.get("/", catchAsync(getAllTaxes));
+router.post("/list-taxes", catchAsync(getAllTaxes));
 router.get("/options", catchAsync(getTaxListOptions));
 router.get("/select-data", catchAsync(getTaxListOptions));
 router.get("/list", catchAsync(getTaxListOptions));
 router.get("/branches", catchAsync(getBranches));
 router.post("/branches", catchAsync(getBranches));
+router.get("/:id/branches", catchAsync(getTaxBranches));
+router.post("/:id/branches", catchAsync(getTaxBranches));
 router.get("/subcategories", catchAsync(getSubcategories));
 router.post("/subcategories", catchAsync(getSubcategories));
 router.get("/foods", catchAsync(getFoods));
 router.post("/foods", catchAsync(getFoods));
+router.get("/:id/foods", catchAsync(getTaxFoods));
+router.post("/:id/foods", catchAsync(getTaxFoods));
 router.get("/:id", catchAsync(getTaxById));
 router.put("/:id", validate(updateTaxSchema), catchAsync(updateTax));
 router.patch("/:id/toggle-status", catchAsync(toggleTaxStatus));

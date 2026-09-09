@@ -1,32 +1,55 @@
 import { Request, Response } from "express";
 import { db } from "../../../models/connection";
 import { taxes, branches, food, subcategories } from "../../../models/schema";
-import { eq, and, desc, inArray } from "drizzle-orm";
+import { eq, and, desc, inArray, count, or, like } from "drizzle-orm";
 import { SuccessResponse } from "../../../utils/response";
 import { BadRequest, NotFound } from "../../../Errors";
 import { v4 as uuidv4 } from "uuid";
 import { TAX_MODULES, TAX_TYPES, TAX_MODULE_TYPES } from "../../../validation/admin/taxes";
 
-import { extractLang, getLocalizedName, Language } from "../../../helpers/localization.helper";
+import { extractLang, getLocalizedName, parseJsonArray, Language } from "../../../helpers/localization.helper";
 
+/**
+ * Helper to format tax items without heavy nested objects
+ */
+function formatTaxItem(item: any, lang: Language = "en") {
+    const localizedName = getLocalizedName(
+        {
+            name: item.name || "",
+            nameAr: item.nameAr,
+            nameFr: item.nameFr,
+        },
+        lang
+    );
+
+    return {
+        id: item.id,
+        restaurantId: item.restaurantId,
+        name: localizedName,
+        type: item.type,
+        moduleType: item.moduleType,
+        modules: parseJsonArray(item.modules),
+        status: item.status,
+    };
+}
 
 /**
  * Helper to enrich tax items with branch and food details
  */
-async function enrichTaxesWithBranchesAndFoods<
-    T extends { branchIds: string[]; foodIds: string[]; name: string; nameAr?: string | null; nameFr?: string | null }
->(items: T[], restaurantId: string, lang: Language = "en") {
-    if (items.length === 0) return items;
+async function enrichTaxesWithBranchesAndFoods(
+    items: any[],
+    restaurantId: string,
+    lang: Language = "en"
+) {
+    if (items.length === 0) return [];
 
-    // Collect all unique branchIds and foodIds
     const allBranchIds = Array.from(
-        new Set(items.flatMap((item) => (Array.isArray(item.branchIds) ? item.branchIds : [])))
+        new Set(items.flatMap((item) => parseJsonArray(item.branchIds)))
     );
     const allFoodIds = Array.from(
-        new Set(items.flatMap((item) => (Array.isArray(item.foodIds) ? item.foodIds : [])))
+        new Set(items.flatMap((item) => parseJsonArray(item.foodIds)))
     );
 
-    // Fetch matching branches and foods concurrently
     const [branchList, foodList] = await Promise.all([
         allBranchIds.length > 0
             ? db
@@ -62,24 +85,21 @@ async function enrichTaxesWithBranchesAndFoods<
             : Promise.resolve([]),
     ]);
 
-    const branchMap = new Map<
-        string,
-        { id: string; name: string; nameAr: string | null; nameFr: string | null }
-    >();
+    const branchMap = new Map<string, { id: string; name: string; nameAr: string | null; nameFr: string | null }>();
     for (const b of branchList) {
         branchMap.set(b.id, b);
     }
 
-    const foodMap = new Map<
-        string,
-        { id: string; name: string; nameAr: string | null; nameFr: string | null }
-    >();
+    const foodMap = new Map<string, { id: string; name: string; nameAr: string | null; nameFr: string | null }>();
     for (const f of foodList) {
         foodMap.set(f.id, f);
     }
 
     return items.map((item) => {
-        const itemBranches = (Array.isArray(item.branchIds) ? item.branchIds : [])
+        const itemBranchIds = parseJsonArray(item.branchIds);
+        const itemFoodIds = parseJsonArray(item.foodIds);
+
+        const itemBranches = itemBranchIds
             .map((id) => branchMap.get(id))
             .filter(Boolean)
             .map((b) => ({
@@ -89,7 +109,7 @@ async function enrichTaxesWithBranchesAndFoods<
                 nameFr: b!.nameFr,
             }));
 
-        const itemFoods = (Array.isArray(item.foodIds) ? item.foodIds : [])
+        const itemFoods = itemFoodIds
             .map((id) => foodMap.get(id))
             .filter(Boolean)
             .map((f) => ({
@@ -101,7 +121,7 @@ async function enrichTaxesWithBranchesAndFoods<
 
         const localizedName = getLocalizedName(
             {
-                name: item.name,
+                name: item.name || "",
                 nameAr: item.nameAr,
                 nameFr: item.nameFr,
             },
@@ -109,10 +129,22 @@ async function enrichTaxesWithBranchesAndFoods<
         );
 
         return {
-            ...item,
+            id: item.id,
+            restaurantId: item.restaurantId,
             name: localizedName,
+            nameAr: item.nameAr,
+            nameFr: item.nameFr,
+            amount: item.amount,
+            type: item.type,
+            moduleType: item.moduleType,
+            modules: parseJsonArray(item.modules),
+            branchIds: itemBranchIds,
+            foodIds: itemFoodIds,
             branches: itemBranches,
             foods: itemFoods,
+            status: item.status,
+            createdAt: item.createdAt,
+            updatedAt: item.updatedAt,
         };
     });
 }
@@ -130,6 +162,10 @@ export const createTax = async (req: Request, res: Response) => {
     const { name, nameAr, nameFr, amount, type, moduleType, module_type, branchIds, foodIds, modules, status } = req.body;
 
     const finalModuleType = moduleType || module_type || "all";
+    const finalBranchIds = parseJsonArray(branchIds);
+    const finalFoodIds = parseJsonArray(foodIds);
+    const finalModules = parseJsonArray(modules).length > 0 ? parseJsonArray(modules) : ["all"];
+
     const id = uuidv4();
     await db.insert(taxes).values({
         id,
@@ -140,9 +176,9 @@ export const createTax = async (req: Request, res: Response) => {
         amount: String(amount),
         type,
         moduleType: finalModuleType,
-        branchIds: Array.isArray(branchIds) ? branchIds : [],
-        foodIds: Array.isArray(foodIds) ? foodIds : [],
-        modules: Array.isArray(modules) ? modules : ["all"],
+        branchIds: finalBranchIds,
+        foodIds: finalFoodIds,
+        modules: finalModules as any,
         status: status || "active",
     });
 
@@ -165,7 +201,7 @@ export const createTax = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 2. Get All Taxes (Restaurant Scoped)
+// 2. Get All Taxes (Paginated & Restaurant Scoped)
 // ==========================================
 export const getAllTaxes = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
@@ -174,7 +210,12 @@ export const getAllTaxes = async (req: Request, res: Response) => {
     }
 
     const lang = extractLang(req);
-    const { status, type, moduleType, module_type } = req.query;
+    const params = { ...req.query, ...req.body };
+    const { status, type, moduleType, module_type, search, all } = params;
+
+    const page = Math.max(1, parseInt(params.page as string) || 1);
+    const limit = Math.max(1, Math.min(100, parseInt(params.limit as string) || 10));
+    const offset = (page - 1) * limit;
 
     const conditions = [eq(taxes.restaurantId, restaurantId)];
     if (status && (status === "active" || status === "inactive")) {
@@ -191,17 +232,53 @@ export const getAllTaxes = async (req: Request, res: Response) => {
         conditions.push(eq(taxes.moduleType, filterModuleType));
     }
 
-    const allItems = await db
-        .select()
-        .from(taxes)
-        .where(and(...conditions))
-        .orderBy(desc(taxes.createdAt));
+    if (search && typeof search === "string" && search.trim() !== "") {
+        const term = `%${search.trim()}%`;
+        conditions.push(
+            or(
+                like(taxes.name, term),
+                like(taxes.nameAr, term),
+                like(taxes.nameFr, term)
+            ) as any
+        );
+    }
 
-    const enrichedList = await enrichTaxesWithBranchesAndFoods(allItems, restaurantId, lang);
+    const isAll = all === "true";
+
+    const [totalCountResult, rawItems] = await Promise.all([
+        db
+            .select({ count: count() })
+            .from(taxes)
+            .where(and(...conditions)),
+        isAll
+            ? db
+                  .select()
+                  .from(taxes)
+                  .where(and(...conditions))
+                  .orderBy(desc(taxes.createdAt))
+            : db
+                  .select()
+                  .from(taxes)
+                  .where(and(...conditions))
+                  .orderBy(desc(taxes.createdAt))
+                  .limit(limit)
+                  .offset(offset),
+    ]);
+
+    const totalItems = Number(totalCountResult[0]?.count || 0);
+    const totalPages = isAll ? 1 : Math.ceil(totalItems / limit);
+
+    const formattedList = rawItems.map((item) => formatTaxItem(item, lang));
 
     return SuccessResponse(res, {
         message: "Taxes fetched successfully",
-        data: enrichedList,
+        data: formattedList,
+        pagination: {
+            page: isAll ? 1 : page,
+            limit: isAll ? totalItems : limit,
+            totalItems,
+            totalPages,
+        },
     });
 };
 
@@ -331,9 +408,9 @@ export const updateTax = async (req: Request, res: Response) => {
     if (type !== undefined) updateData.type = type;
     const finalModuleType = moduleType || module_type;
     if (finalModuleType !== undefined) updateData.moduleType = finalModuleType;
-    if (branchIds !== undefined) updateData.branchIds = branchIds;
-    if (foodIds !== undefined) updateData.foodIds = foodIds;
-    if (modules !== undefined) updateData.modules = modules;
+    if (branchIds !== undefined) updateData.branchIds = parseJsonArray(branchIds);
+    if (foodIds !== undefined) updateData.foodIds = parseJsonArray(foodIds);
+    if (modules !== undefined) updateData.modules = parseJsonArray(modules) as any;
     if (status !== undefined) updateData.status = status;
 
     if (Object.keys(updateData).length > 0) {
@@ -459,7 +536,7 @@ export const getSubcategories = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 9. Get Foods (Localized by lang & filtered by subcategory_id)
+// 9. Get Foods (Localized by lang & filtered by tax or subcategory_id)
 // ==========================================
 export const getFoods = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
@@ -468,6 +545,60 @@ export const getFoods = async (req: Request, res: Response) => {
     }
 
     const lang = extractLang(req);
+    const taxId =
+        req.params.id ||
+        req.query.taxId ||
+        req.body.taxId ||
+        req.query.tax_id ||
+        req.body.tax_id;
+
+    if (taxId) {
+        const [taxItem] = await db
+            .select({ foodIds: taxes.foodIds })
+            .from(taxes)
+            .where(and(eq(taxes.id, String(taxId)), eq(taxes.restaurantId, restaurantId)))
+            .limit(1);
+
+        if (!taxItem) {
+            throw new NotFound("Tax not found");
+        }
+
+        const foodIds = parseJsonArray(taxItem.foodIds);
+        if (foodIds.length === 0) {
+            return SuccessResponse(res, {
+                message: "Foods fetched successfully",
+                data: [],
+            });
+        }
+
+        const foodList = await db
+            .select({
+                id: food.id,
+                name: food.name,
+                nameAr: food.nameAr,
+                nameFr: food.nameFr,
+                subcategoryId: food.subcategoryid,
+            })
+            .from(food)
+            .where(
+                and(
+                    eq(food.restaurantid, restaurantId),
+                    inArray(food.id, foodIds)
+                )
+            );
+
+        const formatted = foodList.map((f) => ({
+            id: f.id,
+            name: getLocalizedName(f, lang),
+            subcategoryId: f.subcategoryId,
+        }));
+
+        return SuccessResponse(res, {
+            message: "Foods fetched successfully",
+            data: formatted,
+        });
+    }
+
     const subcategoryId =
         req.query?.subcategory_id ||
         req.query?.subcategoryId ||
@@ -503,7 +634,7 @@ export const getFoods = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 10. Get Branches (Localized by lang en, ar, fr with fallback to en)
+// 10. Get Branches (Localized by lang en, ar, fr with optional taxId filter)
 // ==========================================
 export const getBranches = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
@@ -512,6 +643,57 @@ export const getBranches = async (req: Request, res: Response) => {
     }
 
     const lang = extractLang(req);
+    const taxId =
+        req.params.id ||
+        req.query.taxId ||
+        req.body.taxId ||
+        req.query.tax_id ||
+        req.body.tax_id;
+
+    if (taxId) {
+        const [taxItem] = await db
+            .select({ branchIds: taxes.branchIds })
+            .from(taxes)
+            .where(and(eq(taxes.id, String(taxId)), eq(taxes.restaurantId, restaurantId)))
+            .limit(1);
+
+        if (!taxItem) {
+            throw new NotFound("Tax not found");
+        }
+
+        const branchIds = parseJsonArray(taxItem.branchIds);
+        if (branchIds.length === 0) {
+            return SuccessResponse(res, {
+                message: "Branches fetched successfully",
+                data: [],
+            });
+        }
+
+        const myBranches = await db
+            .select({
+                id: branches.id,
+                name: branches.name,
+                nameAr: branches.nameAr,
+                nameFr: branches.nameFr,
+            })
+            .from(branches)
+            .where(
+                and(
+                    eq(branches.restaurantId, restaurantId),
+                    inArray(branches.id, branchIds)
+                )
+            );
+
+        const formatted = myBranches.map((b) => ({
+            id: b.id,
+            name: getLocalizedName(b, lang),
+        }));
+
+        return SuccessResponse(res, {
+            message: "Branches fetched successfully",
+            data: formatted,
+        });
+    }
 
     const myBranches = await db
         .select({
@@ -537,4 +719,18 @@ export const getBranches = async (req: Request, res: Response) => {
         message: "Branches fetched successfully",
         data: formatted,
     });
+};
+
+// ==========================================
+// 11. Get Branches of a Specific Tax
+// ==========================================
+export const getTaxBranches = async (req: Request, res: Response) => {
+    return getBranches(req, res);
+};
+
+// ==========================================
+// 12. Get Foods of a Specific Tax
+// ==========================================
+export const getTaxFoods = async (req: Request, res: Response) => {
+    return getFoods(req, res);
 };
