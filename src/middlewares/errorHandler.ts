@@ -25,6 +25,10 @@ export const errorHandler: ErrorRequestHandler = (
       field: error.path.join("."),
       message: error.message,
     }));
+  } else if (err instanceof SyntaxError && ("body" in err || (err as any).type === "entity.parse.failed")) {
+    statusCode = StatusCodes.BAD_REQUEST;
+    message = "Invalid JSON payload in request body. Please verify JSON format (check for trailing commas, unescaped characters, or missing quotes).";
+    details = err.message;
   } else if (err instanceof Jwt.JsonWebTokenError) {
     statusCode = 401;
     message = "Invalid token";
