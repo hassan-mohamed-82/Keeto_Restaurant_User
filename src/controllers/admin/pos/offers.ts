@@ -284,11 +284,23 @@ export const getAllOffers = async (req: Request, res: Response) => {
     const totalItems = Number(totalCountResult[0]?.count || 0);
     const totalPages = isAll ? 1 : Math.ceil(totalItems / limit);
 
-    const enrichedList = await enrichOffersWithBranchesAndFoods(rawOffers, restaurantId, lang);
+    const formattedOffers = rawOffers.map((item) => ({
+        ...item,
+        name: getLocalizedName(
+            {
+                name: item.name,
+                nameAr: item.nameAr,
+                nameFr: item.nameFr,
+            },
+            lang
+        ),
+        branchIds: parseJsonArray(item.branchIds),
+        foodIds: parseJsonArray(item.foodIds),
+    }));
 
     return SuccessResponse(res, {
         message: "Offers fetched successfully",
-        data: enrichedList,
+        data: formattedOffers,
         pagination: {
             page: isAll ? 1 : page,
             limit: isAll ? totalItems : limit,
