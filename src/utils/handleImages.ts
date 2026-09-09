@@ -38,8 +38,10 @@ export async function saveBase64Image(
   let rawProtocol = req.get("x-forwarded-proto") || req.protocol || "https";
   let host = req.get("x-forwarded-host") || req.get("host") || "";
 
-  // Fix domain doubling (e.g. keeto.org.keeto.org -> keeto.org)
-  //host = host.replace(/(\.[a-zA-Z0-9-]+\.[a-zA-Z]+)\1+/g, "$1");
+  // Fix domain doubling (e.g. restbcknd.keeto.org.keeto.org -> restbcknd.keeto.org)
+  if (host.includes(".keeto.org.keeto.org")) {
+    host = host.replace(/\.keeto\.org\.keeto\.org/g, ".keeto.org");
+  }
   
   // Force HTTPS in production / remote environments
   if (!host.includes("localhost") && !host.includes("127.0.0.1")) {
@@ -56,7 +58,9 @@ export function sanitizeImageUrl(url: string | null | undefined): string | null 
   let sanitized = url;
 
   // 1. Remove doubled domain suffix
-  //sanitized = sanitized.replace(/(\.[a-zA-Z0-9-]+\.[a-zA-Z]+)\1+/g, "$1");
+  if (sanitized.includes(".keeto.org.keeto.org")) {
+    sanitized = sanitized.replace(/\.keeto\.org\.keeto\.org/g, ".keeto.org");
+  }
 
   // تحويل http لـ https فقط للروابط الخارجية
   if (sanitized.startsWith("http://") && !sanitized.includes("localhost") && !sanitized.includes("127.0.0.1")) {

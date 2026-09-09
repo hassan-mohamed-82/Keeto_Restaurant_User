@@ -606,6 +606,7 @@ const getMenuWithDynamicPricing = async (req, res) => {
         mainBasePrice: schema_1.food.price,
         globalStatus: schema_1.food.status,
         isOutOfStock: schema_1.food.isOutOfStock,
+        points: schema_1.food.points,
     })
         .from(schema_1.food)
         .where((0, drizzle_orm_1.and)(...foodConditions));
@@ -743,6 +744,7 @@ const getMenuWithDynamicPricing = async (req, res) => {
             categoryId: f.categoryId,
             subcategoryId: f.subcategoryId,
             mainBasePrice: f.mainBasePrice,
+            points: f.points,
             status,
             isOutOfStock: Boolean(f.isOutOfStock),
             isAvailable: true,

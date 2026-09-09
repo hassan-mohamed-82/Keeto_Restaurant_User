@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { db } from "../../../models/connection";
 import { offers, branches, food } from "../../../models/schema";
-import { eq, and, desc, inArray } from "drizzle-orm";
+import { eq, and, desc, inArray, count, or, like } from "drizzle-orm";
 import { SuccessResponse } from "../../../utils/response";
 import { BadRequest, NotFound } from "../../../Errors";
 import { v4 as uuidv4 } from "uuid";
@@ -9,19 +9,54 @@ import { saveBase64Image, handleImageUpdate, deleteImage } from "../../../utils/
 import { extractLang, getLocalizedName, Language } from "../../../helpers/localization.helper";
 
 /**
- * Helper to enrich offers with branch and food details
+ * Robustly parses any JSON / array / string representation into a string array.
+ * Handles MySQL JSON string column returns, double-stringified JSON, and comma-separated lists.
+ */
+export function parseJsonArray(val: any): string[] {
+    if (!val) return [];
+    if (Array.isArray(val)) return val.map(String).filter(Boolean);
+    if (typeof val === "string") {
+        const trimmed = val.trim();
+        if (!trimmed) return [];
+        try {
+            let parsed = JSON.parse(trimmed);
+            if (typeof parsed === "string") {
+                try {
+                    parsed = JSON.parse(parsed);
+                } catch {
+                    // keep parsed as string
+                }
+            }
+            if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+        } catch {
+            if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+                const inner = trimmed.slice(1, -1).trim();
+                if (!inner) return [];
+                return inner
+                    .split(",")
+                    .map((s) => s.replace(/["']/g, "").trim())
+                    .filter(Boolean);
+            }
+            return [trimmed];
+        }
+    }
+    return [];
+}
+
+/**
+ * Helper to enrich offers with branch and food details and parse IDs into native arrays
  */
 async function enrichOffersWithBranchesAndFoods<
-    T extends { branchIds: string[]; foodIds: string[]; name: string; nameAr?: string | null; nameFr?: string | null }
+    T extends { branchIds: any; foodIds: any; name: string; nameAr?: string | null; nameFr?: string | null }
 >(items: T[], restaurantId: string, lang: Language = "en") {
-    if (items.length === 0) return items;
+    if (items.length === 0) return [];
 
-    // Collect all unique branchIds and foodIds
+    // Collect all unique branchIds and foodIds using parseJsonArray
     const allBranchIds = Array.from(
-        new Set(items.flatMap((item) => (Array.isArray(item.branchIds) ? item.branchIds : [])))
+        new Set(items.flatMap((item) => parseJsonArray(item.branchIds)))
     );
     const allFoodIds = Array.from(
-        new Set(items.flatMap((item) => (Array.isArray(item.foodIds) ? item.foodIds : [])))
+        new Set(items.flatMap((item) => parseJsonArray(item.foodIds)))
     );
 
     // Fetch matching branches and foods concurrently
@@ -77,7 +112,10 @@ async function enrichOffersWithBranchesAndFoods<
     }
 
     return items.map((item) => {
-        const itemBranches = (Array.isArray(item.branchIds) ? item.branchIds : [])
+        const itemBranchIds = parseJsonArray(item.branchIds);
+        const itemFoodIds = parseJsonArray(item.foodIds);
+
+        const itemBranches = itemBranchIds
             .map((id) => branchMap.get(id))
             .filter(Boolean)
             .map((b) => ({
@@ -87,7 +125,7 @@ async function enrichOffersWithBranchesAndFoods<
                 nameFr: b!.nameFr,
             }));
 
-        const itemFoods = (Array.isArray(item.foodIds) ? item.foodIds : [])
+        const itemFoods = itemFoodIds
             .map((id) => foodMap.get(id))
             .filter(Boolean)
             .map((f) => ({
@@ -109,6 +147,8 @@ async function enrichOffersWithBranchesAndFoods<
         return {
             ...item,
             name: localizedName,
+            branchIds: itemBranchIds,
+            foodIds: itemFoodIds,
             branches: itemBranches,
             foods: itemFoods,
         };
@@ -140,8 +180,8 @@ export const createOffer = async (req: Request, res: Response) => {
         status,
     } = req.body;
 
-    const finalBranchIds = branchIds || branch_ids || [];
-    const finalFoodIds = foodIds || food_ids || [];
+    const finalBranchIds = parseJsonArray(branchIds !== undefined ? branchIds : branch_ids);
+    const finalFoodIds = parseJsonArray(foodIds !== undefined ? foodIds : food_ids);
 
     let savedImageUrl: string | null = null;
     if (image) {
@@ -163,8 +203,8 @@ export const createOffer = async (req: Request, res: Response) => {
         startDate: new Date(startDate),
         endDate: new Date(endDate),
         price: String(price),
-        foodIds: Array.isArray(finalFoodIds) ? finalFoodIds : [],
-        branchIds: Array.isArray(finalBranchIds) ? finalBranchIds : [],
+        foodIds: finalFoodIds,
+        branchIds: finalBranchIds,
         status: status || "active",
     });
 
@@ -187,7 +227,7 @@ export const createOffer = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 2. Get All Offers (Restaurant Scoped)
+// 2. Get All Offers (Paginated & Restaurant Scoped)
 // ==========================================
 export const getAllOffers = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
@@ -196,24 +236,65 @@ export const getAllOffers = async (req: Request, res: Response) => {
     }
 
     const lang = extractLang(req);
-    const { status } = req.query;
+    const params = { ...req.query, ...req.body };
+    const { status, search, all } = params;
+
+    const page = Math.max(1, parseInt(params.page as string) || 1);
+    const limit = Math.max(1, Math.min(100, parseInt(params.limit as string) || 10));
+    const offset = (page - 1) * limit;
 
     const conditions = [eq(offers.restaurantId, restaurantId)];
     if (status && (status === "active" || status === "inactive")) {
         conditions.push(eq(offers.status, status));
     }
 
-    const allOffers = await db
-        .select()
-        .from(offers)
-        .where(and(...conditions))
-        .orderBy(desc(offers.createdAt));
+    if (search && typeof search === "string" && search.trim() !== "") {
+        const term = `%${search.trim()}%`;
+        conditions.push(
+            or(
+                like(offers.name, term),
+                like(offers.nameAr, term),
+                like(offers.nameFr, term)
+            ) as any
+        );
+    }
 
-    const enrichedList = await enrichOffersWithBranchesAndFoods(allOffers, restaurantId, lang);
+    const isAll = all === "true";
+
+    const [totalCountResult, rawOffers] = await Promise.all([
+        db
+            .select({ count: count() })
+            .from(offers)
+            .where(and(...conditions)),
+        isAll
+            ? db
+                  .select()
+                  .from(offers)
+                  .where(and(...conditions))
+                  .orderBy(desc(offers.createdAt))
+            : db
+                  .select()
+                  .from(offers)
+                  .where(and(...conditions))
+                  .orderBy(desc(offers.createdAt))
+                  .limit(limit)
+                  .offset(offset),
+    ]);
+
+    const totalItems = Number(totalCountResult[0]?.count || 0);
+    const totalPages = isAll ? 1 : Math.ceil(totalItems / limit);
+
+    const enrichedList = await enrichOffersWithBranchesAndFoods(rawOffers, restaurantId, lang);
 
     return SuccessResponse(res, {
         message: "Offers fetched successfully",
         data: enrichedList,
+        pagination: {
+            page: isAll ? 1 : page,
+            limit: isAll ? totalItems : limit,
+            totalItems,
+            totalPages,
+        },
     });
 };
 
@@ -292,11 +373,15 @@ export const updateOffer = async (req: Request, res: Response) => {
     if (endDate !== undefined) updateData.endDate = new Date(endDate);
     if (price !== undefined) updateData.price = String(price);
 
-    const finalFoodIds = foodIds !== undefined ? foodIds : food_ids;
-    if (finalFoodIds !== undefined) updateData.foodIds = finalFoodIds;
+    const rawFoodIds = foodIds !== undefined ? foodIds : food_ids;
+    if (rawFoodIds !== undefined) {
+        updateData.foodIds = parseJsonArray(rawFoodIds);
+    }
 
-    const finalBranchIds = branchIds !== undefined ? branchIds : branch_ids;
-    if (finalBranchIds !== undefined) updateData.branchIds = finalBranchIds;
+    const rawBranchIds = branchIds !== undefined ? branchIds : branch_ids;
+    if (rawBranchIds !== undefined) {
+        updateData.branchIds = parseJsonArray(rawBranchIds);
+    }
 
     if (status !== undefined) updateData.status = status;
 
@@ -396,7 +481,119 @@ export const toggleOfferStatus = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 7. Get Branches (Localized by lang en, ar, fr with universal fallback)
+// 7. Get Branches of a Specific Offer
+// ==========================================
+export const getOfferBranches = async (req: Request, res: Response) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId) {
+        throw new BadRequest("Restaurant context is missing or unauthorized");
+    }
+
+    const lang = extractLang(req);
+    const { id } = req.params;
+
+    const [offer] = await db
+        .select({ branchIds: offers.branchIds })
+        .from(offers)
+        .where(and(eq(offers.id, id), eq(offers.restaurantId, restaurantId)))
+        .limit(1);
+
+    if (!offer) {
+        throw new NotFound("Offer not found");
+    }
+
+    const branchIds = parseJsonArray(offer.branchIds);
+    if (branchIds.length === 0) {
+        return SuccessResponse(res, {
+            message: "Offer branches fetched successfully",
+            data: [],
+        });
+    }
+
+    const offerBranches = await db
+        .select({
+            id: branches.id,
+            name: branches.name,
+            nameAr: branches.nameAr,
+            nameFr: branches.nameFr,
+        })
+        .from(branches)
+        .where(
+            and(
+                eq(branches.restaurantId, restaurantId),
+                inArray(branches.id, branchIds)
+            )
+        );
+
+    const formatted = offerBranches.map((b) => ({
+        id: b.id,
+        name: getLocalizedName(b, lang),
+    }));
+
+    return SuccessResponse(res, {
+        message: "Offer branches fetched successfully",
+        data: formatted,
+    });
+};
+
+// ==========================================
+// 8. Get Foods of a Specific Offer
+// ==========================================
+export const getOfferFoods = async (req: Request, res: Response) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId) {
+        throw new BadRequest("Restaurant context is missing or unauthorized");
+    }
+
+    const lang = extractLang(req);
+    const { id } = req.params;
+
+    const [offer] = await db
+        .select({ foodIds: offers.foodIds })
+        .from(offers)
+        .where(and(eq(offers.id, id), eq(offers.restaurantId, restaurantId)))
+        .limit(1);
+
+    if (!offer) {
+        throw new NotFound("Offer not found");
+    }
+
+    const foodIds = parseJsonArray(offer.foodIds);
+    if (foodIds.length === 0) {
+        return SuccessResponse(res, {
+            message: "Offer foods fetched successfully",
+            data: [],
+        });
+    }
+
+    const offerFoods = await db
+        .select({
+            id: food.id,
+            name: food.name,
+            nameAr: food.nameAr,
+            nameFr: food.nameFr,
+        })
+        .from(food)
+        .where(
+            and(
+                eq(food.restaurantid, restaurantId),
+                inArray(food.id, foodIds)
+            )
+        );
+
+    const formatted = offerFoods.map((f) => ({
+        id: f.id,
+        name: getLocalizedName(f, lang),
+    }));
+
+    return SuccessResponse(res, {
+        message: "Offer foods fetched successfully",
+        data: formatted,
+    });
+};
+
+// ==========================================
+// 9. Get All Active Branches for Selection
 // ==========================================
 export const getBranches = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
@@ -428,6 +625,44 @@ export const getBranches = async (req: Request, res: Response) => {
 
     return SuccessResponse(res, {
         message: "Branches fetched successfully",
+        data: formatted,
+    });
+};
+
+// ==========================================
+// 10. Get All Foods for Selection
+// ==========================================
+export const getFoods = async (req: Request, res: Response) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId) {
+        throw new BadRequest("Restaurant context is missing or unauthorized");
+    }
+
+    const lang = extractLang(req);
+    const { subcategory_id } = { ...req.query, ...req.body };
+
+    const conditions = [eq(food.restaurantid, restaurantId)];
+    if (subcategory_id && typeof subcategory_id === "string") {
+        conditions.push(eq(food.subcategoryid, subcategory_id));
+    }
+
+    const foodList = await db
+        .select({
+            id: food.id,
+            name: food.name,
+            nameAr: food.nameAr,
+            nameFr: food.nameFr,
+        })
+        .from(food)
+        .where(and(...conditions));
+
+    const formatted = foodList.map((f) => ({
+        id: f.id,
+        name: getLocalizedName(f, lang),
+    }));
+
+    return SuccessResponse(res, {
+        message: "Foods fetched successfully",
         data: formatted,
     });
 };
