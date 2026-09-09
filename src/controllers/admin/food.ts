@@ -1073,7 +1073,8 @@ async function recomputeSubcategoryOOS(
 // ============================================================================
 // HELPER: Recompute & store subcategory global status
 // Called after toggling a food's global status.
-// subcategory.isOutOfStock is updated based on all foods' OOS state.
+// - subcategory.status  → "active" if ANY food is active, else "inactive"
+// - subcategory.isOutOfStock → true only if ALL foods are OOS
 // ============================================================================
 async function recomputeSubcategoryGlobalStatus(
     subcategoryId: string,
@@ -1087,10 +1088,13 @@ async function recomputeSubcategoryGlobalStatus(
     if (allFoods.length === 0) return;
 
     const allOOS = allFoods.every((f) => f.isOutOfStock);
+    // If at least one food is active → subcategory should be active
+    const hasActiveFood = allFoods.some((f) => f.status === "active");
+    const newStatus: "active" | "inactive" = hasActiveFood ? "active" : "inactive";
 
     await db
         .update(subcategories)
-        .set({ isOutOfStock: allOOS, updatedAt: new Date() })
+        .set({ status: newStatus, isOutOfStock: allOOS, updatedAt: new Date() })
         .where(eq(subcategories.id, subcategoryId));
 }
 
@@ -1099,6 +1103,7 @@ async function recomputeSubcategoryGlobalStatus(
 // If at least one food is active in the branch (no override = use global status)
 // then branchSubcategory can remain active; otherwise mark inactive.
 // Also recomputes isOutOfStock for the branch record.
+// NOTE: branch subcategory status is capped by the global subcategory status.
 // ============================================================================
 async function recomputeSubcategoryBranchStatus(
     subcategoryId: string,
@@ -1127,9 +1132,21 @@ async function recomputeSubcategoryBranchStatus(
     const effectiveStatuses = allFoods.map((f) => overrideMap.get(f.id) ?? f.status);
     const allOOS = allFoods.every((f) => f.isOutOfStock);
 
-    // If at least one food is active → subcategory should be active in branch
+    // If at least one food is active in branch → subcategory should be active
     const hasActiveFood = effectiveStatuses.some((s) => s === "active");
-    const newBranchSubcatStatus: "active" | "inactive" = hasActiveFood ? "active" : "inactive";
+
+    // ── Respect global subcategory status as ceiling ─────────────────────────
+    // Even if foods are active in branch, the subcategory cannot be active
+    // if the admin explicitly set the global subcategory to inactive.
+    const [globalSub] = await db
+        .select({ status: subcategories.status })
+        .from(subcategories)
+        .where(eq(subcategories.id, subcategoryId))
+        .limit(1);
+
+    const globalSubcatIsActive = globalSub?.status === "active";
+    const newBranchSubcatStatus: "active" | "inactive" =
+        globalSubcatIsActive && hasActiveFood ? "active" : "inactive";
 
     const [existing] = await db
         .select({ id: branchSubcategories.id })
