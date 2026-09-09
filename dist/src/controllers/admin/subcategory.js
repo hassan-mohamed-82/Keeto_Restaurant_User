@@ -622,8 +622,34 @@ const updateBranchSubcategoryOutOfStock = async (req, res) => {
         updatedAt: new Date(),
     })
         .where((0, drizzle_orm_1.and)(...foodConditions));
-    // 2. إذا تم تحديد فرع معين، نحدث أيضاً حالة المخزون في branch_menu_items
+    // 2. تحديث الـ stored flag مباشرة على جدول subcategories (global)
+    await connection_1.db
+        .update(schema_1.subcategories)
+        .set({ isOutOfStock, updatedAt: new Date() })
+        .where((0, drizzle_orm_1.eq)(schema_1.subcategories.id, subcategoryId));
+    // 3. إذا تم تحديد فرع، نحدث branchSubcategories.isOutOfStock + branch_menu_items stock
     if (branchId) {
+        // 3a. Upsert branchSubcategories.isOutOfStock
+        const [existingBranchSub] = await connection_1.db
+            .select({ id: schema_1.branchSubcategories.id })
+            .from(schema_1.branchSubcategories)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branchSubcategories.subcategoryId, subcategoryId), (0, drizzle_orm_1.eq)(schema_1.branchSubcategories.branchId, branchId)))
+            .limit(1);
+        if (existingBranchSub) {
+            await connection_1.db
+                .update(schema_1.branchSubcategories)
+                .set({ isOutOfStock, updatedAt: new Date() })
+                .where((0, drizzle_orm_1.eq)(schema_1.branchSubcategories.id, existingBranchSub.id));
+        }
+        else {
+            await connection_1.db.insert(schema_1.branchSubcategories).values({
+                id: (0, uuid_1.v4)(),
+                branchId,
+                subcategoryId,
+                isOutOfStock,
+            });
+        }
+        // 3b. Update branch_menu_items stock for each food
         const existingBranchItems = await connection_1.db
             .select({ id: schema_1.branchMenuItems.id, foodId: schema_1.branchMenuItems.foodId })
             .from(schema_1.branchMenuItems)

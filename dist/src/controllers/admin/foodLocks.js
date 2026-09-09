@@ -33,24 +33,26 @@ const toggleBranchFoodLock = async (req, res) => {
         .limit(1);
     if (!branchCheck[0])
         throw new NotFound_1.NotFound("Branch not found or does not belong to your restaurant");
-    // التأكد إن الأكلة دي موجودة فعلاً في الكتالوج
-    const foodCheck = await connection_1.db.select({ id: schema_1.food.id })
+    // التأكد إن الأكلة دي موجودة فعلاً في الكتالوج + جلب subcategoryId
+    const [foodCheck] = await connection_1.db
+        .select({ id: schema_1.food.id, subcategoryid: schema_1.food.subcategoryid, isOutOfStock: schema_1.food.isOutOfStock })
         .from(schema_1.food)
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.id, foodId), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId)))
         .limit(1);
-    if (!foodCheck[0])
+    if (!foodCheck)
         throw new NotFound_1.NotFound("Food item not found in master catalog");
     // جلب السجل الحالي في branchMenuItems إن وجد
-    const existing = await connection_1.db.select()
+    const [existing] = await connection_1.db
+        .select()
         .from(schema_1.branchMenuItems)
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.branchId, branchId), (0, drizzle_orm_1.eq)(schema_1.branchMenuItems.foodId, foodId)))
         .limit(1);
     let newStatus;
-    if (existing[0]) {
-        newStatus = existing[0].status === "active" ? "inactive" : "active";
+    if (existing) {
+        newStatus = existing.status === "active" ? "inactive" : "active";
         await connection_1.db.update(schema_1.branchMenuItems)
             .set({ status: newStatus, updatedAt: new Date() })
-            .where((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.id, existing[0].id));
+            .where((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.id, existing.id));
     }
     else {
         // إذا لم تكن موجودة، فهي افتراضيا نشطة، وسنقوم بقفلها
@@ -62,14 +64,56 @@ const toggleBranchFoodLock = async (req, res) => {
             status: newStatus,
         });
     }
+    // ── Cascade to branchSubcategories ────────────────────────────
+    // After toggling this food, recompute subcategory status in this branch
+    if (foodCheck.subcategoryid) {
+        const subcategoryId = foodCheck.subcategoryid;
+        // Get all foods in the same subcategory
+        const allSubcatFoods = await connection_1.db
+            .select({ id: schema_1.food.id, status: schema_1.food.status, isOutOfStock: schema_1.food.isOutOfStock })
+            .from(schema_1.food)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.subcategoryid, subcategoryId), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId)));
+        const allFoodIds = allSubcatFoods.map((f) => f.id);
+        // Get all branch-level overrides for these foods
+        const branchOverrides = await connection_1.db
+            .select({ foodId: schema_1.branchMenuItems.foodId, status: schema_1.branchMenuItems.status })
+            .from(schema_1.branchMenuItems)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.branchId, branchId), (0, drizzle_orm_1.inArray)(schema_1.branchMenuItems.foodId, allFoodIds)));
+        const overrideMap = new Map(branchOverrides.map((b) => [b.foodId, b.status]));
+        // Effective status per food: branch override or global
+        const effectiveStatuses = allSubcatFoods.map((f) => overrideMap.get(f.id) ?? f.status);
+        const allOOS = allSubcatFoods.every((f) => f.isOutOfStock);
+        const hasActiveFood = effectiveStatuses.some((s) => s === "active");
+        const newBranchSubcatStatus = hasActiveFood ? "active" : "inactive";
+        // Upsert branchSubcategories
+        const [existingBranchSub] = await connection_1.db
+            .select({ id: schema_1.branchSubcategories.id })
+            .from(schema_1.branchSubcategories)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branchSubcategories.subcategoryId, subcategoryId), (0, drizzle_orm_1.eq)(schema_1.branchSubcategories.branchId, branchId)))
+            .limit(1);
+        if (existingBranchSub) {
+            await connection_1.db
+                .update(schema_1.branchSubcategories)
+                .set({ status: newBranchSubcatStatus, isOutOfStock: allOOS, updatedAt: new Date() })
+                .where((0, drizzle_orm_1.eq)(schema_1.branchSubcategories.id, existingBranchSub.id));
+        }
+        else {
+            await connection_1.db.insert(schema_1.branchSubcategories).values({
+                id: (0, uuid_1.v4)(),
+                branchId,
+                subcategoryId,
+                status: newBranchSubcatStatus,
+                isOutOfStock: allOOS,
+            });
+        }
+    }
     // مسح كاش منيو الفرع اللي بيتحسب ديناميكياً
     await redis_1.default.del(`admin:branch_menu:${branchId}`);
-    // Also clear user facing cache if exists
     const userCacheKey = `restaurant_details:${restaurantId}:branch:${branchId}`;
     await redis_1.default.del(userCacheKey);
     return (0, response_1.SuccessResponse)(res, {
         message: `Food "${foodId}" is now ${newStatus} in branch "${branchId}"`,
-        data: { status: newStatus }
+        data: { foodId, branchId, status: newStatus }
     });
 };
 exports.toggleBranchFoodLock = toggleBranchFoodLock;

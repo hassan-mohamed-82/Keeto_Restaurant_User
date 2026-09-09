@@ -222,14 +222,16 @@ const getAllOffers = async (req, res) => {
     const totalItems = Number(totalCountResult[0]?.count || 0);
     const totalPages = isAll ? 1 : Math.ceil(totalItems / limit);
     const formattedOffers = rawOffers.map((item) => ({
-        ...item,
+        id: item.id,
+        image: item.image,
+        startDate: item.startDate,
+        endDate: item.endDate,
+        price: item.price,
         name: (0, localization_helper_1.getLocalizedName)({
             name: item.name,
             nameAr: item.nameAr,
             nameFr: item.nameFr,
         }, lang),
-        branchIds: parseJsonArray(item.branchIds),
-        foodIds: parseJsonArray(item.foodIds),
     }));
     return (0, response_1.SuccessResponse)(res, {
         message: "Offers fetched successfully",

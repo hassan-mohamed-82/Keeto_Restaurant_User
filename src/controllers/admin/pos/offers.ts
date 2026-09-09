@@ -285,17 +285,19 @@ export const getAllOffers = async (req: Request, res: Response) => {
     const totalPages = isAll ? 1 : Math.ceil(totalItems / limit);
 
     const formattedOffers = rawOffers.map((item) => ({
-        ...item,
-        name: getLocalizedName(
-            {
-                name: item.name,
-                nameAr: item.nameAr,
-                nameFr: item.nameFr,
-            },
-            lang
-        ),
-        branchIds: parseJsonArray(item.branchIds),
-        foodIds: parseJsonArray(item.foodIds),
+            id : item.id, 
+            image : item.image,
+            startDate : item.startDate,
+            endDate : item.endDate,
+            price : item.price,
+            name: getLocalizedName(
+                {
+                    name: item.name,
+                    nameAr: item.nameAr,
+                    nameFr: item.nameFr,
+                },
+                lang
+            ), 
     }));
 
     return SuccessResponse(res, {
