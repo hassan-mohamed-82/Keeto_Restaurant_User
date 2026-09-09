@@ -12,13 +12,17 @@ import { restaurants } from "./restaurants";
 
 export type TaxModule = "take_away" | "dine_in" | "delivery" | "car" | "all";
 export type TaxType = "web" | "app" | "all";
+export type TaxModuleType = "pos" | "online" | "all";
 
 export const taxes = mysqlTable("taxes", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
     restaurantId: char("restaurant_id", { length: 36 }).references(() => restaurants.id, { onDelete: "cascade" }),
-    name: varchar("name", { length: 255 }),
+    name: varchar("name", { length: 255 }).notNull(),
+    nameAr: varchar("name_ar", { length: 255 }),
+    nameFr: varchar("name_fr", { length: 255 }),
     amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
     modules: json("modules").$type<TaxModule[]>().default(["all"]).notNull(),
+    moduleType: mysqlEnum("module_type", ["pos", "online", "all"]).default("all").notNull(),
     type: mysqlEnum("type", ["web", "app", "all"]).default("all").notNull(),
     foodIds: json("food_ids").$type<string[]>().default([]).notNull(),
     branchIds: json("branch_ids").$type<string[]>().default([]).notNull(),
