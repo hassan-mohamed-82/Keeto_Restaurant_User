@@ -432,11 +432,22 @@ const getFoods = async (req, res) => {
         throw new Errors_1.BadRequest("Restaurant context is missing or unauthorized");
     }
     const lang = (0, localization_helper_1.extractLang)(req);
-    const taxId = req.params.id ||
-        req.query.taxId ||
-        req.body.taxId ||
-        req.query.tax_id ||
-        req.body.tax_id;
+    const taxId = (req.params?.id && !req.params?.subcategoryId ? req.params.id : undefined) ||
+        req.query?.taxId ||
+        req.body?.taxId ||
+        req.query?.tax_id ||
+        req.body?.tax_id;
+    const subcategoryId = req.params?.subcategoryId ||
+        req.params?.subCategoryId ||
+        req.query?.subcategory_id ||
+        req.query?.subcategoryId ||
+        req.query?.subCategory ||
+        req.query?.sub_category ||
+        req.body?.subcategory_id ||
+        req.body?.subcategoryId ||
+        req.body?.subCategory ||
+        req.body?.sub_category;
+    const conditions = [(0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId)];
     if (taxId) {
         const [taxItem] = await connection_1.db
             .select({ foodIds: schema_1.taxes.foodIds })
@@ -453,33 +464,10 @@ const getFoods = async (req, res) => {
                 data: [],
             });
         }
-        const foodList = await connection_1.db
-            .select({
-            id: schema_1.food.id,
-            name: schema_1.food.name,
-            nameAr: schema_1.food.nameAr,
-            nameFr: schema_1.food.nameFr,
-            subcategoryId: schema_1.food.subcategoryid,
-        })
-            .from(schema_1.food)
-            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId), (0, drizzle_orm_1.inArray)(schema_1.food.id, foodIds)));
-        const formatted = foodList.map((f) => ({
-            id: f.id,
-            name: (0, localization_helper_1.getLocalizedName)(f, lang),
-            subcategoryId: f.subcategoryId,
-        }));
-        return (0, response_1.SuccessResponse)(res, {
-            message: "Foods fetched successfully",
-            data: formatted,
-        });
+        conditions.push((0, drizzle_orm_1.inArray)(schema_1.food.id, foodIds));
     }
-    const subcategoryId = req.query?.subcategory_id ||
-        req.query?.subcategoryId ||
-        req.body?.subcategory_id ||
-        req.body?.subcategoryId;
-    const conditions = [(0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId)];
-    if (subcategoryId && typeof subcategoryId === "string") {
-        conditions.push((0, drizzle_orm_1.eq)(schema_1.food.subcategoryid, subcategoryId));
+    if (subcategoryId && typeof subcategoryId === "string" && subcategoryId.trim() !== "") {
+        conditions.push((0, drizzle_orm_1.eq)(schema_1.food.subcategoryid, subcategoryId.trim()));
     }
     const foodList = await connection_1.db
         .select({
@@ -487,6 +475,8 @@ const getFoods = async (req, res) => {
         name: schema_1.food.name,
         nameAr: schema_1.food.nameAr,
         nameFr: schema_1.food.nameFr,
+        price: schema_1.food.price,
+        image: schema_1.food.image,
         subcategoryId: schema_1.food.subcategoryid,
     })
         .from(schema_1.food)
@@ -494,6 +484,8 @@ const getFoods = async (req, res) => {
     const formatted = foodList.map((f) => ({
         id: f.id,
         name: (0, localization_helper_1.getLocalizedName)(f, lang),
+        price: f.price,
+        image: f.image,
         subcategoryId: f.subcategoryId,
     }));
     return (0, response_1.SuccessResponse)(res, {
@@ -511,11 +503,11 @@ const getBranches = async (req, res) => {
         throw new Errors_1.BadRequest("Restaurant context is missing or unauthorized");
     }
     const lang = (0, localization_helper_1.extractLang)(req);
-    const taxId = req.params.id ||
-        req.query.taxId ||
-        req.body.taxId ||
-        req.query.tax_id ||
-        req.body.tax_id;
+    const taxId = req.params?.id ||
+        req.query?.taxId ||
+        req.body?.taxId ||
+        req.query?.tax_id ||
+        req.body?.tax_id;
     if (taxId) {
         const [taxItem] = await connection_1.db
             .select({ branchIds: schema_1.taxes.branchIds })

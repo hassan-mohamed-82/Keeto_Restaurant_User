@@ -436,11 +436,11 @@ const getBranches = async (req, res) => {
         throw new Errors_1.BadRequest("Restaurant context is missing or unauthorized");
     }
     const lang = (0, localization_helper_1.extractLang)(req);
-    const serviceFeeId = req.params.id ||
-        req.query.serviceFeeId ||
-        req.body.serviceFeeId ||
-        req.query.service_fee_id ||
-        req.body.service_fee_id;
+    const serviceFeeId = req.params?.id ||
+        req.query?.serviceFeeId ||
+        req.body?.serviceFeeId ||
+        req.query?.service_fee_id ||
+        req.body?.service_fee_id;
     if (serviceFeeId) {
         const [feeItem] = await connection_1.db
             .select({ branchIds: schema_1.serviceFees.branchIds })

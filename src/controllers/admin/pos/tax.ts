@@ -528,12 +528,27 @@ export const getFoods = async (req: Request, res: Response) => {
     }
 
     const lang = extractLang(req);
+
     const taxId =
-        req.params.id ||
-        req.query.taxId ||
-        req.body.taxId ||
-        req.query.tax_id ||
-        req.body.tax_id;
+        (req.params?.id && !req.params?.subcategoryId ? req.params.id : undefined) ||
+        req.query?.taxId ||
+        req.body?.taxId ||
+        req.query?.tax_id ||
+        req.body?.tax_id;
+
+    const subcategoryId =
+        req.params?.subcategoryId ||
+        req.params?.subCategoryId ||
+        req.query?.subcategory_id ||
+        req.query?.subcategoryId ||
+        req.query?.subCategory ||
+        req.query?.sub_category ||
+        req.body?.subcategory_id ||
+        req.body?.subcategoryId ||
+        req.body?.subCategory ||
+        req.body?.sub_category;
+
+    const conditions: any[] = [eq(food.restaurantid, restaurantId)];
 
     if (taxId) {
         const [taxItem] = await db
@@ -553,44 +568,11 @@ export const getFoods = async (req: Request, res: Response) => {
                 data: [],
             });
         }
-
-        const foodList = await db
-            .select({
-                id: food.id,
-                name: food.name,
-                nameAr: food.nameAr,
-                nameFr: food.nameFr,
-                subcategoryId: food.subcategoryid,
-            })
-            .from(food)
-            .where(
-                and(
-                    eq(food.restaurantid, restaurantId),
-                    inArray(food.id, foodIds)
-                )
-            );
-
-        const formatted = foodList.map((f) => ({
-            id: f.id,
-            name: getLocalizedName(f, lang),
-            subcategoryId: f.subcategoryId,
-        }));
-
-        return SuccessResponse(res, {
-            message: "Foods fetched successfully",
-            data: formatted,
-        });
+        conditions.push(inArray(food.id, foodIds));
     }
 
-    const subcategoryId =
-        req.query?.subcategory_id ||
-        req.query?.subcategoryId ||
-        req.body?.subcategory_id ||
-        req.body?.subcategoryId;
-
-    const conditions = [eq(food.restaurantid, restaurantId)];
-    if (subcategoryId && typeof subcategoryId === "string") {
-        conditions.push(eq(food.subcategoryid, subcategoryId));
+    if (subcategoryId && typeof subcategoryId === "string" && subcategoryId.trim() !== "") {
+        conditions.push(eq(food.subcategoryid, subcategoryId.trim()));
     }
 
     const foodList = await db
@@ -599,6 +581,8 @@ export const getFoods = async (req: Request, res: Response) => {
             name: food.name,
             nameAr: food.nameAr,
             nameFr: food.nameFr,
+            price: food.price,
+            image: food.image,
             subcategoryId: food.subcategoryid,
         })
         .from(food)
@@ -607,6 +591,8 @@ export const getFoods = async (req: Request, res: Response) => {
     const formatted = foodList.map((f) => ({
         id: f.id,
         name: getLocalizedName(f, lang),
+        price: f.price,
+        image: f.image,
         subcategoryId: f.subcategoryId,
     }));
 
@@ -627,11 +613,11 @@ export const getBranches = async (req: Request, res: Response) => {
 
     const lang = extractLang(req);
     const taxId =
-        req.params.id ||
-        req.query.taxId ||
-        req.body.taxId ||
-        req.query.tax_id ||
-        req.body.tax_id;
+        req.params?.id ||
+        req.query?.taxId ||
+        req.body?.taxId ||
+        req.query?.tax_id ||
+        req.body?.tax_id;
 
     if (taxId) {
         const [taxItem] = await db

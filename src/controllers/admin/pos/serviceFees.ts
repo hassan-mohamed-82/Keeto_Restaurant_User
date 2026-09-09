@@ -535,11 +535,11 @@ export const getBranches = async (req: Request, res: Response) => {
 
     const lang = extractLang(req);
     const serviceFeeId =
-        req.params.id ||
-        req.query.serviceFeeId ||
-        req.body.serviceFeeId ||
-        req.query.service_fee_id ||
-        req.body.service_fee_id;
+        req.params?.id ||
+        req.query?.serviceFeeId ||
+        req.body?.serviceFeeId ||
+        req.query?.service_fee_id ||
+        req.body?.service_fee_id;
 
     if (serviceFeeId) {
         const [feeItem] = await db
