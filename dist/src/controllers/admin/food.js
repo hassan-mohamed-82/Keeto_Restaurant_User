@@ -961,15 +961,29 @@ async function recomputeSubcategoryBranchStatus(subcategoryId, branchId, restaur
     if (allFoods.length === 0)
         return;
     const foodIds = allFoods.map((f) => f.id);
-    // Get branch-level overrides for these foods
+    // Get branch-level overrides for these foods (status + stock for OOS check)
     const branchOverrides = await connection_1.db
-        .select({ foodId: schema_1.branchMenuItems.foodId, status: schema_1.branchMenuItems.status })
+        .select({
+        foodId: schema_1.branchMenuItems.foodId,
+        status: schema_1.branchMenuItems.status,
+        stockType: schema_1.branchMenuItems.stockType,
+        stockQty: schema_1.branchMenuItems.stockQty,
+    })
         .from(schema_1.branchMenuItems)
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.branchId, branchId), (0, drizzle_orm_1.inArray)(schema_1.branchMenuItems.foodId, foodIds)));
-    const overrideMap = new Map(branchOverrides.map((b) => [b.foodId, b.status]));
+    const overrideMap = new Map(branchOverrides.map((b) => [b.foodId, b]));
     // Effective status per food: branch override or global
-    const effectiveStatuses = allFoods.map((f) => overrideMap.get(f.id) ?? f.status);
-    const allOOS = allFoods.every((f) => f.isOutOfStock);
+    const effectiveStatuses = allFoods.map((f) => overrideMap.get(f.id)?.status ?? f.status);
+    // Effective OOS per food:
+    // - If branch has an override → OOS = stockType=limited && stockQty<=0
+    // - If no branch override → fall back to global food.isOutOfStock
+    const allOOS = allFoods.every((f) => {
+        const branchItem = overrideMap.get(f.id);
+        if (branchItem) {
+            return branchItem.stockType === "limited" && (branchItem.stockQty ?? 0) <= 0;
+        }
+        return Boolean(f.isOutOfStock);
+    });
     // If at least one food is active in branch → subcategory should be active
     const hasActiveFood = effectiveStatuses.some((s) => s === "active");
     // ── Respect global subcategory status as ceiling ─────────────────────────

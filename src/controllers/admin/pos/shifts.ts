@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { db } from "../../../models/connection";
 import { shifts, branches } from "../../../models/schema";
-import { eq, and, desc, inArray } from "drizzle-orm";
+import { eq, and, desc, inArray, or, like, count } from "drizzle-orm";
 import { SuccessResponse } from "../../../utils/response";
 import { BadRequest, NotFound } from "../../../Errors";
 import { v4 as uuidv4 } from "uuid";
@@ -146,28 +146,93 @@ export const getAllShifts = async (req: Request, res: Response) => {
     }
 
     const lang = extractLang(req);
-    const { status, branchId, branch_id } = req.query;
-    const targetBranchId = branchId || branch_id;
+    const params = { ...req.query, ...req.body, ...req.params };
+    const { status, search } = params;
 
-    const conditions = [eq(shifts.restaurantId, restaurantId)];
+    const rawBranchId =
+        req.query?.branch_id ||
+        req.query?.branchId ||
+        req.body?.branch_id ||
+        req.body?.branchId ||
+        req.params?.branch_id ||
+        req.params?.branchId ||
+        params.branch_id ||
+        params.branchId;
+
+    const conditions: any[] = [eq(shifts.restaurantId, restaurantId)];
+
     if (status && (status === "active" || status === "inactive")) {
         conditions.push(eq(shifts.status, status));
     }
-    if (targetBranchId && typeof targetBranchId === "string") {
-        conditions.push(eq(shifts.branchId, targetBranchId));
+
+    // Filter by branch_id if provided and not "all"
+    if (rawBranchId) {
+        if (Array.isArray(rawBranchId)) {
+            const filtered = rawBranchId.filter(
+                (b) => typeof b === "string" && b.trim().toLowerCase() !== "all" && b.trim() !== ""
+            );
+            if (filtered.length > 0 && filtered.length === rawBranchId.length) {
+                conditions.push(inArray(shifts.branchId, filtered));
+            }
+        } else if (typeof rawBranchId === "string") {
+            const trimmed = rawBranchId.trim();
+            if (trimmed.toLowerCase() !== "all" && trimmed !== "") {
+                conditions.push(eq(shifts.branchId, trimmed));
+            }
+        }
     }
 
-    const allShifts = await db
-        .select()
-        .from(shifts)
-        .where(and(...conditions))
-        .orderBy(desc(shifts.createdAt));
+    if (search && typeof search === "string" && search.trim() !== "") {
+        const term = `%${search.trim()}%`;
+        conditions.push(
+            or(
+                like(shifts.name, term),
+                like(shifts.nameAr, term),
+                like(shifts.nameFr, term)
+            ) as any
+        );
+    }
 
-    const enrichedList = await enrichShiftsWithBranches(allShifts, restaurantId, lang);
+    const { all } = params;
+    const page = Math.max(1, parseInt(params.page as string) || 1);
+    const limit = Math.max(1, Math.min(100, parseInt(params.limit as string) || 10));
+    const offset = (page - 1) * limit;
+
+    const isAll = all === "true";
+
+    const [totalCountResult, rawShifts] = await Promise.all([
+        db
+            .select({ count: count() })
+            .from(shifts)
+            .where(and(...conditions)),
+        isAll
+            ? db
+                  .select()
+                  .from(shifts)
+                  .where(and(...conditions))
+                  .orderBy(desc(shifts.createdAt))
+            : db
+                  .select()
+                  .from(shifts)
+                  .where(and(...conditions))
+                  .orderBy(desc(shifts.createdAt))
+                  .limit(limit)
+                  .offset(offset),
+    ]);
+
+    const totalItems = Number(totalCountResult[0]?.count || 0);
+    const totalPages = isAll ? 1 : Math.ceil(totalItems / limit);
+    const enrichedList = await enrichShiftsWithBranches(rawShifts, restaurantId, lang);
 
     return SuccessResponse(res, {
         message: "Shifts fetched successfully",
         data: enrichedList,
+        pagination: {
+            page: isAll ? 1 : page,
+            limit: isAll ? totalItems : limit,
+            totalItems,
+            totalPages,
+        },
     });
 };
 
@@ -180,8 +245,14 @@ export const getShiftById = async (req: Request, res: Response) => {
         throw new BadRequest("Restaurant context is missing or unauthorized");
     }
 
-    const lang = extractLang(req);
     const { id } = req.params;
+
+    // If client hits /:id with "all", route to getAllShifts
+    if (id && id.toLowerCase() === "all") {
+        return getAllShifts(req, res);
+    }
+
+    const lang = extractLang(req);
 
     const [shift] = await db
         .select()

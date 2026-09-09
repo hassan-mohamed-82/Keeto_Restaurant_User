@@ -119,24 +119,75 @@ const getAllShifts = async (req, res) => {
         throw new Errors_1.BadRequest("Restaurant context is missing or unauthorized");
     }
     const lang = (0, localization_helper_1.extractLang)(req);
-    const { status, branchId, branch_id } = req.query;
-    const targetBranchId = branchId || branch_id;
+    const params = { ...req.query, ...req.body, ...req.params };
+    const { status, search } = params;
+    const rawBranchId = req.query?.branch_id ||
+        req.query?.branchId ||
+        req.body?.branch_id ||
+        req.body?.branchId ||
+        req.params?.branch_id ||
+        req.params?.branchId ||
+        params.branch_id ||
+        params.branchId;
     const conditions = [(0, drizzle_orm_1.eq)(schema_1.shifts.restaurantId, restaurantId)];
     if (status && (status === "active" || status === "inactive")) {
         conditions.push((0, drizzle_orm_1.eq)(schema_1.shifts.status, status));
     }
-    if (targetBranchId && typeof targetBranchId === "string") {
-        conditions.push((0, drizzle_orm_1.eq)(schema_1.shifts.branchId, targetBranchId));
+    // Filter by branch_id if provided and not "all"
+    if (rawBranchId) {
+        if (Array.isArray(rawBranchId)) {
+            const filtered = rawBranchId.filter((b) => typeof b === "string" && b.trim().toLowerCase() !== "all" && b.trim() !== "");
+            if (filtered.length > 0 && filtered.length === rawBranchId.length) {
+                conditions.push((0, drizzle_orm_1.inArray)(schema_1.shifts.branchId, filtered));
+            }
+        }
+        else if (typeof rawBranchId === "string") {
+            const trimmed = rawBranchId.trim();
+            if (trimmed.toLowerCase() !== "all" && trimmed !== "") {
+                conditions.push((0, drizzle_orm_1.eq)(schema_1.shifts.branchId, trimmed));
+            }
+        }
     }
-    const allShifts = await connection_1.db
-        .select()
-        .from(schema_1.shifts)
-        .where((0, drizzle_orm_1.and)(...conditions))
-        .orderBy((0, drizzle_orm_1.desc)(schema_1.shifts.createdAt));
-    const enrichedList = await enrichShiftsWithBranches(allShifts, restaurantId, lang);
+    if (search && typeof search === "string" && search.trim() !== "") {
+        const term = `%${search.trim()}%`;
+        conditions.push((0, drizzle_orm_1.or)((0, drizzle_orm_1.like)(schema_1.shifts.name, term), (0, drizzle_orm_1.like)(schema_1.shifts.nameAr, term), (0, drizzle_orm_1.like)(schema_1.shifts.nameFr, term)));
+    }
+    const { all } = params;
+    const page = Math.max(1, parseInt(params.page) || 1);
+    const limit = Math.max(1, Math.min(100, parseInt(params.limit) || 10));
+    const offset = (page - 1) * limit;
+    const isAll = all === "true";
+    const [totalCountResult, rawShifts] = await Promise.all([
+        connection_1.db
+            .select({ count: (0, drizzle_orm_1.count)() })
+            .from(schema_1.shifts)
+            .where((0, drizzle_orm_1.and)(...conditions)),
+        isAll
+            ? connection_1.db
+                .select()
+                .from(schema_1.shifts)
+                .where((0, drizzle_orm_1.and)(...conditions))
+                .orderBy((0, drizzle_orm_1.desc)(schema_1.shifts.createdAt))
+            : connection_1.db
+                .select()
+                .from(schema_1.shifts)
+                .where((0, drizzle_orm_1.and)(...conditions))
+                .orderBy((0, drizzle_orm_1.desc)(schema_1.shifts.createdAt))
+                .limit(limit)
+                .offset(offset),
+    ]);
+    const totalItems = Number(totalCountResult[0]?.count || 0);
+    const totalPages = isAll ? 1 : Math.ceil(totalItems / limit);
+    const enrichedList = await enrichShiftsWithBranches(rawShifts, restaurantId, lang);
     return (0, response_1.SuccessResponse)(res, {
         message: "Shifts fetched successfully",
         data: enrichedList,
+        pagination: {
+            page: isAll ? 1 : page,
+            limit: isAll ? totalItems : limit,
+            totalItems,
+            totalPages,
+        },
     });
 };
 exports.getAllShifts = getAllShifts;
@@ -148,8 +199,12 @@ const getShiftById = async (req, res) => {
     if (!restaurantId) {
         throw new Errors_1.BadRequest("Restaurant context is missing or unauthorized");
     }
-    const lang = (0, localization_helper_1.extractLang)(req);
     const { id } = req.params;
+    // If client hits /:id with "all", route to getAllShifts
+    if (id && id.toLowerCase() === "all") {
+        return (0, exports.getAllShifts)(req, res);
+    }
+    const lang = (0, localization_helper_1.extractLang)(req);
     const [shift] = await connection_1.db
         .select()
         .from(schema_1.shifts)

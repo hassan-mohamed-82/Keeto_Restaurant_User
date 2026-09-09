@@ -16,6 +16,10 @@ const router = Router();
 
 router.post("/", validate(createShiftSchema), catchAsync(createShift));
 router.get("/", catchAsync(getAllShifts));
+router.post("/list", catchAsync(getAllShifts));
+router.post("/list-shifts", catchAsync(getAllShifts));
+router.get("/branch/:branch_id", catchAsync(getAllShifts));
+router.post("/branch/:branch_id", catchAsync(getAllShifts));
 router.get("/branches", catchAsync(getBranches));
 router.post("/branches", catchAsync(getBranches));
 router.get("/:id", catchAsync(getShiftById));
