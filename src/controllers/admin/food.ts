@@ -1120,17 +1120,32 @@ async function recomputeSubcategoryBranchStatus(
 
     const foodIds = allFoods.map((f) => f.id);
 
-    // Get branch-level overrides for these foods
+    // Get branch-level overrides for these foods (status + stock for OOS check)
     const branchOverrides = await db
-        .select({ foodId: branchMenuItems.foodId, status: branchMenuItems.status })
+        .select({
+            foodId: branchMenuItems.foodId,
+            status: branchMenuItems.status,
+            stockType: branchMenuItems.stockType,
+            stockQty: branchMenuItems.stockQty,
+        })
         .from(branchMenuItems)
         .where(and(eq(branchMenuItems.branchId, branchId), inArray(branchMenuItems.foodId, foodIds)));
 
-    const overrideMap = new Map(branchOverrides.map((b) => [b.foodId, b.status]));
+    const overrideMap = new Map(branchOverrides.map((b) => [b.foodId, b]));
 
     // Effective status per food: branch override or global
-    const effectiveStatuses = allFoods.map((f) => overrideMap.get(f.id) ?? f.status);
-    const allOOS = allFoods.every((f) => f.isOutOfStock);
+    const effectiveStatuses = allFoods.map((f) => overrideMap.get(f.id)?.status ?? f.status);
+
+    // Effective OOS per food:
+    // - If branch has an override → OOS = stockType=limited && stockQty<=0
+    // - If no branch override → fall back to global food.isOutOfStock
+    const allOOS = allFoods.every((f) => {
+        const branchItem = overrideMap.get(f.id);
+        if (branchItem) {
+            return branchItem.stockType === "limited" && (branchItem.stockQty ?? 0) <= 0;
+        }
+        return Boolean(f.isOutOfStock);
+    });
 
     // If at least one food is active in branch → subcategory should be active
     const hasActiveFood = effectiveStatuses.some((s) => s === "active");
