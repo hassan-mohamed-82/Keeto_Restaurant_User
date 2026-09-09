@@ -7,6 +7,7 @@ import {
     restaurants,
     categories,
     subcategories,
+    branchSubcategories,
     addons,
     foodIngredients,
     ingredients,
@@ -58,8 +59,20 @@ export const createFood = async (req: Request, res: Response) => {
         if (!existingCategory[0]) throw new BadRequest("Category not found");
 
         if (subcategoryid) {
-            const existingSub = await db.select().from(subcategories).where(eq(subcategories.id, subcategoryid)).limit(1);
+            const existingSub = await db
+                .select({ id: subcategories.id, status: subcategories.status })
+                .from(subcategories)
+                .where(eq(subcategories.id, subcategoryid))
+                .limit(1);
             if (!existingSub[0]) throw new BadRequest("Subcategory not found");
+
+            // ✅ Block creating an active food under an inactive subcategory
+            const incomingStatus = status || "active";
+            if (incomingStatus === "active" && existingSub[0].status === "inactive") {
+                throw new BadRequest(
+                    "Cannot create an active food under an inactive subcategory. Please activate the subcategory first."
+                );
+            }
         }
 
         // ==========================================
@@ -496,6 +509,22 @@ export const updateFood = async (req: Request, res: Response) => {
         updateData.subcategoryid = incomingSubcategoryId === "" ? null : incomingSubcategoryId;
     }
 
+    // ✅ Block setting an active food under an inactive subcategory
+    const effectiveSubcategoryId = updateData.subcategoryid ?? existingFood[0].subcategoryid;
+    const effectiveStatus = updateData.status ?? existingFood[0].status;
+    if (effectiveSubcategoryId && effectiveStatus === "active") {
+        const subCheck = await db
+            .select({ status: subcategories.status })
+            .from(subcategories)
+            .where(eq(subcategories.id, effectiveSubcategoryId))
+            .limit(1);
+        if (subCheck[0] && subCheck[0].status === "inactive") {
+            throw new BadRequest(
+                "Cannot set food as active while its subcategory is inactive. Please activate the subcategory first."
+            );
+        }
+    }
+
     // ✅ تنفيذ التحديث الرئيسي للأكلة
     if (Object.keys(updateData).length > 1) {
         await db.update(food).set(updateData).where(eq(food.id, id));
@@ -812,24 +841,287 @@ export const toggleVariationOptionStatus = async (req: Request, res: Response) =
 
 export const changeFoodStatus = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { status } = req.body;
     const restaurantId = req.user?.restaurantId || req.user?.id;
+    const branchId: string | undefined =
+        (req.params.branchId as string) ||
+        (req.body?.branchId as string) ||
+        (req.query?.branchId as string) ||
+        req.user?.branchId || undefined;
+
+    // Accept explicit status or toggle
+    const { status: rawStatus } = req.body;
 
     if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
 
-    const existingFood = await db.select().from(food).where(and(eq(food.id, id), eq(food.restaurantid, restaurantId))).limit(1);
-    if (!existingFood[0]) throw new NotFound("Food not found or does not belong to you");
+    const [existingFood] = await db
+        .select({
+            id: food.id,
+            status: food.status,
+            subcategoryid: food.subcategoryid,
+        })
+        .from(food)
+        .where(and(eq(food.id, id), eq(food.restaurantid, restaurantId)))
+        .limit(1);
 
-    await db.update(food).set({ status }).where(eq(food.id, id));
+    if (!existingFood) throw new NotFound("Food not found or does not belong to you");
 
-    if (status == "active") {
-        await db.update(food).set({ status: "active" }).where(eq(food.id, id));
-    } else if (status == "inactive") {
-        await db.update(food).set({ status: "inactive" }).where(eq(food.id, id));
+    // ── Branch-level toggle ────────────────────────────────────────
+    if (branchId) {
+        // Determine new status
+        let newStatus: "active" | "inactive";
+        if (rawStatus === "active" || rawStatus === "inactive") {
+            newStatus = rawStatus;
+        } else {
+            // Toggle from current branch override, fallback to global status
+            const [branchItem] = await db
+                .select({ status: branchMenuItems.status })
+                .from(branchMenuItems)
+                .where(and(eq(branchMenuItems.foodId, id), eq(branchMenuItems.branchId, branchId)))
+                .limit(1);
+            const current = branchItem?.status ?? existingFood.status;
+            newStatus = current === "active" ? "inactive" : "active";
+        }
+
+        // Upsert branchMenuItems
+        const [existingBranchItem] = await db
+            .select({ id: branchMenuItems.id })
+            .from(branchMenuItems)
+            .where(and(eq(branchMenuItems.foodId, id), eq(branchMenuItems.branchId, branchId)))
+            .limit(1);
+
+        if (existingBranchItem) {
+            await db
+                .update(branchMenuItems)
+                .set({ status: newStatus, updatedAt: new Date() })
+                .where(eq(branchMenuItems.id, existingBranchItem.id));
+        } else {
+            await db.insert(branchMenuItems).values({
+                id: uuidv4(),
+                branchId,
+                foodId: id,
+                status: newStatus,
+            });
+        }
+
+        // ── Recompute subcategory branch-level status after food toggle ──
+        if (existingFood.subcategoryid) {
+            await recomputeSubcategoryBranchStatus(existingFood.subcategoryid, branchId, restaurantId);
+        }
+
+        return SuccessResponse(res, {
+            message: `Food status in branch updated to "${newStatus}"`,
+            data: { foodId: id, branchId, status: newStatus },
+        });
     }
 
-    return SuccessResponse(res, { message: "Food status updated successfully" });
+    // ── Global toggle ──────────────────────────────────────────────
+    let newStatus: "active" | "inactive";
+    if (rawStatus === "active" || rawStatus === "inactive") {
+        newStatus = rawStatus;
+    } else {
+        newStatus = existingFood.status === "active" ? "inactive" : "active";
+    }
+
+    await db.update(food).set({ status: newStatus, updatedAt: new Date() }).where(eq(food.id, id));
+
+    // ── Recompute subcategory global status after food toggle ──
+    if (existingFood.subcategoryid) {
+        await recomputeSubcategoryGlobalStatus(existingFood.subcategoryid, restaurantId);
+    }
+
+    return SuccessResponse(res, {
+        message: `Food status updated to "${newStatus}"`,
+        data: { foodId: id, status: newStatus },
+    });
 };
+
+// ============================================================================
+// TOGGLE FOOD OUT-OF-STOCK
+// PATCH /foods/:id/out-of-stock
+// Body: { isOutOfStock?: boolean } — if omitted, toggles current value
+// Query/Body: { branchId? } — used only to update branchSubcategories.isOutOfStock
+// ============================================================================
+export const toggleFoodOutOfStock = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    const branchId: string | undefined =
+        (req.params.branchId as string) ||
+        (req.body?.branchId as string) ||
+        (req.query?.branchId as string) ||
+        req.user?.branchId || undefined;
+
+    if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
+
+    const [existingFood] = await db
+        .select({ id: food.id, isOutOfStock: food.isOutOfStock, subcategoryid: food.subcategoryid })
+        .from(food)
+        .where(and(eq(food.id, id), eq(food.restaurantid, restaurantId)))
+        .limit(1);
+
+    if (!existingFood) throw new NotFound("Food not found or does not belong to you");
+
+    // Determine new OOS value
+    const newIsOOS: boolean =
+        req.body?.isOutOfStock !== undefined
+            ? Boolean(req.body.isOutOfStock)
+            : !existingFood.isOutOfStock;
+
+    // Update food.isOutOfStock globally (OOS is always global — kitchen state)
+    await db.update(food).set({ isOutOfStock: newIsOOS, updatedAt: new Date() }).where(eq(food.id, id));
+
+    // ── Recompute subcategory isOutOfStock (stored flag) ──────────────
+    if (existingFood.subcategoryid) {
+        await recomputeSubcategoryOOS(existingFood.subcategoryid, restaurantId, branchId);
+    }
+
+    return SuccessResponse(res, {
+        message: `Food isOutOfStock set to ${newIsOOS}`,
+        data: { foodId: id, isOutOfStock: newIsOOS, branchId: branchId || null },
+    });
+};
+
+// ============================================================================
+// HELPER: Recompute & store subcategory.isOutOfStock
+// Called after any food OOS toggle — checks all foods in the subcategory.
+// If ALL foods are OOS → subcategory.isOutOfStock = true, else false.
+// If branchId given → also updates branchSubcategories.isOutOfStock
+// ============================================================================
+async function recomputeSubcategoryOOS(
+    subcategoryId: string,
+    restaurantId: string,
+    branchId?: string
+): Promise<void> {
+    const allFoods = await db
+        .select({ isOutOfStock: food.isOutOfStock })
+        .from(food)
+        .where(and(eq(food.subcategoryid, subcategoryId), eq(food.restaurantid, restaurantId)));
+
+    if (allFoods.length === 0) return;
+
+    const allOOS = allFoods.every((f) => f.isOutOfStock);
+
+    // Update subcategories table (global stored flag)
+    await db
+        .update(subcategories)
+        .set({ isOutOfStock: allOOS, updatedAt: new Date() })
+        .where(eq(subcategories.id, subcategoryId));
+
+    // If branchId provided, also update branchSubcategories.isOutOfStock
+    if (branchId) {
+        const [existing] = await db
+            .select({ id: branchSubcategories.id })
+            .from(branchSubcategories)
+            .where(
+                and(
+                    eq(branchSubcategories.subcategoryId, subcategoryId),
+                    eq(branchSubcategories.branchId, branchId)
+                )
+            )
+            .limit(1);
+
+        if (existing) {
+            await db
+                .update(branchSubcategories)
+                .set({ isOutOfStock: allOOS, updatedAt: new Date() })
+                .where(eq(branchSubcategories.id, existing.id));
+        } else {
+            await db.insert(branchSubcategories).values({
+                id: uuidv4(),
+                branchId,
+                subcategoryId,
+                isOutOfStock: allOOS,
+            });
+        }
+    }
+}
+
+// ============================================================================
+// HELPER: Recompute & store subcategory global status
+// Called after toggling a food's global status.
+// subcategory.isOutOfStock is updated based on all foods' OOS state.
+// ============================================================================
+async function recomputeSubcategoryGlobalStatus(
+    subcategoryId: string,
+    restaurantId: string
+): Promise<void> {
+    const allFoods = await db
+        .select({ status: food.status, isOutOfStock: food.isOutOfStock })
+        .from(food)
+        .where(and(eq(food.subcategoryid, subcategoryId), eq(food.restaurantid, restaurantId)));
+
+    if (allFoods.length === 0) return;
+
+    const allOOS = allFoods.every((f) => f.isOutOfStock);
+
+    await db
+        .update(subcategories)
+        .set({ isOutOfStock: allOOS, updatedAt: new Date() })
+        .where(eq(subcategories.id, subcategoryId));
+}
+
+// ============================================================================
+// HELPER: Recompute subcategory branch-level status after a food status change
+// If at least one food is active in the branch (no override = use global status)
+// then branchSubcategory can remain active; otherwise mark inactive.
+// Also recomputes isOutOfStock for the branch record.
+// ============================================================================
+async function recomputeSubcategoryBranchStatus(
+    subcategoryId: string,
+    branchId: string,
+    restaurantId: string
+): Promise<void> {
+    // Get all foods in this subcategory
+    const allFoods = await db
+        .select({ id: food.id, status: food.status, isOutOfStock: food.isOutOfStock })
+        .from(food)
+        .where(and(eq(food.subcategoryid, subcategoryId), eq(food.restaurantid, restaurantId)));
+
+    if (allFoods.length === 0) return;
+
+    const foodIds = allFoods.map((f) => f.id);
+
+    // Get branch-level overrides for these foods
+    const branchOverrides = await db
+        .select({ foodId: branchMenuItems.foodId, status: branchMenuItems.status })
+        .from(branchMenuItems)
+        .where(and(eq(branchMenuItems.branchId, branchId), inArray(branchMenuItems.foodId, foodIds)));
+
+    const overrideMap = new Map(branchOverrides.map((b) => [b.foodId, b.status]));
+
+    // Effective status per food: branch override or global
+    const effectiveStatuses = allFoods.map((f) => overrideMap.get(f.id) ?? f.status);
+    const allOOS = allFoods.every((f) => f.isOutOfStock);
+
+    // If at least one food is active → subcategory should be active in branch
+    const hasActiveFood = effectiveStatuses.some((s) => s === "active");
+    const newBranchSubcatStatus: "active" | "inactive" = hasActiveFood ? "active" : "inactive";
+
+    const [existing] = await db
+        .select({ id: branchSubcategories.id })
+        .from(branchSubcategories)
+        .where(
+            and(
+                eq(branchSubcategories.subcategoryId, subcategoryId),
+                eq(branchSubcategories.branchId, branchId)
+            )
+        )
+        .limit(1);
+
+    if (existing) {
+        await db
+            .update(branchSubcategories)
+            .set({ status: newBranchSubcatStatus, isOutOfStock: allOOS, updatedAt: new Date() })
+            .where(eq(branchSubcategories.id, existing.id));
+    } else {
+        await db.insert(branchSubcategories).values({
+            id: uuidv4(),
+            branchId,
+            subcategoryId,
+            status: newBranchSubcatStatus,
+            isOutOfStock: allOOS,
+        });
+    }
+}
 
 // =============================================
 // GET Out-Of-Stock Foods

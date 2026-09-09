@@ -685,13 +685,15 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
                 if (!row.isOutOfStock) rollupMap[sid].allOutOfStock = false;
             }
 
-            // Fetch branch-level status for each subcategory in this branch
+            // Fetch branch-level status + isOutOfStock for each subcategory in this branch
             const branchSubcategoryStatusMap: Record<string, string | null> = {};
+            const branchSubcategoryOosMap: Record<string, boolean> = {};
             if (singleBranchId) {
                 const branchSubcatRows = await db
                     .select({
                         subcategoryId: branchSubcategories.subcategoryId,
                         branchStatus: branchSubcategories.status,
+                        branchIsOutOfStock: branchSubcategories.isOutOfStock,
                     })
                     .from(branchSubcategories)
                     .where(
@@ -702,10 +704,11 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
                     );
                 for (const row of branchSubcatRows) {
                     branchSubcategoryStatusMap[row.subcategoryId] = row.branchStatus;
+                    branchSubcategoryOosMap[row.subcategoryId] = Boolean(row.branchIsOutOfStock);
                 }
             }
 
-            // Fetch subcategory base info
+            // Fetch subcategory base info including isOutOfStock
             const subcategoryData = await db
                 .select({
                     id: subcategories.id,
@@ -713,6 +716,7 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
                     nameAr: subcategories.nameAr,
                     nameFr: subcategories.nameFr,
                     status: subcategories.status,
+                    isOutOfStock: subcategories.isOutOfStock,
                 })
                 .from(subcategories)
                 .where(inArray(subcategories.id, uniqueSubcategoryIds));
@@ -724,13 +728,19 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
                     ? (branchSubcategoryStatusMap[sub.id] ?? sub.status)
                     : sub.status;
 
+                // Priority: branchSubcategory.isOutOfStock > subcategory.isOutOfStock > food rollup
+                const branchOos = singleBranchId ? (branchSubcategoryOosMap[sub.id] ?? false) : false;
+                const globalOos = Boolean(sub.isOutOfStock);
+                const foodRollupOos = rollup?.hasProducts ? rollup.allOutOfStock : false;
+                const isOutOfStock = branchOos || globalOos || foodRollupOos;
+
                 subcategoryResult.push({
                     id: sub.id,
                     name: sub.name,
                     nameAr: sub.nameAr,
                     nameFr: sub.nameFr,
-                    computedStatus:status,
-                    isOutOfStock: rollup?.hasProducts ? rollup.allOutOfStock : false,
+                    computedStatus: status,
+                    isOutOfStock,
                 });
             }
         }
@@ -976,15 +986,18 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
             if (!row.isOutOfStock) rollupMap[sid].allOutOfStock = false;
         }
 
-        // Fetch branch-level subcategory status for all requested branches
+        // Fetch branch-level subcategory status + isOutOfStock for all requested branches
         // branchStatusMap[subcategoryId][branchId] = status
+        // branchOosMap[subcategoryId][branchId] = isOutOfStock
         const branchStatusMap: Record<string, Record<string, string>> = {};
+        const branchOosMap: Record<string, Record<string, boolean>> = {};
         if (branchIds.length > 0) {
             const branchSubcatRows = await db
                 .select({
                     subcategoryId: branchSubcategories.subcategoryId,
                     branchId: branchSubcategories.branchId,
                     branchStatus: branchSubcategories.status,
+                    branchIsOutOfStock: branchSubcategories.isOutOfStock,
                 })
                 .from(branchSubcategories)
                 .where(
@@ -996,8 +1009,10 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
             for (const row of branchSubcatRows) {
                 if (!branchStatusMap[row.subcategoryId]) {
                     branchStatusMap[row.subcategoryId] = {};
+                    branchOosMap[row.subcategoryId] = {};
                 }
                 branchStatusMap[row.subcategoryId][row.branchId] = row.branchStatus;
+                branchOosMap[row.subcategoryId][row.branchId] = Boolean(row.branchIsOutOfStock);
             }
         }
 
@@ -1008,6 +1023,7 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
                 nameAr: subcategories.nameAr,
                 nameFr: subcategories.nameFr,
                 status: subcategories.status,
+                isOutOfStock: subcategories.isOutOfStock,
             })
             .from(subcategories)
             .where(inArray(subcategories.id, uniqueSubcategoryIds));
@@ -1017,18 +1033,25 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
             // If a single branchId is provided, use its override status (fallback to global)
             // For multi-branch, use global status as base
             const branchStatuses = branchStatusMap[sub.id] ?? {};
+            const branchOoses = branchOosMap[sub.id] ?? {};
             const singleBranch = branchIds.length === 1 ? branchIds[0] : null;
             const status = singleBranch
                 ? (branchStatuses[singleBranch] ?? sub.status)
                 : sub.status;
+
+            // Priority: branchSubcategory.isOutOfStock > subcategory.isOutOfStock > food rollup
+            const branchOos = singleBranch ? (branchOoses[singleBranch] ?? false) : false;
+            const globalOos = Boolean(sub.isOutOfStock);
+            const foodRollupOos = rollup?.hasProducts ? rollup.allOutOfStock : false;
+            const isOutOfStock = branchOos || globalOos || foodRollupOos;
 
             subcategoryResult.push({
                 id: sub.id,
                 name: sub.name,
                 nameAr: sub.nameAr,
                 nameFr: sub.nameFr,
-                computedStatus:status,
-                isOutOfStock: rollup?.hasProducts ? rollup.allOutOfStock : false,
+                computedStatus: status,
+                isOutOfStock,
             });
         }
     }
