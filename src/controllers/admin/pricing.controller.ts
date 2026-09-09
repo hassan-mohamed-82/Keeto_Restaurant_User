@@ -765,6 +765,7 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
             categoryId: food.categoryid,
             subcategoryId: food.subcategoryid,
             mainBasePrice: food.price,
+            globalStatus: food.status,
             isOutOfStock: food.isOutOfStock,
         })
         .from(food)
@@ -884,6 +885,13 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
         const itemBranchOverrides = branchOverrides.filter((b) => b.foodId === f.id);
         const itemChannels = channelPricingList.filter((c) => c.foodId === f.id);
 
+        // status: branch-level override if branchId provided, fallback to global food status
+        const singleBranch = branchIds.length === 1 ? branchIds[0] : null;
+        const branchOverride = singleBranch
+            ? itemBranchOverrides.find((b) => b.branchId === singleBranch)
+            : null;
+        const status = branchOverride?.status ?? f.globalStatus;
+
         const itemVariations = allVariations
             .filter((v) => v.foodId === f.id)
             .map((v) => {
@@ -911,7 +919,16 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
             });
 
         return {
-            ...f,
+            id: f.id,
+            name: f.name,
+            nameAr: f.nameAr,
+            nameFr: f.nameFr,
+            description: f.description,
+            image: f.image,
+            categoryId: f.categoryId,
+            subcategoryId: f.subcategoryId,
+            mainBasePrice: f.mainBasePrice,
+            status,
             isOutOfStock: Boolean(f.isOutOfStock),
             isAvailable: true,
             branchOverrides: itemBranchOverrides,
