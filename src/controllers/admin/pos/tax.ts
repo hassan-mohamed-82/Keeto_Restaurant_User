@@ -294,7 +294,7 @@ export const getTaxListOptions = async (req: Request, res: Response) => {
     const lang = extractLang(req);
 
     // Concurrent fetch for active branches and restaurant foods
-    const [myBranches, myFoods] = await Promise.all([
+    const [myBranches] = await Promise.all([
         db
             .select({
                 id: branches.id,
@@ -308,16 +308,7 @@ export const getTaxListOptions = async (req: Request, res: Response) => {
                     eq(branches.restaurantId, restaurantId),
                     eq(branches.status, "active")
                 )
-            ),
-        db
-            .select({
-                id: food.id,
-                name: food.name,
-                nameAr: food.nameAr,
-                nameFr: food.nameFr,
-            })
-            .from(food)
-            .where(eq(food.restaurantid, restaurantId)),
+            ), 
     ]);
 
     const localizedBranches = myBranches.map((b) => ({
@@ -325,20 +316,12 @@ export const getTaxListOptions = async (req: Request, res: Response) => {
         name: getLocalizedName(b, lang),
         nameAr: b.nameAr,
         nameFr: b.nameFr,
-    }));
-
-    const localizedFoods = myFoods.map((f) => ({
-        id: f.id,
-        name: getLocalizedName(f, lang),
-        nameAr: f.nameAr,
-        nameFr: f.nameFr,
-    }));
+    })); 
 
     return SuccessResponse(res, {
         message: "Tax options fetched successfully",
         data: {
-            branches: localizedBranches,
-            foods: localizedFoods,
+            branches: localizedBranches, 
             modules: TAX_MODULES,
             types: TAX_TYPES,
             moduleTypes: TAX_MODULE_TYPES,

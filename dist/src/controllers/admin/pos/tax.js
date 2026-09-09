@@ -230,7 +230,7 @@ const getTaxListOptions = async (req, res) => {
     }
     const lang = (0, localization_helper_1.extractLang)(req);
     // Concurrent fetch for active branches and restaurant foods
-    const [myBranches, myFoods] = await Promise.all([
+    const [myBranches] = await Promise.all([
         connection_1.db
             .select({
             id: schema_1.branches.id,
@@ -240,15 +240,6 @@ const getTaxListOptions = async (req, res) => {
         })
             .from(schema_1.branches)
             .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branches.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.branches.status, "active"))),
-        connection_1.db
-            .select({
-            id: schema_1.food.id,
-            name: schema_1.food.name,
-            nameAr: schema_1.food.nameAr,
-            nameFr: schema_1.food.nameFr,
-        })
-            .from(schema_1.food)
-            .where((0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId)),
     ]);
     const localizedBranches = myBranches.map((b) => ({
         id: b.id,
@@ -256,17 +247,10 @@ const getTaxListOptions = async (req, res) => {
         nameAr: b.nameAr,
         nameFr: b.nameFr,
     }));
-    const localizedFoods = myFoods.map((f) => ({
-        id: f.id,
-        name: (0, localization_helper_1.getLocalizedName)(f, lang),
-        nameAr: f.nameAr,
-        nameFr: f.nameFr,
-    }));
     return (0, response_1.SuccessResponse)(res, {
         message: "Tax options fetched successfully",
         data: {
             branches: localizedBranches,
-            foods: localizedFoods,
             modules: taxes_1.TAX_MODULES,
             types: taxes_1.TAX_TYPES,
             moduleTypes: taxes_1.TAX_MODULE_TYPES,
