@@ -24,6 +24,11 @@ const errorHandler = (err, req, res, next) => {
             message: error.message,
         }));
     }
+    else if (err instanceof SyntaxError && ("body" in err || err.type === "entity.parse.failed")) {
+        statusCode = http_status_codes_1.StatusCodes.BAD_REQUEST;
+        message = "Invalid JSON payload in request body. Please verify JSON format (check for trailing commas, unescaped characters, or missing quotes).";
+        details = err.message;
+    }
     else if (err instanceof jsonwebtoken_1.default.JsonWebTokenError) {
         statusCode = 401;
         message = "Invalid token";
