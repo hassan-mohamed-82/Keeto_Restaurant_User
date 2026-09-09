@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getBranches = exports.getFoods = exports.getSubcategories = exports.toggleServiceFeeStatus = exports.deleteServiceFee = exports.updateServiceFee = exports.getServiceFeeById = exports.getServiceFeeListOptions = exports.getAllServiceFees = exports.createServiceFee = void 0;
+exports.getServiceFeeBranches = exports.getBranches = exports.getFoods = exports.getSubcategories = exports.toggleServiceFeeStatus = exports.deleteServiceFee = exports.updateServiceFee = exports.getServiceFeeById = exports.getServiceFeeListOptions = exports.getAllServiceFees = exports.createServiceFee = void 0;
 const connection_1 = require("../../../models/connection");
 const schema_1 = require("../../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -10,14 +10,33 @@ const uuid_1 = require("uuid");
 const serviceFees_1 = require("../../../validation/admin/serviceFees");
 const localization_helper_1 = require("../../../helpers/localization.helper");
 /**
+ * Helper to format service fee items without heavy nested objects
+ */
+function formatServiceFeeItem(item, lang = "en") {
+    const localizedName = (0, localization_helper_1.getLocalizedName)({
+        name: item.name || "",
+        nameAr: item.nameAr,
+        nameFr: item.nameFr,
+    }, lang);
+    return {
+        id: item.id,
+        name: localizedName,
+        amount: item.amount,
+        type: item.type,
+        moduleType: item.moduleType,
+        modules: (0, localization_helper_1.parseJsonArray)(item.modules),
+        status: item.status,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+    };
+}
+/**
  * Helper to enrich service fee items with branch details (id, name, nameAr, nameFr)
  */
 async function enrichServiceFeesWithBranches(items, restaurantId, lang = "en") {
     if (items.length === 0)
-        return items;
-    // Collect all unique branchIds across items
-    const allBranchIds = Array.from(new Set(items.flatMap((item) => (Array.isArray(item.branchIds) ? item.branchIds : []))));
-    // Fetch matching branches for this restaurant
+        return [];
+    const allBranchIds = Array.from(new Set(items.flatMap((item) => (0, localization_helper_1.parseJsonArray)(item.branchIds))));
     const branchList = allBranchIds.length > 0
         ? await connection_1.db
             .select({
@@ -34,7 +53,8 @@ async function enrichServiceFeesWithBranches(items, restaurantId, lang = "en") {
         branchMap.set(b.id, b);
     }
     return items.map((item) => {
-        const itemBranches = (Array.isArray(item.branchIds) ? item.branchIds : [])
+        const itemBranchIds = (0, localization_helper_1.parseJsonArray)(item.branchIds);
+        const itemBranches = itemBranchIds
             .map((id) => branchMap.get(id))
             .filter(Boolean)
             .map((b) => ({
@@ -49,9 +69,20 @@ async function enrichServiceFeesWithBranches(items, restaurantId, lang = "en") {
             nameFr: item.nameFr,
         }, lang);
         return {
-            ...item,
+            id: item.id,
+            restaurantId: item.restaurantId,
             name: localizedName,
+            nameAr: item.nameAr,
+            nameFr: item.nameFr,
+            amount: item.amount,
+            type: item.type,
+            moduleType: item.moduleType,
+            modules: (0, localization_helper_1.parseJsonArray)(item.modules),
+            branchIds: itemBranchIds,
             branches: itemBranches,
+            status: item.status,
+            createdAt: item.createdAt,
+            updatedAt: item.updatedAt,
         };
     });
 }
@@ -66,6 +97,8 @@ const createServiceFee = async (req, res) => {
     const lang = (0, localization_helper_1.extractLang)(req);
     const { name, nameAr, nameFr, amount, type, moduleType, module_type, branchIds, modules, status } = req.body;
     const finalModuleType = moduleType || module_type || "all";
+    const finalBranchIds = (0, localization_helper_1.parseJsonArray)(branchIds);
+    const finalModules = (0, localization_helper_1.parseJsonArray)(modules).length > 0 ? (0, localization_helper_1.parseJsonArray)(modules) : ["all"];
     const id = (0, uuid_1.v4)();
     await connection_1.db.insert(schema_1.serviceFees).values({
         id,
@@ -76,8 +109,8 @@ const createServiceFee = async (req, res) => {
         amount: String(amount),
         type,
         moduleType: finalModuleType,
-        branchIds: Array.isArray(branchIds) ? branchIds : [],
-        modules: Array.isArray(modules) ? modules : ["all"],
+        branchIds: finalBranchIds,
+        modules: finalModules,
         status: status || "active",
     });
     const [createdItem] = await connection_1.db
@@ -93,7 +126,7 @@ const createServiceFee = async (req, res) => {
 };
 exports.createServiceFee = createServiceFee;
 // ==========================================
-// 2. Get All Service Fees (Restaurant Scoped)
+// 2. Get All Service Fees (Paginated & Restaurant Scoped)
 // ==========================================
 const getAllServiceFees = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
@@ -101,7 +134,11 @@ const getAllServiceFees = async (req, res) => {
         throw new Errors_1.BadRequest("Restaurant context is missing or unauthorized");
     }
     const lang = (0, localization_helper_1.extractLang)(req);
-    const { status, type, moduleType, module_type } = req.query;
+    const params = { ...req.query, ...req.body };
+    const { status, type, moduleType, module_type, search, all } = params;
+    const page = Math.max(1, parseInt(params.page) || 1);
+    const limit = Math.max(1, Math.min(100, parseInt(params.limit) || 10));
+    const offset = (page - 1) * limit;
     const conditions = [(0, drizzle_orm_1.eq)(schema_1.serviceFees.restaurantId, restaurantId)];
     if (status && (status === "active" || status === "inactive")) {
         conditions.push((0, drizzle_orm_1.eq)(schema_1.serviceFees.status, status));
@@ -114,15 +151,42 @@ const getAllServiceFees = async (req, res) => {
         (filterModuleType === "pos" || filterModuleType === "online" || filterModuleType === "all")) {
         conditions.push((0, drizzle_orm_1.eq)(schema_1.serviceFees.moduleType, filterModuleType));
     }
-    const allItems = await connection_1.db
-        .select()
-        .from(schema_1.serviceFees)
-        .where((0, drizzle_orm_1.and)(...conditions))
-        .orderBy((0, drizzle_orm_1.desc)(schema_1.serviceFees.createdAt));
-    const enrichedList = await enrichServiceFeesWithBranches(allItems, restaurantId, lang);
+    if (search && typeof search === "string" && search.trim() !== "") {
+        const term = `%${search.trim()}%`;
+        conditions.push((0, drizzle_orm_1.or)((0, drizzle_orm_1.like)(schema_1.serviceFees.name, term), (0, drizzle_orm_1.like)(schema_1.serviceFees.nameAr, term), (0, drizzle_orm_1.like)(schema_1.serviceFees.nameFr, term)));
+    }
+    const isAll = all === "true";
+    const [totalCountResult, rawItems] = await Promise.all([
+        connection_1.db
+            .select({ count: (0, drizzle_orm_1.count)() })
+            .from(schema_1.serviceFees)
+            .where((0, drizzle_orm_1.and)(...conditions)),
+        isAll
+            ? connection_1.db
+                .select()
+                .from(schema_1.serviceFees)
+                .where((0, drizzle_orm_1.and)(...conditions))
+                .orderBy((0, drizzle_orm_1.desc)(schema_1.serviceFees.createdAt))
+            : connection_1.db
+                .select()
+                .from(schema_1.serviceFees)
+                .where((0, drizzle_orm_1.and)(...conditions))
+                .orderBy((0, drizzle_orm_1.desc)(schema_1.serviceFees.createdAt))
+                .limit(limit)
+                .offset(offset),
+    ]);
+    const totalItems = Number(totalCountResult[0]?.count || 0);
+    const totalPages = isAll ? 1 : Math.ceil(totalItems / limit);
+    const formattedList = rawItems.map((item) => formatServiceFeeItem(item, lang));
     return (0, response_1.SuccessResponse)(res, {
         message: "Service fees fetched successfully",
-        data: enrichedList,
+        data: formattedList,
+        pagination: {
+            page: isAll ? 1 : page,
+            limit: isAll ? totalItems : limit,
+            totalItems,
+            totalPages,
+        },
     });
 };
 exports.getAllServiceFees = getAllServiceFees;
@@ -221,9 +285,9 @@ const updateServiceFee = async (req, res) => {
     if (finalModuleType !== undefined)
         updateData.moduleType = finalModuleType;
     if (branchIds !== undefined)
-        updateData.branchIds = branchIds;
+        updateData.branchIds = (0, localization_helper_1.parseJsonArray)(branchIds);
     if (modules !== undefined)
-        updateData.modules = modules;
+        updateData.modules = (0, localization_helper_1.parseJsonArray)(modules);
     if (status !== undefined)
         updateData.status = status;
     if (Object.keys(updateData).length > 0) {
@@ -364,7 +428,7 @@ const getFoods = async (req, res) => {
 };
 exports.getFoods = getFoods;
 // ==========================================
-// 10. Get Branches (Localized by lang en, ar, fr with fallback to en)
+// 10. Get Branches (Localized by lang en, ar, fr with optional serviceFeeId filter)
 // ==========================================
 const getBranches = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
@@ -372,6 +436,45 @@ const getBranches = async (req, res) => {
         throw new Errors_1.BadRequest("Restaurant context is missing or unauthorized");
     }
     const lang = (0, localization_helper_1.extractLang)(req);
+    const serviceFeeId = req.params.id ||
+        req.query.serviceFeeId ||
+        req.body.serviceFeeId ||
+        req.query.service_fee_id ||
+        req.body.service_fee_id;
+    if (serviceFeeId) {
+        const [feeItem] = await connection_1.db
+            .select({ branchIds: schema_1.serviceFees.branchIds })
+            .from(schema_1.serviceFees)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.serviceFees.id, String(serviceFeeId)), (0, drizzle_orm_1.eq)(schema_1.serviceFees.restaurantId, restaurantId)))
+            .limit(1);
+        if (!feeItem) {
+            throw new Errors_1.NotFound("Service fee not found");
+        }
+        const branchIds = (0, localization_helper_1.parseJsonArray)(feeItem.branchIds);
+        if (branchIds.length === 0) {
+            return (0, response_1.SuccessResponse)(res, {
+                message: "Branches fetched successfully",
+                data: [],
+            });
+        }
+        const myBranches = await connection_1.db
+            .select({
+            id: schema_1.branches.id,
+            name: schema_1.branches.name,
+            nameAr: schema_1.branches.nameAr,
+            nameFr: schema_1.branches.nameFr,
+        })
+            .from(schema_1.branches)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branches.restaurantId, restaurantId), (0, drizzle_orm_1.inArray)(schema_1.branches.id, branchIds)));
+        const formatted = myBranches.map((b) => ({
+            id: b.id,
+            name: (0, localization_helper_1.getLocalizedName)(b, lang),
+        }));
+        return (0, response_1.SuccessResponse)(res, {
+            message: "Branches fetched successfully",
+            data: formatted,
+        });
+    }
     const myBranches = await connection_1.db
         .select({
         id: schema_1.branches.id,
@@ -391,3 +494,10 @@ const getBranches = async (req, res) => {
     });
 };
 exports.getBranches = getBranches;
+// ==========================================
+// 11. Get Branches of a Specific Service Fee
+// ==========================================
+const getServiceFeeBranches = async (req, res) => {
+    return (0, exports.getBranches)(req, res);
+};
+exports.getServiceFeeBranches = getServiceFeeBranches;

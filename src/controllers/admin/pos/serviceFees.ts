@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { db } from "../../../models/connection";
 import { serviceFees, branches, subcategories, food } from "../../../models/schema";
-import { eq, and, desc, inArray } from "drizzle-orm";
+import { eq, and, desc, inArray, count, or, like } from "drizzle-orm";
 import { SuccessResponse } from "../../../utils/response";
 import { BadRequest, NotFound } from "../../../Errors";
 import { v4 as uuidv4 } from "uuid";
@@ -11,23 +11,48 @@ import {
     SERVICE_FEE_MODULE_TYPES,
 } from "../../../validation/admin/serviceFees";
 
-import { extractLang, getLocalizedName, Language } from "../../../helpers/localization.helper";
+import { extractLang, getLocalizedName, parseJsonArray, Language } from "../../../helpers/localization.helper";
 
+/**
+ * Helper to format service fee items without heavy nested objects
+ */
+function formatServiceFeeItem(item: any, lang: Language = "en") {
+    const localizedName = getLocalizedName(
+        {
+            name: item.name || "",
+            nameAr: item.nameAr,
+            nameFr: item.nameFr,
+        },
+        lang
+    );
+
+    return {
+        id: item.id, 
+        name: localizedName, 
+        amount: item.amount,
+        type: item.type,
+        moduleType: item.moduleType,
+        modules: parseJsonArray(item.modules), 
+        status: item.status,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+    };
+}
 
 /**
  * Helper to enrich service fee items with branch details (id, name, nameAr, nameFr)
  */
-async function enrichServiceFeesWithBranches<
-    T extends { branchIds: string[]; name?: string | null; nameAr?: string | null; nameFr?: string | null }
->(items: T[], restaurantId: string, lang: Language = "en") {
-    if (items.length === 0) return items;
+async function enrichServiceFeesWithBranches(
+    items: any[],
+    restaurantId: string,
+    lang: Language = "en"
+) {
+    if (items.length === 0) return [];
 
-    // Collect all unique branchIds across items
     const allBranchIds = Array.from(
-        new Set(items.flatMap((item) => (Array.isArray(item.branchIds) ? item.branchIds : [])))
+        new Set(items.flatMap((item) => parseJsonArray(item.branchIds)))
     );
 
-    // Fetch matching branches for this restaurant
     const branchList =
         allBranchIds.length > 0
             ? await db
@@ -46,16 +71,14 @@ async function enrichServiceFeesWithBranches<
                   )
             : [];
 
-    const branchMap = new Map<
-        string,
-        { id: string; name: string; nameAr: string | null; nameFr: string | null }
-    >();
+    const branchMap = new Map<string, { id: string; name: string; nameAr: string | null; nameFr: string | null }>();
     for (const b of branchList) {
         branchMap.set(b.id, b);
     }
 
     return items.map((item) => {
-        const itemBranches = (Array.isArray(item.branchIds) ? item.branchIds : [])
+        const itemBranchIds = parseJsonArray(item.branchIds);
+        const itemBranches = itemBranchIds
             .map((id) => branchMap.get(id))
             .filter(Boolean)
             .map((b) => ({
@@ -75,9 +98,20 @@ async function enrichServiceFeesWithBranches<
         );
 
         return {
-            ...item,
+            id: item.id,
+            restaurantId: item.restaurantId,
             name: localizedName,
+            nameAr: item.nameAr,
+            nameFr: item.nameFr,
+            amount: item.amount,
+            type: item.type,
+            moduleType: item.moduleType,
+            modules: parseJsonArray(item.modules),
+            branchIds: itemBranchIds,
             branches: itemBranches,
+            status: item.status,
+            createdAt: item.createdAt,
+            updatedAt: item.updatedAt,
         };
     });
 }
@@ -95,6 +129,9 @@ export const createServiceFee = async (req: Request, res: Response) => {
     const { name, nameAr, nameFr, amount, type, moduleType, module_type, branchIds, modules, status } = req.body;
 
     const finalModuleType = moduleType || module_type || "all";
+    const finalBranchIds = parseJsonArray(branchIds);
+    const finalModules = parseJsonArray(modules).length > 0 ? parseJsonArray(modules) : ["all"];
+
     const id = uuidv4();
     await db.insert(serviceFees).values({
         id,
@@ -105,8 +142,8 @@ export const createServiceFee = async (req: Request, res: Response) => {
         amount: String(amount),
         type,
         moduleType: finalModuleType,
-        branchIds: Array.isArray(branchIds) ? branchIds : [],
-        modules: Array.isArray(modules) ? modules : ["all"],
+        branchIds: finalBranchIds,
+        modules: finalModules as any,
         status: status || "active",
     });
 
@@ -129,7 +166,7 @@ export const createServiceFee = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 2. Get All Service Fees (Restaurant Scoped)
+// 2. Get All Service Fees (Paginated & Restaurant Scoped)
 // ==========================================
 export const getAllServiceFees = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
@@ -138,7 +175,12 @@ export const getAllServiceFees = async (req: Request, res: Response) => {
     }
 
     const lang = extractLang(req);
-    const { status, type, moduleType, module_type } = req.query;
+    const params = { ...req.query, ...req.body };
+    const { status, type, moduleType, module_type, search, all } = params;
+
+    const page = Math.max(1, parseInt(params.page as string) || 1);
+    const limit = Math.max(1, Math.min(100, parseInt(params.limit as string) || 10));
+    const offset = (page - 1) * limit;
 
     const conditions = [eq(serviceFees.restaurantId, restaurantId)];
     if (status && (status === "active" || status === "inactive")) {
@@ -155,17 +197,53 @@ export const getAllServiceFees = async (req: Request, res: Response) => {
         conditions.push(eq(serviceFees.moduleType, filterModuleType));
     }
 
-    const allItems = await db
-        .select()
-        .from(serviceFees)
-        .where(and(...conditions))
-        .orderBy(desc(serviceFees.createdAt));
+    if (search && typeof search === "string" && search.trim() !== "") {
+        const term = `%${search.trim()}%`;
+        conditions.push(
+            or(
+                like(serviceFees.name, term),
+                like(serviceFees.nameAr, term),
+                like(serviceFees.nameFr, term)
+            ) as any
+        );
+    }
 
-    const enrichedList = await enrichServiceFeesWithBranches(allItems, restaurantId, lang);
+    const isAll = all === "true";
+
+    const [totalCountResult, rawItems] = await Promise.all([
+        db
+            .select({ count: count() })
+            .from(serviceFees)
+            .where(and(...conditions)),
+        isAll
+            ? db
+                  .select()
+                  .from(serviceFees)
+                  .where(and(...conditions))
+                  .orderBy(desc(serviceFees.createdAt))
+            : db
+                  .select()
+                  .from(serviceFees)
+                  .where(and(...conditions))
+                  .orderBy(desc(serviceFees.createdAt))
+                  .limit(limit)
+                  .offset(offset),
+    ]);
+
+    const totalItems = Number(totalCountResult[0]?.count || 0);
+    const totalPages = isAll ? 1 : Math.ceil(totalItems / limit);
+
+    const formattedList = rawItems.map((item) => formatServiceFeeItem(item, lang));
 
     return SuccessResponse(res, {
         message: "Service fees fetched successfully",
-        data: enrichedList,
+        data: formattedList,
+        pagination: {
+            page: isAll ? 1 : page,
+            limit: isAll ? totalItems : limit,
+            totalItems,
+            totalPages,
+        },
     });
 };
 
@@ -276,8 +354,8 @@ export const updateServiceFee = async (req: Request, res: Response) => {
     if (type !== undefined) updateData.type = type;
     const finalModuleType = moduleType || module_type;
     if (finalModuleType !== undefined) updateData.moduleType = finalModuleType;
-    if (branchIds !== undefined) updateData.branchIds = branchIds;
-    if (modules !== undefined) updateData.modules = modules;
+    if (branchIds !== undefined) updateData.branchIds = parseJsonArray(branchIds);
+    if (modules !== undefined) updateData.modules = parseJsonArray(modules) as any;
     if (status !== undefined) updateData.status = status;
 
     if (Object.keys(updateData).length > 0) {
@@ -447,7 +525,7 @@ export const getFoods = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 10. Get Branches (Localized by lang en, ar, fr with fallback to en)
+// 10. Get Branches (Localized by lang en, ar, fr with optional serviceFeeId filter)
 // ==========================================
 export const getBranches = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
@@ -456,6 +534,62 @@ export const getBranches = async (req: Request, res: Response) => {
     }
 
     const lang = extractLang(req);
+    const serviceFeeId =
+        req.params.id ||
+        req.query.serviceFeeId ||
+        req.body.serviceFeeId ||
+        req.query.service_fee_id ||
+        req.body.service_fee_id;
+
+    if (serviceFeeId) {
+        const [feeItem] = await db
+            .select({ branchIds: serviceFees.branchIds })
+            .from(serviceFees)
+            .where(
+                and(
+                    eq(serviceFees.id, String(serviceFeeId)),
+                    eq(serviceFees.restaurantId, restaurantId)
+                )
+            )
+            .limit(1);
+
+        if (!feeItem) {
+            throw new NotFound("Service fee not found");
+        }
+
+        const branchIds = parseJsonArray(feeItem.branchIds);
+        if (branchIds.length === 0) {
+            return SuccessResponse(res, {
+                message: "Branches fetched successfully",
+                data: [],
+            });
+        }
+
+        const myBranches = await db
+            .select({
+                id: branches.id,
+                name: branches.name,
+                nameAr: branches.nameAr,
+                nameFr: branches.nameFr,
+            })
+            .from(branches)
+            .where(
+                and(
+                    eq(branches.restaurantId, restaurantId),
+                    inArray(branches.id, branchIds)
+                )
+            );
+
+        const formatted = myBranches.map((b) => ({
+            id: b.id,
+            name: getLocalizedName(b, lang),
+        }));
+
+        return SuccessResponse(res, {
+            message: "Branches fetched successfully",
+            data: formatted,
+        });
+    }
 
     const myBranches = await db
         .select({
@@ -481,4 +615,11 @@ export const getBranches = async (req: Request, res: Response) => {
         message: "Branches fetched successfully",
         data: formatted,
     });
+};
+
+// ==========================================
+// 11. Get Branches of a Specific Service Fee
+// ==========================================
+export const getServiceFeeBranches = async (req: Request, res: Response) => {
+    return getBranches(req, res);
 };
