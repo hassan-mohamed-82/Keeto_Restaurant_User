@@ -8,6 +8,8 @@ const shifts_2 = require("../../../controllers/admin/pos/shifts");
 const router = (0, express_1.Router)();
 router.post("/", (0, validation_1.validate)(shifts_1.createShiftSchema), (0, catchAsync_1.catchAsync)(shifts_2.createShift));
 router.get("/", (0, catchAsync_1.catchAsync)(shifts_2.getAllShifts));
+router.get("/branches", (0, catchAsync_1.catchAsync)(shifts_2.getBranches));
+router.post("/branches", (0, catchAsync_1.catchAsync)(shifts_2.getBranches));
 router.get("/:id", (0, catchAsync_1.catchAsync)(shifts_2.getShiftById));
 router.put("/:id", (0, validation_1.validate)(shifts_1.updateShiftSchema), (0, catchAsync_1.catchAsync)(shifts_2.updateShift));
 router.patch("/:id/toggle-status", (0, catchAsync_1.catchAsync)(shifts_2.toggleShiftStatus));

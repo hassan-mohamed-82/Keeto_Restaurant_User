@@ -15,6 +15,7 @@ import {
     getTaxListOptions,
     getSubcategories,
     getFoods,
+    getBranches,
 } from "../../../controllers/admin/pos/tax";
 
 const router = Router();
@@ -24,6 +25,8 @@ router.get("/", catchAsync(getAllTaxes));
 router.get("/options", catchAsync(getTaxListOptions));
 router.get("/select-data", catchAsync(getTaxListOptions));
 router.get("/list", catchAsync(getTaxListOptions));
+router.get("/branches", catchAsync(getBranches));
+router.post("/branches", catchAsync(getBranches));
 router.get("/subcategories", catchAsync(getSubcategories));
 router.post("/subcategories", catchAsync(getSubcategories));
 router.get("/foods", catchAsync(getFoods));

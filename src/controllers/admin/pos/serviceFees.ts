@@ -11,28 +11,8 @@ import {
     SERVICE_FEE_MODULE_TYPES,
 } from "../../../validation/admin/serviceFees";
 
-export type Language = "en" | "ar" | "fr";
+import { extractLang, getLocalizedName, Language } from "../../../helpers/localization.helper";
 
-export const extractLang = (req: Request): Language => {
-    const raw = (req.body?.lang || req.query?.lang || req.headers["accept-language"] || "en") as string;
-    const lower = String(raw).toLowerCase().trim().slice(0, 2);
-    if (lower === "ar") return "ar";
-    if (lower === "fr") return "fr";
-    return "en";
-};
-
-export const getLocalizedName = (
-    item: { name: string; nameAr?: string | null; nameFr?: string | null },
-    lang: Language = "en"
-): string => {
-    if (lang === "ar" && item.nameAr && item.nameAr.trim() !== "") {
-        return item.nameAr;
-    }
-    if (lang === "fr" && item.nameFr && item.nameFr.trim() !== "") {
-        return item.nameFr;
-    }
-    return item.name;
-};
 
 /**
  * Helper to enrich service fee items with branch details (id, name, nameAr, nameFr)
@@ -462,6 +442,43 @@ export const getFoods = async (req: Request, res: Response) => {
 
     return SuccessResponse(res, {
         message: "Foods fetched successfully",
+        data: formatted,
+    });
+};
+
+// ==========================================
+// 10. Get Branches (Localized by lang en, ar, fr with fallback to en)
+// ==========================================
+export const getBranches = async (req: Request, res: Response) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId) {
+        throw new BadRequest("Restaurant context is missing or unauthorized");
+    }
+
+    const lang = extractLang(req);
+
+    const myBranches = await db
+        .select({
+            id: branches.id,
+            name: branches.name,
+            nameAr: branches.nameAr,
+            nameFr: branches.nameFr,
+        })
+        .from(branches)
+        .where(
+            and(
+                eq(branches.restaurantId, restaurantId),
+                eq(branches.status, "active")
+            )
+        );
+
+    const formatted = myBranches.map((b) => ({
+        id: b.id,
+        name: getLocalizedName(b, lang),
+    }));
+
+    return SuccessResponse(res, {
+        message: "Branches fetched successfully",
         data: formatted,
     });
 };
