@@ -20,6 +20,7 @@ export const subcategories = mysqlTable("subcategories", {
     name: varchar("name", { length: 255 }).notNull(),
     nameAr: varchar("name_ar", { length: 255 }),
     nameFr: varchar("name_fr", { length: 255 }),
+    image: varchar("image", { length: 500 }),
     categoryId: char("category_id", { length: 36 }).references(() => categories.id).notNull(),
     addonsIds: json("addons_ids").$type<string[]>().default([]),
     priority: mysqlEnum("priority", ["low", "medium", "high"]).default("low"),

@@ -54,6 +54,7 @@ export async function sub_categories_list(req: Request, res: Response) {
     .select({
         id: subcategories.id,
         name: language === "En" ? subcategories.name : language === "Ar" ? subcategories.nameAr : subcategories.nameFr,
+        image: subcategories.image,
         categoryId: subcategories.categoryId,
     })
     .from(subcategories)
