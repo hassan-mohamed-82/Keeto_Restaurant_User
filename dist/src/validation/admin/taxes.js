@@ -55,7 +55,7 @@ exports.createTaxSchema = zod_1.z.preprocess(normalizeTaxInput, zod_1.z.object({
     amountType: zod_1.z.enum(exports.AMOUNT_TYPES, {
         required_error: "amount_type is required and must be either 'percentage' or 'value'",
         invalid_type_error: "amount_type must be either 'percentage' or 'value'",
-    }).default("percentage"),
+    }),
     amount_type: zod_1.z.enum(exports.AMOUNT_TYPES).optional(),
     type: zod_1.z.enum(exports.TAX_TYPES, {
         required_error: "Type is required and must be one of: web, app, all",

@@ -63,7 +63,7 @@ export const createServiceFeeSchema = z.preprocess(
         amountType: z.enum(AMOUNT_TYPES, {
             required_error: "amount_type is required and must be either 'percentage' or 'value'",
             invalid_type_error: "amount_type must be either 'percentage' or 'value'",
-        }).default("percentage"),
+        }),
         amount_type: z.enum(AMOUNT_TYPES).optional(),
         type: z.enum(SERVICE_FEE_TYPES, {
             required_error: "Type is required and must be one of: web, app, all",

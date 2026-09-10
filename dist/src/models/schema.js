@@ -77,3 +77,4 @@ __exportStar(require("./schema/admin/serviceFees"), exports);
 __exportStar(require("./schema/admin/taxes"), exports);
 __exportStar(require("./schema/admin/offers"), exports);
 __exportStar(require("./schema/admin/taxType"), exports);
+__exportStar(require("./schema/admin/ratingRequests"), exports);
