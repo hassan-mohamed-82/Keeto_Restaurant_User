@@ -62,4 +62,5 @@ export * from "./schema/admin/redeemRequests";
 export * from "./schema/admin/shifts";
 export * from "./schema/admin/serviceFees";
 export * from "./schema/admin/taxes";
-export * from "./schema/admin/offers";
+export * from "./schema/admin/offers";
+export * from "./schema/admin/taxType";
