@@ -13,6 +13,7 @@ import { eq, and } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { v4 as uuidv4 } from "uuid";
+import { activeFoodCondition } from "../../helpers/foodConditions";
 
 /* =========================================
    Helpers
@@ -45,7 +46,11 @@ export const addToCart = async (req: Request | any, res: Response) => {
 
     const safeVariations = Array.isArray(variations) ? variations : [];
 
-    const [itemFood] = await db.select().from(food).where(eq(food.id, foodId)).limit(1);
+    const [itemFood] = await db
+        .select()
+        .from(food)
+        .where(and(eq(food.id, foodId), activeFoodCondition))
+        .limit(1);
     if (!itemFood) throw new BadRequest("Food not found");
 
     // 🛡️ Check if user is blocked by this restaurant
@@ -78,6 +83,7 @@ export const addToCart = async (req: Request | any, res: Response) => {
         .where(eq(foodVariations.foodId, foodId));
 
     let totalExtraPrice = 0;
+    const enrichedVariations: any[] = [];
 
     // 1. التأكد من أن الإضافات المرسلة صحيحة وموجودة بالفعل للأكلة دي
     for (const selected of safeVariations) {
@@ -103,7 +109,19 @@ export const addToCart = async (req: Request | any, res: Response) => {
             throw new BadRequest(`Option ${foundOption.optionName} is currently unavailable`);
         }
 
-        totalExtraPrice += Number(foundOption.additionalPrice || 0);
+        const optPrice = Number(foundOption.additionalPrice || 0);
+        totalExtraPrice += optPrice;
+
+        enrichedVariations.push({
+            variationId: validDbVariation.id,
+            variationName: validDbVariation.name,
+            variationNameAr: validDbVariation.nameAr,
+            optionId: foundOption.id,
+            optionName: foundOption.optionName,
+            optionNameAr: foundOption.optionNameAr,
+            additionalPrice: foundOption.additionalPrice || "0",
+            price: foundOption.additionalPrice || "0"
+        });
     }
 
     // 2. التأكد من أن الإضافات الإجبارية تم اختيارها
@@ -117,7 +135,7 @@ export const addToCart = async (req: Request | any, res: Response) => {
     const basePrice = Number(itemFood.price);
     const unitPrice = basePrice + totalExtraPrice;
 
-    const normalized = normalizeVariations(safeVariations);
+    const normalized = normalizeVariations(enrichedVariations);
     const key = JSON.stringify(normalized);
 
     const existingItems = await db.select().from(cartItems)
@@ -183,9 +201,9 @@ export const getMyCart = async (req: Request | any, res: Response) => {
             variations: cartItems.variations
         })
         .from(cartItems)
-        .leftJoin(food, eq(cartItems.foodId, food.id))
+        .leftJoin(food, and(eq(cartItems.foodId, food.id), activeFoodCondition))
         .leftJoin(restaurants, eq(cartItems.restaurantId, restaurants.id))
-        .where(eq(cartItems.userId, userId));
+        .where(and(eq(cartItems.userId, userId), activeFoodCondition));
 
     const formatted = await Promise.all(
         items.map(async (item: any) => {
@@ -267,7 +285,7 @@ export const updateCartItem = async (req: Request | any, res: Response) => {
     const [itemFood] = await db
         .select()
         .from(food)
-        .where(eq(food.id, cartItem.foodId))
+        .where(and(eq(food.id, cartItem.foodId), activeFoodCondition))
         .limit(1);
 
     // تجهيز الإضافات بشكل آمن باستخدام الفك العميق

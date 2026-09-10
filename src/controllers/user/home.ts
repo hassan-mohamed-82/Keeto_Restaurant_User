@@ -5,6 +5,7 @@ import { eq, and, like, or, sql } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest, UnauthorizedError } from "../../Errors";
 import redis from "../../config/redis";
+import { activeFoodCondition } from "../../helpers/foodConditions";
 
 // ==========================================
 // 🔥 Helper: تجهيز favorites لو اليوزر عامل login
@@ -167,7 +168,8 @@ export const getFoodsByCategory = async (req: Request, res: Response) => {
         .leftJoin(restaurants, eq(food.restaurantid, restaurants.id))
         .where(and(
             eq(food.categoryid, categoryId),
-            eq(food.status, "active")
+            eq(food.status, "active"),
+            activeFoodCondition
         ));
 
         await redis.set(cacheKey, JSON.stringify(data), 'EX', 3600);
@@ -244,7 +246,8 @@ export const getRestaurantDetails = async (req: Request, res: Response) => {
         .leftJoin(variationOptions, eq(foodVariations.id, variationOptions.variationId))
         .where(and(
             eq(food.restaurantid, restaurantId),
-            eq(food.status, "active")
+            eq(food.status, "active"),
+            activeFoodCondition
         ));
 
     // 👇 تجميع الداتا بناءً على الـ Category ID بدلاً من الاسم
@@ -422,7 +425,7 @@ export const getUserFavorites = async (req: Request, res: Response) => {
     })
     .from(favorites)
     .leftJoin(restaurants, eq(favorites.restaurantId, restaurants.id))
-    .leftJoin(food, eq(favorites.foodId, food.id))
+    .leftJoin(food, and(eq(favorites.foodId, food.id), activeFoodCondition))
     .where(eq(favorites.userId, userId));
 
     // 3. تنسيق البيانات (اختياري): لفصل المطاعم عن الأكلات في الـ Response
@@ -458,7 +461,8 @@ export const searchRestaurantWithMenu = async (req: Request, res: Response) => {
             food,
             and(
                 eq(restaurants.id, food.restaurantid),
-                eq(food.status, "active")
+                eq(food.status, "active"),
+                activeFoodCondition
             )
         )
         .leftJoin(

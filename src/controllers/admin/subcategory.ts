@@ -15,6 +15,7 @@ import { NotFound } from "../../Errors/NotFound";
 import { BadRequest } from "../../Errors/BadRequest";
 import { v4 as uuidv4 } from "uuid";
 import redis from "../../config/redis";
+import { handleImageUpdate } from "../../utils/handleImages";
 
 export const createSubcategory = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
@@ -24,7 +25,7 @@ export const createSubcategory = async (req: Request, res: Response) => {
     }
     
     // استقبلنا order_level و order_Level لدعم الحالتين
-    const { name, categoryId, priority, status, nameAr, nameFr, addonsIds, order_level, order_Level } = req.body;
+    const { name, categoryId, priority, status, nameAr, nameFr, image, addonsIds, order_level, order_Level } = req.body;
 
     if (!name || !categoryId) {
         throw new BadRequest("Subcategory name and category ID are required");
@@ -59,12 +60,14 @@ export const createSubcategory = async (req: Request, res: Response) => {
     }
 
     const id = uuidv4();
+    const imageUrl = await handleImageUpdate(req, undefined, image, "subcategories");
 
     await db.insert(subcategories).values({
         id,
         name,
         nameAr,
         nameFr,
+        image: imageUrl,
         categoryId,
         restaurantId: restaurantId,
         addonsIds: addonsIds || [],
@@ -97,6 +100,7 @@ export const getAllSubcategories = async (req: Request, res: Response) => {
             name: subcategories.name,
             nameAr: subcategories.nameAr,
             nameFr: subcategories.nameFr,
+            image: subcategories.image,
             categoryId: subcategories.categoryId,
             addonsIds: subcategories.addonsIds,
             priority: subcategories.priority,
@@ -181,6 +185,7 @@ export const getSubcategoryById = async (req: Request, res: Response) => {
             name: subcategories.name,
             nameAr: subcategories.nameAr,
             nameFr: subcategories.nameFr,
+            image: subcategories.image,
             categoryId: subcategories.categoryId,
             addonsIds: subcategories.addonsIds,
             priority: subcategories.priority,
@@ -260,7 +265,7 @@ export const updateSubcategory = async (req: Request, res: Response) => {
 
     const { id } = req.params;
     
-    const { name, categoryId, priority, status, nameAr, nameFr, addonsIds, order_level, order_Level } = req.body;
+    const { name, categoryId, priority, status, nameAr, nameFr, image, addonsIds, order_level, order_Level } = req.body;
 
     const existingSubcategory = await db
         .select()
@@ -307,6 +312,9 @@ export const updateSubcategory = async (req: Request, res: Response) => {
     if (name) updateData.name = name;
     if (nameAr !== undefined) updateData.nameAr = nameAr;
     if (nameFr !== undefined) updateData.nameFr = nameFr;
+    if (image !== undefined) {
+        updateData.image = await handleImageUpdate(req, existingSubcategory[0].image, image, "subcategories");
+    }
     if (categoryId) updateData.categoryId = categoryId;
     if (addonsIds !== undefined) updateData.addonsIds = addonsIds;
     if (priority) updateData.priority = priority;
@@ -547,6 +555,7 @@ export const getSubcategoryBranchAvailability = async (req: Request, res: Respon
             name: subcategories.name,
             nameAr: subcategories.nameAr,
             nameFr: subcategories.nameFr,
+            image: subcategories.image,
             status: subcategories.status,
             categoryId: subcategories.categoryId,
         })
@@ -600,6 +609,7 @@ export const getSubcategoryBranchAvailability = async (req: Request, res: Respon
             subcategoryId: sub.id,
             subcategoryName: sub.name,
             subcategoryNameAr: sub.nameAr,
+            subcategoryImage: sub.image,
             globalStatus: sub.status,
             branches: branchList,
         },
@@ -632,6 +642,7 @@ export const getActiveSubcategoriesByBranch = async (req: Request, res: Response
             name: subcategories.name,
             nameAr: subcategories.nameAr,
             nameFr: subcategories.nameFr,
+            image: subcategories.image,
             categoryId: subcategories.categoryId,
             addonsIds: subcategories.addonsIds,
             priority: subcategories.priority,

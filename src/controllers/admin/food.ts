@@ -14,6 +14,12 @@ import {
     ingredientCategories,
     branchMenuItems,
     branches,
+    orderItems,
+    cartItems,
+    favorites,
+    branchIngredientLocks,
+    pointsProducts,
+    redeemRequests,
     productChannelPricing,
     variantChannelPricing,
 } from "../../models/schema";
@@ -25,6 +31,7 @@ import { NotFound } from "../../Errors/NotFound";
 import { BadRequest } from "../../Errors/BadRequest";
 import { v4 as uuidv4 } from "uuid";
 import { saveBase64Image, handleImageUpdate } from "../../utils/handleImages";
+import { activeFoodCondition } from "../../helpers/foodConditions";
 
 // =============================================
 // CREATE Food
@@ -215,7 +222,7 @@ export const getAllFoods = async (req: Request, res: Response) => {
     const { categoryId, subCategoryId } = req.query;
 
     // 2. Build dynamic conditions
-    const conditions = [eq(food.restaurantid, restaurantId)];
+    const conditions = [activeFoodCondition, eq(food.restaurantid, restaurantId)];
 
     if (categoryId) {
         conditions.push(eq(food.categoryid, categoryId as string));
@@ -349,7 +356,7 @@ export const getFoodById = async (req: Request, res: Response) => {
         .leftJoin(restaurants, eq(food.restaurantid, restaurants.id))
         .leftJoin(categories, eq(food.categoryid, categories.id))
         .leftJoin(subcategories, eq(food.subcategoryid, subcategories.id))
-        .where(and(eq(food.id, id), eq(food.restaurantid, restaurantId)))
+        .where(and(activeFoodCondition, eq(food.id, id), eq(food.restaurantid, restaurantId)))
         .limit(1);
 
     if (!foodItem[0]) throw new NotFound("Food not found");
@@ -531,55 +538,106 @@ export const updateFood = async (req: Request, res: Response) => {
     }
 
     // ===========================
-    // ✅ Variations Update
+    // ✅ Variations Update (Non-destructive Upsert)
     // ===========================
     if (data.variations && Array.isArray(data.variations)) {
-
         const oldVars = await db
             .select()
             .from(foodVariations)
             .where(eq(foodVariations.foodId, id));
 
-        // حذف options القديمة
-        for (const v of oldVars) {
-            await db
-                .delete(variationOptions)
-                .where(eq(variationOptions.variationId, v.id));
-        }
+        const oldVarIds = oldVars.map(v => v.id);
+        const oldOptions = oldVarIds.length > 0
+            ? await db.select().from(variationOptions).where(inArray(variationOptions.variationId, oldVarIds))
+            : [];
 
-        // حذف variations القديمة
-        await db
-            .delete(foodVariations)
-            .where(eq(foodVariations.foodId, id));
+        const incomingVarIds = new Set<string>();
+        const incomingOptIds = new Set<string>();
 
-        // إضافة الجديدة
         for (const variation of data.variations) {
+            let variationId = variation.id;
+            const existingVar = variationId ? oldVars.find(v => v.id === variationId) : null;
 
-            const variationId = uuidv4();
+            if (existingVar) {
+                // Update existing variation
+                await db.update(foodVariations).set({
+                    name: variation.name,
+                    nameAr: variation.nameAr ?? existingVar.nameAr,
+                    nameFr: variation.nameFr ?? existingVar.nameFr,
+                    isRequired: variation.isRequired !== undefined ? variation.isRequired : existingVar.isRequired,
+                    selectionType: variation.selectionType || existingVar.selectionType,
+                    min: variation.min !== undefined ? variation.min : existingVar.min,
+                    max: variation.max !== undefined ? variation.max : existingVar.max,
+                    status: variation.status !== undefined ? variation.status : existingVar.status,
+                }).where(eq(foodVariations.id, variationId));
+            } else {
+                // Insert new variation
+                variationId = variationId || uuidv4();
+                await db.insert(foodVariations).values({
+                    id: variationId,
+                    foodId: id,
+                    name: variation.name,
+                    nameAr: variation.nameAr || '',
+                    nameFr: variation.nameFr || '',
+                    isRequired: variation.isRequired || false,
+                    selectionType: variation.selectionType || "single",
+                    min: variation.min ?? null,
+                    max: variation.max ?? null,
+                    status: variation.status !== undefined ? variation.status : true,
+                });
+            }
+            incomingVarIds.add(variationId);
 
-            await db.insert(foodVariations).values({
-                id: variationId,
-                foodId: id,
-                name: variation.name,
-                nameAr: variation.nameAr,
-                nameFr: variation.nameFr,
-                isRequired: variation.isRequired || false,
-                selectionType: variation.selectionType || "single",
-                min: variation.min ?? null,
-                max: variation.max ?? null,
-            });
-
+            // Handle options for this variation
             if (variation.options && Array.isArray(variation.options)) {
                 for (const option of variation.options) {
-                    await db.insert(variationOptions).values({
-                        variationId,
-                        optionName: option.optionName,
-                        optionNameAr: option.optionNameAr,
-                        optionNameFr: option.optionNameFr,
-                        additionalPrice: option.additionalPrice ? option.additionalPrice.toString() : "0",
-                    });
+                    let optionId = option.id;
+                    const existingOpt = optionId ? oldOptions.find(o => o.id === optionId) : null;
+
+                    const additionalPriceStr = option.additionalPrice !== undefined && option.additionalPrice !== null
+                        ? option.additionalPrice.toString()
+                        : "0";
+
+                    if (existingOpt) {
+                        // Update existing option (preserves UUID!)
+                        await db.update(variationOptions).set({
+                            variationId,
+                            optionName: option.optionName,
+                            optionNameAr: option.optionNameAr ?? existingOpt.optionNameAr,
+                            optionNameFr: option.optionNameFr ?? existingOpt.optionNameFr,
+                            additionalPrice: additionalPriceStr,
+                            status: option.status !== undefined ? option.status : existingOpt.status,
+                            isDefault: option.isDefault !== undefined ? option.isDefault : existingOpt.isDefault,
+                        }).where(eq(variationOptions.id, optionId));
+                    } else {
+                        // Insert new option
+                        optionId = optionId || uuidv4();
+                        await db.insert(variationOptions).values({
+                            id: optionId,
+                            variationId,
+                            optionName: option.optionName,
+                            optionNameAr: option.optionNameAr || '',
+                            optionNameFr: option.optionNameFr || '',
+                            additionalPrice: additionalPriceStr,
+                            status: option.status !== undefined ? option.status : true,
+                            isDefault: option.isDefault !== undefined ? option.isDefault : false,
+                        });
+                    }
+                    incomingOptIds.add(optionId);
                 }
             }
+        }
+
+        // Delete options that were explicitly removed
+        const optionsToDelete = oldOptions.filter(o => !incomingOptIds.has(o.id));
+        if (optionsToDelete.length > 0) {
+            await db.delete(variationOptions).where(inArray(variationOptions.id, optionsToDelete.map(o => o.id)));
+        }
+
+        // Delete variations that were explicitly removed
+        const varsToDelete = oldVars.filter(v => !incomingVarIds.has(v.id));
+        if (varsToDelete.length > 0) {
+            await db.delete(foodVariations).where(inArray(foodVariations.id, varsToDelete.map(v => v.id)));
         }
     }
 
@@ -685,27 +743,99 @@ export const updateFood = async (req: Request, res: Response) => {
     });
 };
 // =============================================
-// DELETE Food
+// HYBRID DELETE Food
+// Archived when historical/operational references exist, otherwise deleted.
 // =============================================
 export const deleteFood = async (req: Request, res: Response) => {
     const { id } = req.params;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
 
-    // ✅ استخدام and هنا أيضاً للحماية
-    const existingFood = await db.select().from(food).where(and(eq(food.id, id), eq(food.restaurantid, restaurantId))).limit(1);
-    if (!existingFood[0]) throw new NotFound("Food not found or you don't have permission to delete it");
+    const [existingFood] = await db
+        .select({ id: food.id, status: food.status, deletedAt: food.deletedAt })
+        .from(food)
+        .where(and(eq(food.id, id), eq(food.restaurantid, restaurantId)))
+        .limit(1);
 
-    const vars = await db.select().from(foodVariations).where(eq(foodVariations.foodId, id));
-
-    for (const v of vars) {
-        await db.delete(variationOptions).where(eq(variationOptions.variationId, v.id));
+    if (!existingFood) {
+        throw new NotFound("Food not found or you don't have permission to delete it");
     }
 
-    await db.delete(foodVariations).where(eq(foodVariations.foodId, id));
-    await db.delete(food).where(eq(food.id, id));
+    const [
+        orderReferences,
+        cartReferences,
+        favoriteReferences,
+        ingredientReferences,
+        branchReferences,
+        branchLockReferences,
+        channelPricingReferences,
+        pointsProductReferences,
+        redeemRequestReferences,
+    ] = await Promise.all([
+        db.select({ id: orderItems.id }).from(orderItems).where(eq(orderItems.foodId, id)).limit(1),
+        db.select({ id: cartItems.id }).from(cartItems).where(eq(cartItems.foodId, id)).limit(1),
+        db.select({ id: favorites.id }).from(favorites).where(eq(favorites.foodId, id)).limit(1),
+        db.select({ id: foodIngredients.id }).from(foodIngredients).where(eq(foodIngredients.foodId, id)).limit(1),
+        db.select({ id: branchMenuItems.id }).from(branchMenuItems).where(eq(branchMenuItems.foodId, id)).limit(1),
+        db.select({ id: branchIngredientLocks.id }).from(branchIngredientLocks).where(eq(branchIngredientLocks.foodId, id)).limit(1),
+        db.select({ id: productChannelPricing.id }).from(productChannelPricing).where(eq(productChannelPricing.foodId, id)).limit(1),
+        db.select({ id: pointsProducts.id }).from(pointsProducts).where(eq(pointsProducts.foodId, id)).limit(1),
+        db.select({ id: redeemRequests.id }).from(redeemRequests).where(eq(redeemRequests.foodId, id)).limit(1),
+    ]);
 
-    return SuccessResponse(res, { message: "Delete food success" });
+    const hasReferences = [
+        orderReferences,
+        cartReferences,
+        favoriteReferences,
+        ingredientReferences,
+        branchReferences,
+        branchLockReferences,
+        channelPricingReferences,
+        pointsProductReferences,
+        redeemRequestReferences,
+    ].some((references) => references.length > 0);
+
+    if (hasReferences) {
+        await db
+            .update(food)
+            .set({
+                deletedAt: new Date(),
+                status: "inactive",
+                isOutOfStock: true,
+                updatedAt: new Date(),
+            })
+            .where(and(eq(food.id, id), eq(food.restaurantid, restaurantId)));
+
+        await db
+            .update(branchMenuItems)
+            .set({ status: "inactive", updatedAt: new Date() })
+            .where(eq(branchMenuItems.foodId, id));
+
+        return SuccessResponse(res, {
+            message: "Food deactivated and archived successfully",
+            data: { foodId: id, deletedAt: new Date(), deleteType: "soft" },
+        });
+    }
+
+    await db.transaction(async (tx) => {
+        const variations = await tx
+            .select({ id: foodVariations.id })
+            .from(foodVariations)
+            .where(eq(foodVariations.foodId, id));
+        const variationIds = variations.map((variation) => variation.id);
+
+        if (variationIds.length > 0) {
+            await tx.delete(variationOptions).where(inArray(variationOptions.variationId, variationIds));
+            await tx.delete(foodVariations).where(eq(foodVariations.foodId, id));
+        }
+
+        await tx.delete(food).where(and(eq(food.id, id), eq(food.restaurantid, restaurantId)));
+    });
+
+    return SuccessResponse(res, {
+        message: "Food permanently deleted from database",
+        data: { foodId: id, deleteType: "hard" },
+    });
 };
 
 
