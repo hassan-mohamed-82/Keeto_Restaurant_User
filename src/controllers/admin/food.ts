@@ -18,7 +18,7 @@ import {
     cartItems,
     favorites,
     branchIngredientLocks,
-    pointsRedemptions,
+    pointsProducts,
     redeemRequests,
     productChannelPricing,
     variantChannelPricing,
@@ -769,7 +769,7 @@ export const deleteFood = async (req: Request, res: Response) => {
         branchReferences,
         branchLockReferences,
         channelPricingReferences,
-        pointsRedemptionReferences,
+        pointsProductReferences,
         redeemRequestReferences,
     ] = await Promise.all([
         db.select({ id: orderItems.id }).from(orderItems).where(eq(orderItems.foodId, id)).limit(1),
@@ -779,7 +779,7 @@ export const deleteFood = async (req: Request, res: Response) => {
         db.select({ id: branchMenuItems.id }).from(branchMenuItems).where(eq(branchMenuItems.foodId, id)).limit(1),
         db.select({ id: branchIngredientLocks.id }).from(branchIngredientLocks).where(eq(branchIngredientLocks.foodId, id)).limit(1),
         db.select({ id: productChannelPricing.id }).from(productChannelPricing).where(eq(productChannelPricing.foodId, id)).limit(1),
-        db.select({ id: pointsRedemptions.id }).from(pointsRedemptions).where(eq(pointsRedemptions.foodId, id)).limit(1),
+        db.select({ id: pointsProducts.id }).from(pointsProducts).where(eq(pointsProducts.foodId, id)).limit(1),
         db.select({ id: redeemRequests.id }).from(redeemRequests).where(eq(redeemRequests.foodId, id)).limit(1),
     ]);
 
@@ -791,7 +791,7 @@ export const deleteFood = async (req: Request, res: Response) => {
         branchReferences,
         branchLockReferences,
         channelPricingReferences,
-        pointsRedemptionReferences,
+        pointsProductReferences,
         redeemRequestReferences,
     ].some((references) => references.length > 0);
 
