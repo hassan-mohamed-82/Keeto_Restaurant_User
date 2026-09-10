@@ -28,6 +28,7 @@ import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors/NotFound";
 import { v4 as uuidv4 } from "uuid";
 import { UnauthorizedError } from "../../Errors";
+import { activeFoodCondition } from "../../helpers/foodConditions";
 import { sendPushNotification } from "../../utils/notifications";
 import { calculateDistance, isLocationInZone } from "../../utils/geo";
 import { applyPriorityDiscount, getAvailableDiscounts } from "../../utils/discount";
@@ -182,7 +183,7 @@ export const checkout = async (req: Request | any, res: Response) => {
     });
 
     const [foodList, optionsList, addonsListDb] = await Promise.all([
-        db.select().from(food).where(inArray(food.id, foodIds)),
+        db.select().from(food).where(and(activeFoodCondition, inArray(food.id, foodIds))),
         allOptionIds.length > 0
             ? db.select().from(variationOptions).where(inArray(variationOptions.id, [...new Set(allOptionIds)]))
             : [],

@@ -1,0 +1,1 @@
+ALTER TABLE `food` ADD `deleted_at` timestamp NULL;
