@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { users, restaurant_users, restaurants, userRestaurantPoints } from "../../models/schema";
-import { eq, and, or, sql } from "drizzle-orm";
+import { users, restaurant_users, restaurants, userRestaurantPoints, orders, orderItems, food } from "../../models/schema";
+import { eq, and, or, sql, desc, inArray } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors";
@@ -271,3 +271,118 @@ export const getRestaurantUserById = async (req: Request, res: Response) => {
 
     return SuccessResponse(res, { message: "User fetched successfully", data: userRecord }, 200);
 };
+
+// =======================================================
+// Get Single User Stats (User Analytics Page)
+// Returns: user info, points, total spendings, order source
+// breakdown (pie chart), top-5 most ordered items, and a
+// paginated recent orders list — all scoped to this restaurant.
+// =======================================================
+export const getRestaurantUserStats = async (req: Request, res: Response) => {
+    const userId = req.params.id;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+
+    if (!restaurantId) throw new BadRequest("Restaurant ID is required");
+
+    // ─── 1. Verify user exists ──────────────────────────────────────────────
+    const [userRecord] = await db
+        .select({
+            id: users.id,
+            name: users.name,
+            email: users.email,
+            phone: users.phone,
+            photo: users.photo,
+            status: users.status,
+            isVerified: users.isVerified,
+            createdAt: users.createdAt,
+        })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+
+    if (!userRecord) throw new NotFound("User not found");
+
+    // ─── 2. Run parallel queries ─────────────────────────────────────────────
+    const baseCondition = and(
+        eq(orders.userId, userId),
+        eq(orders.restaurantId, restaurantId)
+    );
+
+    const [pointsRows, aggregateRows, recentOrderRows, topItemRows] = await Promise.all([
+
+        // Points for this restaurant
+        db.select({ points: userRestaurantPoints.points })
+            .from(userRestaurantPoints)
+            .where(and(
+                eq(userRestaurantPoints.userId, userId),
+                eq(userRestaurantPoints.restaurantId, restaurantId)
+            ))
+            .limit(1),
+
+        // Aggregate: total orders & total spendings (exclude cancelled)
+        db.select({
+            totalOrders: sql<number>`COUNT(*)`,
+            totalSpendings: sql<string>`COALESCE(SUM(${orders.totalAmount}), 0)`,
+        })
+            .from(orders)
+            .where(and(baseCondition, sql`${orders.status} != 'cancelled'`)),
+
+        // Recent 50 orders
+        db.select({
+            orderNumber: orders.orderNumber,
+            totalAmount: orders.totalAmount,
+            orderSource: orders.orderSource,
+            orderType: orders.orderType,
+            paymentMethod: orders.paymentMethod,
+            status: orders.status,
+            createdAt: orders.createdAt,
+        })
+            .from(orders)
+            .where(baseCondition)
+            .orderBy(desc(orders.createdAt))
+            .limit(50),
+
+        // Top 5 most ordered food items
+        db.select({
+            foodId: orderItems.foodId,
+            name: food.name,
+            nameAr: food.nameAr,
+            image: food.image,
+            totalQuantity: sql<number>`SUM(${orderItems.quantity})`,
+            orderCount: sql<number>`COUNT(DISTINCT ${orderItems.orderId})`,
+        })
+            .from(orderItems)
+            .innerJoin(orders, eq(orderItems.orderId, orders.id))
+            .innerJoin(food, eq(orderItems.foodId, food.id))
+            .where(baseCondition)
+            .groupBy(orderItems.foodId, food.name, food.nameAr, food.image)
+            .orderBy(sql`SUM(${orderItems.quantity}) DESC`)
+            .limit(5),
+    ]);
+
+    // ─── 3. Build order-source breakdown (for pie chart) ────────────────────
+    const sourceMap: Record<string, number> = {};
+    for (const o of recentOrderRows) {
+        const src = o.orderSource ?? "unknown";
+        sourceMap[src] = (sourceMap[src] ?? 0) + 1;
+    }
+    const orderSourceBreakdown = Object.entries(sourceMap).map(([source, count]) => ({ source, count }));
+
+    // ─── 4. Build response ──────────────────────────────────────────────────
+    const aggregate = aggregateRows[0];
+
+    return SuccessResponse(res, {
+        message: "User stats fetched successfully",
+        data: {
+            user: userRecord,
+            stats: {
+                points: pointsRows[0]?.points ?? 0,
+                totalOrders: Number(aggregate?.totalOrders ?? 0),
+                totalSpendings: Number(aggregate?.totalSpendings ?? 0).toFixed(2),
+            },
+            orderSourceBreakdown,
+            topItems: topItemRows,
+            recentOrders: recentOrderRows,
+        },
+    }, 200);
+};
