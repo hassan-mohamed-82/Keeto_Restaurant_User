@@ -107,7 +107,7 @@ export const upsertTaxType = async (req: Request, res: Response) => {
             .where(eq(taxTypes.id, newId))
             .limit(1);
 
-        resultRecord = created?.type;
+        resultRecord = created;
         statusCode = 201;
     }
 

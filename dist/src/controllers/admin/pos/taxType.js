@@ -94,7 +94,7 @@ const upsertTaxType = async (req, res) => {
             .from(schema_1.taxTypes)
             .where((0, drizzle_orm_1.eq)(schema_1.taxTypes.id, newId))
             .limit(1);
-        resultRecord = created?.type;
+        resultRecord = created;
         statusCode = 201;
     }
     return (0, response_1.SuccessResponse)(res, resultRecord, statusCode);

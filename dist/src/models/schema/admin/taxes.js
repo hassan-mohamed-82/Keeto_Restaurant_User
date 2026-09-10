@@ -11,6 +11,7 @@ exports.taxes = (0, mysql_core_1.mysqlTable)("taxes", {
     nameAr: (0, mysql_core_1.varchar)("name_ar", { length: 255 }),
     nameFr: (0, mysql_core_1.varchar)("name_fr", { length: 255 }),
     amount: (0, mysql_core_1.decimal)("amount", { precision: 10, scale: 2 }).notNull(),
+    amountType: (0, mysql_core_1.mysqlEnum)("amount_type", ["percentage", "value"]).default("percentage").notNull(),
     modules: (0, mysql_core_1.json)("modules").$type().default(["all"]).notNull(),
     moduleType: (0, mysql_core_1.mysqlEnum)("module_type", ["pos", "online", "all"]).default("all").notNull(),
     type: (0, mysql_core_1.mysqlEnum)("type", ["web", "app", "all"]).default("all").notNull(),
