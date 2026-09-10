@@ -1,70 +1,62 @@
 import { Request, Response } from "express";
 import { db } from "../../../models/connection";
-import { taxTypes, restaurants } from "../../../models/schema";
+import { taxTypes } from "../../../models/schema";
 import { eq } from "drizzle-orm";
 import { SuccessResponse } from "../../../utils/response";
-import { BadRequest, NotFound } from "../../../Errors";
+import { BadRequest, ForbiddenError } from "../../../Errors";
 import { v4 as uuidv4 } from "uuid";
 
 /**
- * 1. Show TaxType by restaurant ID
- * GET /api/admin/pos/tax-type/:restrauntid
- * GET /api/admin/pos/tax-type
+ * Helper to get and validate authenticated restaurant ID
  */
-export const getTaxTypeByRestaurantId = async (req: Request, res: Response) => {
-    const restaurantId =
-        req.params.restrauntid ||
-        req.params.restaurantId ||
-        req.query.restrauntid ||
-        req.query.restaurantId ||
-        req.user?.restaurantId ||
-        req.user?.id;
-
+const getAuthenticatedRestaurantId = (req: Request): string => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) {
-        throw new BadRequest("Restaurant ID is required");
+        throw new BadRequest("Restaurant context is missing or unauthorized");
     }
+    return String(restaurantId);
+};
 
-    const [restaurant] = await db
-        .select({ id: restaurants.id })
-        .from(restaurants)
-        .where(eq(restaurants.id, String(restaurantId)))
-        .limit(1);
+/**
+ * 1. Show TaxType for authenticated restaurant
+ * GET /api/admin/pos/tax-type
+ * GET /api/admin/pos/tax-type/:restrauntid
+ */
+export const getTaxType = async (req: Request, res: Response) => {
+    const restaurantId = getAuthenticatedRestaurantId(req);
 
-    if (!restaurant) {
-        throw new NotFound("Restaurant not found");
+    // Prevent viewing any other restaurant
+    const requestedId = req.params.restrauntid || req.params.restaurantId;
+    if (requestedId && requestedId !== restaurantId) {
+        throw new ForbiddenError("You are not authorized to view tax settings of another restaurant");
     }
 
     const [record] = await db
         .select()
         .from(taxTypes)
-        .where(eq(taxTypes.restrauntid, String(restaurantId)))
+        .where(eq(taxTypes.restrauntid, restaurantId))
         .limit(1);
 
-    if (!record) {
-        return SuccessResponse(res, null, 200);
-    }
-
-    return SuccessResponse(res, record, 200);
+    return SuccessResponse(res, record || null, 200);
 };
 
 /**
- * 2. Create if null, update if exist (Upsert)
+ * 2. Create if null, update if exist (Upsert) for authenticated restaurant
  * POST /api/admin/pos/tax-type
  * PUT  /api/admin/pos/tax-type
  */
 export const upsertTaxType = async (req: Request, res: Response) => {
-    const restaurantId =
-        req.body.restrauntid ||
-        req.body.restaurantId ||
+    const restaurantId = getAuthenticatedRestaurantId(req);
+
+    // Prevent modifying any other restaurant
+    const requestedId =
         req.params.restrauntid ||
         req.params.restaurantId ||
-        req.query.restrauntid ||
-        req.query.restaurantId ||
-        req.user?.restaurantId ||
-        req.user?.id;
+        req.body.restrauntid ||
+        req.body.restaurantId;
 
-    if (!restaurantId) {
-        throw new BadRequest("Restaurant ID is required");
+    if (requestedId && requestedId !== restaurantId) {
+        throw new ForbiddenError("You are not authorized to modify tax settings of another restaurant");
     }
 
     const { type } = req.body;
@@ -72,22 +64,11 @@ export const upsertTaxType = async (req: Request, res: Response) => {
         throw new BadRequest("Type is required and must be either 'include' or 'exclude'");
     }
 
-    // Verify restaurant exists
-    const [restaurant] = await db
-        .select({ id: restaurants.id })
-        .from(restaurants)
-        .where(eq(restaurants.id, String(restaurantId)))
-        .limit(1);
-
-    if (!restaurant) {
-        throw new NotFound("Restaurant not found");
-    }
-
-    // Check if record exists
+    // Check if record already exists for this restaurant
     const [existing] = await db
         .select()
         .from(taxTypes)
-        .where(eq(taxTypes.restrauntid, String(restaurantId)))
+        .where(eq(taxTypes.restrauntid, restaurantId))
         .limit(1);
 
     let resultRecord;
@@ -116,7 +97,7 @@ export const upsertTaxType = async (req: Request, res: Response) => {
         const newId = uuidv4();
         await db.insert(taxTypes).values({
             id: newId,
-            restrauntid: String(restaurantId),
+            restrauntid: restaurantId,
             type,
         });
 
@@ -133,7 +114,8 @@ export const upsertTaxType = async (req: Request, res: Response) => {
     return SuccessResponse(res, resultRecord, statusCode);
 };
 
-// Aliases for convenience
-export const showTaxType = getTaxTypeByRestaurantId;
+// Aliases
+export const getTaxTypeByRestaurantId = getTaxType;
+export const showTaxType = getTaxType;
 export const createTaxType = upsertTaxType;
 export const updateTaxType = upsertTaxType;

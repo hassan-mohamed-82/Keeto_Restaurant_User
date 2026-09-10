@@ -12,6 +12,7 @@ exports.subcategories = (0, mysql_core_1.mysqlTable)("subcategories", {
     name: (0, mysql_core_1.varchar)("name", { length: 255 }).notNull(),
     nameAr: (0, mysql_core_1.varchar)("name_ar", { length: 255 }),
     nameFr: (0, mysql_core_1.varchar)("name_fr", { length: 255 }),
+    image: (0, mysql_core_1.varchar)("image", { length: 500 }),
     categoryId: (0, mysql_core_1.char)("category_id", { length: 36 }).references(() => Category_1.categories.id).notNull(),
     addonsIds: (0, mysql_core_1.json)("addons_ids").$type().default([]),
     priority: (0, mysql_core_1.mysqlEnum)("priority", ["low", "medium", "high"]).default("low"),

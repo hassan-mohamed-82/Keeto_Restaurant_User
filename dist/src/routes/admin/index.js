@@ -49,6 +49,7 @@ const shifts_1 = __importDefault(require("./pos/shifts"));
 const serviceFees_1 = __importDefault(require("./pos/serviceFees"));
 const tax_1 = __importDefault(require("./pos/tax"));
 const offers_1 = __importDefault(require("./pos/offers"));
+const taxType_1 = __importDefault(require("./pos/taxType"));
 const router = (0, express_1.Router)();
 router.use("/auth", auth_1.default);
 // ضفنا الـ Underscore هنا 👇
@@ -102,4 +103,8 @@ router.use("/tax", tax_1.default);
 router.use("/pos/tax", tax_1.default);
 router.use("/offers", offers_1.default);
 router.use("/pos/offers", offers_1.default);
+router.use("/tax-type", taxType_1.default);
+router.use("/pos/tax-type", taxType_1.default);
+router.use("/tax-types", taxType_1.default);
+router.use("/pos/tax-types", taxType_1.default);
 exports.default = router;

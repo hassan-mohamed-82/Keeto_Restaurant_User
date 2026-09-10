@@ -9,6 +9,7 @@ const BadRequest_1 = require("../../Errors/BadRequest");
 const NotFound_1 = require("../../Errors/NotFound");
 const uuid_1 = require("uuid");
 const Errors_1 = require("../../Errors");
+const foodConditions_1 = require("../../helpers/foodConditions");
 const notifications_1 = require("../../utils/notifications");
 const geo_1 = require("../../utils/geo");
 const discount_1 = require("../../utils/discount");
@@ -138,7 +139,7 @@ const checkout = async (req, res) => {
             allAddonIds.push(a.addonId || a.id); });
     });
     const [foodList, optionsList, addonsListDb] = await Promise.all([
-        connection_1.db.select().from(schema_1.food).where((0, drizzle_orm_1.inArray)(schema_1.food.id, foodIds)),
+        connection_1.db.select().from(schema_1.food).where((0, drizzle_orm_1.and)(foodConditions_1.activeFoodCondition, (0, drizzle_orm_1.inArray)(schema_1.food.id, foodIds))),
         allOptionIds.length > 0
             ? connection_1.db.select().from(schema_1.variationOptions).where((0, drizzle_orm_1.inArray)(schema_1.variationOptions.id, [...new Set(allOptionIds)]))
             : [],
@@ -146,8 +147,13 @@ const checkout = async (req, res) => {
             ? connection_1.db.select().from(schema_1.addons).where((0, drizzle_orm_1.inArray)(schema_1.addons.id, [...new Set(allAddonIds)]))
             : []
     ]);
+    const varIdsFromOptions = [...new Set(optionsList.map(o => o.variationId).filter(Boolean))];
+    const variationsListDb = varIdsFromOptions.length > 0
+        ? await connection_1.db.select().from(schema_1.foodVariations).where((0, drizzle_orm_1.inArray)(schema_1.foodVariations.id, varIdsFromOptions))
+        : [];
     const foodMap = new Map(foodList.map(f => [f.id, f]));
     const optionsMap = new Map(optionsList.map(o => [o.id, o]));
+    const variationsMap = new Map(variationsListDb.map(v => [v.id, v]));
     const addonsMap = new Map(addonsListDb.map(a => [a.id, a]));
     // ==========================================
     // 5.1 Calculate Subtotal, Variations & Addons
@@ -183,10 +189,25 @@ const checkout = async (req, res) => {
         for (const v of parsedVariations) {
             if (v.optionId) {
                 const dbOption = optionsMap.get(v.optionId);
-                if (dbOption) {
-                    const dbOptionPrice = parseFloat((dbOption.additionalPrice || "0"));
-                    varPrice += dbOptionPrice;
-                    v.additionalPrice = dbOptionPrice.toString();
+                if (!dbOption) {
+                    throw new BadRequest_1.BadRequest(`Option '${v.optionName || 'selected'}' is no longer available. Please update your cart.`);
+                }
+                if (dbOption.status === false) {
+                    throw new BadRequest_1.BadRequest(`Option '${dbOption.optionName}' is currently unavailable.`);
+                }
+                const dbOptionPrice = parseFloat((dbOption.additionalPrice || "0"));
+                varPrice += dbOptionPrice;
+                v.additionalPrice = dbOptionPrice.toString();
+                v.price = dbOptionPrice.toString();
+                v.optionName = dbOption.optionName;
+                v.optionNameAr = dbOption.optionNameAr;
+                v.optionNameFr = dbOption.optionNameFr;
+                const parentVar = variationsMap.get(dbOption.variationId);
+                if (parentVar) {
+                    v.variationId = parentVar.id;
+                    v.variationName = parentVar.name;
+                    v.variationNameAr = parentVar.nameAr;
+                    v.variationNameFr = parentVar.nameFr;
                 }
             }
             else {
@@ -197,9 +218,15 @@ const checkout = async (req, res) => {
             const addonId = a.addonId || a.id;
             const dbAddon = addonsMap.get(addonId);
             if (dbAddon) {
+                if (dbAddon.status === "inactive") {
+                    throw new BadRequest_1.BadRequest(`Add-on '${dbAddon.name}' is currently unavailable.`);
+                }
                 const dbAddonPrice = parseFloat((dbAddon.price || "0"));
                 addonPrice += dbAddonPrice;
                 a.price = dbAddonPrice.toString();
+                a.name = dbAddon.name;
+                a.nameAr = dbAddon.nameAr;
+                a.nameFr = dbAddon.nameFr;
             }
             else {
                 addonPrice += parseFloat(a.price || "0");
