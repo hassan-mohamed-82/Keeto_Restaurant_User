@@ -78,6 +78,7 @@ export const addToCart = async (req: Request | any, res: Response) => {
         .where(eq(foodVariations.foodId, foodId));
 
     let totalExtraPrice = 0;
+    const enrichedVariations: any[] = [];
 
     // 1. التأكد من أن الإضافات المرسلة صحيحة وموجودة بالفعل للأكلة دي
     for (const selected of safeVariations) {
@@ -103,7 +104,19 @@ export const addToCart = async (req: Request | any, res: Response) => {
             throw new BadRequest(`Option ${foundOption.optionName} is currently unavailable`);
         }
 
-        totalExtraPrice += Number(foundOption.additionalPrice || 0);
+        const optPrice = Number(foundOption.additionalPrice || 0);
+        totalExtraPrice += optPrice;
+
+        enrichedVariations.push({
+            variationId: validDbVariation.id,
+            variationName: validDbVariation.name,
+            variationNameAr: validDbVariation.nameAr,
+            optionId: foundOption.id,
+            optionName: foundOption.optionName,
+            optionNameAr: foundOption.optionNameAr,
+            additionalPrice: foundOption.additionalPrice || "0",
+            price: foundOption.additionalPrice || "0"
+        });
     }
 
     // 2. التأكد من أن الإضافات الإجبارية تم اختيارها
@@ -117,7 +130,7 @@ export const addToCart = async (req: Request | any, res: Response) => {
     const basePrice = Number(itemFood.price);
     const unitPrice = basePrice + totalExtraPrice;
 
-    const normalized = normalizeVariations(safeVariations);
+    const normalized = normalizeVariations(enrichedVariations);
     const key = JSON.stringify(normalized);
 
     const existingItems = await db.select().from(cartItems)

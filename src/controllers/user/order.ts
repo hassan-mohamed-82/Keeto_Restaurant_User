@@ -16,6 +16,7 @@ import {
     restaurant_users,
     deliveryMen,
     freeDeliveryOffers,
+    foodVariations,
     variationOptions,
     notifications,
     zones,
@@ -190,8 +191,14 @@ export const checkout = async (req: Request | any, res: Response) => {
             : []
     ]);
 
+    const varIdsFromOptions = [...new Set(optionsList.map(o => o.variationId).filter(Boolean))];
+    const variationsListDb = varIdsFromOptions.length > 0
+        ? await db.select().from(foodVariations).where(inArray(foodVariations.id, varIdsFromOptions))
+        : [];
+
     const foodMap = new Map(foodList.map(f => [f.id, f]));
     const optionsMap = new Map(optionsList.map(o => [o.id, o]));
+    const variationsMap = new Map(variationsListDb.map(v => [v.id, v]));
     const addonsMap = new Map(addonsListDb.map(a => [a.id, a]));
 
     // ==========================================
@@ -232,10 +239,27 @@ export const checkout = async (req: Request | any, res: Response) => {
         for (const v of parsedVariations) {
             if (v.optionId) {
                 const dbOption = optionsMap.get(v.optionId);
-                if (dbOption) {
-                    const dbOptionPrice = parseFloat((dbOption.additionalPrice || "0") as string);
-                    varPrice += dbOptionPrice;
-                    v.additionalPrice = dbOptionPrice.toString();
+                if (!dbOption) {
+                    throw new BadRequest(`Option '${v.optionName || 'selected'}' is no longer available. Please update your cart.`);
+                }
+                if (dbOption.status === false) {
+                    throw new BadRequest(`Option '${dbOption.optionName}' is currently unavailable.`);
+                }
+
+                const dbOptionPrice = parseFloat((dbOption.additionalPrice || "0") as string);
+                varPrice += dbOptionPrice;
+                v.additionalPrice = dbOptionPrice.toString();
+                v.price = dbOptionPrice.toString();
+                v.optionName = dbOption.optionName;
+                v.optionNameAr = dbOption.optionNameAr;
+                v.optionNameFr = dbOption.optionNameFr;
+
+                const parentVar = variationsMap.get(dbOption.variationId);
+                if (parentVar) {
+                    v.variationId = parentVar.id;
+                    v.variationName = parentVar.name;
+                    v.variationNameAr = parentVar.nameAr;
+                    v.variationNameFr = parentVar.nameFr;
                 }
             } else {
                 varPrice += parseFloat(v.additionalPrice || v.price || v.amount || "0");
@@ -246,9 +270,15 @@ export const checkout = async (req: Request | any, res: Response) => {
             const addonId = a.addonId || a.id;
             const dbAddon = addonsMap.get(addonId);
             if (dbAddon) {
+                if (dbAddon.status === "inactive") {
+                    throw new BadRequest(`Add-on '${dbAddon.name}' is currently unavailable.`);
+                }
                 const dbAddonPrice = parseFloat((dbAddon.price || "0") as string);
                 addonPrice += dbAddonPrice;
                 a.price = dbAddonPrice.toString();
+                a.name = dbAddon.name;
+                a.nameAr = dbAddon.nameAr;
+                a.nameFr = dbAddon.nameFr;
             } else {
                 addonPrice += parseFloat(a.price || "0");
             }
