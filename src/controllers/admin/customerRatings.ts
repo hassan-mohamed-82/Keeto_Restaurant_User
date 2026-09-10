@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { orders, users } from "../../models/schema";
-import { eq, and, isNotNull, desc } from "drizzle-orm";
+import { orders, users, ratingRequests } from "../../models/schema";
+import { eq, and, isNotNull, desc, inArray } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { buildOrderDateConditions } from "../../helpers/order.helper";
@@ -47,6 +47,42 @@ export const getCustomerRatingsInShift = async (req: Request, res: Response) => 
         )
         .orderBy(desc(orders.createdAt));
 
+    // إحضار آخر طلبات تعديل/حذف مرتبطة بهذه الأوردرات
+    const orderIds = ratedOrders.map(o => o.orderId);
+    let orderRequestsMap: Record<string, any> = {};
+
+    if (orderIds.length > 0) {
+        const requests = await db
+            .select({
+                id: ratingRequests.id,
+                orderId: ratingRequests.orderId,
+                targetType: ratingRequests.targetType,
+                requestType: ratingRequests.requestType,
+                newRating: ratingRequests.newRating,
+                newComment: ratingRequests.newComment,
+                reason: ratingRequests.reason,
+                status: ratingRequests.status,
+                adminNotes: ratingRequests.adminNotes,
+                createdAt: ratingRequests.createdAt,
+                resolvedAt: ratingRequests.resolvedAt,
+            })
+            .from(ratingRequests)
+            .where(
+                and(
+                    eq(ratingRequests.restaurantId, restaurantId),
+                    eq(ratingRequests.targetType, "order"),
+                    inArray(ratingRequests.orderId, orderIds)
+                )
+            )
+            .orderBy(desc(ratingRequests.createdAt));
+
+        for (const reqItem of requests) {
+            if (reqItem.orderId && !orderRequestsMap[reqItem.orderId]) {
+                orderRequestsMap[reqItem.orderId] = reqItem;
+            }
+        }
+    }
+
     // تجميع الأوردرات لكل عميل
     const customerMap = new Map<
         string,
@@ -62,6 +98,7 @@ export const getCustomerRatingsInShift = async (req: Request, res: Response) => 
                 orderStatus: string | null;
                 rating: number;
                 ratingComment: string | null;
+                latestRequest: any | null;
             }>;
         }
     >();
@@ -95,6 +132,7 @@ export const getCustomerRatingsInShift = async (req: Request, res: Response) => 
             orderStatus: row.orderStatus,
             rating: row.rating,
             ratingComment: row.ratingComment ?? null,
+            latestRequest: orderRequestsMap[row.orderId] || null,
         });
     }
 
