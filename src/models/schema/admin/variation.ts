@@ -26,6 +26,9 @@ export const foodVariations = mysqlTable("food_variations", {
     min: int("min"), // Min
     max: int("max"), // Max
     status: boolean("status").default(true), // حالة الفارييشن (شغال / مقفول)
+
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
 // 2. جدول يمثل الخيارات داخل كل Variation (مثل: صغير، وسط، كبير)
@@ -37,7 +40,11 @@ export const variationOptions = mysqlTable("variation_options", {
     optionNameAr: varchar("option_name_ar", { length: 255 }).notNull().default(''),
     optionNameFr: varchar("option_name_fr", { length: 255 }).notNull().default(''),
     additionalPrice: varchar("additional_price", { length: 255 }).notNull().default("0"), // Additional price
+    isDefault: boolean("is_default").default(false),
     status: boolean("status").default(true), // حالة الاوبشن (متاح / غير متاح)
+
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
 import { relations } from "drizzle-orm";

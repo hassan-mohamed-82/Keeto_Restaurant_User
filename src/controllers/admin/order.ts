@@ -720,14 +720,35 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
                         .where(eq(variationOptions.id, optId))
                         .limit(1);
 
+                    let optPrice = parseFloat(v.additionalPrice || v.price || "0");
                     if (optDb) {
                         optionName = optDb.optionName || optionName;
                         optionNameAr = optDb.optionNameAr || optionNameAr;
 
                         const price = parseFloat((optDb as any).price || optDb.additionalPrice || "0");
                         totalCalculatedVarPrice += price;
+                        if (!optPrice && price) {
+                            optPrice = price;
+                        }
+                    } else {
+                        totalCalculatedVarPrice += optPrice;
                     }
+
+                    return {
+                        ...v,
+                        variationId: varId,
+                        optionId: optId,
+                        variationName,
+                        variationNameAr,
+                        optionName,
+                        optionNameAr,
+                        additionalPrice: optPrice.toFixed(2),
+                        price: optPrice.toFixed(2),
+                    };
                 }
+
+                const fallbackPrice = parseFloat(v.additionalPrice || v.price || "0");
+                totalCalculatedVarPrice += fallbackPrice;
 
                 return {
                     ...v,
@@ -736,7 +757,9 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
                     variationName,
                     variationNameAr,
                     optionName,
-                    optionNameAr
+                    optionNameAr,
+                    additionalPrice: fallbackPrice.toFixed(2),
+                    price: fallbackPrice.toFixed(2),
                 };
             }));
         }
