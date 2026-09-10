@@ -12,13 +12,14 @@ const NotFound_1 = require("../../Errors/NotFound");
 const BadRequest_1 = require("../../Errors/BadRequest");
 const uuid_1 = require("uuid");
 const redis_1 = __importDefault(require("../../config/redis"));
+const handleImages_1 = require("../../utils/handleImages");
 const createSubcategory = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) {
         throw new BadRequest_1.BadRequest("Restaurant context is missing or unauthorized");
     }
     // استقبلنا order_level و order_Level لدعم الحالتين
-    const { name, categoryId, priority, status, nameAr, nameFr, addonsIds, order_level, order_Level } = req.body;
+    const { name, categoryId, priority, status, nameAr, nameFr, image, addonsIds, order_level, order_Level } = req.body;
     if (!name || !categoryId) {
         throw new BadRequest_1.BadRequest("Subcategory name and category ID are required");
     }
@@ -42,11 +43,13 @@ const createSubcategory = async (req, res) => {
         }
     }
     const id = (0, uuid_1.v4)();
+    const imageUrl = await (0, handleImages_1.handleImageUpdate)(req, undefined, image, "subcategories");
     await connection_1.db.insert(schema_1.subcategories).values({
         id,
         name,
         nameAr,
         nameFr,
+        image: imageUrl,
         categoryId,
         restaurantId: restaurantId,
         addonsIds: addonsIds || [],
@@ -74,6 +77,7 @@ const getAllSubcategories = async (req, res) => {
         name: schema_1.subcategories.name,
         nameAr: schema_1.subcategories.nameAr,
         nameFr: schema_1.subcategories.nameFr,
+        image: schema_1.subcategories.image,
         categoryId: schema_1.subcategories.categoryId,
         addonsIds: schema_1.subcategories.addonsIds,
         priority: schema_1.subcategories.priority,
@@ -142,6 +146,7 @@ const getSubcategoryById = async (req, res) => {
         name: schema_1.subcategories.name,
         nameAr: schema_1.subcategories.nameAr,
         nameFr: schema_1.subcategories.nameFr,
+        image: schema_1.subcategories.image,
         categoryId: schema_1.subcategories.categoryId,
         addonsIds: schema_1.subcategories.addonsIds,
         priority: schema_1.subcategories.priority,
@@ -206,7 +211,7 @@ const updateSubcategory = async (req, res) => {
         throw new BadRequest_1.BadRequest("Restaurant context is missing or unauthorized");
     }
     const { id } = req.params;
-    const { name, categoryId, priority, status, nameAr, nameFr, addonsIds, order_level, order_Level } = req.body;
+    const { name, categoryId, priority, status, nameAr, nameFr, image, addonsIds, order_level, order_Level } = req.body;
     const existingSubcategory = await connection_1.db
         .select()
         .from(schema_1.subcategories)
@@ -243,6 +248,9 @@ const updateSubcategory = async (req, res) => {
         updateData.nameAr = nameAr;
     if (nameFr !== undefined)
         updateData.nameFr = nameFr;
+    if (image !== undefined) {
+        updateData.image = await (0, handleImages_1.handleImageUpdate)(req, existingSubcategory[0].image, image, "subcategories");
+    }
     if (categoryId)
         updateData.categoryId = categoryId;
     if (addonsIds !== undefined)
@@ -458,6 +466,7 @@ const getSubcategoryBranchAvailability = async (req, res) => {
         name: schema_1.subcategories.name,
         nameAr: schema_1.subcategories.nameAr,
         nameFr: schema_1.subcategories.nameFr,
+        image: schema_1.subcategories.image,
         status: schema_1.subcategories.status,
         categoryId: schema_1.subcategories.categoryId,
     })
@@ -505,6 +514,7 @@ const getSubcategoryBranchAvailability = async (req, res) => {
             subcategoryId: sub.id,
             subcategoryName: sub.name,
             subcategoryNameAr: sub.nameAr,
+            subcategoryImage: sub.image,
             globalStatus: sub.status,
             branches: branchList,
         },
@@ -536,6 +546,7 @@ const getActiveSubcategoriesByBranch = async (req, res) => {
         name: schema_1.subcategories.name,
         nameAr: schema_1.subcategories.nameAr,
         nameFr: schema_1.subcategories.nameFr,
+        image: schema_1.subcategories.image,
         categoryId: schema_1.subcategories.categoryId,
         addonsIds: schema_1.subcategories.addonsIds,
         priority: schema_1.subcategories.priority,

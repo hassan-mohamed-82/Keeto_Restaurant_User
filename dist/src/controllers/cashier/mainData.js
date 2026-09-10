@@ -50,6 +50,7 @@ async function sub_categories_list(req, res) {
         .select({
         id: schema_1.subcategories.id,
         name: language === "En" ? schema_1.subcategories.name : language === "Ar" ? schema_1.subcategories.nameAr : schema_1.subcategories.nameFr,
+        image: schema_1.subcategories.image,
         categoryId: schema_1.subcategories.categoryId,
     })
         .from(schema_1.subcategories)

@@ -40,6 +40,7 @@ exports.food = (0, mysql_core_1.mysqlTable)("food", {
     isOutOfStock: (0, mysql_core_1.boolean)("is_out_of_stock").default(false),
     status: (0, mysql_core_1.mysqlEnum)("status", ["active", "inactive"])
         .default("active"),
+    deletedAt: (0, mysql_core_1.timestamp)("deleted_at"),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow().onUpdateNow(),
 });

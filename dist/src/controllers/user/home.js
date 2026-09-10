@@ -10,6 +10,7 @@ const drizzle_orm_1 = require("drizzle-orm");
 const response_1 = require("../../utils/response");
 const Errors_1 = require("../../Errors");
 const redis_1 = __importDefault(require("../../config/redis"));
+const foodConditions_1 = require("../../helpers/foodConditions");
 // ==========================================
 // 🔥 Helper: تجهيز favorites لو اليوزر عامل login
 // ==========================================
@@ -152,7 +153,7 @@ const getFoodsByCategory = async (req, res) => {
         })
             .from(schema_1.food)
             .leftJoin(schema_1.restaurants, (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, schema_1.restaurants.id))
-            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.categoryid, categoryId), (0, drizzle_orm_1.eq)(schema_1.food.status, "active")));
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.categoryid, categoryId), (0, drizzle_orm_1.eq)(schema_1.food.status, "active"), foodConditions_1.activeFoodCondition));
         await redis_1.default.set(cacheKey, JSON.stringify(data), 'EX', 3600);
     }
     const result = data.map((f) => ({
@@ -217,7 +218,7 @@ const getRestaurantDetails = async (req, res) => {
             .leftJoin(schema_1.categories, (0, drizzle_orm_1.eq)(schema_1.food.categoryid, schema_1.categories.id))
             .leftJoin(schema_1.foodVariations, (0, drizzle_orm_1.eq)(schema_1.food.id, schema_1.foodVariations.foodId))
             .leftJoin(schema_1.variationOptions, (0, drizzle_orm_1.eq)(schema_1.foodVariations.id, schema_1.variationOptions.variationId))
-            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId), (0, drizzle_orm_1.eq)(schema_1.food.status, "active")));
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId), (0, drizzle_orm_1.eq)(schema_1.food.status, "active"), foodConditions_1.activeFoodCondition));
         // 👇 تجميع الداتا بناءً على الـ Category ID بدلاً من الاسم
         const groupedMenuObj = rawMenu.reduce((acc, row) => {
             const catId = row.categoryId || "uncategorized";
@@ -375,7 +376,7 @@ const getUserFavorites = async (req, res) => {
     })
         .from(schema_1.favorites)
         .leftJoin(schema_1.restaurants, (0, drizzle_orm_1.eq)(schema_1.favorites.restaurantId, schema_1.restaurants.id))
-        .leftJoin(schema_1.food, (0, drizzle_orm_1.eq)(schema_1.favorites.foodId, schema_1.food.id))
+        .leftJoin(schema_1.food, (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.favorites.foodId, schema_1.food.id), foodConditions_1.activeFoodCondition))
         .where((0, drizzle_orm_1.eq)(schema_1.favorites.userId, userId));
     // 3. تنسيق البيانات (اختياري): لفصل المطاعم عن الأكلات في الـ Response
     const result = {
@@ -400,7 +401,7 @@ const searchRestaurantWithMenu = async (req, res) => {
         option: schema_1.variationOptions
     })
         .from(schema_1.restaurants)
-        .leftJoin(schema_1.food, (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.restaurants.id, schema_1.food.restaurantid), (0, drizzle_orm_1.eq)(schema_1.food.status, "active")))
+        .leftJoin(schema_1.food, (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.restaurants.id, schema_1.food.restaurantid), (0, drizzle_orm_1.eq)(schema_1.food.status, "active"), foodConditions_1.activeFoodCondition))
         .leftJoin(schema_1.foodVariations, (0, drizzle_orm_1.eq)(schema_1.food.id, schema_1.foodVariations.foodId))
         .leftJoin(schema_1.variationOptions, (0, drizzle_orm_1.eq)(schema_1.foodVariations.id, schema_1.variationOptions.variationId))
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.restaurants.status, "active"), (0, drizzle_orm_1.or)((0, drizzle_orm_1.like)(schema_1.restaurants.name, searchTerm), (0, drizzle_orm_1.like)(schema_1.restaurants.nameAr, searchTerm), (0, drizzle_orm_1.like)(schema_1.restaurants.nameFr, searchTerm))));

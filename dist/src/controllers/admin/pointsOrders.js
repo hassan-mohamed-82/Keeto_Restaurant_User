@@ -129,17 +129,17 @@ const approveRedeemCode = async (req, res) => {
                 restaurantId,
             }
         });
-        await (0, notifications_1.sendPushNotification)({
-            recipientType: "restaurant",
-            recipientId: restaurantId,
-            title: "تم رفض طلب استبدال نقاط",
-            body: `أدخل العميل رمز الاستبدال وتم رفض الطلب للوجبة ${redeemReq.foodName}.`,
-            data: {
-                type: "points_redeem_rejected",
-                redeemRequestId,
-                restaurantId,
-            }
-        });
+        // await sendPushNotification({
+        //     recipientType: "restaurant",
+        //     recipientId: restaurantId,
+        //     title: "تم رفض طلب استبدال نقاط",
+        //     body: `أدخل العميل رمز الاستبدال وتم رفض الطلب للوجبة ${redeemReq.foodName}.`,
+        //     data: {
+        //         type: "points_redeem_rejected",
+        //         redeemRequestId,
+        //         restaurantId,
+        //     }
+        // });
         return (0, response_1.SuccessResponse)(res, {
             message: "Redeem request rejected successfully.",
             data: { redeemRequestId, status: "cancelled" }

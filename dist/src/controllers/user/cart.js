@@ -7,6 +7,7 @@ const drizzle_orm_1 = require("drizzle-orm");
 const response_1 = require("../../utils/response");
 const BadRequest_1 = require("../../Errors/BadRequest");
 const uuid_1 = require("uuid");
+const foodConditions_1 = require("../../helpers/foodConditions");
 /* =========================================
    Helpers
 ========================================= */
@@ -35,7 +36,11 @@ const addToCart = async (req, res) => {
     const userId = req.user?.id;
     const { foodId, quantity = 1, variations = [] } = req.body;
     const safeVariations = Array.isArray(variations) ? variations : [];
-    const [itemFood] = await connection_1.db.select().from(schema_1.food).where((0, drizzle_orm_1.eq)(schema_1.food.id, foodId)).limit(1);
+    const [itemFood] = await connection_1.db
+        .select()
+        .from(schema_1.food)
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.id, foodId), foodConditions_1.activeFoodCondition))
+        .limit(1);
     if (!itemFood)
         throw new BadRequest_1.BadRequest("Food not found");
     // 🛡️ Check if user is blocked by this restaurant
@@ -60,6 +65,7 @@ const addToCart = async (req, res) => {
         .from(schema_1.foodVariations)
         .where((0, drizzle_orm_1.eq)(schema_1.foodVariations.foodId, foodId));
     let totalExtraPrice = 0;
+    const enrichedVariations = [];
     // 1. التأكد من أن الإضافات المرسلة صحيحة وموجودة بالفعل للأكلة دي
     for (const selected of safeVariations) {
         const validDbVariation = dbVariations.find(v => v.id === selected.variationId);
@@ -80,7 +86,18 @@ const addToCart = async (req, res) => {
         if (foundOption.status === false) {
             throw new BadRequest_1.BadRequest(`Option ${foundOption.optionName} is currently unavailable`);
         }
-        totalExtraPrice += Number(foundOption.additionalPrice || 0);
+        const optPrice = Number(foundOption.additionalPrice || 0);
+        totalExtraPrice += optPrice;
+        enrichedVariations.push({
+            variationId: validDbVariation.id,
+            variationName: validDbVariation.name,
+            variationNameAr: validDbVariation.nameAr,
+            optionId: foundOption.id,
+            optionName: foundOption.optionName,
+            optionNameAr: foundOption.optionNameAr,
+            additionalPrice: foundOption.additionalPrice || "0",
+            price: foundOption.additionalPrice || "0"
+        });
     }
     // 2. التأكد من أن الإضافات الإجبارية تم اختيارها
     for (const v of dbVariations) {
@@ -92,7 +109,7 @@ const addToCart = async (req, res) => {
     }
     const basePrice = Number(itemFood.price);
     const unitPrice = basePrice + totalExtraPrice;
-    const normalized = normalizeVariations(safeVariations);
+    const normalized = normalizeVariations(enrichedVariations);
     const key = JSON.stringify(normalized);
     const existingItems = await connection_1.db.select().from(schema_1.cartItems)
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.cartItems.userId, userId), (0, drizzle_orm_1.eq)(schema_1.cartItems.foodId, foodId)));
@@ -153,9 +170,9 @@ const getMyCart = async (req, res) => {
         variations: schema_1.cartItems.variations
     })
         .from(schema_1.cartItems)
-        .leftJoin(schema_1.food, (0, drizzle_orm_1.eq)(schema_1.cartItems.foodId, schema_1.food.id))
+        .leftJoin(schema_1.food, (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.cartItems.foodId, schema_1.food.id), foodConditions_1.activeFoodCondition))
         .leftJoin(schema_1.restaurants, (0, drizzle_orm_1.eq)(schema_1.cartItems.restaurantId, schema_1.restaurants.id))
-        .where((0, drizzle_orm_1.eq)(schema_1.cartItems.userId, userId));
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.cartItems.userId, userId), foodConditions_1.activeFoodCondition));
     const formatted = await Promise.all(items.map(async (item) => {
         let parsedVariations = deepParseJSON(item.variations);
         if (!Array.isArray(parsedVariations)) {
@@ -225,7 +242,7 @@ const updateCartItem = async (req, res) => {
     const [itemFood] = await connection_1.db
         .select()
         .from(schema_1.food)
-        .where((0, drizzle_orm_1.eq)(schema_1.food.id, cartItem.foodId))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.id, cartItem.foodId), foodConditions_1.activeFoodCondition))
         .limit(1);
     // تجهيز الإضافات بشكل آمن باستخدام الفك العميق
     let safeVariations = [];

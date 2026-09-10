@@ -620,13 +620,33 @@ const getRestaurantOrderById = async (req, res) => {
                         .from(schema_1.variationOptions)
                         .where((0, drizzle_orm_1.eq)(schema_1.variationOptions.id, optId))
                         .limit(1);
+                    let optPrice = parseFloat(v.additionalPrice || v.price || "0");
                     if (optDb) {
                         optionName = optDb.optionName || optionName;
                         optionNameAr = optDb.optionNameAr || optionNameAr;
                         const price = parseFloat(optDb.price || optDb.additionalPrice || "0");
                         totalCalculatedVarPrice += price;
+                        if (!optPrice && price) {
+                            optPrice = price;
+                        }
                     }
+                    else {
+                        totalCalculatedVarPrice += optPrice;
+                    }
+                    return {
+                        ...v,
+                        variationId: varId,
+                        optionId: optId,
+                        variationName,
+                        variationNameAr,
+                        optionName,
+                        optionNameAr,
+                        additionalPrice: optPrice.toFixed(2),
+                        price: optPrice.toFixed(2),
+                    };
                 }
+                const fallbackPrice = parseFloat(v.additionalPrice || v.price || "0");
+                totalCalculatedVarPrice += fallbackPrice;
                 return {
                     ...v,
                     variationId: varId,
@@ -634,7 +654,9 @@ const getRestaurantOrderById = async (req, res) => {
                     variationName,
                     variationNameAr,
                     optionName,
-                    optionNameAr
+                    optionNameAr,
+                    additionalPrice: fallbackPrice.toFixed(2),
+                    price: fallbackPrice.toFixed(2),
                 };
             }));
         }
