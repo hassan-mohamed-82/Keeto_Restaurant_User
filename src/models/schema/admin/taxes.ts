@@ -13,6 +13,7 @@ import { restaurants } from "./restaurants";
 export type TaxModule = "take_away" | "dine_in" | "delivery" | "car" | "all";
 export type TaxType = "web" | "app" | "all";
 export type TaxModuleType = "pos" | "online" | "all";
+export type TaxAmountType = "percentage" | "value";
 
 export const taxes = mysqlTable("taxes", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
@@ -21,6 +22,7 @@ export const taxes = mysqlTable("taxes", {
     nameAr: varchar("name_ar", { length: 255 }),
     nameFr: varchar("name_fr", { length: 255 }),
     amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+    amountType: mysqlEnum("amount_type", ["percentage", "value"]).default("percentage").notNull(),
     modules: json("modules").$type<TaxModule[]>().default(["all"]).notNull(),
     moduleType: mysqlEnum("module_type", ["pos", "online", "all"]).default("all").notNull(),
     type: mysqlEnum("type", ["web", "app", "all"]).default("all").notNull(),

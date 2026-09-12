@@ -40,6 +40,33 @@ const getCustomerRatingsInShift = async (req, res) => {
         .leftJoin(schema_1.users, (0, drizzle_orm_1.eq)(schema_1.orders.userId, schema_1.users.id))
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId), (0, drizzle_orm_1.isNotNull)(schema_1.orders.rating), ...dateConditions))
         .orderBy((0, drizzle_orm_1.desc)(schema_1.orders.createdAt));
+    // إحضار آخر طلبات تعديل/حذف مرتبطة بهذه الأوردرات
+    const orderIds = ratedOrders.map(o => o.orderId);
+    let orderRequestsMap = {};
+    if (orderIds.length > 0) {
+        const requests = await connection_1.db
+            .select({
+            id: schema_1.ratingRequests.id,
+            orderId: schema_1.ratingRequests.orderId,
+            targetType: schema_1.ratingRequests.targetType,
+            requestType: schema_1.ratingRequests.requestType,
+            newRating: schema_1.ratingRequests.newRating,
+            newComment: schema_1.ratingRequests.newComment,
+            reason: schema_1.ratingRequests.reason,
+            status: schema_1.ratingRequests.status,
+            adminNotes: schema_1.ratingRequests.adminNotes,
+            createdAt: schema_1.ratingRequests.createdAt,
+            resolvedAt: schema_1.ratingRequests.resolvedAt,
+        })
+            .from(schema_1.ratingRequests)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.ratingRequests.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.ratingRequests.targetType, "order"), (0, drizzle_orm_1.inArray)(schema_1.ratingRequests.orderId, orderIds)))
+            .orderBy((0, drizzle_orm_1.desc)(schema_1.ratingRequests.createdAt));
+        for (const reqItem of requests) {
+            if (reqItem.orderId && !orderRequestsMap[reqItem.orderId]) {
+                orderRequestsMap[reqItem.orderId] = reqItem;
+            }
+        }
+    }
     // تجميع الأوردرات لكل عميل
     const customerMap = new Map();
     for (const row of ratedOrders) {
@@ -69,6 +96,7 @@ const getCustomerRatingsInShift = async (req, res) => {
             orderStatus: row.orderStatus,
             rating: row.rating,
             ratingComment: row.ratingComment ?? null,
+            latestRequest: orderRequestsMap[row.orderId] || null,
         });
     }
     // حساب المتوسط لكل عميل

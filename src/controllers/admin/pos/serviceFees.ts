@@ -9,6 +9,7 @@ import {
     SERVICE_FEE_MODULES,
     SERVICE_FEE_TYPES,
     SERVICE_FEE_MODULE_TYPES,
+    AMOUNT_TYPES,
 } from "../../../validation/admin/serviceFees";
 
 import { extractLang, getLocalizedName, parseJsonArray, Language } from "../../../helpers/localization.helper";
@@ -30,6 +31,7 @@ function formatServiceFeeItem(item: any, lang: Language = "en") {
         id: item.id, 
         name: localizedName, 
         amount: item.amount,
+        amountType: item.amountType,
         type: item.type,
         moduleType: item.moduleType,
         modules: parseJsonArray(item.modules), 
@@ -104,6 +106,7 @@ async function enrichServiceFeesWithBranches(
             nameAr: item.nameAr,
             nameFr: item.nameFr,
             amount: item.amount,
+            amountType: item.amountType,
             type: item.type,
             moduleType: item.moduleType,
             modules: parseJsonArray(item.modules),
@@ -126,8 +129,9 @@ export const createServiceFee = async (req: Request, res: Response) => {
     }
 
     const lang = extractLang(req);
-    const { name, nameAr, nameFr, amount, type, moduleType, module_type, branchIds, modules, status } = req.body;
+    const { name, nameAr, nameFr, amount, amountType, amount_type, type, moduleType, module_type, branchIds, modules, status } = req.body;
 
+    const finalAmountType = amountType || amount_type || "percentage";
     const finalModuleType = moduleType || module_type || "all";
     const finalBranchIds = parseJsonArray(branchIds);
     const finalModules = parseJsonArray(modules).length > 0 ? parseJsonArray(modules) : ["all"];
@@ -140,6 +144,7 @@ export const createServiceFee = async (req: Request, res: Response) => {
         nameAr: nameAr || null,
         nameFr: nameFr || null,
         amount: String(amount),
+        amountType: finalAmountType,
         type,
         moduleType: finalModuleType,
         branchIds: finalBranchIds,
@@ -287,6 +292,7 @@ export const getServiceFeeListOptions = async (req: Request, res: Response) => {
             branches: localizedBranches,
             modules: SERVICE_FEE_MODULES,
             types: SERVICE_FEE_TYPES,
+            amountTypes: AMOUNT_TYPES,
             moduleTypes: SERVICE_FEE_MODULE_TYPES,
         },
     });
@@ -344,13 +350,15 @@ export const updateServiceFee = async (req: Request, res: Response) => {
         throw new NotFound("Service fee not found");
     }
 
-    const { name, nameAr, nameFr, amount, type, moduleType, module_type, branchIds, modules, status } = req.body;
+    const { name, nameAr, nameFr, amount, amountType, amount_type, type, moduleType, module_type, branchIds, modules, status } = req.body;
 
     const updateData: Partial<typeof serviceFees.$inferInsert> = {};
     if (name !== undefined) updateData.name = name;
     if (nameAr !== undefined) updateData.nameAr = nameAr;
     if (nameFr !== undefined) updateData.nameFr = nameFr;
     if (amount !== undefined) updateData.amount = String(amount);
+    const finalAmountType = amountType || amount_type;
+    if (finalAmountType !== undefined) updateData.amountType = finalAmountType;
     if (type !== undefined) updateData.type = type;
     const finalModuleType = moduleType || module_type;
     if (finalModuleType !== undefined) updateData.moduleType = finalModuleType;

@@ -1,10 +1,11 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateServiceFeeSchema = exports.createServiceFeeSchema = exports.foodFilterSchema = exports.subcategoryFilterSchema = exports.SUPPORTED_LANGUAGES = exports.SERVICE_FEE_MODULE_TYPES = exports.SERVICE_FEE_TYPES = exports.SERVICE_FEE_MODULES = void 0;
+exports.updateServiceFeeSchema = exports.createServiceFeeSchema = exports.foodFilterSchema = exports.subcategoryFilterSchema = exports.SUPPORTED_LANGUAGES = exports.AMOUNT_TYPES = exports.SERVICE_FEE_MODULE_TYPES = exports.SERVICE_FEE_TYPES = exports.SERVICE_FEE_MODULES = void 0;
 const zod_1 = require("zod");
 exports.SERVICE_FEE_MODULES = ["take_away", "dine_in", "delivery", "car", "all"];
 exports.SERVICE_FEE_TYPES = ["web", "app", "all"];
 exports.SERVICE_FEE_MODULE_TYPES = ["pos", "online", "all"];
+exports.AMOUNT_TYPES = ["percentage", "value"];
 exports.SUPPORTED_LANGUAGES = ["en", "ar", "fr"];
 exports.subcategoryFilterSchema = zod_1.z.object({
     lang: zod_1.z.enum(exports.SUPPORTED_LANGUAGES).optional().default("en"),
@@ -14,7 +15,7 @@ exports.foodFilterSchema = zod_1.z.object({
     subcategory_id: zod_1.z.string().optional(),
     subcategoryId: zod_1.z.string().optional(),
 });
-const normalizeModuleType = (obj) => {
+const normalizeServiceFeeInput = (obj) => {
     if (obj && typeof obj === "object") {
         if (obj.moduleType === undefined && obj.module_type !== undefined) {
             obj.moduleType = obj.module_type;
@@ -22,13 +23,19 @@ const normalizeModuleType = (obj) => {
         else if (obj.module_type === undefined && obj.moduleType !== undefined) {
             obj.module_type = obj.moduleType;
         }
+        if (obj.amountType === undefined && obj.amount_type !== undefined) {
+            obj.amountType = obj.amount_type;
+        }
+        else if (obj.amount_type === undefined && obj.amountType !== undefined) {
+            obj.amount_type = obj.amountType;
+        }
     }
     return obj;
 };
 // ==========================================
 // Service Fees Validation Schemas
 // ==========================================
-exports.createServiceFeeSchema = zod_1.z.preprocess(normalizeModuleType, zod_1.z.object({
+exports.createServiceFeeSchema = zod_1.z.preprocess(normalizeServiceFeeInput, zod_1.z.object({
     name: zod_1.z.string().max(255, "Name cannot exceed 255 characters").optional().nullable(),
     nameAr: zod_1.z.string().max(255, "Arabic name cannot exceed 255 characters").optional().nullable(),
     nameFr: zod_1.z.string().max(255, "French name cannot exceed 255 characters").optional().nullable(),
@@ -45,6 +52,11 @@ exports.createServiceFeeSchema = zod_1.z.preprocess(normalizeModuleType, zod_1.z
     })
         .min(0, "Amount must be 0 or greater")
         .transform((v) => String(v))),
+    amountType: zod_1.z.enum(exports.AMOUNT_TYPES, {
+        required_error: "amount_type is required and must be either 'percentage' or 'value'",
+        invalid_type_error: "amount_type must be either 'percentage' or 'value'",
+    }),
+    amount_type: zod_1.z.enum(exports.AMOUNT_TYPES).optional(),
     type: zod_1.z.enum(exports.SERVICE_FEE_TYPES, {
         required_error: "Type is required and must be one of: web, app, all",
         invalid_type_error: "Type must be one of: web, app, all",
@@ -72,7 +84,7 @@ exports.createServiceFeeSchema = zod_1.z.preprocess(normalizeModuleType, zod_1.z
         .min(1, "At least one module must be provided"),
     status: zod_1.z.enum(["active", "inactive"]).optional().default("active"),
 }));
-exports.updateServiceFeeSchema = zod_1.z.preprocess(normalizeModuleType, zod_1.z.object({
+exports.updateServiceFeeSchema = zod_1.z.preprocess(normalizeServiceFeeInput, zod_1.z.object({
     name: zod_1.z.string().max(255, "Name cannot exceed 255 characters").optional().nullable(),
     nameAr: zod_1.z.string().max(255, "Arabic name cannot exceed 255 characters").optional().nullable(),
     nameFr: zod_1.z.string().max(255, "French name cannot exceed 255 characters").optional().nullable(),
@@ -90,6 +102,8 @@ exports.updateServiceFeeSchema = zod_1.z.preprocess(normalizeModuleType, zod_1.z
         .min(0, "Amount must be 0 or greater")
         .transform((v) => String(v)))
         .optional(),
+    amountType: zod_1.z.enum(exports.AMOUNT_TYPES).optional(),
+    amount_type: zod_1.z.enum(exports.AMOUNT_TYPES).optional(),
     type: zod_1.z.enum(exports.SERVICE_FEE_TYPES).optional(),
     moduleType: zod_1.z.enum(exports.SERVICE_FEE_MODULE_TYPES).optional(),
     module_type: zod_1.z.enum(exports.SERVICE_FEE_MODULE_TYPES).optional(),

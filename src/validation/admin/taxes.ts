@@ -3,6 +3,8 @@ import { z } from "zod";
 export const TAX_MODULES = ["take_away", "dine_in", "delivery", "car", "all"] as const;
 export const TAX_TYPES = ["web", "app", "all"] as const;
 export const TAX_MODULE_TYPES = ["pos", "online", "all"] as const;
+export const AMOUNT_TYPES = ["percentage", "value"] as const;
+export type AmountType = (typeof AMOUNT_TYPES)[number];
 export const SUPPORTED_LANGUAGES = ["en", "ar", "fr"] as const;
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 
@@ -16,12 +18,17 @@ export const foodFilterSchema = z.object({
     subcategoryId: z.string().optional(),
 });
 
-const normalizeModuleType = (obj: any) => {
+const normalizeTaxInput = (obj: any) => {
     if (obj && typeof obj === "object") {
         if (obj.moduleType === undefined && obj.module_type !== undefined) {
             obj.moduleType = obj.module_type;
         } else if (obj.module_type === undefined && obj.moduleType !== undefined) {
             obj.module_type = obj.moduleType;
+        }
+        if (obj.amountType === undefined && obj.amount_type !== undefined) {
+            obj.amountType = obj.amount_type;
+        } else if (obj.amount_type === undefined && obj.amountType !== undefined) {
+            obj.amount_type = obj.amountType;
         }
     }
     return obj;
@@ -32,7 +39,7 @@ const normalizeModuleType = (obj: any) => {
 // ==========================================
 
 export const createTaxSchema = z.preprocess(
-    normalizeModuleType,
+    normalizeTaxInput,
     z.object({
         name: z.string({ required_error: "Name is required" }).min(1, "Name cannot be empty").max(255, "Name cannot exceed 255 characters"),
         nameAr: z.string().max(255, "Arabic name cannot exceed 255 characters").optional().nullable(),
@@ -53,6 +60,11 @@ export const createTaxSchema = z.preprocess(
                 .min(0, "Amount must be 0 or greater")
                 .transform((v) => String(v))
         ),
+        amountType: z.enum(AMOUNT_TYPES, {
+            required_error: "amount_type is required and must be either 'percentage' or 'value'",
+            invalid_type_error: "amount_type must be either 'percentage' or 'value'",
+        }),
+        amount_type: z.enum(AMOUNT_TYPES).optional(),
         type: z.enum(TAX_TYPES, {
             required_error: "Type is required and must be one of: web, app, all",
             invalid_type_error: "Type must be one of: web, app, all",
@@ -92,7 +104,7 @@ export const createTaxSchema = z.preprocess(
 );
 
 export const updateTaxSchema = z.preprocess(
-    normalizeModuleType,
+    normalizeTaxInput,
     z.object({
         name: z.string().min(1, "Name cannot be empty").max(255, "Name cannot exceed 255 characters").optional(),
         nameAr: z.string().max(255, "Arabic name cannot exceed 255 characters").optional().nullable(),
@@ -114,6 +126,8 @@ export const updateTaxSchema = z.preprocess(
                     .transform((v) => String(v))
             )
             .optional(),
+        amountType: z.enum(AMOUNT_TYPES).optional(),
+        amount_type: z.enum(AMOUNT_TYPES).optional(),
         type: z.enum(TAX_TYPES).optional(),
         moduleType: z.enum(TAX_MODULE_TYPES).optional(),
         module_type: z.enum(TAX_MODULE_TYPES).optional(),

@@ -22,6 +22,7 @@ function formatServiceFeeItem(item, lang = "en") {
         id: item.id,
         name: localizedName,
         amount: item.amount,
+        amountType: item.amountType,
         type: item.type,
         moduleType: item.moduleType,
         modules: (0, localization_helper_1.parseJsonArray)(item.modules),
@@ -75,6 +76,7 @@ async function enrichServiceFeesWithBranches(items, restaurantId, lang = "en") {
             nameAr: item.nameAr,
             nameFr: item.nameFr,
             amount: item.amount,
+            amountType: item.amountType,
             type: item.type,
             moduleType: item.moduleType,
             modules: (0, localization_helper_1.parseJsonArray)(item.modules),
@@ -95,7 +97,8 @@ const createServiceFee = async (req, res) => {
         throw new Errors_1.BadRequest("Restaurant context is missing or unauthorized");
     }
     const lang = (0, localization_helper_1.extractLang)(req);
-    const { name, nameAr, nameFr, amount, type, moduleType, module_type, branchIds, modules, status } = req.body;
+    const { name, nameAr, nameFr, amount, amountType, amount_type, type, moduleType, module_type, branchIds, modules, status } = req.body;
+    const finalAmountType = amountType || amount_type || "percentage";
     const finalModuleType = moduleType || module_type || "all";
     const finalBranchIds = (0, localization_helper_1.parseJsonArray)(branchIds);
     const finalModules = (0, localization_helper_1.parseJsonArray)(modules).length > 0 ? (0, localization_helper_1.parseJsonArray)(modules) : ["all"];
@@ -107,6 +110,7 @@ const createServiceFee = async (req, res) => {
         nameAr: nameAr || null,
         nameFr: nameFr || null,
         amount: String(amount),
+        amountType: finalAmountType,
         type,
         moduleType: finalModuleType,
         branchIds: finalBranchIds,
@@ -221,6 +225,7 @@ const getServiceFeeListOptions = async (req, res) => {
             branches: localizedBranches,
             modules: serviceFees_1.SERVICE_FEE_MODULES,
             types: serviceFees_1.SERVICE_FEE_TYPES,
+            amountTypes: serviceFees_1.AMOUNT_TYPES,
             moduleTypes: serviceFees_1.SERVICE_FEE_MODULE_TYPES,
         },
     });
@@ -269,7 +274,7 @@ const updateServiceFee = async (req, res) => {
     if (!existingItem) {
         throw new Errors_1.NotFound("Service fee not found");
     }
-    const { name, nameAr, nameFr, amount, type, moduleType, module_type, branchIds, modules, status } = req.body;
+    const { name, nameAr, nameFr, amount, amountType, amount_type, type, moduleType, module_type, branchIds, modules, status } = req.body;
     const updateData = {};
     if (name !== undefined)
         updateData.name = name;
@@ -279,6 +284,9 @@ const updateServiceFee = async (req, res) => {
         updateData.nameFr = nameFr;
     if (amount !== undefined)
         updateData.amount = String(amount);
+    const finalAmountType = amountType || amount_type;
+    if (finalAmountType !== undefined)
+        updateData.amountType = finalAmountType;
     if (type !== undefined)
         updateData.type = type;
     const finalModuleType = moduleType || module_type;

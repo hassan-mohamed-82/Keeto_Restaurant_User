@@ -5,7 +5,7 @@ import { eq, and, desc, inArray, count, or, like } from "drizzle-orm";
 import { SuccessResponse } from "../../../utils/response";
 import { BadRequest, NotFound } from "../../../Errors";
 import { v4 as uuidv4 } from "uuid";
-import { TAX_MODULES, TAX_TYPES, TAX_MODULE_TYPES } from "../../../validation/admin/taxes";
+import { TAX_MODULES, TAX_TYPES, TAX_MODULE_TYPES, AMOUNT_TYPES } from "../../../validation/admin/taxes";
 
 import { extractLang, getLocalizedName, parseJsonArray, Language } from "../../../helpers/localization.helper";
 
@@ -26,6 +26,8 @@ function formatTaxItem(item: any, lang: Language = "en") {
         id: item.id,
         restaurantId: item.restaurantId,
         name: localizedName,
+        amount: item.amount,
+        amountType: item.amountType,
         type: item.type,
         moduleType: item.moduleType,
         modules: parseJsonArray(item.modules),
@@ -135,6 +137,7 @@ async function enrichTaxesWithBranchesAndFoods(
             nameAr: item.nameAr,
             nameFr: item.nameFr,
             amount: item.amount,
+            amountType: item.amountType,
             type: item.type,
             moduleType: item.moduleType,
             modules: parseJsonArray(item.modules),
@@ -159,8 +162,9 @@ export const createTax = async (req: Request, res: Response) => {
     }
 
     const lang = extractLang(req);
-    const { name, nameAr, nameFr, amount, type, moduleType, module_type, branchIds, foodIds, modules, status } = req.body;
+    const { name, nameAr, nameFr, amount, amountType, amount_type, type, moduleType, module_type, branchIds, foodIds, modules, status } = req.body;
 
+    const finalAmountType = amountType || amount_type || "percentage";
     const finalModuleType = moduleType || module_type || "all";
     const finalBranchIds = parseJsonArray(branchIds);
     const finalFoodIds = parseJsonArray(foodIds);
@@ -174,6 +178,7 @@ export const createTax = async (req: Request, res: Response) => {
         nameAr: nameAr || null,
         nameFr: nameFr || null,
         amount: String(amount),
+        amountType: finalAmountType,
         type,
         moduleType: finalModuleType,
         branchIds: finalBranchIds,
@@ -324,6 +329,7 @@ export const getTaxListOptions = async (req: Request, res: Response) => {
             branches: localizedBranches, 
             modules: TAX_MODULES,
             types: TAX_TYPES,
+            amountTypes: AMOUNT_TYPES,
             moduleTypes: TAX_MODULE_TYPES,
         },
     });
@@ -381,13 +387,15 @@ export const updateTax = async (req: Request, res: Response) => {
         throw new NotFound("Tax not found");
     }
 
-    const { name, nameAr, nameFr, amount, type, moduleType, module_type, branchIds, foodIds, modules, status } = req.body;
+    const { name, nameAr, nameFr, amount, amountType, amount_type, type, moduleType, module_type, branchIds, foodIds, modules, status } = req.body;
 
     const updateData: Partial<typeof taxes.$inferInsert> = {};
     if (name !== undefined) updateData.name = name;
     if (nameAr !== undefined) updateData.nameAr = nameAr;
     if (nameFr !== undefined) updateData.nameFr = nameFr;
     if (amount !== undefined) updateData.amount = String(amount);
+    const finalAmountType = amountType || amount_type;
+    if (finalAmountType !== undefined) updateData.amountType = finalAmountType;
     if (type !== undefined) updateData.type = type;
     const finalModuleType = moduleType || module_type;
     if (finalModuleType !== undefined) updateData.moduleType = finalModuleType;

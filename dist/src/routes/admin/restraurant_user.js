@@ -2,10 +2,13 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const catchAsync_1 = require("../../utils/catchAsync");
+const validation_1 = require("../../middlewares/validation");
+const user_1 = require("../../validation/admin/user");
 const restraurant_user_1 = require("../../controllers/admin/restraurant_user");
 const router = (0, express_1.Router)();
 router.get("/blocked", (0, catchAsync_1.catchAsync)(restraurant_user_1.getBlockedRestaurantUsers));
 router.get("/", (0, catchAsync_1.catchAsync)(restraurant_user_1.getRestaurantUsers));
+router.get("/:id/stats", (0, validation_1.validate)(user_1.getUserStatsParamsSchema, "params"), (0, catchAsync_1.catchAsync)(restraurant_user_1.getRestaurantUserStats));
 router.get("/:id", (0, catchAsync_1.catchAsync)(restraurant_user_1.getRestaurantUserById));
 router.put("/:id", (0, catchAsync_1.catchAsync)(restraurant_user_1.updateRestaurantUser));
 router.delete("/:id", (0, catchAsync_1.catchAsync)(restraurant_user_1.deleteRestaurantUser));
