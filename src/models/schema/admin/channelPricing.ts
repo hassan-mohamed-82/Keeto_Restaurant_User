@@ -1,60 +1,68 @@
+// Replaces THREE old tables:
+//   - productChannelPricing   (food price per branch/module)
+//   - branchVariantPricing    (variant price per branch)
+//   - variantChannelPricing   (variant price per branch/module)
+//
+// With TWO tables, using nullable branchId/serviceModule as "wildcards":
+//   - branchId = NULL        → applies to ALL branches
+//   - serviceModule = NULL   → applies to ALL service modules (takeaway/dine_in/delivery)
+//
+// Resolution priority (most → least specific), enforced in application code
+// via ORDER BY (branch_id IS NOT NULL) DESC, (service_module IS NOT NULL) DESC:
+//   1. branch + module match   (most specific)
+//   2. branch match, module = NULL
+//   3. module match, branch = NULL
+//   4. base price (food.price / variationOptions.additionalPrice)
+//
+// ⚠️ MySQL CAVEAT: composite UNIQUE indexes treat each NULL as distinct, so
+// MySQL will NOT stop you inserting two rows with the same (foodId, NULL,
+// 'delivery') — the unique index only blocks true duplicates where every
+// column has a concrete value. This is why every write goes through the
+// select-then-insert/update upsert helpers in pricing.controller.ts instead
+// of relying on the DB to reject duplicates. Do not bypass those helpers.
+
 import {
     mysqlTable,
-    timestamp,
-    mysqlEnum,
     char,
     decimal,
+    mysqlEnum,
+    timestamp,
     uniqueIndex,
 } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
 import { food } from "./food";
-import { branches, branchMenuItems } from "./branches";
+import { branches } from "./branches";
 import { variationOptions } from "./variation";
 
-// 1. Re-export Branch Menu Items from branches schema
-export { branchMenuItems };
-
-// 2. Branch Variant Pricing (Branch-Specific Variant Overrides)
-export const branchVariantPricing = mysqlTable(
-    "branch_variant_pricing",
+// ============================================================================
+// 1. Food Pricing Overrides
+// ============================================================================
+export const foodPricingOverrides = mysqlTable(
+    "food_pricing_overrides",
     {
         id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
-        branchId: char("branch_id", { length: 36 })
-            .references(() => branches.id)
-            .notNull(),
-        variantId: char("variant_id", { length: 36 })
-            .references(() => variationOptions.id)
-            .notNull(),
-        price: decimal("price", { precision: 10, scale: 2 }).default("0.00"),
-        // active = available in this branch, inactive = unavailable
-        status: mysqlEnum("status", ["active", "inactive"]).default("active").notNull(),
-        createdAt: timestamp("created_at").defaultNow(),
-        updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
-    },
-    (table) => ({
-        branchVariantIdx: uniqueIndex("unique_branch_variant").on(table.branchId, table.variantId),
-    })
-);
 
-// 3. Product Channel Pricing (Takeaway / Dine-In / Delivery Pricing)
-export const productChannelPricing = mysqlTable(
-    "product_channel_pricing",
-    {
-        id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
         foodId: char("food_id", { length: 36 })
             .references(() => food.id)
             .notNull(),
-        branchId: char("branch_id", { length: 36 })
-            .references(() => branches.id), // Nullable for Global Channel Defaults
-        serviceModule: mysqlEnum("service_module", ["takeaway", "dine_in", "delivery"]).notNull(),
+
+        // NULL = applies to every branch
+        branchId: char("branch_id", { length: 36 }).references(() => branches.id),
+
+        // NULL = applies to every service module (takeaway/dine_in/delivery)
+        serviceModule: mysqlEnum("service_module", ["takeaway", "dine_in", "delivery"]),
+
         price: decimal("price", { precision: 10, scale: 2 }).notNull(),
-        // active = available on this channel, inactive = unavailable
+
+        // active = this override is in effect, inactive = ignored (falls through
+        // to the next-most-specific override / base price)
         status: mysqlEnum("status", ["active", "inactive"]).default("active").notNull(),
+
         createdAt: timestamp("created_at").defaultNow(),
         updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
     },
     (table) => ({
-        foodBranchModuleIdx: uniqueIndex("unique_food_branch_module").on(
+        uniqueOverride: uniqueIndex("unique_food_branch_module").on(
             table.foodId,
             table.branchId,
             table.serviceModule
@@ -62,25 +70,29 @@ export const productChannelPricing = mysqlTable(
     })
 );
 
-// 4. Variant Channel Pricing (Takeaway / Dine-In / Delivery Variant Pricing)
-export const variantChannelPricing = mysqlTable(
-    "variant_channel_pricing",
+// ============================================================================
+// 2. Variant (variation option) Pricing Overrides
+// ============================================================================
+export const variantPricingOverrides = mysqlTable(
+    "variant_pricing_overrides",
     {
         id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
+
         variantId: char("variant_id", { length: 36 })
             .references(() => variationOptions.id)
             .notNull(),
-        branchId: char("branch_id", { length: 36 })
-            .references(() => branches.id), // Nullable for Global Channel Defaults
-        serviceModule: mysqlEnum("service_module", ["takeaway", "dine_in", "delivery"]).notNull(),
+
+        branchId: char("branch_id", { length: 36 }).references(() => branches.id),
+        serviceModule: mysqlEnum("service_module", ["takeaway", "dine_in", "delivery"]),
+
         price: decimal("price", { precision: 10, scale: 2 }).notNull(),
-        // active = available on this channel, inactive = unavailable
         status: mysqlEnum("status", ["active", "inactive"]).default("active").notNull(),
+
         createdAt: timestamp("created_at").defaultNow(),
         updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
     },
     (table) => ({
-        variantBranchModuleIdx: uniqueIndex("unique_variant_branch_module").on(
+        uniqueOverride: uniqueIndex("unique_variant_branch_module").on(
             table.variantId,
             table.branchId,
             table.serviceModule

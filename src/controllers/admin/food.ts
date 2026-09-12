@@ -20,8 +20,8 @@ import {
     branchIngredientLocks,
     pointsProducts,
     redeemRequests,
-    productChannelPricing,
-    variantChannelPricing,
+    foodPricingOverrides,
+    variantPricingOverrides,
 } from "../../models/schema";
 import { getUnavailableBranchesForFoods } from "../../helpers/food.helper";
 // ✅ تم إضافة and, or, isNull هنا عشان نصلح مشكلة الشروط المتعددة
@@ -32,6 +32,7 @@ import { BadRequest } from "../../Errors/BadRequest";
 import { v4 as uuidv4 } from "uuid";
 import { saveBase64Image, handleImageUpdate } from "../../utils/handleImages";
 import { activeFoodCondition } from "../../helpers/foodConditions";
+import { upsertFoodPricingOverride, upsertVariantPricingOverride } from "../../helpers/pricing.overrides";
 
 // =============================================
 // CREATE Food
@@ -194,9 +195,16 @@ export const createFood = async (req: Request, res: Response) => {
                         id: uuidv4(),
                         branchId: b.branchId,
                         foodId,
-                        price: b.price !== undefined && b.price !== null ? String(b.price) : "0.00",
                         status: b.status === "inactive" ? "inactive" : "active",
                     });
+                    if (b.price !== undefined && b.price !== null && b.price !== "") {
+                        await upsertFoodPricingOverride(tx, {
+                            foodId,
+                            branchId: b.branchId,
+                            serviceModule: null,
+                            price: String(b.price),
+                        });
+                    }
                 }
             }
         });
@@ -364,12 +372,13 @@ export const getFoodById = async (req: Request, res: Response) => {
     // 1. جلب أسعار الفروع الاستثنائية للوجبة (Branch Overrides)
     const branchPrices = await db
         .select({
-            branchId: branchMenuItems.branchId,
-            price: branchMenuItems.price,
-            status: branchMenuItems.status
+            branchId: foodPricingOverrides.branchId,
+            price: foodPricingOverrides.price,
+            status: foodPricingOverrides.status,
+            serviceModule: foodPricingOverrides.serviceModule,
         })
-        .from(branchMenuItems)
-        .where(eq(branchMenuItems.foodId, id));
+        .from(foodPricingOverrides)
+        .where(and(eq(foodPricingOverrides.foodId, id), isNull(foodPricingOverrides.serviceModule)));
 
     // 2. جلب الـ Variations والـ Options
     const vars = await db.select().from(foodVariations).where(eq(foodVariations.foodId, id));
@@ -664,13 +673,21 @@ export const updateFood = async (req: Request, res: Response) => {
 
             if (existing) {
                 await db.update(branchMenuItems)
-                    .set({ price: priceVal, status: statusVal, updatedAt: new Date() })
+                    .set({ status: statusVal, updatedAt: new Date() })
                     .where(eq(branchMenuItems.id, existing.id));
             } else {
                 await db.insert(branchMenuItems).values({
                     id: uuidv4(),
                     branchId: b.branchId,
                     foodId: id,
+                    status: statusVal,
+                });
+            }
+            if (b.price !== undefined && b.price !== null && b.price !== "") {
+                await upsertFoodPricingOverride(db, {
+                    foodId: id,
+                    branchId: b.branchId,
+                    serviceModule: null,
                     price: priceVal,
                     status: statusVal,
                 });
@@ -689,22 +706,13 @@ export const updateFood = async (req: Request, res: Response) => {
             const targetBranchId = chBranchId || null;
             const statusVal: "active" | "inactive" = status === "inactive" ? "inactive" : "active";
 
-            const whereClause = targetBranchId
-                ? and(eq(productChannelPricing.foodId, id), eq(productChannelPricing.branchId, targetBranchId), eq(productChannelPricing.serviceModule, serviceModule))
-                : and(eq(productChannelPricing.foodId, id), isNull(productChannelPricing.branchId), eq(productChannelPricing.serviceModule, serviceModule));
-
-            const [existing] = await db.select({ id: productChannelPricing.id }).from(productChannelPricing).where(whereClause).limit(1);
-
-            if (existing) {
-                await db.update(productChannelPricing)
-                    .set({ price: priceVal, status: statusVal, updatedAt: new Date() })
-                    .where(eq(productChannelPricing.id, existing.id));
-            } else {
-                await db.insert(productChannelPricing).values({
-                    id: uuidv4(), foodId: id, branchId: targetBranchId,
-                    serviceModule, price: priceVal, status: statusVal,
-                });
-            }
+            await upsertFoodPricingOverride(db, {
+                foodId: id,
+                branchId: targetBranchId,
+                serviceModule,
+                price: priceVal,
+                status: statusVal,
+            });
         }
     }
 
@@ -719,22 +727,13 @@ export const updateFood = async (req: Request, res: Response) => {
             const targetBranchId = vcBranchId || null;
             const statusVal: "active" | "inactive" = status === "inactive" ? "inactive" : "active";
 
-            const whereClause = targetBranchId
-                ? and(eq(variantChannelPricing.variantId, variantId), eq(variantChannelPricing.branchId, targetBranchId), eq(variantChannelPricing.serviceModule, serviceModule))
-                : and(eq(variantChannelPricing.variantId, variantId), isNull(variantChannelPricing.branchId), eq(variantChannelPricing.serviceModule, serviceModule));
-
-            const [existing] = await db.select({ id: variantChannelPricing.id }).from(variantChannelPricing).where(whereClause).limit(1);
-
-            if (existing) {
-                await db.update(variantChannelPricing)
-                    .set({ price: priceVal, status: statusVal, updatedAt: new Date() })
-                    .where(eq(variantChannelPricing.id, existing.id));
-            } else {
-                await db.insert(variantChannelPricing).values({
-                    id: uuidv4(), variantId, branchId: targetBranchId,
-                    serviceModule, price: priceVal, status: statusVal,
-                });
-            }
+            await upsertVariantPricingOverride(db, {
+                variantId,
+                branchId: targetBranchId,
+                serviceModule,
+                price: priceVal,
+                status: statusVal,
+            });
         }
     }
 
@@ -764,34 +763,16 @@ export const deleteFood = async (req: Request, res: Response) => {
     const [
         orderReferences,
         cartReferences,
-        favoriteReferences,
-        ingredientReferences,
-        branchReferences,
-        branchLockReferences,
-        channelPricingReferences,
-        pointsProductReferences,
         redeemRequestReferences,
     ] = await Promise.all([
         db.select({ id: orderItems.id }).from(orderItems).where(eq(orderItems.foodId, id)).limit(1),
         db.select({ id: cartItems.id }).from(cartItems).where(eq(cartItems.foodId, id)).limit(1),
-        db.select({ id: favorites.id }).from(favorites).where(eq(favorites.foodId, id)).limit(1),
-        db.select({ id: foodIngredients.id }).from(foodIngredients).where(eq(foodIngredients.foodId, id)).limit(1),
-        db.select({ id: branchMenuItems.id }).from(branchMenuItems).where(eq(branchMenuItems.foodId, id)).limit(1),
-        db.select({ id: branchIngredientLocks.id }).from(branchIngredientLocks).where(eq(branchIngredientLocks.foodId, id)).limit(1),
-        db.select({ id: productChannelPricing.id }).from(productChannelPricing).where(eq(productChannelPricing.foodId, id)).limit(1),
-        db.select({ id: pointsProducts.id }).from(pointsProducts).where(eq(pointsProducts.foodId, id)).limit(1),
         db.select({ id: redeemRequests.id }).from(redeemRequests).where(eq(redeemRequests.foodId, id)).limit(1),
     ]);
 
     const hasReferences = [
         orderReferences,
         cartReferences,
-        favoriteReferences,
-        ingredientReferences,
-        branchReferences,
-        branchLockReferences,
-        channelPricingReferences,
-        pointsProductReferences,
         redeemRequestReferences,
     ].some((references) => references.length > 0);
 
@@ -818,6 +799,7 @@ export const deleteFood = async (req: Request, res: Response) => {
     }
 
     await db.transaction(async (tx) => {
+        // 1. Delete variant pricing overrides, variation options, and variations
         const variations = await tx
             .select({ id: foodVariations.id })
             .from(foodVariations)
@@ -825,10 +807,34 @@ export const deleteFood = async (req: Request, res: Response) => {
         const variationIds = variations.map((variation) => variation.id);
 
         if (variationIds.length > 0) {
-            await tx.delete(variationOptions).where(inArray(variationOptions.variationId, variationIds));
-            await tx.delete(foodVariations).where(eq(foodVariations.foodId, id));
+            const options = await tx
+                .select({ id: variationOptions.id })
+                .from(variationOptions)
+                .where(inArray(variationOptions.variationId, variationIds));
+            const optionIds = options.map((opt) => opt.id);
+
+            if (optionIds.length > 0) {
+                // Delete variant pricing overrides first
+                await tx.delete(variantPricingOverrides).where(inArray(variantPricingOverrides.variantId, optionIds));
+                // Delete variation options
+                await tx.delete(variationOptions).where(inArray(variationOptions.id, optionIds));
+            }
+
+            // Delete food variations
+            await tx.delete(foodVariations).where(inArray(foodVariations.id, variationIds));
         }
 
+        // 2. Delete food pricing overrides
+        await tx.delete(foodPricingOverrides).where(eq(foodPricingOverrides.foodId, id));
+
+        // 3. Delete other child relations
+        await tx.delete(branchIngredientLocks).where(eq(branchIngredientLocks.foodId, id));
+        await tx.delete(foodIngredients).where(eq(foodIngredients.foodId, id));
+        await tx.delete(branchMenuItems).where(eq(branchMenuItems.foodId, id));
+        await tx.delete(favorites).where(eq(favorites.foodId, id));
+        await tx.delete(pointsProducts).where(eq(pointsProducts.foodId, id));
+
+        // 4. Delete the food record
         await tx.delete(food).where(and(eq(food.id, id), eq(food.restaurantid, restaurantId)));
     });
 

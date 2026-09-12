@@ -8,12 +8,15 @@ import {
     branchIngredientLocks,
     foodIngredients,
 } from "../../models/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { foodPricingOverrides } from "../../models/schema/admin/channelPricing";
+import { eq, and, sql, isNull } from "drizzle-orm";
+import { alias } from "drizzle-orm/mysql-core";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors/NotFound";
 import { v4 as uuidv4 } from "uuid";
 import redis from "../../config/redis";
+import { upsertFoodPricingOverride } from "../../helpers/pricing.overrides";
 
 // =============================================
 // Helper: مسح كاش الفرع والمطعم بعد أي تعديل
@@ -25,6 +28,11 @@ const invalidateBranchMenuCache = async (branchId: string, restaurantId: string)
 
 // =============================================
 // تعيين أكلة لفرع معين وتحديد سعرها ومخزونها
+//
+// ✅ FIX: `price` كان بيتكتب في branchMenuItems.price (جدول مسؤول أصلاً عن
+// التوفر/المخزون بس). دلوقتي بيتكتب في foodPricingOverrides (branch-only،
+// serviceModule = NULL) عن طريق upsertFoodPricingOverride، وbranchMenuItems
+// بقى مسؤول فقط عن stockType/stockQty/status.
 // =============================================
 export const assignFoodToBranch = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
@@ -53,43 +61,55 @@ export const assignFoodToBranch = async (req: Request, res: Response) => {
         .where(and(eq(food.id, foodId), eq(food.restaurantid, restaurantId))).limit(1);
     if (!foodCheck[0]) throw new NotFound("Food item not found in master catalog");
 
-    // فحص: هل الأكلة دي موجودة في الفرع ده أصلاً؟
-    const existingBranchItem = await db.select().from(branchMenuItems)
-        .where(and(eq(branchMenuItems.branchId, branchId), eq(branchMenuItems.foodId, foodId)))
-        .limit(1);
-
-    if (existingBranchItem[0]) {
-        // لو موجودة، نعمل Update (مثلاً بيغلي السعر أو بيعدل المخزون)
-        await db.update(branchMenuItems).set({
-            price,
-            stockType: stockType || "unlimited",
-            stockQty: stockQty !== undefined ? stockQty : existingBranchItem[0].stockQty,
-            status: status || existingBranchItem[0].status,
-            updatedAt: new Date()
-        }).where(eq(branchMenuItems.id, existingBranchItem[0].id));
-
-        await invalidateBranchMenuCache(branchId, restaurantId);
-        return SuccessResponse(res, { message: "Branch menu item updated successfully" });
-    } else {
-        // لو أول مرة تتضاف للفرع، نعمل Insert
-        const branchItemId = uuidv4();
-        await db.insert(branchMenuItems).values({
-            id: branchItemId,
-            branchId,
+    const isNewAssignment = await db.transaction(async (tx) => {
+        // ─── Price → foodPricingOverrides (branch-only, all service modules) ───
+        await upsertFoodPricingOverride(tx, {
             foodId,
-            price,
-            stockType: stockType || "unlimited",
-            stockQty: stockQty || 0,
-            status: status || "active",
+            branchId,
+            serviceModule: null,
+            price: String(price),
+            status: "active",
         });
 
-        await invalidateBranchMenuCache(branchId, restaurantId);
-        return SuccessResponse(res, { message: "Food assigned to branch successfully", data: { id: branchItemId } }, 201);
-    }
+        // ─── Availability/stock → branchMenuItems ───────────────────────────
+        const [existingBranchItem] = await tx.select().from(branchMenuItems)
+            .where(and(eq(branchMenuItems.branchId, branchId), eq(branchMenuItems.foodId, foodId)))
+            .limit(1);
+
+        if (existingBranchItem) {
+            await tx.update(branchMenuItems).set({
+                stockType: stockType || "unlimited",
+                stockQty: stockQty !== undefined ? stockQty : existingBranchItem.stockQty,
+                status: status || existingBranchItem.status,
+                updatedAt: new Date(),
+            }).where(eq(branchMenuItems.id, existingBranchItem.id));
+            return false;
+        } else {
+            await tx.insert(branchMenuItems).values({
+                id: uuidv4(),
+                branchId,
+                foodId,
+                stockType: stockType || "unlimited",
+                stockQty: stockQty || 0,
+                status: status || "active",
+            });
+            return true;
+        }
+    });
+
+    await invalidateBranchMenuCache(branchId, restaurantId);
+
+    return isNewAssignment
+        ? SuccessResponse(res, { message: "Food assigned to branch successfully" }, 201)
+        : SuccessResponse(res, { message: "Branch menu item updated successfully" });
 };
 
 // =============================================
 // عرض منيو الفرع (دي اللي بترجع لتطبيق اليوزر)
+//
+// ✅ FIX: الـ COALESCE كان بياخد السعر من branchMenuItems.price مباشرة.
+// دلوقتي بياخده من foodPricingOverrides (branch-only override) عن طريق join
+// إضافي، وbranchMenuItems فضل بس لـ status/stockType/stockQty.
 // =============================================
 export const getBranchMenu = async (req: Request, res: Response) => {
     const { branchId } = req.params;
@@ -110,6 +130,9 @@ export const getBranchMenu = async (req: Request, res: Response) => {
         return SuccessResponse(res, { message: "Get branch menu success", data: JSON.parse(cachedData) });
     }
 
+    // Branch-only price override (serviceModule IS NULL)
+    const branchPriceOverride = alias(foodPricingOverrides, "branch_price_override");
+
     // الكتالوج الموحد مدمج مع استثناءات الفرع
     const rawBranchMenu = await db.select({
         menuItemId: branchMenuItems.id, // قد يكون null إذا لم يكن هناك استثناء
@@ -127,8 +150,9 @@ export const getBranchMenu = async (req: Request, res: Response) => {
         categoryNameAr: categories.nameAr,
         categoryNameFr: categories.nameFr,
 
-        // البيانات الخاصة بالفرع باستخدام COALESCE لاعتماد الأساسي في حالة غياب الاستثناء
-        price: sql<number>`COALESCE(${branchMenuItems.price}, ${food.price})`.as('price'),
+        // السعر: override الفرع (لو موجود وactive) وإلا السعر الأساسي
+        price: sql<number>`COALESCE(${branchPriceOverride.price}, ${food.price})`.as('price'),
+        // التوفر/المخزون: من branchMenuItems فقط
         status: sql<string>`COALESCE(${branchMenuItems.status}, 'active')`.as('status'),
         stockType: sql<string>`COALESCE(${branchMenuItems.stockType}, ${food.stock_type})`.as('stock_type'),
         stockQty: sql<number>`COALESCE(${branchMenuItems.stockQty}, 0)`.as('stock_qty'),
@@ -137,6 +161,12 @@ export const getBranchMenu = async (req: Request, res: Response) => {
         .leftJoin(branchMenuItems, and(
             eq(branchMenuItems.foodId, food.id),
             eq(branchMenuItems.branchId, branchId)
+        ))
+        .leftJoin(branchPriceOverride, and(
+            eq(branchPriceOverride.foodId, food.id),
+            eq(branchPriceOverride.branchId, branchId),
+            isNull(branchPriceOverride.serviceModule),
+            eq(branchPriceOverride.status, "active")
         ))
         .leftJoin(categories, eq(food.categoryid, categories.id))
         .where(eq(food.restaurantid, restaurantId));
@@ -160,9 +190,9 @@ export const getBranchMenu = async (req: Request, res: Response) => {
 
     // إضافة حقل isAvailable لكل منتج
     const branchMenu = rawBranchMenu.map(item => {
-        const isAvailable = 
-            item.status === "active" && 
-            !item.foodIsOutOfStock && 
+        const isAvailable =
+            item.status === "active" &&
+            !item.foodIsOutOfStock &&
             !unavailableFoodIds.has(item.foodId);
 
         return {
@@ -177,10 +207,13 @@ export const getBranchMenu = async (req: Request, res: Response) => {
     return SuccessResponse(res, { message: "Get branch menu success", data: branchMenu });
 };
 
+// =============================================
+// ✅ FIX: يقبل price (→ foodPricingOverrides) و/أو stockType/stockQty/status
+// (→ branchMenuItems) كل واحد يتحدث لوحده.
+// =============================================
 export const updateBranchMenuItem = async (req: Request, res: Response) => {
     const { id } = req.params; // branchMenuItemId
-    
-    // 1. استخدام Default Value لمنع خطأ الـ Destructuring إذا كان req.body غير معرف
+
     const { price, stockType, stockQty, status } = req.body || {};
     const restaurantId = req.user?.restaurantId || req.user?.id;
     const userBranchId = req.user?.branchId;
@@ -203,23 +236,34 @@ export const updateBranchMenuItem = async (req: Request, res: Response) => {
         .where(and(eq(branches.id, existingItem.branchId), eq(branches.restaurantId, restaurantId))).limit(1);
     if (!branchCheck) throw new NotFound("Branch not found");
 
-    // 5. تجميع البيانات المرسلة فقط للتحديث
-    const updateData: Partial<typeof branchMenuItems.$inferInsert> = {};
-    
-    if (price !== undefined) updateData.price = price;
-    if (stockType !== undefined) updateData.stockType = stockType;
-    if (stockQty !== undefined) updateData.stockQty = stockQty;
-    if (status !== undefined) updateData.status = status;
+    // 5. تجميع البيانات المرسلة فقط للتحديث (بدون price هنا)
+    const availabilityUpdate: Partial<typeof branchMenuItems.$inferInsert> = {};
 
-    // التأكد من إرسال حقل واحد على الأقل للقيم المراد تحديثها
-    if (Object.keys(updateData).length === 0) {
+    if (stockType !== undefined) availabilityUpdate.stockType = stockType;
+    if (stockQty !== undefined) availabilityUpdate.stockQty = stockQty;
+    if (status !== undefined) availabilityUpdate.status = status;
+
+    // التأكد من إرسال حقل واحد على الأقل للتحديث (price أو حاجة من الـ availability)
+    if (Object.keys(availabilityUpdate).length === 0 && price === undefined) {
         throw new BadRequest("No valid fields provided for update");
     }
 
-    updateData.updatedAt = new Date();
+    // 6. تنفيذ تحديث التوفر/المخزون في branchMenuItems
+    if (Object.keys(availabilityUpdate).length > 0) {
+        availabilityUpdate.updatedAt = new Date();
+        await db.update(branchMenuItems).set(availabilityUpdate).where(eq(branchMenuItems.id, id));
+    }
 
-    // 6. تنفيذ التحديث
-    await db.update(branchMenuItems).set(updateData).where(eq(branchMenuItems.id, id));
+    // 7. تنفيذ تحديث السعر في foodPricingOverrides (branch-only override)
+    if (price !== undefined) {
+        await upsertFoodPricingOverride(db, {
+            foodId: existingItem.foodId,
+            branchId: existingItem.branchId,
+            serviceModule: null,
+            price: String(price),
+            status: "active",
+        });
+    }
 
     // ✅ Invalidate cache
     await invalidateBranchMenuCache(existingItem.branchId, restaurantId);
@@ -228,6 +272,11 @@ export const updateBranchMenuItem = async (req: Request, res: Response) => {
 };
 
 
+// =============================================
+// ✅ FIX: بحذف الـ branchMenuItems، بنشيل معاه الـ price override الخاص
+// بنفس الفرع/الصنف عشان متفضلش موجودة يتيمة وتظهر تاني لو الصنف اتضاف
+// للفرع ده من تاني بسعر جديد.
+// =============================================
 export const deleteBranchMenuItem = async (req: Request, res: Response) => {
     const { id } = req.params; // الـ branchMenuItemId
     const restaurantId = req.user?.restaurantId || req.user?.id;
@@ -251,8 +300,15 @@ export const deleteBranchMenuItem = async (req: Request, res: Response) => {
         .where(and(eq(branches.id, existingItem[0].branchId), eq(branches.restaurantId, restaurantId))).limit(1);
     if (!branchCheck[0]) throw new NotFound("Branch not found");
 
-    // 4. حذف العنصر
+    // 4. حذف العنصر من branchMenuItems
     await db.delete(branchMenuItems).where(eq(branchMenuItems.id, id));
+
+    // 5. حذف الـ price override المرتبط بنفس الفرع/الصنف (branch-only, serviceModule NULL)
+    await db.delete(foodPricingOverrides).where(and(
+        eq(foodPricingOverrides.foodId, existingItem[0].foodId),
+        eq(foodPricingOverrides.branchId, existingItem[0].branchId),
+        isNull(foodPricingOverrides.serviceModule)
+    ));
 
     // ✅ Invalidate cache
     await invalidateBranchMenuCache(existingItem[0].branchId, restaurantId);
@@ -261,25 +317,22 @@ export const deleteBranchMenuItem = async (req: Request, res: Response) => {
 };
 
 // controllers/restaurant.controller.ts
+// (بدون أي تعديل — مفيهاش price خالص)
 
 export const getRestaurantSelectData = async (req: Request, res: Response) => {
-    // بناخد الـ ID بتاع المطعم من التوكن (المالك اللي عامل Login)
     const restaurantId = req.user?.restaurantId || req.user?.id;
 
     if (!restaurantId) {
         throw new BadRequest("Restaurant context is missing or unauthorized");
     }
 
-    // ✅ Redis Cache
     const cacheKey = `admin:branch_select:${restaurantId}`;
     const cachedData = await redis.get(cacheKey);
     if (cachedData) {
         return SuccessResponse(res, { message: "Select data fetched successfully", data: JSON.parse(cachedData) });
     }
 
-    // تنفيذ الـ Queries في وقت واحد لسرعة الاستجابة
     const [myBranches, myFoods] = await Promise.all([
-        // 1. جلب الفروع النشطة فقط
         db.select({
             id: branches.id,
             name: branches.name,
@@ -288,11 +341,10 @@ export const getRestaurantSelectData = async (req: Request, res: Response) => {
             .where(
                 and(
                     eq(branches.restaurantId, restaurantId),
-                    eq(branches.status, "active") // الفروع الشغالة بس
+                    eq(branches.status, "active")
                 )
             ),
 
-        // 2. جلب قائمة الأكل (الكتالوج) بالكامل للمطعم ده
         db.select({
             id: food.id,
             name: food.name,
@@ -303,7 +355,6 @@ export const getRestaurantSelectData = async (req: Request, res: Response) => {
 
     const responseData = { branches: myBranches, foods: myFoods };
 
-    // ✅ Cache for 30 minutes
     await redis.set(cacheKey, JSON.stringify(responseData), 'EX', 1800);
 
     return SuccessResponse(res, {
@@ -315,6 +366,7 @@ export const getRestaurantSelectData = async (req: Request, res: Response) => {
 
 // =============================================
 // تعديل بيانات الأكلة الأساسية في الكتالوج (Master Food)
+// (بدون أي تعديل — مفيهاش price خالص)
 // =============================================
 export const updateMasterFoodItem = async (req: Request, res: Response) => {
     const { id } = req.params; // ده الـ foodId
@@ -323,7 +375,6 @@ export const updateMasterFoodItem = async (req: Request, res: Response) => {
 
     if (!restaurantId) throw new BadRequest("Restaurant ID missing");
 
-    // 1. التأكد إن الأكلة دي موجودة وتخص المطعم ده
     const existingFood = await db.select().from(food)
         .where(and(
             eq(food.id, id),
@@ -334,21 +385,16 @@ export const updateMasterFoodItem = async (req: Request, res: Response) => {
         throw new NotFound("Food item not found or you don't have permission to edit it");
     }
 
-    // 2. تجهيز البيانات الجديدة للتحديث
     const updateData: any = {};
     if (name !== undefined) updateData.name = name;
     if (description !== undefined) updateData.description = description;
     if (image !== undefined) updateData.image = image;
     if (categoryId !== undefined) updateData.categoryid = categoryId;
 
-    // updateData.updatedAt = new Date(); // لو عندك حقل updatedAt في جدول الـ food
-
-    // 3. تحديث الداتابيز
     await db.update(food)
         .set(updateData)
         .where(eq(food.id, id));
 
-    // ✅ Invalidate all branch menus that might contain this food
     const branchMenuKeys = await redis.keys('admin:branch_menu:*');
     if (branchMenuKeys.length > 0) await redis.del(...branchMenuKeys);
     await redis.del(`admin:branch_select:${restaurantId}`);

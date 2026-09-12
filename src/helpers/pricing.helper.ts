@@ -2,22 +2,13 @@
 /**
  * Multi-Tier Channel Pricing Engine
  *
- * Provides two core primitives:
- *  1. resolveBranchIdFromAddress — geo-based branch resolver for delivery orders
- *  2. calculateCalculatedPrice   — 4-tier price cascade per food + variants
+ * Pricing cascade (single override source):
+ *   1. foodPricingOverrides / variantPricingOverrides (branch + module)
+ *   2. override (branch, module = NULL)
+ *   3. override (branch = NULL, module)
+ *   4. food.price / variationOptions.additionalPrice
  *
- * Pricing priority (highest → lowest):
- *  Food Base Price:
- *    A. productChannelPricing (foodId + branchId + serviceModule)
- *    B. productChannelPricing (foodId + serviceModule, branchId IS NULL)  — global channel default
- *    C. branchMenuItems       (foodId + branchId)
- *    D. food.price            — raw base price
- *
- *  Variant Option Price:
- *    A. variantChannelPricing (variantId + branchId + serviceModule)
- *    B. variantChannelPricing (variantId + serviceModule, branchId IS NULL) — global channel default
- *    C. branchVariantPricing  (variantId + branchId)
- *    D. variationOptions.additionalPrice — base variant price
+ * branchMenuItems is inventory/availability only (status, stockType, stockQty).
  */
 
 import { db } from "../models/connection";
@@ -29,18 +20,19 @@ import {
     restaurantZoneDeliveryFees,
     zones,
     addons,
-    foodVariations
-} from "../models/schema";
-import {
+    foodVariations,
     branchMenuItems,
-    productChannelPricing,
-    variantChannelPricing,
-    branchVariantPricing,
-} from "../models/schema/admin/channelPricing";
-import { eq, and, isNull, inArray } from "drizzle-orm";
+} from "../models/schema";
+import { eq, and, inArray } from "drizzle-orm";
 import { isLocationInZone } from "../utils/geo";
 import { BadRequest } from "../Errors/BadRequest";
 import { NotFound } from "../Errors/NotFound";
+import {
+    fetchFoodOverrides,
+    fetchVariantOverrides,
+    parsePrice,
+    pickBestOverride,
+} from "./pricing.overrides";
 
 // ─────────────────────────────────────────────
 // Types
@@ -180,10 +172,7 @@ export const resolveBranchIdFromAddress = async (
 
 /**
  * Resolves the effective price for a food item + its selected variant options
- * using the 4-tier pricing cascade.
- *
- * All DB queries are executed in parallel via Promise.all for performance.
- * Availability collapses to false if ANY tier marks the item as inactive.
+ * from foodPricingOverrides / variantPricingOverrides + base prices.
  */
 export const calculateCalculatedPrice = async (
     foodId: string,
@@ -191,196 +180,69 @@ export const calculateCalculatedPrice = async (
     branchId: string,
     serviceModule?: ServiceModule
 ): Promise<CalculatedPriceResult> => {
-    // ─── Parallel batch fetch ───────────────────────────────────────────
-    const [
-        foodRow,
-        // Food channel pricing — branch-specific
-        channelBranchRows,
-        // Food channel pricing — global
-        channelGlobalRows,
-        // Branch menu item override
-        branchMenuRow,
-        // Variant channel pricing — branch-specific
-        variantChannelBranchRows,
-        // Variant channel pricing — global
-        variantChannelGlobalRows,
-        // Branch variant pricing overrides
-        branchVariantRows,
-        // Base variant option prices
-        baseVariantRows,
-    ] = await Promise.all([
-        // Food base
+    const [foodRow, foodOverrides, branchMenuRow, variantOverrideRows, baseVariantRows] = await Promise.all([
         db.select({ price: food.price, status: food.status, isOutOfStock: food.isOutOfStock })
             .from(food)
             .where(eq(food.id, foodId))
             .limit(1),
-
-        // A. productChannelPricing — branch-specific
-        db.select({ price: productChannelPricing.price, status: productChannelPricing.status })
-            .from(productChannelPricing)
-            .where(
-                and(
-                    eq(productChannelPricing.foodId, foodId),
-                    eq(productChannelPricing.branchId, branchId),
-                    serviceModule ? eq(productChannelPricing.serviceModule, serviceModule) : undefined
-                )
-            )
-            .limit(1),
-
-        // B. productChannelPricing — global channel default
-        db.select({ price: productChannelPricing.price, status: productChannelPricing.status })
-            .from(productChannelPricing)
-            .where(
-                and(
-                    eq(productChannelPricing.foodId, foodId),
-                    isNull(productChannelPricing.branchId),
-                    serviceModule ? eq(productChannelPricing.serviceModule, serviceModule) : undefined
-                )
-            )
-            .limit(1),
-
-        // C. branchMenuItems — branch override
+        fetchFoodOverrides(db, foodId, branchId, serviceModule),
         db.select({
-                price: branchMenuItems.price,
-                status: branchMenuItems.status,
-                stockType: branchMenuItems.stockType,
-                stockQty: branchMenuItems.stockQty,
-            })
+            status: branchMenuItems.status,
+            stockType: branchMenuItems.stockType,
+            stockQty: branchMenuItems.stockQty,
+        })
             .from(branchMenuItems)
-            .where(
-                and(
-                    eq(branchMenuItems.foodId, foodId),
-                    eq(branchMenuItems.branchId, branchId)
-                )
-            )
+            .where(and(eq(branchMenuItems.foodId, foodId), eq(branchMenuItems.branchId, branchId)))
             .limit(1),
-
-        // Variant channel pricing — branch-specific
+        fetchVariantOverrides(db, variantOptionIds, branchId, serviceModule),
         variantOptionIds.length > 0
             ? db.select({
-                    variantId: variantChannelPricing.variantId,
-                    price: variantChannelPricing.price,
-                    status: variantChannelPricing.status,
-                })
-                .from(variantChannelPricing)
-                .where(
-                    and(
-                        inArray(variantChannelPricing.variantId, variantOptionIds),
-                        eq(variantChannelPricing.branchId, branchId),
-                        serviceModule ? eq(variantChannelPricing.serviceModule, serviceModule) : undefined
-                    )
-                )
-            : Promise.resolve([]),
-
-        // Variant channel pricing — global
-        variantOptionIds.length > 0
-            ? db.select({
-                    variantId: variantChannelPricing.variantId,
-                    price: variantChannelPricing.price,
-                    status: variantChannelPricing.status,
-                })
-                .from(variantChannelPricing)
-                .where(
-                    and(
-                        inArray(variantChannelPricing.variantId, variantOptionIds),
-                        isNull(variantChannelPricing.branchId),
-                        serviceModule ? eq(variantChannelPricing.serviceModule, serviceModule) : undefined
-                    )
-                )
-            : Promise.resolve([]),
-
-        // Branch variant pricing overrides
-        variantOptionIds.length > 0
-            ? db.select({
-                    variantId: branchVariantPricing.variantId,
-                    price: branchVariantPricing.price,
-                    status: branchVariantPricing.status,
-                })
-                .from(branchVariantPricing)
-                .where(
-                    and(
-                        inArray(branchVariantPricing.variantId, variantOptionIds),
-                        eq(branchVariantPricing.branchId, branchId)
-                    )
-                )
-            : Promise.resolve([]),
-
-        // Base variant option prices
-        variantOptionIds.length > 0
-            ? db.select({
-                    id: variationOptions.id,
-                    additionalPrice: variationOptions.additionalPrice,
-                    status: variationOptions.status,
-                })
+                id: variationOptions.id,
+                additionalPrice: variationOptions.additionalPrice,
+                status: variationOptions.status,
+            })
                 .from(variationOptions)
                 .where(inArray(variationOptions.id, variantOptionIds))
             : Promise.resolve([]),
     ]);
 
-    // ─── Resolve food base price ────────────────────────────────────────
     const foodData = foodRow[0];
     if (!foodData) {
         throw new NotFound(`Food item not found: ${foodId}`);
     }
 
-    let basePrice = parseFloat((foodData.price as string) || "0");
-    let isFoodAvailable = foodData.status !== "inactive" && !foodData.isOutOfStock;
+    const winningFoodOverride = pickBestOverride(foodOverrides);
+    let basePrice = winningFoodOverride
+        ? parsePrice(winningFoodOverride.price)
+        : parsePrice(foodData.price as string);
 
-    // 1. تسعير القناة الخاص بالفرع
-    if (channelBranchRows.length > 0) {
-        const row = channelBranchRows[0];
-        basePrice = parseFloat((row.price as string) || "0");
-        if (row.status === "inactive") isFoodAvailable = false;
-    }
-    // 2. تسعير القناة العام
-    else if (channelGlobalRows.length > 0) {
-        const row = channelGlobalRows[0];
-        basePrice = parseFloat((row.price as string) || "0");
-        if (row.status === "inactive") isFoodAvailable = false;
-    }
-    // 3. تسعير الفرع المباشر (Fallback)
-    else if (branchMenuRow.length > 0) {
+    let isFoodAvailable = foodData.status !== "inactive" && !foodData.isOutOfStock;
+    if (branchMenuRow.length > 0) {
         const row = branchMenuRow[0];
-        if (row.price !== null && row.price !== undefined) {
-            basePrice = parseFloat((row.price as string) || "0");
-        }
         if (row.status === "inactive") isFoodAvailable = false;
         if (row.stockType === "limited" && (row.stockQty ?? 0) <= 0) isFoodAvailable = false;
     }
-    // 4. food.price العام
 
-    // ─── Resolve variant prices ─────────────────────────────────────────
     const resolvedVariants: VariantPriceResult[] = [];
     let totalVariantPrice = 0;
-
-    const vcBranchMap = new Map(variantChannelBranchRows.map((r) => [r.variantId, r]));
-    const vcGlobalMap = new Map(variantChannelGlobalRows.map((r) => [r.variantId, r]));
-    const bvMap = new Map(branchVariantRows.map((r) => [r.variantId, r]));
+    const overridesByVariant = new Map<string, typeof variantOverrideRows>();
+    for (const row of variantOverrideRows) {
+        const list = overridesByVariant.get(row.variantId) ?? [];
+        list.push(row);
+        overridesByVariant.set(row.variantId, list);
+    }
     const baseVarMap = new Map(baseVariantRows.map((r) => [r.id, r]));
 
     for (const optionId of variantOptionIds) {
         const baseOption = baseVarMap.get(optionId);
-        let varPrice = parseFloat((baseOption?.additionalPrice as string) || "0");
-        let varAvailable = baseOption ? baseOption.status !== false : true;
+        if (!baseOption) {
+            resolvedVariants.push({ variantOptionId: optionId, price: 0, isAvailable: false });
+            continue;
+        }
 
-        if (vcBranchMap.get(optionId)) {
-            const vcBranch = vcBranchMap.get(optionId)!;
-            varPrice = parseFloat((vcBranch.price as string) || "0");
-            if (vcBranch.status === "inactive") varAvailable = false;
-        }
-        // Variant channel pricing — global
-         else if (vcGlobalMap.get(optionId)) {
-            const vcGlobal = vcGlobalMap.get(optionId)!;
-            varPrice = parseFloat((vcGlobal.price as string) || "0");
-            if (vcGlobal.status === "inactive") varAvailable = false;
-        }
-        // Branch variant pricing
-         else if (bvMap.get(optionId)) {
-            const bv = bvMap.get(optionId)!;
-            varPrice = parseFloat((bv.price as string) || "0");
-            if (bv.status === "inactive") varAvailable = false;
-        }
-        // Base variant price — already set above
+        const winning = pickBestOverride(overridesByVariant.get(optionId) ?? []);
+        const varPrice = winning ? parsePrice(winning.price) : parsePrice(baseOption.additionalPrice as string);
+        const varAvailable = baseOption.status !== false;
 
         totalVariantPrice += varPrice;
         resolvedVariants.push({
@@ -401,9 +263,9 @@ export const calculateCalculatedPrice = async (
 };
 
 export const product_form = async (
-    foodData: any, // تم تغيير الاسم ليكون أوضح حيث أنه يمثل منتج واحد (كائن وليس مصفوفة)
+    foodData: any,
     branchId: string,
-    serviceModule?: any, // استبدل any بـ ServiceModule إذا كان لديك Type محدد
+    serviceModule?: ServiceModule,
     language: "En" | "Ar" | "Fr" = "En",
 ) => {
     const foodId = foodData.id;
@@ -412,90 +274,33 @@ export const product_form = async (
         throw new NotFound(`Food item not found: ${foodId}`);
     }
 
-    // ─── Parallel batch fetch ───────────────────────────────────────────
-    const [ 
-        // Food channel pricing — branch-specific
-        channelBranchRows,
-        // Food channel pricing — global
-        channelGlobalRows,
-        // Branch menu item override
-        branchMenuRow, 
-    ] = await Promise.all([ 
-
-        // A. productChannelPricing — branch-specific
-        db.select({ price: productChannelPricing.price, status: productChannelPricing.status })
-            .from(productChannelPricing)
-            .where(
-                and(
-                    eq(productChannelPricing.foodId, foodId),
-                    eq(productChannelPricing.branchId, branchId),
-                    serviceModule ? eq(productChannelPricing.serviceModule, serviceModule) : undefined
-                )
-            )
-            .limit(1),
-
-        // B. productChannelPricing — global channel default
-        db.select({ price: productChannelPricing.price, status: productChannelPricing.status })
-            .from(productChannelPricing)
-            .where(
-                and(
-                    eq(productChannelPricing.foodId, foodId),
-                    isNull(productChannelPricing.branchId),
-                    serviceModule ? eq(productChannelPricing.serviceModule, serviceModule) : undefined
-                )
-            )
-            .limit(1),
-
-        // C. branchMenuItems — branch override
+    const [foodOverrides, branchMenuRow] = await Promise.all([
+        fetchFoodOverrides(db, foodId, branchId, serviceModule),
         db.select({
-                price: branchMenuItems.price,
-                status: branchMenuItems.status,
-                stockType: branchMenuItems.stockType,
-                stockQty: branchMenuItems.stockQty,
-            })
+            status: branchMenuItems.status,
+            stockType: branchMenuItems.stockType,
+            stockQty: branchMenuItems.stockQty,
+        })
             .from(branchMenuItems)
-            .where(
-                and(
-                    eq(branchMenuItems.foodId, foodId),
-                    eq(branchMenuItems.branchId, branchId)
-                )
-            )
-            .limit(1), 
+            .where(and(eq(branchMenuItems.foodId, foodId), eq(branchMenuItems.branchId, branchId)))
+            .limit(1),
     ]);
 
-    // ─── Resolve food base price ────────────────────────────────────────
-
-    let basePrice = parseFloat((foodData.price as string) || "0");
+    const winning = pickBestOverride(foodOverrides);
+    const basePrice = winning ? parsePrice(winning.price) : parsePrice(foodData.price as string);
     let isFoodAvailable = foodData.status !== "inactive" && !foodData.isOutOfStock;
-
-    // 1. تسعير القناة الخاص بالفرع
-    if (channelBranchRows.length > 0) {
-        const row = channelBranchRows[0];
-        basePrice = parseFloat((row.price as string) || "0");
-        if (row.status === "inactive") isFoodAvailable = false;
-    }
-    // 2. تسعير القناة العام
-    else if (channelGlobalRows.length > 0) {
-        const row = channelGlobalRows[0];
-        basePrice = parseFloat((row.price as string) || "0");
-        if (row.status === "inactive") isFoodAvailable = false;
-    }
-    // 3. تسعير الفرع المباشر (Fallback)
-    else if (branchMenuRow.length > 0) {
+    if (branchMenuRow.length > 0) {
         const row = branchMenuRow[0];
-        if (row.price !== null && row.price !== undefined) {
-            basePrice = parseFloat((row.price as string) || "0");
-        }
         if (row.status === "inactive") isFoodAvailable = false;
         if (row.stockType === "limited" && (row.stockQty ?? 0) <= 0) isFoodAvailable = false;
-    } 
+    }
 
     return {
-        id: foodData.id, // من الأفضل إرجاع الـ ID ليتم استخدامه في الـ Frontend
+        id: foodData.id,
         name: language === "En" ? foodData.name : language === "Ar" ? foodData.nameAr : foodData.nameFr,
         image: foodData.image,
         basePrice,
-        isAvailable: isFoodAvailable, 
+        isAvailable: isFoodAvailable,
     };
 };
 
@@ -506,18 +311,16 @@ export const productData = async (
     language: "En" | "Ar" | "Fr" = "En",
     addonsIds: string[] = [],
 ) => {
-    const [ 
+    const [
         foodRow,
-        channelBranchRows,
-        channelGlobalRows,
+        foodOverrides,
         branchMenuRow,
         addonsRows,
         variantsDataRaw
     ] = await Promise.all([
-        // 1. Food base
-        db.select({ 
-            price: food.price, 
-            status: food.status, 
+        db.select({
+            price: food.price,
+            status: food.status,
             isOutOfStock: food.isOutOfStock,
             name: food.name,
             nameAr: food.nameAr,
@@ -532,33 +335,9 @@ export const productData = async (
         .where(eq(food.id, foodId))
         .limit(1),
 
-        // 2. productChannelPricing — branch-specific
-        db.select({ price: productChannelPricing.price, status: productChannelPricing.status })
-            .from(productChannelPricing)
-            .where(
-                and(
-                    eq(productChannelPricing.foodId, foodId),
-                    eq(productChannelPricing.branchId, branchId),
-                    serviceModule ? eq(productChannelPricing.serviceModule, serviceModule) : undefined
-                )
-            )
-            .limit(1),
+        fetchFoodOverrides(db, foodId, branchId, serviceModule),
 
-        // 3. productChannelPricing — global channel default
-        db.select({ price: productChannelPricing.price, status: productChannelPricing.status })
-            .from(productChannelPricing)
-            .where(
-                and(
-                    eq(productChannelPricing.foodId, foodId),
-                    isNull(productChannelPricing.branchId),
-                    serviceModule ? eq(productChannelPricing.serviceModule, serviceModule) : undefined
-                )
-            )
-            .limit(1),
-
-        // 4. branchMenuItems — branch override
         db.select({
-            price: branchMenuItems.price,
             status: branchMenuItems.status,
             stockType: branchMenuItems.stockType,
             stockQty: branchMenuItems.stockQty,
@@ -617,81 +396,34 @@ export const productData = async (
         : [];
 
     const variantOptionIds = variationOptionsRaw.map(o => o.id);
+    const variantOverrideRows = await fetchVariantOverrides(db, variantOptionIds, branchId, serviceModule);
 
-    // ─── المرحلة الثالثة: جلب أسعار الخيارات (Options Pricing) ────
-    const [ 
-        variantChannelBranchRows,
-        variantChannelGlobalRows,
-        branchVariantRows,
-    ] = await Promise.all([
-        variantOptionIds.length > 0
-            ? db.select({ variantId: variantChannelPricing.variantId, price: variantChannelPricing.price, status: variantChannelPricing.status })
-                .from(variantChannelPricing)
-                .where(and(inArray(variantChannelPricing.variantId, variantOptionIds), eq(variantChannelPricing.branchId, branchId), serviceModule ? eq(variantChannelPricing.serviceModule, serviceModule) : undefined))
-            : Promise.resolve([]),
-
-        variantOptionIds.length > 0
-            ? db.select({ variantId: variantChannelPricing.variantId, price: variantChannelPricing.price, status: variantChannelPricing.status })
-                .from(variantChannelPricing)
-                .where(and(inArray(variantChannelPricing.variantId, variantOptionIds), isNull(variantChannelPricing.branchId), serviceModule ? eq(variantChannelPricing.serviceModule, serviceModule) : undefined))
-            : Promise.resolve([]),
-
-        variantOptionIds.length > 0
-            ? db.select({ variantId: branchVariantPricing.variantId, price: branchVariantPricing.price, status: branchVariantPricing.status })
-                .from(branchVariantPricing)
-                .where(and(inArray(branchVariantPricing.variantId, variantOptionIds), eq(branchVariantPricing.branchId, branchId)))
-            : Promise.resolve([]),
-    ]);
-
-    // ─── حساب السعر الأساسي للمنتج (Base Price Resolution) ────────────────────────
-    let basePrice = parseFloat((foodData.price as string) || "0");
+    const winningFood = pickBestOverride(foodOverrides);
+    let basePrice = winningFood ? parsePrice(winningFood.price) : parsePrice(foodData.price as string);
     let isFoodAvailable = foodData.status !== "inactive" && !foodData.isOutOfStock;
 
-    if (channelBranchRows.length > 0) {
-        const row = channelBranchRows[0];
-        basePrice = parseFloat((row.price as string) || "0");
-        if (row.status === "inactive") isFoodAvailable = false;
-    } else if (channelGlobalRows.length > 0) {
-        const row = channelGlobalRows[0];
-        basePrice = parseFloat((row.price as string) || "0");
-        if (row.status === "inactive") isFoodAvailable = false;
-    } else if (branchMenuRow.length > 0) {
+    if (branchMenuRow.length > 0) {
         const row = branchMenuRow[0];
-        if (row.price !== null && row.price !== undefined) {
-            basePrice = parseFloat((row.price as string) || "0");
-        }
         if (row.status === "inactive") isFoodAvailable = false;
         if (row.stockType === "limited" && (row.stockQty ?? 0) <= 0) isFoodAvailable = false;
     }
 
-    // ─── حساب أسعار الخيارات ودمجها (Variant Prices Resolution) ─────────────────
-    const vcBranchMap = new Map(variantChannelBranchRows.map((r) => [r.variantId, r]));
-    const vcGlobalMap = new Map(variantChannelGlobalRows.map((r) => [r.variantId, r]));
-    const bvMap = new Map(branchVariantRows.map((r) => [r.variantId, r]));
+    const overridesByVariant = new Map<string, typeof variantOverrideRows>();
+    for (const row of variantOverrideRows) {
+        const list = overridesByVariant.get(row.variantId) ?? [];
+        list.push(row);
+        overridesByVariant.set(row.variantId, list);
+    }
 
     const resolvedVariants: any[] = [];
-    
-    // ربط الـ Options وتحديث أسعارها ووضعها داخل الـ Variations الخاصة بها
+
     const variantsData = variantsDataRaw.map(variant => {
         const optionsForVariant = variationOptionsRaw.filter(o => o.variationId === variant.id);
-        
-        const resolvedOptions = optionsForVariant.map(opt => {
-            let varPrice = parseFloat((opt.additionalPrice as string) || "0");
-            let varAvailable = opt.status !== false;
 
-            if (vcBranchMap.has(opt.id)) {
-                const vcBranch = vcBranchMap.get(opt.id)!;
-                varPrice = parseFloat((vcBranch.price as string) || "0");
-                if (vcBranch.status === "inactive") varAvailable = false;
-            } else if (vcGlobalMap.has(opt.id)) {
-                const vcGlobal = vcGlobalMap.get(opt.id)!;
-                varPrice = parseFloat((vcGlobal.price as string) || "0");
-                if (vcGlobal.status === "inactive") varAvailable = false;
-            } else if (bvMap.has(opt.id)) {
-                const bv = bvMap.get(opt.id)!;
-                varPrice = parseFloat((bv.price as string) || "0");
-                if (bv.status === "inactive") varAvailable = false;
-            }
+        const resolvedOptions = optionsForVariant.map(opt => {
+            const winning = pickBestOverride(overridesByVariant.get(opt.id) ?? []);
+            const varPrice = winning ? parsePrice(winning.price) : parsePrice(opt.additionalPrice as string);
+            const varAvailable = opt.status !== false;
 
             resolvedVariants.push({
                 variantOptionId: opt.id,

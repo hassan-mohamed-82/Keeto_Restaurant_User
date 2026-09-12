@@ -15,7 +15,7 @@ import { food, ingredients, restaurants, zones } from "../../schema";
 export const branches = mysqlTable("branches", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
     restaurantId: char("restaurant_id", { length: 36 }).references(() => restaurants.id).notNull(),
-    name: varchar("name", { length: 255 }).notNull(), // فرع مدينة نصر مثلاً
+    name: varchar("name", { length: 255 }).notNull(),
     nameAr: varchar("name_ar", { length: 255 }),
     nameFr: varchar("name_fr", { length: 255 }),
     address: text("address").notNull(),
@@ -38,8 +38,10 @@ export const branchMenuItems = mysqlTable("branch_menu_items", {
     branchId: char("branch_id", { length: 36 }).references(() => branches.id).notNull(),
     foodId: char("food_id", { length: 36 }).references(() => food.id).notNull(),
 
-    // السعر اختياري: إذا كان NULL يعتمد basePrice من جدول food
-    price: decimal("price", { precision: 10, scale: 2 }),
+    // ✅ REMOVED: price (decimal). Price now lives in foodPricingOverrides.
+    // This table answers ONE question: is this food sold at this branch,
+    // and with what stock — never the price.
+    //price: decimal("price", { precision: 10, scale: 2 }),
 
     stockType: mysqlEnum("stock_type", ["limited", "unlimited"]).default("unlimited"),
     stockQty: int("stock_qty").default(0),
@@ -63,7 +65,7 @@ export const branchIngredientLocks = mysqlTable("branch_ingredient_locks", {
         .notNull(),
 
     // إذا كانت NULL -> القفل يطبق على المكون في الفرع ككل (لكل الوجبات)
-    // إذا كانت بها UUID -> القفل يطبق على هذا المكون لهذه الوجبة فقط داخل هذا الفرع
+    // إذا كانت بها UUID -> القفل يطبق على هذا المكون لهذه الوجبة فقط داخل هذا الفرع    
     foodId: char("food_id", { length: 36 })
         .references(() => food.id),
 
@@ -71,7 +73,6 @@ export const branchIngredientLocks = mysqlTable("branch_ingredient_locks", {
         .references(() => ingredients.id)
         .notNull(),
 
-    // false = المكون غير متاح
     isAvailable: boolean("is_available").default(true).notNull(),
 
     createdAt: timestamp("created_at").defaultNow(),
