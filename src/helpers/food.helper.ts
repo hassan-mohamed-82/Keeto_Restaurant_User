@@ -8,7 +8,7 @@ import {
     ingredients,
     foodVariations,
     variationOptions,
-    branchVariantPricing,
+    variantPricingOverrides,
 } from "../models/schema";
 import { eq, and, inArray, or, isNull } from "drizzle-orm";
 import { db } from "../models/connection";
@@ -166,7 +166,7 @@ export const getUnavailableBranchesForFoods = async (
  * 1. وجود الوجبة وحالتها العامة (نشطة / موقوفة / نفاد مخزون عام).
  * 2. حالة الوجبة داخل الفرع الممرر (active / inactive / نفاد المخزون المحدود).
  * 3. المكونات الأساسية للوجبة (isEssential) ومخزونها العام، وأقفال المكونات داخل الفرع (branchIngredientLocks).
- * 4. خيارات الوجبة الإلزامية (Required Variations) وتوافرها بالفرع عبر branchVariantPricing.
+ * 4. خيارات الوجبة الإلزامية (Required Variations) وتوافرها بالفرع عبر variantPricingOverrides.
  */
 export const checkFoodAvailabilityInBranch = async ({
     foodId,
@@ -404,14 +404,14 @@ export const checkFoodAvailabilityInBranch = async ({
                     const optIds = globallyActiveOptions.map((o) => o.id);
                     const branchVariantOverrides = await db
                         .select({
-                            variantId: branchVariantPricing.variantId,
-                            status: branchVariantPricing.status,
+                            variantId: variantPricingOverrides.variantId,
+                            status: variantPricingOverrides.status,
                         })
-                        .from(branchVariantPricing)
+                        .from(variantPricingOverrides)
                         .where(
                             and(
-                                eq(branchVariantPricing.branchId, branchId),
-                                inArray(branchVariantPricing.variantId, optIds)
+                                eq(variantPricingOverrides.branchId, branchId),
+                                inArray(variantPricingOverrides.variantId, optIds)
                             )
                         );
 
