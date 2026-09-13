@@ -570,8 +570,6 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
         }));
 
         // ── Subcategory rollup ────────────────────────────────────────────────
-        // Compute whether all products in each subcategory are inactive / OOS,
-        // AND whether the subcategory itself is closed at branch level.
         const uniqueSubcategoryIds = [
             ...new Set(
                 finalMenu.map((item) => item.subcategoryId).filter(Boolean) as string[]
@@ -580,7 +578,6 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
 
         const subcategoryResult: any[] = [];
         if (uniqueSubcategoryIds.length > 0) {
-            // All foods (active + inactive) for these subcategories
             const allFoodsForRollup = await db
                 .select({
                     subcategoryId: food.subcategoryid,
@@ -595,7 +592,6 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
                     )
                 );
 
-            // Rollup per subcategoryId
             const rollupMap: Record<string, { allInactive: boolean; allOutOfStock: boolean; hasProducts: boolean }> = {};
             for (const row of allFoodsForRollup) {
                 const sid = row.subcategoryId!;
@@ -607,7 +603,6 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
                 if (!row.isOutOfStock) rollupMap[sid].allOutOfStock = false;
             }
 
-            // Fetch branch-level status + isOutOfStock for each subcategory in this branch
             const branchSubcategoryStatusMap: Record<string, string | null> = {};
             const branchSubcategoryOosMap: Record<string, boolean> = {};
             if (singleBranchId) {
@@ -630,7 +625,6 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
                 }
             }
 
-            // Fetch subcategory base info including isOutOfStock
             const subcategoryData = await db
                 .select({
                     id: subcategories.id,
@@ -645,12 +639,10 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
 
             for (const sub of subcategoryData) {
                 const rollup = rollupMap[sub.id];
-                // If branchId was provided, use branch-level override status (fallback to global)
                 const status = singleBranchId
                     ? (branchSubcategoryStatusMap[sub.id] ?? sub.status)
                     : sub.status;
 
-                // Priority: branchSubcategory.isOutOfStock > subcategory.isOutOfStock > food rollup
                 const branchOos = singleBranchId ? (branchSubcategoryOosMap[sub.id] ?? false) : false;
                 const globalOos = Boolean(sub.isOutOfStock);
                 const foodRollupOos = rollup?.hasProducts ? rollup.allOutOfStock : false;
@@ -734,11 +726,16 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
             )
         : [];
 
+    // ✅ FIX: branchIds.length === 0 now explicitly means "global overrides
+    // only" (branchId IS NULL) instead of "no filter at all" (which pulled
+    // every branch's row and let pickBestOverride tie-break arbitrarily).
     const foodOverrideConditions = [inArray(foodPricingOverrides.foodId, foodIds)];
     if (branchIds.length > 0) {
         foodOverrideConditions.push(
             or(inArray(foodPricingOverrides.branchId, branchIds), isNull(foodPricingOverrides.branchId))!
         );
+    } else {
+        foodOverrideConditions.push(isNull(foodPricingOverrides.branchId));
     }
     if (serviceModules.length > 0) {
         foodOverrideConditions.push(
@@ -787,17 +784,23 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
 
     const optionIds = allOptions.map((o) => o.id);
 
-    // Variant channel pricing
+    // ✅ FIX: same branch-filter bug as foodOverrideConditions above, fixed
+    // the same way — branchIds.length === 0 restricts to branchId IS NULL
+    // instead of skipping the branch filter entirely.
     const variantOverrideConditions = optionIds.length > 0 ? [inArray(variantPricingOverrides.variantId, optionIds)] : [];
-    if (branchIds.length > 0 && variantOverrideConditions.length > 0) {
-        variantOverrideConditions.push(
-            or(inArray(variantPricingOverrides.branchId, branchIds), isNull(variantPricingOverrides.branchId))!
-        );
-    }
-    if (serviceModules.length > 0 && variantOverrideConditions.length > 0) {
-        variantOverrideConditions.push(
-            or(inArray(variantPricingOverrides.serviceModule, serviceModules), isNull(variantPricingOverrides.serviceModule))!
-        );
+    if (optionIds.length > 0) {
+        if (branchIds.length > 0) {
+            variantOverrideConditions.push(
+                or(inArray(variantPricingOverrides.branchId, branchIds), isNull(variantPricingOverrides.branchId))!
+            );
+        } else {
+            variantOverrideConditions.push(isNull(variantPricingOverrides.branchId));
+        }
+        if (serviceModules.length > 0) {
+            variantOverrideConditions.push(
+                or(inArray(variantPricingOverrides.serviceModule, serviceModules), isNull(variantPricingOverrides.serviceModule))!
+            );
+        }
     }
 
     const variantOverrideList = optionIds.length > 0
@@ -877,7 +880,6 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
     });
 
     // ── Subcategory rollup (multi-branch path) ────────────────────────────────
-    // Compute food rollup AND branch-level subcategory status per branch.
     const uniqueSubcategoryIds = [
         ...new Set(
             finalMenu.map((item) => item.subcategoryId).filter(Boolean) as string[]
@@ -886,7 +888,6 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
 
     const subcategoryResult: any[] = [];
     if (uniqueSubcategoryIds.length > 0) {
-        // All foods (active + inactive) for rollup
         const allFoodsForRollup = await db
             .select({
                 subcategoryId: food.subcategoryid,
@@ -912,9 +913,6 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
             if (!row.isOutOfStock) rollupMap[sid].allOutOfStock = false;
         }
 
-        // Fetch branch-level subcategory status + isOutOfStock for all requested branches
-        // branchStatusMap[subcategoryId][branchId] = status
-        // branchOosMap[subcategoryId][branchId] = isOutOfStock
         const branchStatusMap: Record<string, Record<string, string>> = {};
         const branchOosMap: Record<string, Record<string, boolean>> = {};
         if (branchIds.length > 0) {
@@ -956,8 +954,6 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
 
         for (const sub of subcategoryData) {
             const rollup = rollupMap[sub.id];
-            // If a single branchId is provided, use its override status (fallback to global)
-            // For multi-branch, use global status as base
             const branchStatuses = branchStatusMap[sub.id] ?? {};
             const branchOoses = branchOosMap[sub.id] ?? {};
             const singleBranch = branchIds.length === 1 ? branchIds[0] : null;
@@ -965,7 +961,6 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
                 ? (branchStatuses[singleBranch] ?? sub.status)
                 : sub.status;
 
-            // Priority: branchSubcategory.isOutOfStock > subcategory.isOutOfStock > food rollup
             const branchOos = singleBranch ? (branchOoses[singleBranch] ?? false) : false;
             const globalOos = Boolean(sub.isOutOfStock);
             const foodRollupOos = rollup?.hasProducts ? rollup.allOutOfStock : false;
@@ -996,7 +991,6 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
         },
     });
 };
-
 // ============================================================================
 // 4. CONTROLLER: Get Food List for Pricing UI (food + variations + options)
 // GET /pricing/food-for-pricing
