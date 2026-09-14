@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { popup } from "../../models/schema/admin/popup";
+import { popup, subcategories, food, discounts } from "../../models/schema";
 import { eq, and, gte, lte } from "drizzle-orm";
 import { NotFound } from "../../Errors";
 import { SuccessResponse } from "../../utils/response";
@@ -22,10 +22,28 @@ export const getActivePopups = async (req: Request, res: Response) => {
             imageAr: popup.imageAr,
             imageFr: popup.imageFr,
             type: popup.type,
+            linkType: popup.linkType,
+            link: popup.link,
+            subcategoryId: popup.subcategoryId,
+            subcategoryName: subcategories.name,
+            subcategoryNameAr: subcategories.nameAr,
+            foodId: popup.foodId,
+            productId: popup.foodId,
+            foodName: food.name,
+            foodNameAr: food.nameAr,
+            foodImage: food.image,
+            discountId: popup.discountId,
+            discountName: discounts.name,
+            discountNameAr: discounts.nameAr,
+            discountType: discounts.discountType,
+            discountValue: discounts.discountValue,
             startDate: popup.startDate,
             endDate: popup.endDate,
         })
         .from(popup)
+        .leftJoin(subcategories, eq(popup.subcategoryId, subcategories.id))
+        .leftJoin(food, eq(popup.foodId, food.id))
+        .leftJoin(discounts, eq(popup.discountId, discounts.id))
         .where(
             and(
                 eq(popup.status, "active"),
@@ -54,10 +72,28 @@ export const getPopupById = async (req: Request, res: Response) => {
             imageAr: popup.imageAr,
             imageFr: popup.imageFr,
             type: popup.type,
+            linkType: popup.linkType,
+            link: popup.link,
+            subcategoryId: popup.subcategoryId,
+            subcategoryName: subcategories.name,
+            subcategoryNameAr: subcategories.nameAr,
+            foodId: popup.foodId,
+            productId: popup.foodId,
+            foodName: food.name,
+            foodNameAr: food.nameAr,
+            foodImage: food.image,
+            discountId: popup.discountId,
+            discountName: discounts.name,
+            discountNameAr: discounts.nameAr,
+            discountType: discounts.discountType,
+            discountValue: discounts.discountValue,
             startDate: popup.startDate,
             endDate: popup.endDate,
         })
         .from(popup)
+        .leftJoin(subcategories, eq(popup.subcategoryId, subcategories.id))
+        .leftJoin(food, eq(popup.foodId, food.id))
+        .leftJoin(discounts, eq(popup.discountId, discounts.id))
         .where(
             and(
                 eq(popup.id, id),

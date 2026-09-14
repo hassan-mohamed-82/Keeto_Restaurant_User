@@ -1,10 +1,15 @@
 import { Router } from "express";
 import { createImage, deleteImage, getAllImages, getImageById, updateImage } from "../../controllers/admin/image";
 import { catchAsync } from "../../utils/catchAsync";
+import { validate } from "../../middlewares/validation";
+import { createImageSchema, updateImageSchema } from "../../validation/admin/image";
+import { getLinkTargetOptions } from "../../controllers/admin/popup";
+
 const router = Router();
-router.post("/", catchAsync(createImage));
+
+router.post("/", validate(createImageSchema), catchAsync(createImage));
 router.get("/", catchAsync(getAllImages));
 router.get("/:id", catchAsync(getImageById));
 router.delete("/:id", catchAsync(deleteImage));
-router.put("/:id", catchAsync(updateImage));
+router.put("/:id", validate(updateImageSchema), catchAsync(updateImage));
 export default router;
