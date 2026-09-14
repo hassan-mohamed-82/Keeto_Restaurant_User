@@ -1,5 +1,7 @@
 import { Router } from "express";
 import { catchAsync } from "../../utils/catchAsync";
+import { validate } from "../../middlewares/validation";
+import { createSliderSchema, updateSliderSchema } from "../../validation/admin/slider";
 import { 
    createImage,
    getAllImages,
@@ -10,10 +12,10 @@ import {
 
 const router = Router();
 
-router.post("/", catchAsync(createImage));
+router.post("/", validate(createSliderSchema), catchAsync(createImage));
 router.get("/", catchAsync(getAllImages));
-router.delete("/:id", catchAsync(deleteImage));
 router.get("/:id", catchAsync(getImageById));
-router.put("/:id", catchAsync(updateImage));
+router.delete("/:id", catchAsync(deleteImage));
+router.put("/:id", validate(updateSliderSchema), catchAsync(updateImage));
 
 export default router;
