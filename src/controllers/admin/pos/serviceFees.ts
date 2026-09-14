@@ -8,7 +8,6 @@ import { v4 as uuidv4 } from "uuid";
 import {
     SERVICE_FEE_MODULES,
     SERVICE_FEE_TYPES,
-    SERVICE_FEE_MODULE_TYPES,
     AMOUNT_TYPES,
 } from "../../../validation/admin/serviceFees";
 
@@ -33,7 +32,6 @@ function formatServiceFeeItem(item: any, lang: Language = "en") {
         amount: item.amount,
         amountType: item.amountType,
         type: item.type,
-        moduleType: item.moduleType,
         modules: parseJsonArray(item.modules), 
         status: item.status,
         createdAt: item.createdAt,
@@ -108,7 +106,6 @@ async function enrichServiceFeesWithBranches(
             amount: item.amount,
             amountType: item.amountType,
             type: item.type,
-            moduleType: item.moduleType,
             modules: parseJsonArray(item.modules),
             branchIds: itemBranchIds,
             branches: itemBranches,
@@ -129,10 +126,9 @@ export const createServiceFee = async (req: Request, res: Response) => {
     }
 
     const lang = extractLang(req);
-    const { name, nameAr, nameFr, amount, amountType, amount_type, type, moduleType, module_type, branchIds, modules, status } = req.body;
+    const { name, nameAr, nameFr, amount, amountType, amount_type, type, branchIds, modules, status } = req.body;
 
     const finalAmountType = amountType || amount_type || "percentage";
-    const finalModuleType = moduleType || module_type || "all";
     const finalBranchIds = parseJsonArray(branchIds);
     const finalModules = parseJsonArray(modules).length > 0 ? parseJsonArray(modules) : ["all"];
 
@@ -146,7 +142,6 @@ export const createServiceFee = async (req: Request, res: Response) => {
         amount: String(amount),
         amountType: finalAmountType,
         type,
-        moduleType: finalModuleType,
         branchIds: finalBranchIds,
         modules: finalModules as any,
         status: status || "active",
@@ -181,7 +176,7 @@ export const getAllServiceFees = async (req: Request, res: Response) => {
 
     const lang = extractLang(req);
     const params = { ...req.query, ...req.body };
-    const { status, type, moduleType, module_type, search, all } = params;
+    const { status, type, search, all } = params;
 
     const page = Math.max(1, parseInt(params.page as string) || 1);
     const limit = Math.max(1, Math.min(100, parseInt(params.limit as string) || 10));
@@ -193,13 +188,6 @@ export const getAllServiceFees = async (req: Request, res: Response) => {
     }
     if (type && (type === "web" || type === "app" || type === "all")) {
         conditions.push(eq(serviceFees.type, type));
-    }
-    const filterModuleType = moduleType || module_type;
-    if (
-        filterModuleType &&
-        (filterModuleType === "pos" || filterModuleType === "online" || filterModuleType === "all")
-    ) {
-        conditions.push(eq(serviceFees.moduleType, filterModuleType));
     }
 
     if (search && typeof search === "string" && search.trim() !== "") {
@@ -293,7 +281,6 @@ export const getServiceFeeListOptions = async (req: Request, res: Response) => {
             modules: SERVICE_FEE_MODULES,
             types: SERVICE_FEE_TYPES,
             amountTypes: AMOUNT_TYPES,
-            moduleTypes: SERVICE_FEE_MODULE_TYPES,
         },
     });
 };
@@ -350,7 +337,7 @@ export const updateServiceFee = async (req: Request, res: Response) => {
         throw new NotFound("Service fee not found");
     }
 
-    const { name, nameAr, nameFr, amount, amountType, amount_type, type, moduleType, module_type, branchIds, modules, status } = req.body;
+    const { name, nameAr, nameFr, amount, amountType, amount_type, type, branchIds, modules, status } = req.body;
 
     const updateData: Partial<typeof serviceFees.$inferInsert> = {};
     if (name !== undefined) updateData.name = name;
@@ -360,8 +347,6 @@ export const updateServiceFee = async (req: Request, res: Response) => {
     const finalAmountType = amountType || amount_type;
     if (finalAmountType !== undefined) updateData.amountType = finalAmountType;
     if (type !== undefined) updateData.type = type;
-    const finalModuleType = moduleType || module_type;
-    if (finalModuleType !== undefined) updateData.moduleType = finalModuleType;
     if (branchIds !== undefined) updateData.branchIds = parseJsonArray(branchIds);
     if (modules !== undefined) updateData.modules = parseJsonArray(modules) as any;
     if (status !== undefined) updateData.status = status;

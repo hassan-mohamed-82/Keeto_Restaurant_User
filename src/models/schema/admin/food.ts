@@ -10,8 +10,9 @@ import {
     boolean,
     text
 } from "drizzle-orm/mysql-core";
-import { sql } from "drizzle-orm";
+import { sql, relations } from "drizzle-orm";
 import { addons, categories, restaurants, subcategories } from "../../schema";
+import { noteGroups } from "./noteGroup";
 export const food = mysqlTable("food", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
 
@@ -45,6 +46,9 @@ export const food = mysqlTable("food", {
 
     addonsId: json("addons_ids").$type<string[]>().default([]),
 
+    group_note_id: char("group_note_id", { length: 36 })
+        .references(() => noteGroups.id, { onDelete: "set null" }),
+
     startTime: varchar("start_time", { length: 255 }).notNull(),
     endTime: varchar("end_time", { length: 255 }).notNull(),
 
@@ -72,3 +76,14 @@ export const food = mysqlTable("food", {
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
 });
+
+export const foodRelations = relations(food, ({ one }) => ({
+    restaurant: one(restaurants, {
+        fields: [food.restaurantid],
+        references: [restaurants.id],
+    }),
+    noteGroup: one(noteGroups, {
+        fields: [food.group_note_id],
+        references: [noteGroups.id],
+    }),
+}));

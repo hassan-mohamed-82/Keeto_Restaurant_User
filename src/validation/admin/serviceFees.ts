@@ -2,7 +2,6 @@ import { z } from "zod";
 
 export const SERVICE_FEE_MODULES = ["take_away", "dine_in", "delivery", "car", "all"] as const;
 export const SERVICE_FEE_TYPES = ["web", "app", "all"] as const;
-export const SERVICE_FEE_MODULE_TYPES = ["pos", "online", "all"] as const;
 export const AMOUNT_TYPES = ["percentage", "value"] as const;
 export type AmountType = (typeof AMOUNT_TYPES)[number];
 export const SUPPORTED_LANGUAGES = ["en", "ar", "fr"] as const;
@@ -20,11 +19,6 @@ export const foodFilterSchema = z.object({
 
 const normalizeServiceFeeInput = (obj: any) => {
     if (obj && typeof obj === "object") {
-        if (obj.moduleType === undefined && obj.module_type !== undefined) {
-            obj.moduleType = obj.module_type;
-        } else if (obj.module_type === undefined && obj.moduleType !== undefined) {
-            obj.module_type = obj.moduleType;
-        }
         if (obj.amountType === undefined && obj.amount_type !== undefined) {
             obj.amountType = obj.amount_type;
         } else if (obj.amount_type === undefined && obj.amountType !== undefined) {
@@ -69,11 +63,6 @@ export const createServiceFeeSchema = z.preprocess(
             required_error: "Type is required and must be one of: web, app, all",
             invalid_type_error: "Type must be one of: web, app, all",
         }),
-        moduleType: z.enum(SERVICE_FEE_MODULE_TYPES, {
-            required_error: "module_type is required and must be one of: pos, online, all",
-            invalid_type_error: "module_type must be one of: pos, online, all",
-        }),
-        module_type: z.enum(SERVICE_FEE_MODULE_TYPES).optional(),
         branchIds: z
             .array(z.string().min(1, "Branch ID cannot be empty"), {
                 required_error: "branchIds is required and must be an array of branch IDs",
@@ -123,8 +112,6 @@ export const updateServiceFeeSchema = z.preprocess(
         amountType: z.enum(AMOUNT_TYPES).optional(),
         amount_type: z.enum(AMOUNT_TYPES).optional(),
         type: z.enum(SERVICE_FEE_TYPES).optional(),
-        moduleType: z.enum(SERVICE_FEE_MODULE_TYPES).optional(),
-        module_type: z.enum(SERVICE_FEE_MODULE_TYPES).optional(),
         branchIds: z
             .array(z.string().min(1, "Branch ID cannot be empty"))
             .min(1, "At least one branch ID must be provided")

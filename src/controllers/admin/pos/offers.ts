@@ -1185,9 +1185,7 @@ export const getFoods = async (req: Request, res: Response) => {
             name: getLocalizedName(
                 { name: o.optionName, nameAr: o.optionNameAr, nameFr: o.optionNameFr },
                 lang
-            ),
-            nameAr: o.optionNameAr,
-            nameFr: o.optionNameFr,
+            ), 
             additionalPrice: o.additionalPrice,
             isDefault: o.isDefault,
             status: o.status,
@@ -1195,9 +1193,7 @@ export const getFoods = async (req: Request, res: Response) => {
 
         variationsByFoodId.get(v.foodId)!.push({
             id: v.id,
-            name: getLocalizedName(v, lang),
-            nameAr: v.nameAr,
-            nameFr: v.nameFr,
+            name: getLocalizedName(v, lang), 
             selectionType: v.selectionType,
             isRequired: v.isRequired,
             min: v.min,
@@ -1208,9 +1204,7 @@ export const getFoods = async (req: Request, res: Response) => {
 
     const formatted = foodList.map((f) => ({
         id: f.id,
-        name: getLocalizedName(f, lang),
-        nameAr: f.nameAr,
-        nameFr: f.nameFr,
+        name: getLocalizedName(f, lang), 
         price: f.price,
         image: f.image,
         variations: variationsByFoodId.get(f.id) || [],

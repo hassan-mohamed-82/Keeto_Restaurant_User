@@ -1,9 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.food = void 0;
+exports.foodRelations = exports.food = void 0;
 const mysql_core_1 = require("drizzle-orm/mysql-core");
 const drizzle_orm_1 = require("drizzle-orm");
 const schema_1 = require("../../schema");
+const noteGroup_1 = require("./noteGroup");
 exports.food = (0, mysql_core_1.mysqlTable)("food", {
     id: (0, mysql_core_1.char)("id", { length: 36 }).primaryKey().default((0, drizzle_orm_1.sql) `(UUID())`),
     name: (0, mysql_core_1.varchar)("name", { length: 255 }).notNull(),
@@ -26,6 +27,8 @@ exports.food = (0, mysql_core_1.mysqlTable)("food", {
     allergen_ingredients: (0, mysql_core_1.text)("allergen_ingredients"),
     is_Halal: (0, mysql_core_1.boolean)("is_Halal").default(false),
     addonsId: (0, mysql_core_1.json)("addons_ids").$type().default([]),
+    group_note_id: (0, mysql_core_1.char)("group_note_id", { length: 36 })
+        .references(() => noteGroup_1.noteGroups.id, { onDelete: "set null" }),
     startTime: (0, mysql_core_1.varchar)("start_time", { length: 255 }).notNull(),
     endTime: (0, mysql_core_1.varchar)("end_time", { length: 255 }).notNull(),
     search_tags: (0, mysql_core_1.varchar)("search_tags", { length: 255 }),
@@ -44,3 +47,13 @@ exports.food = (0, mysql_core_1.mysqlTable)("food", {
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow().onUpdateNow(),
 });
+exports.foodRelations = (0, drizzle_orm_1.relations)(exports.food, ({ one }) => ({
+    restaurant: one(schema_1.restaurants, {
+        fields: [exports.food.restaurantid],
+        references: [schema_1.restaurants.id],
+    }),
+    noteGroup: one(noteGroup_1.noteGroups, {
+        fields: [exports.food.group_note_id],
+        references: [noteGroup_1.noteGroups.id],
+    }),
+}));
