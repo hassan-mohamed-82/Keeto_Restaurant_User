@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateOfferSchema = exports.createOfferSchema = exports.offerFoodItemSchema = exports.offerVariationSchema = exports.parseStringOrArray = exports.SUPPORTED_LANGUAGES = void 0;
+exports.getOfferFoodsSchema = exports.updateOfferSchema = exports.createOfferSchema = exports.offerFoodItemSchema = exports.offerVariationSchema = exports.parseStringOrArray = exports.SUPPORTED_LANGUAGES = void 0;
 exports.safeParseJson = safeParseJson;
 const zod_1 = require("zod");
 exports.SUPPORTED_LANGUAGES = ["en", "ar", "fr"];
@@ -320,3 +320,14 @@ exports.updateOfferSchema = zod_1.z.preprocess(normalizeOfferInput, zod_1.z.obje
     branch_ids: zod_1.z.array(zod_1.z.string().min(1)).optional(),
     status: zod_1.z.enum(["active", "inactive"]).optional(),
 }));
+exports.getOfferFoodsSchema = zod_1.z.object({
+    page: zod_1.z.preprocess((v) => (v !== undefined && v !== null && v !== "" ? Number(v) : 1), zod_1.z.number().int().min(1).default(1)).optional(),
+    limit: zod_1.z.preprocess((v) => (v !== undefined && v !== null && v !== "" ? Number(v) : 10), zod_1.z.number().int().min(1).max(100).default(10)).optional(),
+    all: zod_1.z.preprocess((v) => (v === "true" || v === true), zod_1.z.boolean().default(false)).optional(),
+    search: zod_1.z.string().optional(),
+    name: zod_1.z.string().optional(),
+    nameAr: zod_1.z.string().optional(),
+    nameFr: zod_1.z.string().optional(),
+    subcategory_id: zod_1.z.string().optional(),
+    status: zod_1.z.enum(["active", "inactive", "all"]).optional(),
+});

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { catchAsync } from "../../../utils/catchAsync";
 import { validate } from "../../../middlewares/validation";
-import { createOfferSchema, updateOfferSchema } from "../../../validation/admin/offers";
+import { createOfferSchema, updateOfferSchema, getOfferFoodsSchema } from "../../../validation/admin/offers";
 import {
     createOffer,
     getAllOffers,
@@ -24,8 +24,8 @@ router.post("/list", catchAsync(getAllOffers));
 // Options for dropdown selection
 router.get("/branches", catchAsync(getBranches));
 router.post("/branches", catchAsync(getBranches));
-router.get("/foods", catchAsync(getFoods));
-router.post("/foods", catchAsync(getFoods));
+router.get("/foods", validate(getOfferFoodsSchema, "query"), catchAsync(getFoods));
+router.post("/foods", validate(getOfferFoodsSchema, "body"), catchAsync(getFoods));
 
 // Specific offer branches & foods
 router.get("/:id/branches", catchAsync(getOfferBranches));

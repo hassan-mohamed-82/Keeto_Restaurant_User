@@ -12,8 +12,8 @@ router.post("/list", (0, catchAsync_1.catchAsync)(offers_2.getAllOffers));
 // Options for dropdown selection
 router.get("/branches", (0, catchAsync_1.catchAsync)(offers_2.getBranches));
 router.post("/branches", (0, catchAsync_1.catchAsync)(offers_2.getBranches));
-router.get("/foods", (0, catchAsync_1.catchAsync)(offers_2.getFoods));
-router.post("/foods", (0, catchAsync_1.catchAsync)(offers_2.getFoods));
+router.get("/foods", (0, validation_1.validate)(offers_1.getOfferFoodsSchema, "query"), (0, catchAsync_1.catchAsync)(offers_2.getFoods));
+router.post("/foods", (0, validation_1.validate)(offers_1.getOfferFoodsSchema, "body"), (0, catchAsync_1.catchAsync)(offers_2.getFoods));
 // Specific offer branches & foods
 router.get("/:id/branches", (0, catchAsync_1.catchAsync)(offers_2.getOfferBranches));
 router.post("/:id/branches", (0, catchAsync_1.catchAsync)(offers_2.getOfferBranches));

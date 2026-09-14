@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { db } from "../../../models/connection";
 import { offers, offerFoods, branches, food, foodVariations, variationOptions } from "../../../models/schema";
-import { eq, and, desc, inArray, count, or, like } from "drizzle-orm";
+import { eq, and, desc, inArray, count, or, like, isNull } from "drizzle-orm";
 import { SuccessResponse } from "../../../utils/response";
 import { BadRequest, NotFound } from "../../../Errors";
 import { v4 as uuidv4 } from "uuid";
@@ -1074,24 +1074,87 @@ export const getFoods = async (req: Request, res: Response) => {
     }
 
     const lang = extractLang(req);
-    const { subcategory_id } = { ...req.query, ...req.body };
+    const params = { ...req.query, ...req.body };
+    const { subcategory_id, search, name, nameAr, nameFr, status, all } = params;
 
-    const conditions = [eq(food.restaurantid, restaurantId)];
+    const page = Math.max(1, parseInt(params.page as string) || 1);
+    const limit = Math.max(1, Math.min(100, parseInt(params.limit as string) || 10));
+    const offset = (page - 1) * limit;
+
+    const conditions: any[] = [
+        eq(food.restaurantid, restaurantId),
+        isNull(food.deletedAt),
+    ];
+
     if (subcategory_id && typeof subcategory_id === "string") {
         conditions.push(eq(food.subcategoryid, subcategory_id));
     }
 
-    const foodList = await db
-        .select({
-            id: food.id,
-            name: food.name,
-            nameAr: food.nameAr,
-            nameFr: food.nameFr,
-            price: food.price,
-            image: food.image,
-        })
-        .from(food)
-        .where(and(...conditions));
+    if (status && (status === "active" || status === "inactive")) {
+        conditions.push(eq(food.status, status));
+    }
+
+    // General search across name, nameAr, nameFr
+    if (search && typeof search === "string" && search.trim() !== "") {
+        const term = `%${search.trim()}%`;
+        conditions.push(
+            or(
+                like(food.name, term),
+                like(food.nameAr, term),
+                like(food.nameFr, term)
+            ) as any
+        );
+    }
+
+    // Specific field searches
+    if (name && typeof name === "string" && name.trim() !== "") {
+        conditions.push(like(food.name, `%${name.trim()}%`));
+    }
+    if (nameAr && typeof nameAr === "string" && nameAr.trim() !== "") {
+        conditions.push(like(food.nameAr, `%${nameAr.trim()}%`));
+    }
+    if (nameFr && typeof nameFr === "string" && nameFr.trim() !== "") {
+        conditions.push(like(food.nameFr, `%${nameFr.trim()}%`));
+    }
+
+    const isAll = all === "true" || all === true;
+
+    const [totalCountResult, foodList] = await Promise.all([
+        db
+            .select({ count: count() })
+            .from(food)
+            .where(and(...conditions)),
+        isAll
+            ? db
+                  .select({
+                      id: food.id,
+                      name: food.name,
+                      nameAr: food.nameAr,
+                      nameFr: food.nameFr,
+                      price: food.price,
+                      image: food.image,
+                  })
+                  .from(food)
+                  .where(and(...conditions))
+                  .orderBy(desc(food.createdAt))
+            : db
+                  .select({
+                      id: food.id,
+                      name: food.name,
+                      nameAr: food.nameAr,
+                      nameFr: food.nameFr,
+                      price: food.price,
+                      image: food.image,
+                  })
+                  .from(food)
+                  .where(and(...conditions))
+                  .orderBy(desc(food.createdAt))
+                  .limit(limit)
+                  .offset(offset),
+    ]);
+
+    const totalItems = Number(totalCountResult[0]?.count || 0);
+    const totalPages = isAll ? 1 : Math.ceil(totalItems / limit);
 
     const foodIds = foodList.map((f) => f.id);
     const variationsList = foodIds.length > 0
@@ -1156,5 +1219,11 @@ export const getFoods = async (req: Request, res: Response) => {
     return SuccessResponse(res, {
         message: "Foods fetched successfully",
         data: formatted,
+        pagination: {
+            page: isAll ? 1 : page,
+            limit: isAll ? totalItems : limit,
+            totalItems,
+            totalPages,
+        },
     });
 };

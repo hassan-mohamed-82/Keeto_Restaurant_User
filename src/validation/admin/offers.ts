@@ -351,3 +351,17 @@ export type CreateOfferInput = z.infer<typeof createOfferSchema>;
 export type UpdateOfferInput = z.infer<typeof updateOfferSchema>;
 export type OfferFoodItemInput = z.infer<typeof offerFoodItemSchema>;
 export type OfferVariationInput = z.infer<typeof offerVariationSchema>;
+
+export const getOfferFoodsSchema = z.object({
+    page: z.preprocess((v) => (v !== undefined && v !== null && v !== "" ? Number(v) : 1), z.number().int().min(1).default(1)).optional(),
+    limit: z.preprocess((v) => (v !== undefined && v !== null && v !== "" ? Number(v) : 10), z.number().int().min(1).max(100).default(10)).optional(),
+    all: z.preprocess((v) => (v === "true" || v === true), z.boolean().default(false)).optional(),
+    search: z.string().optional(),
+    name: z.string().optional(),
+    nameAr: z.string().optional(),
+    nameFr: z.string().optional(),
+    subcategory_id: z.string().optional(),
+    status: z.enum(["active", "inactive", "all"]).optional(),
+});
+
+export type GetOfferFoodsInput = z.infer<typeof getOfferFoodsSchema>;

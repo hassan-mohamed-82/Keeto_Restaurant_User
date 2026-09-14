@@ -869,22 +869,72 @@ const getFoods = async (req, res) => {
         throw new Errors_1.BadRequest("Restaurant context is missing or unauthorized");
     }
     const lang = (0, localization_helper_1.extractLang)(req);
-    const { subcategory_id } = { ...req.query, ...req.body };
-    const conditions = [(0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId)];
+    const params = { ...req.query, ...req.body };
+    const { subcategory_id, search, name, nameAr, nameFr, status, all } = params;
+    const page = Math.max(1, parseInt(params.page) || 1);
+    const limit = Math.max(1, Math.min(100, parseInt(params.limit) || 10));
+    const offset = (page - 1) * limit;
+    const conditions = [
+        (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId),
+        (0, drizzle_orm_1.isNull)(schema_1.food.deletedAt),
+    ];
     if (subcategory_id && typeof subcategory_id === "string") {
         conditions.push((0, drizzle_orm_1.eq)(schema_1.food.subcategoryid, subcategory_id));
     }
-    const foodList = await connection_1.db
-        .select({
-        id: schema_1.food.id,
-        name: schema_1.food.name,
-        nameAr: schema_1.food.nameAr,
-        nameFr: schema_1.food.nameFr,
-        price: schema_1.food.price,
-        image: schema_1.food.image,
-    })
-        .from(schema_1.food)
-        .where((0, drizzle_orm_1.and)(...conditions));
+    if (status && (status === "active" || status === "inactive")) {
+        conditions.push((0, drizzle_orm_1.eq)(schema_1.food.status, status));
+    }
+    // General search across name, nameAr, nameFr
+    if (search && typeof search === "string" && search.trim() !== "") {
+        const term = `%${search.trim()}%`;
+        conditions.push((0, drizzle_orm_1.or)((0, drizzle_orm_1.like)(schema_1.food.name, term), (0, drizzle_orm_1.like)(schema_1.food.nameAr, term), (0, drizzle_orm_1.like)(schema_1.food.nameFr, term)));
+    }
+    // Specific field searches
+    if (name && typeof name === "string" && name.trim() !== "") {
+        conditions.push((0, drizzle_orm_1.like)(schema_1.food.name, `%${name.trim()}%`));
+    }
+    if (nameAr && typeof nameAr === "string" && nameAr.trim() !== "") {
+        conditions.push((0, drizzle_orm_1.like)(schema_1.food.nameAr, `%${nameAr.trim()}%`));
+    }
+    if (nameFr && typeof nameFr === "string" && nameFr.trim() !== "") {
+        conditions.push((0, drizzle_orm_1.like)(schema_1.food.nameFr, `%${nameFr.trim()}%`));
+    }
+    const isAll = all === "true" || all === true;
+    const [totalCountResult, foodList] = await Promise.all([
+        connection_1.db
+            .select({ count: (0, drizzle_orm_1.count)() })
+            .from(schema_1.food)
+            .where((0, drizzle_orm_1.and)(...conditions)),
+        isAll
+            ? connection_1.db
+                .select({
+                id: schema_1.food.id,
+                name: schema_1.food.name,
+                nameAr: schema_1.food.nameAr,
+                nameFr: schema_1.food.nameFr,
+                price: schema_1.food.price,
+                image: schema_1.food.image,
+            })
+                .from(schema_1.food)
+                .where((0, drizzle_orm_1.and)(...conditions))
+                .orderBy((0, drizzle_orm_1.desc)(schema_1.food.createdAt))
+            : connection_1.db
+                .select({
+                id: schema_1.food.id,
+                name: schema_1.food.name,
+                nameAr: schema_1.food.nameAr,
+                nameFr: schema_1.food.nameFr,
+                price: schema_1.food.price,
+                image: schema_1.food.image,
+            })
+                .from(schema_1.food)
+                .where((0, drizzle_orm_1.and)(...conditions))
+                .orderBy((0, drizzle_orm_1.desc)(schema_1.food.createdAt))
+                .limit(limit)
+                .offset(offset),
+    ]);
+    const totalItems = Number(totalCountResult[0]?.count || 0);
+    const totalPages = isAll ? 1 : Math.ceil(totalItems / limit);
     const foodIds = foodList.map((f) => f.id);
     const variationsList = foodIds.length > 0
         ? await connection_1.db.select().from(schema_1.foodVariations).where((0, drizzle_orm_1.inArray)(schema_1.foodVariations.foodId, foodIds))
@@ -939,6 +989,12 @@ const getFoods = async (req, res) => {
     return (0, response_1.SuccessResponse)(res, {
         message: "Foods fetched successfully",
         data: formatted,
+        pagination: {
+            page: isAll ? 1 : page,
+            limit: isAll ? totalItems : limit,
+            totalItems,
+            totalPages,
+        },
     });
 };
 exports.getFoods = getFoods;
