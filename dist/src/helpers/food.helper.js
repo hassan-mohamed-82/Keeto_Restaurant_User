@@ -106,7 +106,7 @@ exports.getUnavailableBranchesForFoods = getUnavailableBranchesForFoods;
  * 1. وجود الوجبة وحالتها العامة (نشطة / موقوفة / نفاد مخزون عام).
  * 2. حالة الوجبة داخل الفرع الممرر (active / inactive / نفاد المخزون المحدود).
  * 3. المكونات الأساسية للوجبة (isEssential) ومخزونها العام، وأقفال المكونات داخل الفرع (branchIngredientLocks).
- * 4. خيارات الوجبة الإلزامية (Required Variations) وتوافرها بالفرع عبر branchVariantPricing.
+ * 4. خيارات الوجبة الإلزامية (Required Variations) وتوافرها بالفرع عبر variantPricingOverrides.
  */
 const checkFoodAvailabilityInBranch = async ({ foodId, restaurantId, branchId, }) => {
     // ----------------------------------------------------
@@ -300,11 +300,11 @@ const checkFoodAvailabilityInBranch = async ({ foodId, restaurantId, branchId, }
                     const optIds = globallyActiveOptions.map((o) => o.id);
                     const branchVariantOverrides = await connection_1.db
                         .select({
-                        variantId: schema_1.branchVariantPricing.variantId,
-                        status: schema_1.branchVariantPricing.status,
+                        variantId: schema_1.variantPricingOverrides.variantId,
+                        status: schema_1.variantPricingOverrides.status,
                     })
-                        .from(schema_1.branchVariantPricing)
-                        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branchVariantPricing.branchId, branchId), (0, drizzle_orm_1.inArray)(schema_1.branchVariantPricing.variantId, optIds)));
+                        .from(schema_1.variantPricingOverrides)
+                        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.variantPricingOverrides.branchId, branchId), (0, drizzle_orm_1.inArray)(schema_1.variantPricingOverrides.variantId, optIds)));
                     const inactiveVariantIds = new Set(branchVariantOverrides
                         .filter((o) => o.status === "inactive")
                         .map((o) => o.variantId));

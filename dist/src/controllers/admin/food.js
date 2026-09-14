@@ -12,6 +12,7 @@ const BadRequest_1 = require("../../Errors/BadRequest");
 const uuid_1 = require("uuid");
 const handleImages_1 = require("../../utils/handleImages");
 const foodConditions_1 = require("../../helpers/foodConditions");
+const pricing_overrides_1 = require("../../helpers/pricing.overrides");
 // =============================================
 // CREATE Food
 // =============================================
@@ -145,9 +146,16 @@ const createFood = async (req, res) => {
                         id: (0, uuid_1.v4)(),
                         branchId: b.branchId,
                         foodId,
-                        price: b.price !== undefined && b.price !== null ? String(b.price) : "0.00",
                         status: b.status === "inactive" ? "inactive" : "active",
                     });
+                    if (b.price !== undefined && b.price !== null && b.price !== "") {
+                        await (0, pricing_overrides_1.upsertFoodPricingOverride)(tx, {
+                            foodId,
+                            branchId: b.branchId,
+                            serviceModule: null,
+                            price: String(b.price),
+                        });
+                    }
                 }
             }
         });
@@ -312,12 +320,13 @@ const getFoodById = async (req, res) => {
     // 1. جلب أسعار الفروع الاستثنائية للوجبة (Branch Overrides)
     const branchPrices = await connection_1.db
         .select({
-        branchId: schema_1.branchMenuItems.branchId,
-        price: schema_1.branchMenuItems.price,
-        status: schema_1.branchMenuItems.status
+        branchId: schema_1.foodPricingOverrides.branchId,
+        price: schema_1.foodPricingOverrides.price,
+        status: schema_1.foodPricingOverrides.status,
+        serviceModule: schema_1.foodPricingOverrides.serviceModule,
     })
-        .from(schema_1.branchMenuItems)
-        .where((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.foodId, id));
+        .from(schema_1.foodPricingOverrides)
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.foodPricingOverrides.foodId, id), (0, drizzle_orm_1.isNull)(schema_1.foodPricingOverrides.serviceModule)));
     // 2. جلب الـ Variations والـ Options
     const vars = await connection_1.db.select().from(schema_1.foodVariations).where((0, drizzle_orm_1.eq)(schema_1.foodVariations.foodId, id));
     const varIds = vars.map(v => v.id);
@@ -577,7 +586,7 @@ const updateFood = async (req, res) => {
                 .limit(1);
             if (existing) {
                 await connection_1.db.update(schema_1.branchMenuItems)
-                    .set({ price: priceVal, status: statusVal, updatedAt: new Date() })
+                    .set({ status: statusVal, updatedAt: new Date() })
                     .where((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.id, existing.id));
             }
             else {
@@ -585,6 +594,14 @@ const updateFood = async (req, res) => {
                     id: (0, uuid_1.v4)(),
                     branchId: b.branchId,
                     foodId: id,
+                    status: statusVal,
+                });
+            }
+            if (b.price !== undefined && b.price !== null && b.price !== "") {
+                await (0, pricing_overrides_1.upsertFoodPricingOverride)(connection_1.db, {
+                    foodId: id,
+                    branchId: b.branchId,
+                    serviceModule: null,
                     price: priceVal,
                     status: statusVal,
                 });
@@ -602,21 +619,13 @@ const updateFood = async (req, res) => {
             const priceVal = String(price);
             const targetBranchId = chBranchId || null;
             const statusVal = status === "inactive" ? "inactive" : "active";
-            const whereClause = targetBranchId
-                ? (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.productChannelPricing.foodId, id), (0, drizzle_orm_1.eq)(schema_1.productChannelPricing.branchId, targetBranchId), (0, drizzle_orm_1.eq)(schema_1.productChannelPricing.serviceModule, serviceModule))
-                : (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.productChannelPricing.foodId, id), (0, drizzle_orm_1.isNull)(schema_1.productChannelPricing.branchId), (0, drizzle_orm_1.eq)(schema_1.productChannelPricing.serviceModule, serviceModule));
-            const [existing] = await connection_1.db.select({ id: schema_1.productChannelPricing.id }).from(schema_1.productChannelPricing).where(whereClause).limit(1);
-            if (existing) {
-                await connection_1.db.update(schema_1.productChannelPricing)
-                    .set({ price: priceVal, status: statusVal, updatedAt: new Date() })
-                    .where((0, drizzle_orm_1.eq)(schema_1.productChannelPricing.id, existing.id));
-            }
-            else {
-                await connection_1.db.insert(schema_1.productChannelPricing).values({
-                    id: (0, uuid_1.v4)(), foodId: id, branchId: targetBranchId,
-                    serviceModule, price: priceVal, status: statusVal,
-                });
-            }
+            await (0, pricing_overrides_1.upsertFoodPricingOverride)(connection_1.db, {
+                foodId: id,
+                branchId: targetBranchId,
+                serviceModule,
+                price: priceVal,
+                status: statusVal,
+            });
         }
     }
     // ===========================
@@ -630,21 +639,13 @@ const updateFood = async (req, res) => {
             const priceVal = String(price);
             const targetBranchId = vcBranchId || null;
             const statusVal = status === "inactive" ? "inactive" : "active";
-            const whereClause = targetBranchId
-                ? (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.variantChannelPricing.variantId, variantId), (0, drizzle_orm_1.eq)(schema_1.variantChannelPricing.branchId, targetBranchId), (0, drizzle_orm_1.eq)(schema_1.variantChannelPricing.serviceModule, serviceModule))
-                : (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.variantChannelPricing.variantId, variantId), (0, drizzle_orm_1.isNull)(schema_1.variantChannelPricing.branchId), (0, drizzle_orm_1.eq)(schema_1.variantChannelPricing.serviceModule, serviceModule));
-            const [existing] = await connection_1.db.select({ id: schema_1.variantChannelPricing.id }).from(schema_1.variantChannelPricing).where(whereClause).limit(1);
-            if (existing) {
-                await connection_1.db.update(schema_1.variantChannelPricing)
-                    .set({ price: priceVal, status: statusVal, updatedAt: new Date() })
-                    .where((0, drizzle_orm_1.eq)(schema_1.variantChannelPricing.id, existing.id));
-            }
-            else {
-                await connection_1.db.insert(schema_1.variantChannelPricing).values({
-                    id: (0, uuid_1.v4)(), variantId, branchId: targetBranchId,
-                    serviceModule, price: priceVal, status: statusVal,
-                });
-            }
+            await (0, pricing_overrides_1.upsertVariantPricingOverride)(connection_1.db, {
+                variantId,
+                branchId: targetBranchId,
+                serviceModule,
+                price: priceVal,
+                status: statusVal,
+            });
         }
     }
     return (0, response_1.SuccessResponse)(res, {
@@ -669,26 +670,14 @@ const deleteFood = async (req, res) => {
     if (!existingFood) {
         throw new NotFound_1.NotFound("Food not found or you don't have permission to delete it");
     }
-    const [orderReferences, cartReferences, favoriteReferences, ingredientReferences, branchReferences, branchLockReferences, channelPricingReferences, pointsProductReferences, redeemRequestReferences,] = await Promise.all([
+    const [orderReferences, cartReferences, redeemRequestReferences,] = await Promise.all([
         connection_1.db.select({ id: schema_1.orderItems.id }).from(schema_1.orderItems).where((0, drizzle_orm_1.eq)(schema_1.orderItems.foodId, id)).limit(1),
         connection_1.db.select({ id: schema_1.cartItems.id }).from(schema_1.cartItems).where((0, drizzle_orm_1.eq)(schema_1.cartItems.foodId, id)).limit(1),
-        connection_1.db.select({ id: schema_1.favorites.id }).from(schema_1.favorites).where((0, drizzle_orm_1.eq)(schema_1.favorites.foodId, id)).limit(1),
-        connection_1.db.select({ id: schema_1.foodIngredients.id }).from(schema_1.foodIngredients).where((0, drizzle_orm_1.eq)(schema_1.foodIngredients.foodId, id)).limit(1),
-        connection_1.db.select({ id: schema_1.branchMenuItems.id }).from(schema_1.branchMenuItems).where((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.foodId, id)).limit(1),
-        connection_1.db.select({ id: schema_1.branchIngredientLocks.id }).from(schema_1.branchIngredientLocks).where((0, drizzle_orm_1.eq)(schema_1.branchIngredientLocks.foodId, id)).limit(1),
-        connection_1.db.select({ id: schema_1.productChannelPricing.id }).from(schema_1.productChannelPricing).where((0, drizzle_orm_1.eq)(schema_1.productChannelPricing.foodId, id)).limit(1),
-        connection_1.db.select({ id: schema_1.pointsProducts.id }).from(schema_1.pointsProducts).where((0, drizzle_orm_1.eq)(schema_1.pointsProducts.foodId, id)).limit(1),
         connection_1.db.select({ id: schema_1.redeemRequests.id }).from(schema_1.redeemRequests).where((0, drizzle_orm_1.eq)(schema_1.redeemRequests.foodId, id)).limit(1),
     ]);
     const hasReferences = [
         orderReferences,
         cartReferences,
-        favoriteReferences,
-        ingredientReferences,
-        branchReferences,
-        branchLockReferences,
-        channelPricingReferences,
-        pointsProductReferences,
         redeemRequestReferences,
     ].some((references) => references.length > 0);
     if (hasReferences) {
@@ -711,15 +700,36 @@ const deleteFood = async (req, res) => {
         });
     }
     await connection_1.db.transaction(async (tx) => {
+        // 1. Delete variant pricing overrides, variation options, and variations
         const variations = await tx
             .select({ id: schema_1.foodVariations.id })
             .from(schema_1.foodVariations)
             .where((0, drizzle_orm_1.eq)(schema_1.foodVariations.foodId, id));
         const variationIds = variations.map((variation) => variation.id);
         if (variationIds.length > 0) {
-            await tx.delete(schema_1.variationOptions).where((0, drizzle_orm_1.inArray)(schema_1.variationOptions.variationId, variationIds));
-            await tx.delete(schema_1.foodVariations).where((0, drizzle_orm_1.eq)(schema_1.foodVariations.foodId, id));
+            const options = await tx
+                .select({ id: schema_1.variationOptions.id })
+                .from(schema_1.variationOptions)
+                .where((0, drizzle_orm_1.inArray)(schema_1.variationOptions.variationId, variationIds));
+            const optionIds = options.map((opt) => opt.id);
+            if (optionIds.length > 0) {
+                // Delete variant pricing overrides first
+                await tx.delete(schema_1.variantPricingOverrides).where((0, drizzle_orm_1.inArray)(schema_1.variantPricingOverrides.variantId, optionIds));
+                // Delete variation options
+                await tx.delete(schema_1.variationOptions).where((0, drizzle_orm_1.inArray)(schema_1.variationOptions.id, optionIds));
+            }
+            // Delete food variations
+            await tx.delete(schema_1.foodVariations).where((0, drizzle_orm_1.inArray)(schema_1.foodVariations.id, variationIds));
         }
+        // 2. Delete food pricing overrides
+        await tx.delete(schema_1.foodPricingOverrides).where((0, drizzle_orm_1.eq)(schema_1.foodPricingOverrides.foodId, id));
+        // 3. Delete other child relations
+        await tx.delete(schema_1.branchIngredientLocks).where((0, drizzle_orm_1.eq)(schema_1.branchIngredientLocks.foodId, id));
+        await tx.delete(schema_1.foodIngredients).where((0, drizzle_orm_1.eq)(schema_1.foodIngredients.foodId, id));
+        await tx.delete(schema_1.branchMenuItems).where((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.foodId, id));
+        await tx.delete(schema_1.favorites).where((0, drizzle_orm_1.eq)(schema_1.favorites.foodId, id));
+        await tx.delete(schema_1.pointsProducts).where((0, drizzle_orm_1.eq)(schema_1.pointsProducts.foodId, id));
+        // 4. Delete the food record
         await tx.delete(schema_1.food).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.id, id), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId)));
     });
     return (0, response_1.SuccessResponse)(res, {

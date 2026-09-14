@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getFoods = exports.getBranches = exports.getOfferFoods = exports.getOfferBranches = exports.toggleOfferStatus = exports.deleteOffer = exports.updateOffer = exports.getOfferById = exports.getAllOffers = exports.createOffer = void 0;
+exports.getFoods = exports.getBranches = exports.getOfferFoods = exports.getOfferBranches = exports.toggleOfferStatus = exports.deleteOffer = exports.updateOffer = exports.getOfferById = exports.getAllOffers = exports.createOffer = exports.deepParseJSON = void 0;
 exports.parseJsonArray = parseJsonArray;
 const connection_1 = require("../../../models/connection");
 const schema_1 = require("../../../models/schema");
@@ -52,16 +52,212 @@ function parseJsonArray(val) {
     return [];
 }
 /**
- * Helper to enrich offers with branch and food details and parse IDs into native arrays
+ * Deeply parses any stringified JSON into native JavaScript objects/arrays
+ */
+const deepParseJSON = (data) => {
+    if (!data)
+        return data;
+    if (typeof data === "string") {
+        const trimmed = data.trim();
+        if ((trimmed.startsWith("[") && trimmed.endsWith("]")) || (trimmed.startsWith("{") && trimmed.endsWith("}"))) {
+            try {
+                return (0, exports.deepParseJSON)(JSON.parse(trimmed));
+            }
+            catch {
+                return data;
+            }
+        }
+        return data;
+    }
+    return data;
+};
+exports.deepParseJSON = deepParseJSON;
+/**
+ * Helper to fetch and hierarchically enrich offer foods with variations and options
+ */
+async function fetchAndEnrichOfferFoods(offerIds, lang = "en") {
+    if (offerIds.length === 0)
+        return new Map();
+    const offerFoodRows = await connection_1.db
+        .select()
+        .from(schema_1.offerFoods)
+        .where((0, drizzle_orm_1.inArray)(schema_1.offerFoods.offerId, offerIds));
+    if (offerFoodRows.length === 0)
+        return new Map();
+    // Parse JSON columns cleanly (prevents string issues from MySQL)
+    const parsedRows = offerFoodRows.map((r) => {
+        const parsedVars = (0, exports.deepParseJSON)(r.variations);
+        const variations = Array.isArray(parsedVars) ? parsedVars : [];
+        const parsedOpts = (0, exports.deepParseJSON)(r.optionIds);
+        const optionIds = Array.isArray(parsedOpts) ? parsedOpts : [];
+        return {
+            ...r,
+            variations,
+            optionIds,
+        };
+    });
+    const foodIds = Array.from(new Set(parsedRows.map((r) => r.foodId).filter(Boolean)));
+    // Collect all option IDs explicitly passed
+    const allOptionIds = Array.from(new Set(parsedRows.flatMap((r) => {
+        const flatOpts = Array.isArray(r.optionIds) ? r.optionIds : [];
+        const varOpts = Array.isArray(r.variations)
+            ? r.variations.flatMap((v) => (Array.isArray(v.options) ? v.options : []))
+            : [];
+        return [...flatOpts, ...varOpts].map(String).filter(Boolean);
+    })));
+    // Concurrently fetch foods, explicitly passed options, AND default variations for foods with empty variations
+    const foodIdsWithEmptyVars = Array.from(new Set(parsedRows.filter((r) => r.variations.length === 0).map((r) => r.foodId)));
+    const [foodList, optionList, defaultVarsList] = await Promise.all([
+        foodIds.length > 0
+            ? connection_1.db
+                .select({
+                id: schema_1.food.id,
+                name: schema_1.food.name,
+                nameAr: schema_1.food.nameAr,
+                nameFr: schema_1.food.nameFr,
+                price: schema_1.food.price,
+                image: schema_1.food.image,
+            })
+                .from(schema_1.food)
+                .where((0, drizzle_orm_1.inArray)(schema_1.food.id, foodIds))
+            : Promise.resolve([]),
+        allOptionIds.length > 0
+            ? connection_1.db
+                .select()
+                .from(schema_1.variationOptions)
+                .where((0, drizzle_orm_1.inArray)(schema_1.variationOptions.id, allOptionIds))
+            : Promise.resolve([]),
+        foodIdsWithEmptyVars.length > 0
+            ? connection_1.db
+                .select()
+                .from(schema_1.foodVariations)
+                .where((0, drizzle_orm_1.inArray)(schema_1.foodVariations.foodId, foodIdsWithEmptyVars))
+            : Promise.resolve([]),
+    ]);
+    const foodMap = new Map();
+    for (const f of foodList) {
+        foodMap.set(f.id, f);
+    }
+    // Also fetch options for default variations
+    const defaultVarIds = defaultVarsList.map((v) => v.id);
+    const defaultOptsList = defaultVarIds.length > 0
+        ? await connection_1.db
+            .select()
+            .from(schema_1.variationOptions)
+            .where((0, drizzle_orm_1.inArray)(schema_1.variationOptions.variationId, defaultVarIds))
+        : [];
+    const defaultOptsByVarId = new Map();
+    for (const opt of defaultOptsList) {
+        if (!defaultOptsByVarId.has(opt.variationId)) {
+            defaultOptsByVarId.set(opt.variationId, []);
+        }
+        defaultOptsByVarId.get(opt.variationId).push(opt);
+    }
+    const defaultVarsByFoodId = new Map();
+    for (const v of defaultVarsList) {
+        if (!defaultVarsByFoodId.has(v.foodId)) {
+            defaultVarsByFoodId.set(v.foodId, []);
+        }
+        const opts = (defaultOptsByVarId.get(v.id) || []).map((o) => ({
+            optionId: o.id,
+            name: (0, localization_helper_1.getLocalizedName)({ name: o.optionName, nameAr: o.optionNameAr, nameFr: o.optionNameFr }, lang),
+            nameAr: o.optionNameAr,
+            nameFr: o.optionNameFr,
+            additionalPrice: o.additionalPrice,
+        }));
+        defaultVarsByFoodId.get(v.foodId).push({
+            variationId: v.id,
+            name: (0, localization_helper_1.getLocalizedName)(v, lang),
+            nameAr: v.nameAr,
+            nameFr: v.nameFr,
+            selectionType: v.selectionType,
+            isRequired: v.isRequired,
+            options: opts,
+        });
+    }
+    // Variations for explicitly passed options
+    const varIdsFromOpts = Array.from(new Set(optionList.map((o) => o.variationId).filter(Boolean)));
+    const varList = varIdsFromOpts.length > 0
+        ? await connection_1.db
+            .select()
+            .from(schema_1.foodVariations)
+            .where((0, drizzle_orm_1.inArray)(schema_1.foodVariations.id, varIdsFromOpts))
+        : [];
+    const varMap = new Map();
+    for (const v of varList) {
+        varMap.set(v.id, v);
+    }
+    const optionMap = new Map();
+    for (const o of optionList) {
+        optionMap.set(o.id, o);
+    }
+    const result = new Map();
+    for (const row of parsedRows) {
+        if (!result.has(row.offerId)) {
+            result.set(row.offerId, []);
+        }
+        const foodItem = foodMap.get(row.foodId);
+        const variations = Array.isArray(row.variations)
+            ? row.variations
+            : [];
+        let enrichedVariations = variations.map((v) => {
+            const opts = (Array.isArray(v.options) ? v.options : []).map((optId) => {
+                const optInfo = optionMap.get(String(optId));
+                return {
+                    optionId: String(optId),
+                    name: optInfo
+                        ? (0, localization_helper_1.getLocalizedName)({
+                            name: optInfo.optionName,
+                            nameAr: optInfo.optionNameAr,
+                            nameFr: optInfo.optionNameFr,
+                        }, lang)
+                        : null,
+                    nameAr: optInfo?.optionNameAr || null,
+                    nameFr: optInfo?.optionNameFr || null,
+                    additionalPrice: optInfo?.additionalPrice || "0",
+                    variationId: optInfo?.variationId || null,
+                };
+            });
+            // Automatically detect variationId from options if not provided
+            const detectedVarId = v.variationId || opts.find((o) => o.variationId)?.variationId || null;
+            const varInfo = detectedVarId ? varMap.get(detectedVarId) : null;
+            return {
+                variationId: detectedVarId,
+                name: varInfo ? (0, localization_helper_1.getLocalizedName)(varInfo, lang) : null,
+                nameAr: varInfo?.nameAr || null,
+                nameFr: varInfo?.nameFr || null,
+                selectionType: varInfo?.selectionType || null,
+                isRequired: varInfo?.isRequired ?? false,
+                options: opts,
+            };
+        });
+        // Smart fallback: if no specific variations were selected for this food, return all available variations of this food
+        if (enrichedVariations.length === 0) {
+            enrichedVariations = defaultVarsByFoodId.get(row.foodId) || [];
+        }
+        result.get(row.offerId).push({
+            id: row.id,
+            foodId: row.foodId,
+            name: foodItem ? (0, localization_helper_1.getLocalizedName)(foodItem, lang) : "",
+            nameAr: foodItem?.nameAr || null,
+            nameFr: foodItem?.nameFr || null,
+            price: foodItem?.price || "0",
+            image: foodItem?.image || null,
+            quantity: row.quantity || 1,
+            variations: enrichedVariations,
+        });
+    }
+    return result;
+}
+/**
+ * Helper to enrich offers with branch and food details
  */
 async function enrichOffersWithBranchesAndFoods(items, restaurantId, lang = "en") {
     if (items.length === 0)
         return [];
-    // Collect all unique branchIds and foodIds using parseJsonArray
+    const offerIds = items.map((i) => i.id);
     const allBranchIds = Array.from(new Set(items.flatMap((item) => parseJsonArray(item.branchIds))));
-    const allFoodIds = Array.from(new Set(items.flatMap((item) => parseJsonArray(item.foodIds))));
-    // Fetch matching branches and foods concurrently
-    const [branchList, foodList] = await Promise.all([
+    const [branchList, offerFoodsMap] = await Promise.all([
         allBranchIds.length > 0
             ? connection_1.db
                 .select({
@@ -73,29 +269,35 @@ async function enrichOffersWithBranchesAndFoods(items, restaurantId, lang = "en"
                 .from(schema_1.branches)
                 .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branches.restaurantId, restaurantId), (0, drizzle_orm_1.inArray)(schema_1.branches.id, allBranchIds)))
             : Promise.resolve([]),
-        allFoodIds.length > 0
-            ? connection_1.db
-                .select({
-                id: schema_1.food.id,
-                name: schema_1.food.name,
-                nameAr: schema_1.food.nameAr,
-                nameFr: schema_1.food.nameFr,
-            })
-                .from(schema_1.food)
-                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId), (0, drizzle_orm_1.inArray)(schema_1.food.id, allFoodIds)))
-            : Promise.resolve([]),
+        fetchAndEnrichOfferFoods(offerIds, lang),
     ]);
     const branchMap = new Map();
     for (const b of branchList) {
         branchMap.set(b.id, b);
     }
-    const foodMap = new Map();
-    for (const f of foodList) {
-        foodMap.set(f.id, f);
+    // Check if any offers had no offerFoods rows and need legacy food enrichment
+    const missingOfferFoodIds = items
+        .filter((item) => !offerFoodsMap.has(item.id) || offerFoodsMap.get(item.id).length === 0)
+        .flatMap((item) => parseJsonArray(item.foodIds));
+    const legacyFoodMap = new Map();
+    if (missingOfferFoodIds.length > 0) {
+        const legacyFoods = await connection_1.db
+            .select({
+            id: schema_1.food.id,
+            name: schema_1.food.name,
+            nameAr: schema_1.food.nameAr,
+            nameFr: schema_1.food.nameFr,
+            price: schema_1.food.price,
+            image: schema_1.food.image,
+        })
+            .from(schema_1.food)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId), (0, drizzle_orm_1.inArray)(schema_1.food.id, missingOfferFoodIds)));
+        for (const f of legacyFoods) {
+            legacyFoodMap.set(f.id, f);
+        }
     }
     return items.map((item) => {
         const itemBranchIds = parseJsonArray(item.branchIds);
-        const itemFoodIds = parseJsonArray(item.foodIds);
         const itemBranches = itemBranchIds
             .map((id) => branchMap.get(id))
             .filter(Boolean)
@@ -105,15 +307,24 @@ async function enrichOffersWithBranchesAndFoods(items, restaurantId, lang = "en"
             nameAr: b.nameAr,
             nameFr: b.nameFr,
         }));
-        const itemFoods = itemFoodIds
-            .map((id) => foodMap.get(id))
-            .filter(Boolean)
-            .map((f) => ({
-            id: f.id,
-            name: (0, localization_helper_1.getLocalizedName)(f, lang),
-            nameAr: f.nameAr,
-            nameFr: f.nameFr,
-        }));
+        let itemFoods = offerFoodsMap.get(item.id) || [];
+        if (itemFoods.length === 0 && item.foodIds) {
+            const legacyIds = parseJsonArray(item.foodIds);
+            itemFoods = legacyIds
+                .map((id) => legacyFoodMap.get(id))
+                .filter(Boolean)
+                .map((f) => ({
+                id: f.id,
+                foodId: f.id,
+                name: (0, localization_helper_1.getLocalizedName)(f, lang),
+                nameAr: f.nameAr,
+                nameFr: f.nameFr,
+                price: f.price,
+                image: f.image,
+                quantity: 1,
+                variations: [],
+            }));
+        }
         const localizedName = (0, localization_helper_1.getLocalizedName)({
             name: item.name,
             nameAr: item.nameAr,
@@ -123,7 +334,6 @@ async function enrichOffersWithBranchesAndFoods(items, restaurantId, lang = "en"
             ...item,
             name: localizedName,
             branchIds: itemBranchIds,
-            foodIds: itemFoodIds,
             branches: itemBranches,
             foods: itemFoods,
         };
@@ -138,9 +348,17 @@ const createOffer = async (req, res) => {
         throw new Errors_1.BadRequest("Restaurant context is missing or unauthorized");
     }
     const lang = (0, localization_helper_1.extractLang)(req);
-    const { name, nameAr, nameFr, image, startDate, endDate, price, foodIds, food_ids, branchIds, branch_ids, status, } = req.body;
+    const { name, nameAr, nameFr, image, startDate, endDate, price, foods, foodIds, food_ids, branchIds, branch_ids, status, } = req.body;
     const finalBranchIds = parseJsonArray(branchIds !== undefined ? branchIds : branch_ids);
-    const finalFoodIds = parseJsonArray(foodIds !== undefined ? foodIds : food_ids);
+    let finalFoods = [];
+    if (Array.isArray(foods) && foods.length > 0) {
+        finalFoods = foods;
+    }
+    else {
+        const rawIds = parseJsonArray(foodIds !== undefined ? foodIds : food_ids);
+        finalFoods = rawIds.map((fid) => ({ foodId: fid, quantity: 1, variations: [] }));
+    }
+    const distinctFoodIds = Array.from(new Set(finalFoods.map((f) => f.foodId).filter(Boolean)));
     let savedImageUrl = null;
     if (image) {
         if (typeof image === "string" && image.startsWith("http")) {
@@ -161,10 +379,25 @@ const createOffer = async (req, res) => {
         startDate: new Date(startDate),
         endDate: new Date(endDate),
         price: String(price),
-        foodIds: finalFoodIds,
+        foodIds: distinctFoodIds,
         branchIds: finalBranchIds,
         status: status || "active",
     });
+    if (finalFoods.length > 0) {
+        const rows = finalFoods.map((f) => {
+            const rawVars = Array.isArray(f.variations) ? f.variations : [];
+            const flatOptions = Array.from(new Set(rawVars.flatMap((v) => Array.isArray(v.options) ? v.options : []).map(String).filter(Boolean)));
+            return {
+                id: (0, uuid_1.v4)(),
+                offerId: id,
+                foodId: f.foodId,
+                variations: rawVars,
+                optionIds: flatOptions,
+                quantity: f.quantity || 1,
+            };
+        });
+        await connection_1.db.insert(schema_1.offerFoods).values(rows);
+    }
     const [createdOffer] = await connection_1.db
         .select()
         .from(schema_1.offers)
@@ -288,7 +521,7 @@ const updateOffer = async (req, res) => {
     if (!existingOffer) {
         throw new Errors_1.NotFound("Offer not found");
     }
-    const { name, nameAr, nameFr, image, startDate, endDate, price, foodIds, food_ids, branchIds, branch_ids, status, } = req.body;
+    const { name, nameAr, nameFr, image, startDate, endDate, price, foods, foodIds, food_ids, branchIds, branch_ids, status, } = req.body;
     const updateData = {};
     if (name !== undefined)
         updateData.name = name;
@@ -302,9 +535,40 @@ const updateOffer = async (req, res) => {
         updateData.endDate = new Date(endDate);
     if (price !== undefined)
         updateData.price = String(price);
-    const rawFoodIds = foodIds !== undefined ? foodIds : food_ids;
-    if (rawFoodIds !== undefined) {
-        updateData.foodIds = parseJsonArray(rawFoodIds);
+    const rawFoods = foods !== undefined ? foods : (foodIds !== undefined ? foodIds : food_ids);
+    if (rawFoods !== undefined) {
+        let finalFoods = [];
+        if (Array.isArray(rawFoods)) {
+            if (rawFoods.length > 0 && typeof rawFoods[0] === "string") {
+                finalFoods = rawFoods.map((fid) => ({ foodId: fid, quantity: 1, variations: [] }));
+            }
+            else {
+                finalFoods = rawFoods;
+            }
+        }
+        else {
+            const parsedArray = parseJsonArray(rawFoods);
+            finalFoods = parsedArray.map((fid) => ({ foodId: fid, quantity: 1, variations: [] }));
+        }
+        const distinctFoodIds = Array.from(new Set(finalFoods.map((f) => f.foodId).filter(Boolean)));
+        updateData.foodIds = distinctFoodIds;
+        // Delete existing offer_foods and insert updated rows
+        await connection_1.db.delete(schema_1.offerFoods).where((0, drizzle_orm_1.eq)(schema_1.offerFoods.offerId, id));
+        if (finalFoods.length > 0) {
+            const rows = finalFoods.map((f) => {
+                const rawVars = Array.isArray(f.variations) ? f.variations : [];
+                const flatOptions = Array.from(new Set(rawVars.flatMap((v) => Array.isArray(v.options) ? v.options : []).map(String).filter(Boolean)));
+                return {
+                    id: (0, uuid_1.v4)(),
+                    offerId: id,
+                    foodId: f.foodId,
+                    variations: rawVars,
+                    optionIds: flatOptions,
+                    quantity: f.quantity || 1,
+                };
+            });
+            await connection_1.db.insert(schema_1.offerFoods).values(rows);
+        }
     }
     const rawBranchIds = branchIds !== undefined ? branchIds : branch_ids;
     if (rawBranchIds !== undefined) {
@@ -446,36 +710,45 @@ const getOfferFoods = async (req, res) => {
     const lang = (0, localization_helper_1.extractLang)(req);
     const { id } = req.params;
     const [offer] = await connection_1.db
-        .select({ foodIds: schema_1.offers.foodIds })
+        .select()
         .from(schema_1.offers)
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.offers.id, id), (0, drizzle_orm_1.eq)(schema_1.offers.restaurantId, restaurantId)))
         .limit(1);
     if (!offer) {
         throw new Errors_1.NotFound("Offer not found");
     }
-    const foodIds = parseJsonArray(offer.foodIds);
-    if (foodIds.length === 0) {
-        return (0, response_1.SuccessResponse)(res, {
-            message: "Offer foods fetched successfully",
-            data: [],
-        });
+    const foodsMap = await fetchAndEnrichOfferFoods([id], lang);
+    let result = foodsMap.get(id) || [];
+    if (result.length === 0 && offer.foodIds) {
+        const legacyFoodIds = parseJsonArray(offer.foodIds);
+        if (legacyFoodIds.length > 0) {
+            const legacyFoods = await connection_1.db
+                .select({
+                id: schema_1.food.id,
+                name: schema_1.food.name,
+                nameAr: schema_1.food.nameAr,
+                nameFr: schema_1.food.nameFr,
+                price: schema_1.food.price,
+                image: schema_1.food.image,
+            })
+                .from(schema_1.food)
+                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId), (0, drizzle_orm_1.inArray)(schema_1.food.id, legacyFoodIds)));
+            result = legacyFoods.map((f) => ({
+                id: f.id,
+                foodId: f.id,
+                name: (0, localization_helper_1.getLocalizedName)(f, lang),
+                nameAr: f.nameAr,
+                nameFr: f.nameFr,
+                price: f.price,
+                image: f.image,
+                quantity: 1,
+                variations: [],
+            }));
+        }
     }
-    const offerFoods = await connection_1.db
-        .select({
-        id: schema_1.food.id,
-        name: schema_1.food.name,
-        nameAr: schema_1.food.nameAr,
-        nameFr: schema_1.food.nameFr,
-    })
-        .from(schema_1.food)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId), (0, drizzle_orm_1.inArray)(schema_1.food.id, foodIds)));
-    const formatted = offerFoods.map((f) => ({
-        id: f.id,
-        name: (0, localization_helper_1.getLocalizedName)(f, lang),
-    }));
     return (0, response_1.SuccessResponse)(res, {
         message: "Offer foods fetched successfully",
-        data: formatted,
+        data: result,
     });
 };
 exports.getOfferFoods = getOfferFoods;
@@ -527,12 +800,61 @@ const getFoods = async (req, res) => {
         name: schema_1.food.name,
         nameAr: schema_1.food.nameAr,
         nameFr: schema_1.food.nameFr,
+        price: schema_1.food.price,
+        image: schema_1.food.image,
     })
         .from(schema_1.food)
         .where((0, drizzle_orm_1.and)(...conditions));
+    const foodIds = foodList.map((f) => f.id);
+    const variationsList = foodIds.length > 0
+        ? await connection_1.db.select().from(schema_1.foodVariations).where((0, drizzle_orm_1.inArray)(schema_1.foodVariations.foodId, foodIds))
+        : [];
+    const varIds = variationsList.map((v) => v.id);
+    const optionsList = varIds.length > 0
+        ? await connection_1.db.select().from(schema_1.variationOptions).where((0, drizzle_orm_1.inArray)(schema_1.variationOptions.variationId, varIds))
+        : [];
+    const optionsByVarId = new Map();
+    for (const opt of optionsList) {
+        if (!optionsByVarId.has(opt.variationId)) {
+            optionsByVarId.set(opt.variationId, []);
+        }
+        optionsByVarId.get(opt.variationId).push(opt);
+    }
+    const variationsByFoodId = new Map();
+    for (const v of variationsList) {
+        if (!variationsByFoodId.has(v.foodId)) {
+            variationsByFoodId.set(v.foodId, []);
+        }
+        const opts = (optionsByVarId.get(v.id) || []).map((o) => ({
+            id: o.id,
+            optionName: o.optionName,
+            name: (0, localization_helper_1.getLocalizedName)({ name: o.optionName, nameAr: o.optionNameAr, nameFr: o.optionNameFr }, lang),
+            nameAr: o.optionNameAr,
+            nameFr: o.optionNameFr,
+            additionalPrice: o.additionalPrice,
+            isDefault: o.isDefault,
+            status: o.status,
+        }));
+        variationsByFoodId.get(v.foodId).push({
+            id: v.id,
+            name: (0, localization_helper_1.getLocalizedName)(v, lang),
+            nameAr: v.nameAr,
+            nameFr: v.nameFr,
+            selectionType: v.selectionType,
+            isRequired: v.isRequired,
+            min: v.min,
+            max: v.max,
+            options: opts,
+        });
+    }
     const formatted = foodList.map((f) => ({
         id: f.id,
         name: (0, localization_helper_1.getLocalizedName)(f, lang),
+        nameAr: f.nameAr,
+        nameFr: f.nameFr,
+        price: f.price,
+        image: f.image,
+        variations: variationsByFoodId.get(f.id) || [],
     }));
     return (0, response_1.SuccessResponse)(res, {
         message: "Foods fetched successfully",

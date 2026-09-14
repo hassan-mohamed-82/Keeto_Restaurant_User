@@ -44,6 +44,25 @@ export function parseJsonArray(val: any): string[] {
 }
 
 /**
+ * Deeply parses any stringified JSON into native JavaScript objects/arrays
+ */
+export const deepParseJSON = (data: any): any => {
+    if (!data) return data;
+    if (typeof data === "string") {
+        const trimmed = data.trim();
+        if ((trimmed.startsWith("[") && trimmed.endsWith("]")) || (trimmed.startsWith("{") && trimmed.endsWith("}"))) {
+            try {
+                return deepParseJSON(JSON.parse(trimmed));
+            } catch {
+                return data;
+            }
+        }
+        return data;
+    }
+    return data;
+};
+
+/**
  * Helper to fetch and hierarchically enrich offer foods with variations and options
  */
 async function fetchAndEnrichOfferFoods(offerIds: string[], lang: Language = "en") {
@@ -56,11 +75,25 @@ async function fetchAndEnrichOfferFoods(offerIds: string[], lang: Language = "en
 
     if (offerFoodRows.length === 0) return new Map<string, any[]>();
 
-    const foodIds = Array.from(new Set(offerFoodRows.map((r) => r.foodId).filter(Boolean)));
+    // Parse JSON columns cleanly (prevents string issues from MySQL)
+    const parsedRows = offerFoodRows.map((r) => {
+        const parsedVars = deepParseJSON(r.variations);
+        const variations = Array.isArray(parsedVars) ? parsedVars : [];
+        const parsedOpts = deepParseJSON(r.optionIds);
+        const optionIds = Array.isArray(parsedOpts) ? parsedOpts : [];
+        return {
+            ...r,
+            variations,
+            optionIds,
+        };
+    });
 
+    const foodIds = Array.from(new Set(parsedRows.map((r) => r.foodId).filter(Boolean)));
+
+    // Collect all option IDs explicitly passed
     const allOptionIds = Array.from(
         new Set(
-            offerFoodRows.flatMap((r) => {
+            parsedRows.flatMap((r) => {
                 const flatOpts = Array.isArray(r.optionIds) ? r.optionIds : [];
                 const varOpts = Array.isArray(r.variations)
                     ? (r.variations as Array<{ variationId?: string | null; options: string[] }>).flatMap(
@@ -72,7 +105,12 @@ async function fetchAndEnrichOfferFoods(offerIds: string[], lang: Language = "en
         )
     );
 
-    const [foodList, optionList] = await Promise.all([
+    // Concurrently fetch foods, explicitly passed options, AND default variations for foods with empty variations
+    const foodIdsWithEmptyVars = Array.from(
+        new Set(parsedRows.filter((r) => r.variations.length === 0).map((r) => r.foodId))
+    );
+
+    const [foodList, optionList, defaultVarsList] = await Promise.all([
         foodIds.length > 0
             ? db
                   .select({
@@ -92,6 +130,12 @@ async function fetchAndEnrichOfferFoods(offerIds: string[], lang: Language = "en
                   .from(variationOptions)
                   .where(inArray(variationOptions.id, allOptionIds))
             : Promise.resolve([]),
+        foodIdsWithEmptyVars.length > 0
+            ? db
+                  .select()
+                  .from(foodVariations)
+                  .where(inArray(foodVariations.foodId, foodIdsWithEmptyVars))
+            : Promise.resolve([]),
     ]);
 
     const foodMap = new Map<string, (typeof foodList)[0]>();
@@ -99,6 +143,50 @@ async function fetchAndEnrichOfferFoods(offerIds: string[], lang: Language = "en
         foodMap.set(f.id, f);
     }
 
+    // Also fetch options for default variations
+    const defaultVarIds = defaultVarsList.map((v) => v.id);
+    const defaultOptsList = defaultVarIds.length > 0
+        ? await db
+              .select()
+              .from(variationOptions)
+              .where(inArray(variationOptions.variationId, defaultVarIds))
+        : [];
+
+    const defaultOptsByVarId = new Map<string, typeof defaultOptsList>();
+    for (const opt of defaultOptsList) {
+        if (!defaultOptsByVarId.has(opt.variationId)) {
+            defaultOptsByVarId.set(opt.variationId, []);
+        }
+        defaultOptsByVarId.get(opt.variationId)!.push(opt);
+    }
+
+    const defaultVarsByFoodId = new Map<string, any[]>();
+    for (const v of defaultVarsList) {
+        if (!defaultVarsByFoodId.has(v.foodId)) {
+            defaultVarsByFoodId.set(v.foodId, []);
+        }
+        const opts = (defaultOptsByVarId.get(v.id) || []).map((o) => ({
+            optionId: o.id,
+            name: getLocalizedName(
+                { name: o.optionName, nameAr: o.optionNameAr, nameFr: o.optionNameFr },
+                lang
+            ),
+            nameAr: o.optionNameAr,
+            nameFr: o.optionNameFr,
+            additionalPrice: o.additionalPrice,
+        }));
+        defaultVarsByFoodId.get(v.foodId)!.push({
+            variationId: v.id,
+            name: getLocalizedName(v, lang),
+            nameAr: v.nameAr,
+            nameFr: v.nameFr,
+            selectionType: v.selectionType,
+            isRequired: v.isRequired,
+            options: opts,
+        });
+    }
+
+    // Variations for explicitly passed options
     const varIdsFromOpts = Array.from(
         new Set(optionList.map((o) => o.variationId).filter(Boolean))
     );
@@ -120,7 +208,7 @@ async function fetchAndEnrichOfferFoods(offerIds: string[], lang: Language = "en
     }
 
     const result = new Map<string, any[]>();
-    for (const row of offerFoodRows) {
+    for (const row of parsedRows) {
         if (!result.has(row.offerId)) {
             result.set(row.offerId, []);
         }
@@ -130,12 +218,11 @@ async function fetchAndEnrichOfferFoods(offerIds: string[], lang: Language = "en
             ? (row.variations as Array<{ variationId?: string | null; options: string[] }>)
             : [];
 
-        const enrichedVariations = variations.map((v) => {
-            const varInfo = v.variationId ? varMap.get(v.variationId) : null;
+        let enrichedVariations = variations.map((v) => {
             const opts = (Array.isArray(v.options) ? v.options : []).map((optId) => {
-                const optInfo = optionMap.get(optId);
+                const optInfo = optionMap.get(String(optId));
                 return {
-                    optionId: optId,
+                    optionId: String(optId),
                     name: optInfo
                         ? getLocalizedName(
                               {
@@ -149,11 +236,16 @@ async function fetchAndEnrichOfferFoods(offerIds: string[], lang: Language = "en
                     nameAr: optInfo?.optionNameAr || null,
                     nameFr: optInfo?.optionNameFr || null,
                     additionalPrice: optInfo?.additionalPrice || "0",
+                    variationId: optInfo?.variationId || null,
                 };
             });
 
+            // Automatically detect variationId from options if not provided
+            const detectedVarId = v.variationId || opts.find((o) => o.variationId)?.variationId || null;
+            const varInfo = detectedVarId ? varMap.get(detectedVarId) : null;
+
             return {
-                variationId: v.variationId || null,
+                variationId: detectedVarId,
                 name: varInfo ? getLocalizedName(varInfo, lang) : null,
                 nameAr: varInfo?.nameAr || null,
                 nameFr: varInfo?.nameFr || null,
@@ -162,6 +254,11 @@ async function fetchAndEnrichOfferFoods(offerIds: string[], lang: Language = "en
                 options: opts,
             };
         });
+
+        // Smart fallback: if no specific variations were selected for this food, return all available variations of this food
+        if (enrichedVariations.length === 0) {
+            enrichedVariations = defaultVarsByFoodId.get(row.foodId) || [];
+        }
 
         result.get(row.offerId)!.push({
             id: row.id,
