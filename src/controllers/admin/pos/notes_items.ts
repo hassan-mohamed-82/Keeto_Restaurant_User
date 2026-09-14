@@ -1,15 +1,40 @@
 import { Request, Response } from "express";
 import { db } from "../../../models/connection";
 import { noteGroups, noteItems } from "../../../models/schema";
-import { eq, desc, or, like, count, sql, inArray } from "drizzle-orm";
+import { eq, and, desc, or, like, count, sql, inArray } from "drizzle-orm";
 import { SuccessResponse } from "../../../utils/response";
 import { BadRequest, NotFound } from "../../../Errors";
 import { v4 as uuidv4 } from "uuid";
+import { extractLang, getLocalizedName, Language } from "../../../helpers/localization.helper";
+
+export function formatSingleNoteItem(item: any, lang: Language = "en") {
+    if (!item) return null;
+    return {
+        ...item,
+        name: getLocalizedName(item, lang),
+        nameAr: item.nameAr ?? null,
+        nameFr: item.nameFr ?? null,
+        group: item.group
+            ? {
+                  id: item.group.id,
+                  name: getLocalizedName(item.group, lang),
+                  nameAr: item.group.nameAr ?? null,
+                  nameFr: item.group.nameFr ?? null,
+                  status: item.group.status,
+              }
+            : null,
+    };
+}
 
 // ==========================================
 // 1. Create Note Item
 // ==========================================
 export const createNoteItem = async (req: Request, res: Response) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId) {
+        throw new BadRequest("Restaurant context is missing or unauthorized");
+    }
+
     const groupId =
         req.body.group_note_id ||
         req.body.note_group_id ||
@@ -25,15 +50,15 @@ export const createNoteItem = async (req: Request, res: Response) => {
         throw new BadRequest("Item name is required");
     }
 
-    // Verify parent group exists
+    // Verify parent group exists and belongs to this restaurant
     const [group] = await db
         .select()
         .from(noteGroups)
-        .where(eq(noteGroups.id, groupId))
+        .where(and(eq(noteGroups.id, groupId), eq(noteGroups.restaurantId, restaurantId)))
         .limit(1);
 
     if (!group) {
-        throw new NotFound("Parent note group not found");
+        throw new NotFound("Parent note group not found or unauthorized");
     }
 
     const id = uuidv4();
@@ -41,6 +66,7 @@ export const createNoteItem = async (req: Request, res: Response) => {
 
     await db.insert(noteItems).values({
         id,
+        restaurantId,
         group_note_id: groupId,
         name: name.trim(),
         nameAr: nameAr ? nameAr.trim() : null,
@@ -51,31 +77,35 @@ export const createNoteItem = async (req: Request, res: Response) => {
     const [createdItem] = await db
         .select()
         .from(noteItems)
-        .where(eq(noteItems.id, id))
+        .where(and(eq(noteItems.id, id), eq(noteItems.restaurantId, restaurantId)))
         .limit(1);
 
+    const lang = extractLang(req);
     return SuccessResponse(
         res,
         {
             message: "Note item created successfully",
-            data: {
-                ...createdItem,
-                group: {
-                    id: group.id,
-                    name: group.name,
-                    nameAr: group.nameAr,
-                    nameFr: group.nameFr,
+            data: formatSingleNoteItem(
+                {
+                    ...createdItem,
+                    group,
                 },
-            },
+                lang
+            ),
         },
         201
     );
 };
 
 // ==========================================
-// 2. Get All Note Items (with filter by noteGroup, search & pagination)
+// 2. Get All Note Items (scoped to restaurantId, filter by noteGroup, search & pagination)
 // ==========================================
 export const getAllNoteItems = async (req: Request, res: Response) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId) {
+        throw new BadRequest("Restaurant context is missing or unauthorized");
+    }
+
     const page = Math.max(1, parseInt((req.query.page || req.body?.page || "1") as string, 10));
     const limit = Math.max(1, Math.min(100, parseInt((req.query.limit || req.body?.limit || "20") as string, 10)));
     const offset = (page - 1) * limit;
@@ -91,7 +121,7 @@ export const getAllNoteItems = async (req: Request, res: Response) => {
     const search = (req.query.search || req.body?.search || "") as string;
     const status = (req.query.status || req.body?.status) as string;
 
-    const conditions = [];
+    const conditions = [eq(noteItems.restaurantId, restaurantId)];
 
     if (groupId && groupId.trim()) {
         conditions.push(eq(noteItems.group_note_id, groupId.trim()));
@@ -104,7 +134,7 @@ export const getAllNoteItems = async (req: Request, res: Response) => {
                 like(noteItems.name, searchPattern),
                 like(noteItems.nameAr, searchPattern),
                 like(noteItems.nameFr, searchPattern)
-            )
+            ) as any
         );
     }
 
@@ -112,7 +142,7 @@ export const getAllNoteItems = async (req: Request, res: Response) => {
         conditions.push(eq(noteItems.status, status));
     }
 
-    const whereClause = conditions.length > 0 ? sql.join(conditions, sql` AND `) : undefined;
+    const whereClause = and(...conditions);
 
     // Count total
     const [totalCount] = await db
@@ -144,7 +174,12 @@ export const getAllNoteItems = async (req: Request, res: Response) => {
                 status: noteGroups.status,
             })
             .from(noteGroups)
-            .where(inArray(noteGroups.id, groupIds));
+            .where(
+                and(
+                    inArray(noteGroups.id, groupIds),
+                    eq(noteGroups.restaurantId, restaurantId)
+                )
+            );
 
         const groupMap = new Map<string, any>();
         for (const g of groups) {
@@ -157,9 +192,12 @@ export const getAllNoteItems = async (req: Request, res: Response) => {
         }));
     }
 
+    const lang = extractLang(req);
+    const formattedItems = enrichedItems.map((item) => formatSingleNoteItem(item, lang));
+
     return SuccessResponse(res, {
         message: "Note items fetched successfully",
-        data: enrichedItems,
+        data: formattedItems,
         pagination: {
             total,
             page,
@@ -170,15 +208,20 @@ export const getAllNoteItems = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 3. Get Note Item By ID
+// 3. Get Note Item By ID (scoped to restaurantId)
 // ==========================================
 export const getNoteItemById = async (req: Request, res: Response) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId) {
+        throw new BadRequest("Restaurant context is missing or unauthorized");
+    }
+
     const { id } = req.params;
 
     const [item] = await db
         .select()
         .from(noteItems)
-        .where(eq(noteItems.id, id))
+        .where(and(eq(noteItems.id, id), eq(noteItems.restaurantId, restaurantId)))
         .limit(1);
 
     if (!item) {
@@ -194,22 +237,36 @@ export const getNoteItemById = async (req: Request, res: Response) => {
             status: noteGroups.status,
         })
         .from(noteGroups)
-        .where(eq(noteGroups.id, item.group_note_id))
+        .where(
+            and(
+                eq(noteGroups.id, item.group_note_id),
+                eq(noteGroups.restaurantId, restaurantId)
+            )
+        )
         .limit(1);
 
+    const lang = extractLang(req);
     return SuccessResponse(res, {
         message: "Note item fetched successfully",
-        data: {
-            ...item,
-            group: group || null,
-        },
+        data: formatSingleNoteItem(
+            {
+                ...item,
+                group: group || null,
+            },
+            lang
+        ),
     });
 };
 
 // ==========================================
-// 4. Update Note Item
+// 4. Update Note Item (scoped to restaurantId)
 // ==========================================
 export const updateNoteItem = async (req: Request, res: Response) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId) {
+        throw new BadRequest("Restaurant context is missing or unauthorized");
+    }
+
     const { id } = req.params;
     const { name, nameAr, nameFr, status } = req.body;
     const newGroupId =
@@ -221,7 +278,7 @@ export const updateNoteItem = async (req: Request, res: Response) => {
     const [existing] = await db
         .select()
         .from(noteItems)
-        .where(eq(noteItems.id, id))
+        .where(and(eq(noteItems.id, id), eq(noteItems.restaurantId, restaurantId)))
         .limit(1);
 
     if (!existing) {
@@ -238,23 +295,31 @@ export const updateNoteItem = async (req: Request, res: Response) => {
         const [targetGroup] = await db
             .select()
             .from(noteGroups)
-            .where(eq(noteGroups.id, newGroupId))
+            .where(
+                and(
+                    eq(noteGroups.id, newGroupId),
+                    eq(noteGroups.restaurantId, restaurantId)
+                )
+            )
             .limit(1);
 
         if (!targetGroup) {
-            throw new NotFound("Target note group not found");
+            throw new NotFound("Target note group not found or unauthorized");
         }
         updateFields.group_note_id = newGroupId;
     }
 
     if (Object.keys(updateFields).length > 0) {
-        await db.update(noteItems).set(updateFields).where(eq(noteItems.id, id));
+        await db
+            .update(noteItems)
+            .set(updateFields)
+            .where(and(eq(noteItems.id, id), eq(noteItems.restaurantId, restaurantId)));
     }
 
     const [updatedItem] = await db
         .select()
         .from(noteItems)
-        .where(eq(noteItems.id, id))
+        .where(and(eq(noteItems.id, id), eq(noteItems.restaurantId, restaurantId)))
         .limit(1);
 
     const [group] = await db
@@ -266,35 +331,51 @@ export const updateNoteItem = async (req: Request, res: Response) => {
             status: noteGroups.status,
         })
         .from(noteGroups)
-        .where(eq(noteGroups.id, updatedItem.group_note_id))
+        .where(
+            and(
+                eq(noteGroups.id, updatedItem.group_note_id),
+                eq(noteGroups.restaurantId, restaurantId)
+            )
+        )
         .limit(1);
 
+    const lang = extractLang(req);
     return SuccessResponse(res, {
         message: "Note item updated successfully",
-        data: {
-            ...updatedItem,
-            group: group || null,
-        },
+        data: formatSingleNoteItem(
+            {
+                ...updatedItem,
+                group: group || null,
+            },
+            lang
+        ),
     });
 };
 
 // ==========================================
-// 5. Delete Note Item
+// 5. Delete Note Item (scoped to restaurantId)
 // ==========================================
 export const deleteNoteItem = async (req: Request, res: Response) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId) {
+        throw new BadRequest("Restaurant context is missing or unauthorized");
+    }
+
     const { id } = req.params;
 
     const [existing] = await db
         .select()
         .from(noteItems)
-        .where(eq(noteItems.id, id))
+        .where(and(eq(noteItems.id, id), eq(noteItems.restaurantId, restaurantId)))
         .limit(1);
 
     if (!existing) {
         throw new NotFound("Note item not found");
     }
 
-    await db.delete(noteItems).where(eq(noteItems.id, id));
+    await db
+        .delete(noteItems)
+        .where(and(eq(noteItems.id, id), eq(noteItems.restaurantId, restaurantId)));
 
     return SuccessResponse(res, {
         message: "Note item deleted successfully",
@@ -302,15 +383,20 @@ export const deleteNoteItem = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 6. Toggle Note Item Status
+// 6. Toggle Note Item Status (scoped to restaurantId)
 // ==========================================
 export const toggleNoteItemStatus = async (req: Request, res: Response) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId) {
+        throw new BadRequest("Restaurant context is missing or unauthorized");
+    }
+
     const { id } = req.params;
 
     const [existing] = await db
         .select()
         .from(noteItems)
-        .where(eq(noteItems.id, id))
+        .where(and(eq(noteItems.id, id), eq(noteItems.restaurantId, restaurantId)))
         .limit(1);
 
     if (!existing) {
@@ -322,7 +408,7 @@ export const toggleNoteItemStatus = async (req: Request, res: Response) => {
     await db
         .update(noteItems)
         .set({ status: newStatus })
-        .where(eq(noteItems.id, id));
+        .where(and(eq(noteItems.id, id), eq(noteItems.restaurantId, restaurantId)));
 
     return SuccessResponse(res, {
         message: `Note item status changed to ${newStatus}`,

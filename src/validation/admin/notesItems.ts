@@ -46,6 +46,7 @@ export const getNoteItemsQuerySchema = z.preprocess(
         note_group_id: z.string().optional(),
         search: z.string().optional(),
         status: z.enum(["active", "inactive", "all"]).optional(),
+        lang: z.enum(["en", "ar", "fr"]).optional().default("en"),
         page: z.coerce.number().int().positive().optional().default(1),
         limit: z.coerce.number().int().positive().optional().default(20),
     })
