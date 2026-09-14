@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getPopupById = exports.getActivePopups = void 0;
 const connection_1 = require("../../models/connection");
-const popup_1 = require("../../models/schema/admin/popup");
+const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
 const Errors_1 = require("../../Errors");
 const response_1 = require("../../utils/response");
@@ -11,22 +11,40 @@ const getActivePopups = async (req, res) => {
     const now = new Date();
     const activePopups = await connection_1.db
         .select({
-        id: popup_1.popup.id,
-        Title: popup_1.popup.Title,
-        TitleAr: popup_1.popup.TitleAr,
-        TitleFr: popup_1.popup.TitleFr,
-        description: popup_1.popup.description,
-        descriptionAr: popup_1.popup.descriptionAr,
-        descriptionFr: popup_1.popup.descriptionFr,
-        image: popup_1.popup.image,
-        imageAr: popup_1.popup.imageAr,
-        imageFr: popup_1.popup.imageFr,
-        type: popup_1.popup.type,
-        startDate: popup_1.popup.startDate,
-        endDate: popup_1.popup.endDate,
+        id: schema_1.popup.id,
+        Title: schema_1.popup.Title,
+        TitleAr: schema_1.popup.TitleAr,
+        TitleFr: schema_1.popup.TitleFr,
+        description: schema_1.popup.description,
+        descriptionAr: schema_1.popup.descriptionAr,
+        descriptionFr: schema_1.popup.descriptionFr,
+        image: schema_1.popup.image,
+        imageAr: schema_1.popup.imageAr,
+        imageFr: schema_1.popup.imageFr,
+        type: schema_1.popup.type,
+        linkType: schema_1.popup.linkType,
+        link: schema_1.popup.link,
+        subcategoryId: schema_1.popup.subcategoryId,
+        subcategoryName: schema_1.subcategories.name,
+        subcategoryNameAr: schema_1.subcategories.nameAr,
+        foodId: schema_1.popup.foodId,
+        productId: schema_1.popup.foodId,
+        foodName: schema_1.food.name,
+        foodNameAr: schema_1.food.nameAr,
+        foodImage: schema_1.food.image,
+        discountId: schema_1.popup.discountId,
+        discountName: schema_1.discounts.name,
+        discountNameAr: schema_1.discounts.nameAr,
+        discountType: schema_1.discounts.discountType,
+        discountValue: schema_1.discounts.discountValue,
+        startDate: schema_1.popup.startDate,
+        endDate: schema_1.popup.endDate,
     })
-        .from(popup_1.popup)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(popup_1.popup.status, "active"), (0, drizzle_orm_1.lte)(popup_1.popup.startDate, now), (0, drizzle_orm_1.gte)(popup_1.popup.endDate, now)));
+        .from(schema_1.popup)
+        .leftJoin(schema_1.subcategories, (0, drizzle_orm_1.eq)(schema_1.popup.subcategoryId, schema_1.subcategories.id))
+        .leftJoin(schema_1.food, (0, drizzle_orm_1.eq)(schema_1.popup.foodId, schema_1.food.id))
+        .leftJoin(schema_1.discounts, (0, drizzle_orm_1.eq)(schema_1.popup.discountId, schema_1.discounts.id))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.popup.status, "active"), (0, drizzle_orm_1.lte)(schema_1.popup.startDate, now), (0, drizzle_orm_1.gte)(schema_1.popup.endDate, now)));
     return (0, response_1.SuccessResponse)(res, { message: "Get active popups success", data: activePopups });
 };
 exports.getActivePopups = getActivePopups;
@@ -35,22 +53,40 @@ const getPopupById = async (req, res) => {
     const { id } = req.params;
     const result = await connection_1.db
         .select({
-        id: popup_1.popup.id,
-        Title: popup_1.popup.Title,
-        TitleAr: popup_1.popup.TitleAr,
-        TitleFr: popup_1.popup.TitleFr,
-        description: popup_1.popup.description,
-        descriptionAr: popup_1.popup.descriptionAr,
-        descriptionFr: popup_1.popup.descriptionFr,
-        image: popup_1.popup.image,
-        imageAr: popup_1.popup.imageAr,
-        imageFr: popup_1.popup.imageFr,
-        type: popup_1.popup.type,
-        startDate: popup_1.popup.startDate,
-        endDate: popup_1.popup.endDate,
+        id: schema_1.popup.id,
+        Title: schema_1.popup.Title,
+        TitleAr: schema_1.popup.TitleAr,
+        TitleFr: schema_1.popup.TitleFr,
+        description: schema_1.popup.description,
+        descriptionAr: schema_1.popup.descriptionAr,
+        descriptionFr: schema_1.popup.descriptionFr,
+        image: schema_1.popup.image,
+        imageAr: schema_1.popup.imageAr,
+        imageFr: schema_1.popup.imageFr,
+        type: schema_1.popup.type,
+        linkType: schema_1.popup.linkType,
+        link: schema_1.popup.link,
+        subcategoryId: schema_1.popup.subcategoryId,
+        subcategoryName: schema_1.subcategories.name,
+        subcategoryNameAr: schema_1.subcategories.nameAr,
+        foodId: schema_1.popup.foodId,
+        productId: schema_1.popup.foodId,
+        foodName: schema_1.food.name,
+        foodNameAr: schema_1.food.nameAr,
+        foodImage: schema_1.food.image,
+        discountId: schema_1.popup.discountId,
+        discountName: schema_1.discounts.name,
+        discountNameAr: schema_1.discounts.nameAr,
+        discountType: schema_1.discounts.discountType,
+        discountValue: schema_1.discounts.discountValue,
+        startDate: schema_1.popup.startDate,
+        endDate: schema_1.popup.endDate,
     })
-        .from(popup_1.popup)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(popup_1.popup.id, id), (0, drizzle_orm_1.eq)(popup_1.popup.status, "active")))
+        .from(schema_1.popup)
+        .leftJoin(schema_1.subcategories, (0, drizzle_orm_1.eq)(schema_1.popup.subcategoryId, schema_1.subcategories.id))
+        .leftJoin(schema_1.food, (0, drizzle_orm_1.eq)(schema_1.popup.foodId, schema_1.food.id))
+        .leftJoin(schema_1.discounts, (0, drizzle_orm_1.eq)(schema_1.popup.discountId, schema_1.discounts.id))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.popup.id, id), (0, drizzle_orm_1.eq)(schema_1.popup.status, "active")))
         .limit(1);
     if (!result[0]) {
         throw new Errors_1.NotFound("Popup not found");

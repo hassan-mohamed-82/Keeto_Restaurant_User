@@ -105,8 +105,6 @@ router.use("/tax", tax_1.default);
 router.use("/pos/tax", tax_1.default);
 router.use("/bundles", bundles_1.default);
 router.use("/pos/bundles", bundles_1.default);
-router.use("/offers", bundles_1.default);
-router.use("/pos/offers", bundles_1.default);
 router.use("/tax-type", taxType_1.default);
 router.use("/pos/tax-type", taxType_1.default);
 router.use("/tax-types", taxType_1.default);
