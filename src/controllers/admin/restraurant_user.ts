@@ -330,6 +330,7 @@ export const getRestaurantUserStats = async (req: Request, res: Response) => {
         // Recent 50 orders
         db.select({
             orderNumber: orders.orderNumber,
+            dailyOrderNumber: orders.dailyOrderNumber,
             totalAmount: orders.totalAmount,
             orderSource: orders.orderSource,
             orderType: orders.orderType,
@@ -385,4 +386,4 @@ export const getRestaurantUserStats = async (req: Request, res: Response) => {
             recentOrders: recentOrderRows,
         },
     }, 200);
-};
+};
