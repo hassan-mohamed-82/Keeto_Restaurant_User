@@ -959,8 +959,6 @@ const getFoods = async (req, res) => {
             id: o.id,
             optionName: o.optionName,
             name: (0, localization_helper_1.getLocalizedName)({ name: o.optionName, nameAr: o.optionNameAr, nameFr: o.optionNameFr }, lang),
-            nameAr: o.optionNameAr,
-            nameFr: o.optionNameFr,
             additionalPrice: o.additionalPrice,
             isDefault: o.isDefault,
             status: o.status,
@@ -968,8 +966,6 @@ const getFoods = async (req, res) => {
         variationsByFoodId.get(v.foodId).push({
             id: v.id,
             name: (0, localization_helper_1.getLocalizedName)(v, lang),
-            nameAr: v.nameAr,
-            nameFr: v.nameFr,
             selectionType: v.selectionType,
             isRequired: v.isRequired,
             min: v.min,
@@ -980,8 +976,6 @@ const getFoods = async (req, res) => {
     const formatted = foodList.map((f) => ({
         id: f.id,
         name: (0, localization_helper_1.getLocalizedName)(f, lang),
-        nameAr: f.nameAr,
-        nameFr: f.nameFr,
         price: f.price,
         image: f.image,
         variations: variationsByFoodId.get(f.id) || [],
