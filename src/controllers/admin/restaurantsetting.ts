@@ -38,6 +38,7 @@ export const updateSettings = async (req: Request, res: Response): Promise<void>
         if (settings.canEditOrder !== undefined) settingsData.canEditOrder = settings.canEditOrder;
         if (settings.isAlwaysOpen !== undefined) settingsData.isAlwaysOpen = settings.isAlwaysOpen;
         if (settings.isSameTimeEveryDay !== undefined) settingsData.isSameTimeEveryDay = settings.isSameTimeEveryDay;
+        if (settings.isTemporarilyClosed !== undefined) settingsData.isTemporarilyClosed = settings.isTemporarilyClosed;
 
         // Other fields
         if (settings.productView !== undefined || settings.productview !== undefined) {
