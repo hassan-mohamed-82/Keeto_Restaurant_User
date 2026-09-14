@@ -39,9 +39,9 @@ export async function saveBase64Image(
   let host = req.get("x-forwarded-host") || req.get("host") || "";
 
   // Fix domain doubling (e.g. restbcknd.keeto.org.keeto.org -> restbcknd.keeto.org)
-  if (host.includes(".keeto.org.keeto.org")) {
-    host = host.replace(/\.keeto\.org\.keeto\.org/g, ".keeto.org");
-  }
+  // if (host.includes(".keeto.org.keeto.org")) {
+  //   host = host.replace(/\.keeto\.org\.keeto\.org/g, ".keeto.org");
+  // }
   
   // Force HTTPS in production / remote environments
   if (!host.includes("localhost") && !host.includes("127.0.0.1")) {
