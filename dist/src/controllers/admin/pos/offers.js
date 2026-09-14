@@ -497,7 +497,7 @@ const createOffer = async (req, res) => {
         .limit(1);
     const [enriched] = await enrichOffersWithBranchesAndFoods([createdOffer], restaurantId, lang);
     return (0, response_1.SuccessResponse)(res, {
-        message: "Offer created successfully",
+        message: "Bundle created successfully",
         data: enriched || createdOffer,
     }, 201);
 };
@@ -559,7 +559,7 @@ const getAllOffers = async (req, res) => {
         }, lang),
     }));
     return (0, response_1.SuccessResponse)(res, {
-        message: "Offers fetched successfully",
+        message: "Bundles fetched successfully",
         data: formattedOffers,
         pagination: {
             page: isAll ? 1 : page,
@@ -586,11 +586,11 @@ const getOfferById = async (req, res) => {
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.offers.id, id), (0, drizzle_orm_1.eq)(schema_1.offers.restaurantId, restaurantId)))
         .limit(1);
     if (!offer) {
-        throw new Errors_1.NotFound("Offer not found");
+        throw new Errors_1.NotFound("Bundle not found");
     }
     const [enriched] = await enrichOffersWithBranchesAndFoods([offer], restaurantId, lang);
     return (0, response_1.SuccessResponse)(res, {
-        message: "Offer fetched successfully",
+        message: "Bundle fetched successfully",
         data: enriched || offer,
     });
 };
@@ -611,7 +611,7 @@ const updateOffer = async (req, res) => {
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.offers.id, id), (0, drizzle_orm_1.eq)(schema_1.offers.restaurantId, restaurantId)))
         .limit(1);
     if (!existingOffer) {
-        throw new Errors_1.NotFound("Offer not found");
+        throw new Errors_1.NotFound("Bundle not found");
     }
     const { name, nameAr, nameFr, image, startDate, endDate, price, foods, foodIds, food_ids, branchIds, branch_ids, status, } = req.body;
     const updateData = {};
@@ -673,7 +673,7 @@ const updateOffer = async (req, res) => {
         .limit(1);
     const [enriched] = await enrichOffersWithBranchesAndFoods([updatedOffer], restaurantId, lang);
     return (0, response_1.SuccessResponse)(res, {
-        message: "Offer updated successfully",
+        message: "Bundle updated successfully",
         data: enriched || updatedOffer,
     });
 };
@@ -693,7 +693,7 @@ const deleteOffer = async (req, res) => {
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.offers.id, id), (0, drizzle_orm_1.eq)(schema_1.offers.restaurantId, restaurantId)))
         .limit(1);
     if (!existingOffer) {
-        throw new Errors_1.NotFound("Offer not found");
+        throw new Errors_1.NotFound("Bundle not found");
     }
     // Delete image file first before removing database record
     if (existingOffer.image) {
@@ -703,7 +703,7 @@ const deleteOffer = async (req, res) => {
         .delete(schema_1.offers)
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.offers.id, id), (0, drizzle_orm_1.eq)(schema_1.offers.restaurantId, restaurantId)));
     return (0, response_1.SuccessResponse)(res, {
-        message: "Offer deleted successfully",
+        message: "Bundle deleted successfully",
     });
 };
 exports.deleteOffer = deleteOffer;
@@ -722,7 +722,7 @@ const toggleOfferStatus = async (req, res) => {
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.offers.id, id), (0, drizzle_orm_1.eq)(schema_1.offers.restaurantId, restaurantId)))
         .limit(1);
     if (!existingOffer) {
-        throw new Errors_1.NotFound("Offer not found");
+        throw new Errors_1.NotFound("Bundle not found");
     }
     const newStatus = existingOffer.status === "active" ? "inactive" : "active";
     await connection_1.db
@@ -730,7 +730,7 @@ const toggleOfferStatus = async (req, res) => {
         .set({ status: newStatus })
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.offers.id, id), (0, drizzle_orm_1.eq)(schema_1.offers.restaurantId, restaurantId)));
     return (0, response_1.SuccessResponse)(res, {
-        message: `Offer status changed to ${newStatus}`,
+        message: `Bundle status changed to ${newStatus}`,
         data: { id, status: newStatus },
     });
 };
@@ -751,12 +751,12 @@ const getOfferBranches = async (req, res) => {
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.offers.id, id), (0, drizzle_orm_1.eq)(schema_1.offers.restaurantId, restaurantId)))
         .limit(1);
     if (!offer) {
-        throw new Errors_1.NotFound("Offer not found");
+        throw new Errors_1.NotFound("Bundle not found");
     }
     const branchIds = parseJsonArray(offer.branchIds);
     if (branchIds.length === 0) {
         return (0, response_1.SuccessResponse)(res, {
-            message: "Offer branches fetched successfully",
+            message: "Bundle branches fetched successfully",
             data: [],
         });
     }
@@ -774,7 +774,7 @@ const getOfferBranches = async (req, res) => {
         name: (0, localization_helper_1.getLocalizedName)(b, lang),
     }));
     return (0, response_1.SuccessResponse)(res, {
-        message: "Offer branches fetched successfully",
+        message: "Bundle branches fetched successfully",
         data: formatted,
     });
 };
@@ -795,7 +795,7 @@ const getOfferFoods = async (req, res) => {
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.offers.id, id), (0, drizzle_orm_1.eq)(schema_1.offers.restaurantId, restaurantId)))
         .limit(1);
     if (!offer) {
-        throw new Errors_1.NotFound("Offer not found");
+        throw new Errors_1.NotFound("Bundle not found");
     }
     const foodsMap = await fetchAndEnrichOfferFoods([id], lang);
     let result = foodsMap.get(id) || [];
@@ -827,7 +827,7 @@ const getOfferFoods = async (req, res) => {
         }
     }
     return (0, response_1.SuccessResponse)(res, {
-        message: "Offer foods fetched successfully",
+        message: "Bundle foods fetched successfully",
         data: result,
     });
 };

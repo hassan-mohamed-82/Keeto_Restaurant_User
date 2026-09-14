@@ -37,6 +37,7 @@ exports.getNoteItemsQuerySchema = zod_1.z.preprocess(normalizeNoteItemInput, zod
     note_group_id: zod_1.z.string().optional(),
     search: zod_1.z.string().optional(),
     status: zod_1.z.enum(["active", "inactive", "all"]).optional(),
+    lang: zod_1.z.enum(["en", "ar", "fr"]).optional().default("en"),
     page: zod_1.z.coerce.number().int().positive().optional().default(1),
     limit: zod_1.z.coerce.number().int().positive().optional().default(20),
 }));

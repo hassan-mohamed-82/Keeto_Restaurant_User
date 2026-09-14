@@ -1,0 +1,321 @@
+{
+  "info": {
+    "_postman_id": "notes-api-keeto-pos",
+    "name": "POS Notes & Note Items APIs",
+    "description": "APIs for Note Groups and Note Items (CRUD, Assign to Food, Filter by Group)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Note Groups",
+      "item": [
+        {
+          "name": "Create Note Group (with optional items)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Cooking Degree\",\n  \"nameAr\": \"درجة الاستواء\",\n  \"nameFr\": \"Degré de cuisson\",\n  \"status\": \"active\",\n  \"noteItems\": [\n    {\n      \"name\": \"Rare\",\n      \"nameAr\": \"قليل الاستواء\",\n      \"nameFr\": \"Saignant\",\n      \"status\": \"active\"\n    },\n    {\n      \"name\": \"Medium\",\n      \"nameAr\": \"متوسط الاستواء\",\n      \"nameFr\": \"À point\",\n      \"status\": \"active\"\n    },\n    {\n      \"name\": \"Well Done\",\n      \"nameAr\": \"كامل الاستواء\",\n      \"nameFr\": \"Bien cuit\",\n      \"status\": \"active\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/restaurant/admin/pos/notes",
+              "host": ["{{base_url}}"],
+              "path": ["api", "restaurant", "admin", "pos", "notes"]
+            }
+          }
+        },
+        {
+          "name": "Get All Note Groups (List & Search)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/restaurant/admin/pos/notes?page=1&limit=20&search=&status=active",
+              "host": ["{{base_url}}"],
+              "path": ["api", "restaurant", "admin", "pos", "notes"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "search", "value": "" },
+                { "key": "status", "value": "active" },
+                { "key": "lang", "value": "ar" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get All Note Groups (POST List)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"page\": 1,\n  \"limit\": 20,\n  \"search\": \"\",\n  \"status\": \"active\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/restaurant/admin/pos/notes/list",
+              "host": ["{{base_url}}"],
+              "path": ["api", "restaurant", "admin", "pos", "notes", "list"]
+            }
+          }
+        },
+        {
+          "name": "Get Note Group By ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/restaurant/admin/pos/notes/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "restaurant", "admin", "pos", "notes", ":id"],
+              "variable": [
+                { "key": "id", "value": "GROUP_ID_HERE" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Note Group (with items sync)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Cooking Degree Updated\",\n  \"nameAr\": \"درجة الاستواء معدلة\",\n  \"status\": \"active\",\n  \"noteItems\": [\n    {\n      \"id\": \"EXISTING_ITEM_ID\",\n      \"name\": \"Medium Rare\",\n      \"nameAr\": \"نصف استواء\"\n    },\n    {\n      \"name\": \"Extra Well Done\",\n      \"nameAr\": \"استواء مضاعف\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/restaurant/admin/pos/notes/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "restaurant", "admin", "pos", "notes", ":id"],
+              "variable": [
+                { "key": "id", "value": "GROUP_ID_HERE" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Toggle Note Group Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/restaurant/admin/pos/notes/:id/toggle-status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "restaurant", "admin", "pos", "notes", ":id", "toggle-status"],
+              "variable": [
+                { "key": "id", "value": "GROUP_ID_HERE" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Note Group",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/restaurant/admin/pos/notes/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "restaurant", "admin", "pos", "notes", ":id"],
+              "variable": [
+                { "key": "id", "value": "GROUP_ID_HERE" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Assign / Unassign Note Group to Food",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"food_id\": \"FOOD_ID_HERE\",\n  \"note_group_id\": \"GROUP_ID_HERE\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/restaurant/admin/pos/notes/assign-food",
+              "host": ["{{base_url}}"],
+              "path": ["api", "restaurant", "admin", "pos", "notes", "assign-food"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Note Items",
+      "item": [
+        {
+          "name": "Create Note Item",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"group_note_id\": \"GROUP_ID_HERE\",\n  \"name\": \"No Onions\",\n  \"nameAr\": \"بدون بصل\",\n  \"nameFr\": \"Sans oignons\",\n  \"status\": \"active\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/restaurant/admin/pos/notes-items",
+              "host": ["{{base_url}}"],
+              "path": ["api", "restaurant", "admin", "pos", "notes-items"]
+            }
+          }
+        },
+        {
+          "name": "Get All Note Items (Filter by Group & Search)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/restaurant/admin/pos/notes-items?group_note_id=GROUP_ID_HERE&page=1&limit=20&search=&status=active",
+              "host": ["{{base_url}}"],
+              "path": ["api", "restaurant", "admin", "pos", "notes-items"],
+              "query": [
+                { "key": "group_note_id", "value": "GROUP_ID_HERE" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "search", "value": "" },
+                { "key": "status", "value": "active" },
+                { "key": "lang", "value": "ar" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get All Note Items (POST List)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"group_note_id\": \"GROUP_ID_HERE\",\n  \"page\": 1,\n  \"limit\": 20,\n  \"search\": \"\",\n  \"status\": \"active\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/restaurant/admin/pos/notes-items/list",
+              "host": ["{{base_url}}"],
+              "path": ["api", "restaurant", "admin", "pos", "notes-items", "list"]
+            }
+          }
+        },
+        {
+          "name": "Get Note Items By Group ID Direct",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/restaurant/admin/pos/notes-items/group/:group_id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "restaurant", "admin", "pos", "notes-items", "group", ":group_id"],
+              "variable": [
+                { "key": "group_id", "value": "GROUP_ID_HERE" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Note Item By ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/restaurant/admin/pos/notes-items/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "restaurant", "admin", "pos", "notes-items", ":id"],
+              "variable": [
+                { "key": "id", "value": "ITEM_ID_HERE" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Note Item",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Extra Spicy\",\n  \"nameAr\": \"حار جداً\",\n  \"status\": \"active\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/restaurant/admin/pos/notes-items/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "restaurant", "admin", "pos", "notes-items", ":id"],
+              "variable": [
+                { "key": "id", "value": "ITEM_ID_HERE" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Toggle Note Item Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/restaurant/admin/pos/notes-items/:id/toggle-status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "restaurant", "admin", "pos", "notes-items", ":id", "toggle-status"],
+              "variable": [
+                { "key": "id", "value": "ITEM_ID_HERE" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Note Item",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/restaurant/admin/pos/notes-items/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "restaurant", "admin", "pos", "notes-items", ":id"],
+              "variable": [
+                { "key": "id", "value": "ITEM_ID_HERE" }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

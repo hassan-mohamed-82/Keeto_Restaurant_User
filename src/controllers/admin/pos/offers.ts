@@ -600,7 +600,7 @@ export const createOffer = async (req: Request, res: Response) => {
     return SuccessResponse(
         res,
         {
-            message: "Offer created successfully",
+            message: "Bundle created successfully",
             data: enriched || createdOffer,
         },
         201
@@ -682,7 +682,7 @@ export const getAllOffers = async (req: Request, res: Response) => {
     }));
 
     return SuccessResponse(res, {
-        message: "Offers fetched successfully",
+        message: "Bundles fetched successfully",
         data: formattedOffers,
         pagination: {
             page: isAll ? 1 : page,
@@ -712,13 +712,13 @@ export const getOfferById = async (req: Request, res: Response) => {
         .limit(1);
 
     if (!offer) {
-        throw new NotFound("Offer not found");
+        throw new NotFound("Bundle not found");
     }
 
     const [enriched] = await enrichOffersWithBranchesAndFoods([offer], restaurantId, lang);
 
     return SuccessResponse(res, {
-        message: "Offer fetched successfully",
+        message: "Bundle fetched successfully",
         data: enriched || offer,
     });
 };
@@ -742,7 +742,7 @@ export const updateOffer = async (req: Request, res: Response) => {
         .limit(1);
 
     if (!existingOffer) {
-        throw new NotFound("Offer not found");
+        throw new NotFound("Bundle not found");
     }
 
     const {
@@ -832,7 +832,7 @@ export const updateOffer = async (req: Request, res: Response) => {
     const [enriched] = await enrichOffersWithBranchesAndFoods([updatedOffer], restaurantId, lang);
 
     return SuccessResponse(res, {
-        message: "Offer updated successfully",
+        message: "Bundle updated successfully",
         data: enriched || updatedOffer,
     });
 };
@@ -855,7 +855,7 @@ export const deleteOffer = async (req: Request, res: Response) => {
         .limit(1);
 
     if (!existingOffer) {
-        throw new NotFound("Offer not found");
+        throw new NotFound("Bundle not found");
     }
 
     // Delete image file first before removing database record
@@ -868,7 +868,7 @@ export const deleteOffer = async (req: Request, res: Response) => {
         .where(and(eq(offers.id, id), eq(offers.restaurantId, restaurantId)));
 
     return SuccessResponse(res, {
-        message: "Offer deleted successfully",
+        message: "Bundle deleted successfully",
     });
 };
 
@@ -890,7 +890,7 @@ export const toggleOfferStatus = async (req: Request, res: Response) => {
         .limit(1);
 
     if (!existingOffer) {
-        throw new NotFound("Offer not found");
+        throw new NotFound("Bundle not found");
     }
 
     const newStatus = existingOffer.status === "active" ? "inactive" : "active";
@@ -901,7 +901,7 @@ export const toggleOfferStatus = async (req: Request, res: Response) => {
         .where(and(eq(offers.id, id), eq(offers.restaurantId, restaurantId)));
 
     return SuccessResponse(res, {
-        message: `Offer status changed to ${newStatus}`,
+        message: `Bundle status changed to ${newStatus}`,
         data: { id, status: newStatus },
     });
 };
@@ -925,13 +925,13 @@ export const getOfferBranches = async (req: Request, res: Response) => {
         .limit(1);
 
     if (!offer) {
-        throw new NotFound("Offer not found");
+        throw new NotFound("Bundle not found");
     }
 
     const branchIds = parseJsonArray(offer.branchIds);
     if (branchIds.length === 0) {
         return SuccessResponse(res, {
-            message: "Offer branches fetched successfully",
+            message: "Bundle branches fetched successfully",
             data: [],
         });
     }
@@ -957,7 +957,7 @@ export const getOfferBranches = async (req: Request, res: Response) => {
     }));
 
     return SuccessResponse(res, {
-        message: "Offer branches fetched successfully",
+        message: "Bundle branches fetched successfully",
         data: formatted,
     });
 };
@@ -981,7 +981,7 @@ export const getOfferFoods = async (req: Request, res: Response) => {
         .limit(1);
 
     if (!offer) {
-        throw new NotFound("Offer not found");
+        throw new NotFound("Bundle not found");
     }
 
     const foodsMap = await fetchAndEnrichOfferFoods([id], lang);
@@ -1022,7 +1022,7 @@ export const getOfferFoods = async (req: Request, res: Response) => {
     }
 
     return SuccessResponse(res, {
-        message: "Offer foods fetched successfully",
+        message: "Bundle foods fetched successfully",
         data: result,
     });
 };
