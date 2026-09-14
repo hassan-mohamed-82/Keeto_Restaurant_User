@@ -76,7 +76,7 @@ async function fetchAndEnrichOfferFoods(offerIds: string[], lang: Language = "en
     if (offerFoodRows.length === 0) return new Map<string, any[]>();
 
     // Parse JSON columns cleanly (prevents string issues from MySQL)
-    const parsedRows = offerFoodRows.map((r) => {
+    const rawParsedRows = offerFoodRows.map((r) => {
         const parsedVars = deepParseJSON(r.variations);
         const variations = Array.isArray(parsedVars) ? parsedVars : [];
         const parsedOpts = deepParseJSON(r.optionIds);
@@ -87,6 +87,37 @@ async function fetchAndEnrichOfferFoods(offerIds: string[], lang: Language = "en
             optionIds,
         };
     });
+
+    // Consolidate rows by (offerId, foodId) so multiple variations or duplicate rows merge seamlessly
+    const groupedByOfferAndFood = new Map<string, Map<string, any>>();
+    for (const r of rawParsedRows) {
+        if (!groupedByOfferAndFood.has(r.offerId)) {
+            groupedByOfferAndFood.set(r.offerId, new Map());
+        }
+        const foodMapForOffer = groupedByOfferAndFood.get(r.offerId)!;
+        if (!foodMapForOffer.has(r.foodId)) {
+            foodMapForOffer.set(r.foodId, {
+                id: r.id,
+                offerId: r.offerId,
+                foodId: r.foodId,
+                quantity: r.quantity || 1,
+                variations: [...r.variations],
+                optionIds: [...r.optionIds],
+            });
+        } else {
+            const ex = foodMapForOffer.get(r.foodId)!;
+            ex.quantity = Math.max(ex.quantity, r.quantity || 1);
+            ex.variations.push(...r.variations);
+            ex.optionIds = Array.from(new Set([...ex.optionIds, ...r.optionIds]));
+        }
+    }
+
+    const parsedRows: any[] = [];
+    for (const foodMapForOffer of groupedByOfferAndFood.values()) {
+        for (const unifiedFood of foodMapForOffer.values()) {
+            parsedRows.push(unifiedFood);
+        }
+    }
 
     const foodIds = Array.from(new Set(parsedRows.map((r) => r.foodId).filter(Boolean)));
 
@@ -186,15 +217,18 @@ async function fetchAndEnrichOfferFoods(offerIds: string[], lang: Language = "en
         });
     }
 
-    // Variations for explicitly passed options
-    const varIdsFromOpts = Array.from(
-        new Set(optionList.map((o) => o.variationId).filter(Boolean))
+    // Variations for explicitly passed options AND explicitly passed variationIds
+    const varIdsFromOpts = optionList.map((o) => o.variationId).filter(Boolean);
+    const explicitVarIds = parsedRows.flatMap((r) =>
+        (r.variations || []).map((v: any) => v.variationId).filter(Boolean)
     );
-    const varList = varIdsFromOpts.length > 0
+    const allVarIdsToQuery = Array.from(new Set([...varIdsFromOpts, ...explicitVarIds]));
+
+    const varList = allVarIdsToQuery.length > 0
         ? await db
               .select()
               .from(foodVariations)
-              .where(inArray(foodVariations.id, varIdsFromOpts))
+              .where(inArray(foodVariations.id, allVarIdsToQuery))
         : [];
 
     const varMap = new Map<string, (typeof varList)[0]>();
@@ -218,7 +252,20 @@ async function fetchAndEnrichOfferFoods(offerIds: string[], lang: Language = "en
             ? (row.variations as Array<{ variationId?: string | null; options: string[] }>)
             : [];
 
-        let enrichedVariations = variations.map((v) => {
+        // Consolidate variations with the same variationId
+        const consolidatedVarMap = new Map<string, { variationId?: string | null; options: string[] }>();
+        for (const v of variations) {
+            const vOpts = (Array.isArray(v.options) ? v.options : []).map(String).filter(Boolean);
+            const vKey = v.variationId ? String(v.variationId) : `auto_${Math.random()}`;
+            if (!consolidatedVarMap.has(vKey)) {
+                consolidatedVarMap.set(vKey, { variationId: v.variationId || null, options: [...vOpts] });
+            } else {
+                const ex = consolidatedVarMap.get(vKey)!;
+                ex.options = Array.from(new Set([...ex.options, ...vOpts]));
+            }
+        }
+
+        let enrichedVariations = Array.from(consolidatedVarMap.values()).map((v) => {
             const opts = (Array.isArray(v.options) ? v.options : []).map((optId) => {
                 const optInfo = optionMap.get(String(optId));
                 return {
@@ -395,6 +442,72 @@ async function enrichOffersWithBranchesAndFoods<
     });
 }
 
+/**
+ * Helper to consolidate foods and variations by foodId and variationId
+ */
+function consolidateFoodsAndVariations(
+    foodsInput: any,
+    foodIdsInput: any
+): Array<{
+    foodId: string;
+    quantity: number;
+    variations: Array<{ variationId?: string | null; options: string[] }>;
+}> {
+    let rawItems: any[] = [];
+    if (Array.isArray(foodsInput) && foodsInput.length > 0) {
+        rawItems = foodsInput;
+    } else {
+        const rawIds = parseJsonArray(foodIdsInput);
+        rawItems = rawIds.map((fid) => ({ foodId: fid, quantity: 1, variations: [] }));
+    }
+
+    const mergedFoodsMap = new Map<string, {
+        foodId: string;
+        quantity: number;
+        variations: Array<{ variationId?: string | null; options: string[] }>;
+    }>();
+
+    for (const item of rawItems) {
+        if (!item) continue;
+        const fid = typeof item === "string" ? item : String(item.foodId || item.food_id || item.id || "");
+        if (!fid) continue;
+
+        const qty = item.quantity !== undefined ? Number(item.quantity) || 1 : 1;
+        const vars = Array.isArray(item.variations) ? item.variations : [];
+
+        if (!mergedFoodsMap.has(fid)) {
+            mergedFoodsMap.set(fid, {
+                foodId: fid,
+                quantity: qty,
+                variations: [...vars],
+            });
+        } else {
+            const ex = mergedFoodsMap.get(fid)!;
+            ex.quantity = Math.max(ex.quantity, qty);
+            ex.variations.push(...vars);
+        }
+    }
+
+    return Array.from(mergedFoodsMap.values()).map((f) => {
+        const vMap = new Map<string, { variationId?: string | null; options: string[] }>();
+        for (const v of f.variations) {
+            const vKey = v.variationId ? String(v.variationId) : `auto_${Math.random()}`;
+            const vOpts = Array.isArray(v.options) ? v.options.map(String).filter(Boolean) : [];
+            if (!vMap.has(vKey)) {
+                vMap.set(vKey, { variationId: v.variationId || null, options: [...vOpts] });
+            } else {
+                const ex = vMap.get(vKey)!;
+                ex.options = Array.from(new Set([...ex.options, ...vOpts]));
+            }
+        }
+        return {
+            foodId: f.foodId,
+            quantity: f.quantity,
+            variations: Array.from(vMap.values()),
+        };
+    });
+}
+
 // ==========================================
 // 1. Create Offer
 // ==========================================
@@ -423,20 +536,11 @@ export const createOffer = async (req: Request, res: Response) => {
 
     const finalBranchIds = parseJsonArray(branchIds !== undefined ? branchIds : branch_ids);
 
-    let finalFoods: Array<{
-        foodId: string;
-        quantity?: number;
-        variations?: Array<{ variationId?: string | null; options: string[] }>;
-    }> = [];
-
-    if (Array.isArray(foods) && foods.length > 0) {
-        finalFoods = foods;
-    } else {
-        const rawIds = parseJsonArray(foodIds !== undefined ? foodIds : food_ids);
-        finalFoods = rawIds.map((fid) => ({ foodId: fid, quantity: 1, variations: [] }));
-    }
-
-    const distinctFoodIds = Array.from(new Set(finalFoods.map((f) => f.foodId).filter(Boolean)));
+    const consolidatedFoods = consolidateFoodsAndVariations(
+        foods,
+        foodIds !== undefined ? foodIds : food_ids
+    );
+    const distinctFoodIds = consolidatedFoods.map((f) => f.foodId);
 
     let savedImageUrl: string | null = null;
     if (image) {
@@ -463,8 +567,8 @@ export const createOffer = async (req: Request, res: Response) => {
         status: status || "active",
     });
 
-    if (finalFoods.length > 0) {
-        const rows = finalFoods.map((f) => {
+    if (consolidatedFoods.length > 0) {
+        const rows = consolidatedFoods.map((f) => {
             const rawVars = Array.isArray(f.variations) ? f.variations : [];
             const flatOptions = Array.from(
                 new Set(
@@ -667,31 +771,18 @@ export const updateOffer = async (req: Request, res: Response) => {
 
     const rawFoods = foods !== undefined ? foods : (foodIds !== undefined ? foodIds : food_ids);
     if (rawFoods !== undefined) {
-        let finalFoods: Array<{
-            foodId: string;
-            quantity?: number;
-            variations?: Array<{ variationId?: string | null; options: string[] }>;
-        }> = [];
-
-        if (Array.isArray(rawFoods)) {
-            if (rawFoods.length > 0 && typeof rawFoods[0] === "string") {
-                finalFoods = (rawFoods as string[]).map((fid) => ({ foodId: fid, quantity: 1, variations: [] }));
-            } else {
-                finalFoods = rawFoods;
-            }
-        } else {
-            const parsedArray = parseJsonArray(rawFoods);
-            finalFoods = parsedArray.map((fid) => ({ foodId: fid, quantity: 1, variations: [] }));
-        }
-
-        const distinctFoodIds = Array.from(new Set(finalFoods.map((f) => f.foodId).filter(Boolean)));
+        const consolidatedFoods = consolidateFoodsAndVariations(
+            Array.isArray(foods) ? foods : (Array.isArray(rawFoods) && typeof rawFoods[0] === "object" ? rawFoods : []),
+            rawFoods
+        );
+        const distinctFoodIds = consolidatedFoods.map((f) => f.foodId);
         updateData.foodIds = distinctFoodIds;
 
         // Delete existing offer_foods and insert updated rows
         await db.delete(offerFoods).where(eq(offerFoods.offerId, id));
 
-        if (finalFoods.length > 0) {
-            const rows = finalFoods.map((f) => {
+        if (consolidatedFoods.length > 0) {
+            const rows = consolidatedFoods.map((f) => {
                 const rawVars = Array.isArray(f.variations) ? f.variations : [];
                 const flatOptions = Array.from(
                     new Set(

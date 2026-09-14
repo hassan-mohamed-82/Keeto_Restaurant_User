@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateOfferSchema = exports.createOfferSchema = exports.offerFoodItemSchema = exports.offerVariationSchema = exports.SUPPORTED_LANGUAGES = void 0;
+exports.updateOfferSchema = exports.createOfferSchema = exports.offerFoodItemSchema = exports.offerVariationSchema = exports.parseStringOrArray = exports.SUPPORTED_LANGUAGES = void 0;
 exports.safeParseJson = safeParseJson;
 const zod_1 = require("zod");
 exports.SUPPORTED_LANGUAGES = ["en", "ar", "fr"];
@@ -18,6 +18,21 @@ function safeParseJson(val) {
     }
     return val;
 }
+const parseStringOrArray = (val) => {
+    if (val === undefined || val === null)
+        return [];
+    val = safeParseJson(val);
+    if (typeof val === "string") {
+        if (val.includes(","))
+            return val.split(",").map((s) => s.trim()).filter(Boolean);
+        return val.trim() ? [val.trim()] : [];
+    }
+    if (Array.isArray(val)) {
+        return val.map(String).filter(Boolean);
+    }
+    return [];
+};
+exports.parseStringOrArray = parseStringOrArray;
 const normalizeOfferInput = (obj) => {
     if (obj && typeof obj === "object") {
         // Normalize branchIds
@@ -40,17 +55,43 @@ const normalizeOfferInput = (obj) => {
         // Normalize foods / products / items
         let incomingFoods = obj.foods !== undefined ? obj.foods : (obj.products !== undefined ? obj.products : obj.items);
         incomingFoods = safeParseJson(incomingFoods);
+        if (incomingFoods && typeof incomingFoods === "object" && !Array.isArray(incomingFoods)) {
+            if (incomingFoods.foodId || incomingFoods.food_id || incomingFoods.id) {
+                incomingFoods = [incomingFoods];
+            }
+            else {
+                incomingFoods = Object.values(incomingFoods);
+            }
+        }
         if (Array.isArray(incomingFoods)) {
-            obj.foods = incomingFoods.map((item) => {
+            const rawParsedItems = incomingFoods.map((item) => {
                 if (typeof item === "string") {
                     return { foodId: item, quantity: 1, variations: [] };
                 }
                 if (item && typeof item === "object") {
-                    const foodId = item.foodId || item.food_id || item.id;
+                    const foodId = String(item.foodId || item.food_id || item.id || "");
                     const quantity = item.quantity !== undefined ? item.quantity : 1;
                     let variations = item.variations;
                     variations = safeParseJson(variations);
-                    const directOptions = safeParseJson(item.options || item.optionIds || item.optionsIds || item.option_ids || item.options_ids);
+                    if (variations && typeof variations === "object" && !Array.isArray(variations)) {
+                        if (variations.variationId || variations.variation_id || variations.options || variations.optionIds || variations.optionId || variations.option_id) {
+                            variations = [variations];
+                        }
+                        else {
+                            const vals = Object.values(variations);
+                            if (vals.length > 0 && typeof vals[0] === "object") {
+                                variations = vals;
+                            }
+                            else {
+                                variations = Object.entries(variations).map(([k, v]) => ({
+                                    variationId: k,
+                                    options: v,
+                                }));
+                            }
+                        }
+                    }
+                    const directOptions = (0, exports.parseStringOrArray)(item.options || item.optionIds || item.optionsIds || item.option_ids || item.options_ids || item.optionId || item.option_id);
+                    const directVarId = item.variationId || item.variation_id || null;
                     let normalizedVariations = [];
                     if (Array.isArray(variations)) {
                         normalizedVariations = variations.map((v) => {
@@ -58,17 +99,17 @@ const normalizeOfferInput = (obj) => {
                                 return { variationId: null, options: [v] };
                             }
                             const vId = v.variationId || v.variation_id || null;
-                            const vOpts = safeParseJson(v.options || v.optionIds || v.optionsIds || v.option_ids || []);
+                            const vOpts = (0, exports.parseStringOrArray)(v.options || v.optionIds || v.optionsIds || v.option_ids || v.optionId || v.option_id);
                             return {
                                 variationId: vId,
-                                options: Array.isArray(vOpts) ? vOpts.map(String) : [],
+                                options: vOpts,
                             };
                         });
                     }
-                    if (Array.isArray(directOptions) && directOptions.length > 0) {
+                    if (directOptions.length > 0) {
                         normalizedVariations.push({
-                            variationId: null,
-                            options: directOptions.map(String),
+                            variationId: directVarId,
+                            options: directOptions,
                         });
                     }
                     return {
@@ -78,6 +119,46 @@ const normalizeOfferInput = (obj) => {
                     };
                 }
                 return item;
+            }).filter((item) => item && item.foodId);
+            // Group and merge by foodId
+            const mergedFoodMap = new Map();
+            for (const item of rawParsedItems) {
+                const fid = item.foodId;
+                if (!mergedFoodMap.has(fid)) {
+                    mergedFoodMap.set(fid, {
+                        foodId: fid,
+                        quantity: item.quantity,
+                        variations: [...item.variations],
+                    });
+                }
+                else {
+                    const existing = mergedFoodMap.get(fid);
+                    existing.quantity = Math.max(existing.quantity, item.quantity);
+                    existing.variations.push(...item.variations);
+                }
+            }
+            // Consolidate variations with the same variationId under each food
+            obj.foods = Array.from(mergedFoodMap.values()).map((f) => {
+                const vMap = new Map();
+                for (const v of f.variations) {
+                    const vKey = v.variationId ? String(v.variationId) : `auto_${Math.random()}`;
+                    const vOpts = Array.isArray(v.options) ? v.options.map(String) : [];
+                    if (!vMap.has(vKey)) {
+                        vMap.set(vKey, {
+                            variationId: v.variationId || null,
+                            options: [...vOpts],
+                        });
+                    }
+                    else {
+                        const ex = vMap.get(vKey);
+                        ex.options = Array.from(new Set([...ex.options, ...vOpts]));
+                    }
+                }
+                return {
+                    foodId: f.foodId,
+                    quantity: f.quantity,
+                    variations: Array.from(vMap.values()),
+                };
             });
         }
         else {
@@ -103,27 +184,71 @@ const normalizeOfferInput = (obj) => {
 // ==========================================
 // Offers Validation Schemas
 // ==========================================
-exports.offerVariationSchema = zod_1.z.object({
+const stringOrArraySchema = zod_1.z.preprocess((val) => {
+    return (0, exports.parseStringOrArray)(val);
+}, zod_1.z.array(zod_1.z.string()).default([]));
+exports.offerVariationSchema = zod_1.z.preprocess((raw) => {
+    if (typeof raw === "string") {
+        const parsed = safeParseJson(raw);
+        if (typeof parsed === "object" && parsed !== null)
+            return parsed;
+        return { variationId: null, options: [raw] };
+    }
+    return raw;
+}, zod_1.z.object({
     variationId: zod_1.z.string().optional().nullable(),
     variation_id: zod_1.z.string().optional().nullable(),
-    options: zod_1.z.array(zod_1.z.string().min(1)).optional().default([]),
-    optionIds: zod_1.z.array(zod_1.z.string().min(1)).optional(),
-    optionsIds: zod_1.z.array(zod_1.z.string().min(1)).optional(),
-    option_ids: zod_1.z.array(zod_1.z.string().min(1)).optional(),
+    options: stringOrArraySchema.optional().default([]),
+    optionIds: stringOrArraySchema.optional(),
+    optionsIds: stringOrArraySchema.optional(),
+    option_ids: stringOrArraySchema.optional(),
+    optionId: stringOrArraySchema.optional(),
+    option_id: stringOrArraySchema.optional(),
 }).transform((val) => {
-    const rawOptions = val.options.length > 0
-        ? val.options
-        : (val.optionIds || val.optionsIds || val.option_ids || []);
+    const rawOptions = [
+        ...(val.options || []),
+        ...(val.optionIds || []),
+        ...(val.optionsIds || []),
+        ...(val.option_ids || []),
+        ...(val.optionId || []),
+        ...(val.option_id || []),
+    ];
     return {
         variationId: val.variationId || val.variation_id || null,
         options: Array.from(new Set(rawOptions.map(String).filter(Boolean))),
     };
-});
-exports.offerFoodItemSchema = zod_1.z.object({
+}));
+exports.offerFoodItemSchema = zod_1.z.preprocess((raw) => {
+    if (typeof raw === "string") {
+        return { foodId: raw, quantity: 1, variations: [] };
+    }
+    return raw;
+}, zod_1.z.object({
     foodId: zod_1.z.string({ required_error: "foodId is required" }).min(1, "foodId cannot be empty"),
     quantity: zod_1.z.preprocess((v) => (v === undefined || v === null ? 1 : Number(v)), zod_1.z.number({ invalid_type_error: "quantity must be a number" }).int().min(1, "quantity must be at least 1")).default(1),
-    variations: zod_1.z.array(exports.offerVariationSchema).optional().default([]),
-});
+    variations: zod_1.z.preprocess((val) => {
+        if (val === undefined || val === null)
+            return [];
+        val = safeParseJson(val);
+        if (Array.isArray(val))
+            return val;
+        if (typeof val === "object" && val !== null) {
+            const objVal = val;
+            if (objVal.variationId || objVal.variation_id || objVal.options || objVal.optionIds || objVal.optionId || objVal.option_id) {
+                return [objVal];
+            }
+            const values = Object.values(objVal);
+            if (values.length > 0 && typeof values[0] === "object") {
+                return values;
+            }
+            return Object.entries(objVal).map(([varId, opts]) => ({
+                variationId: varId,
+                options: opts,
+            }));
+        }
+        return [];
+    }, zod_1.z.array(exports.offerVariationSchema)).optional().default([]),
+}));
 exports.createOfferSchema = zod_1.z.preprocess(normalizeOfferInput, zod_1.z.object({
     name: zod_1.z.string({ required_error: "Offer name is required" }).min(1, "Offer name is required").max(255, "Name cannot exceed 255 characters"),
     nameAr: zod_1.z.string().max(255, "Arabic name cannot exceed 255 characters").optional().nullable(),
