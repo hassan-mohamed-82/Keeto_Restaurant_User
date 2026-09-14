@@ -48,6 +48,8 @@ const updateSettings = async (req, res) => {
                     settingsData.isAlwaysOpen = settings.isAlwaysOpen;
                 if (settings.isSameTimeEveryDay !== undefined)
                     settingsData.isSameTimeEveryDay = settings.isSameTimeEveryDay;
+                if (settings.isTemporarilyClosed !== undefined)
+                    settingsData.isTemporarilyClosed = settings.isTemporarilyClosed;
                 // Other fields
                 if (settings.productView !== undefined || settings.productview !== undefined) {
                     const val = (settings.productView ?? settings.productview);

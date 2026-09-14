@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.assignNoteGroupToFood = exports.toggleNoteGroupStatus = exports.deleteNoteGroup = exports.updateNoteGroup = exports.getNoteGroupById = exports.getAllNoteGroups = exports.createNoteGroup = void 0;
 exports.formatNoteItem = formatNoteItem;
 exports.formatNoteGroup = formatNoteGroup;
+exports.formatListNoteGroup = formatListNoteGroup;
 const connection_1 = require("../../../models/connection");
 const schema_1 = require("../../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -29,6 +30,14 @@ function formatNoteGroup(group, lang = "en") {
         nameAr: group.nameAr ?? null,
         nameFr: group.nameFr ?? null,
         items: Array.isArray(group.items) ? group.items.map((it) => formatNoteItem(it, lang)) : [],
+    };
+}
+function formatListNoteGroup(group, lang = "en") {
+    if (!group)
+        return null;
+    return {
+        ...group,
+        name: (0, localization_helper_1.getLocalizedName)(group, lang),
     };
 }
 // ==========================================
@@ -150,7 +159,7 @@ const getAllNoteGroups = async (req, res) => {
         }));
     }
     const lang = (0, localization_helper_1.extractLang)(req);
-    const formattedGroups = enrichedGroups.map((g) => formatNoteGroup(g, lang));
+    const formattedGroups = enrichedGroups.map((g) => formatListNoteGroup(g, lang));
     return (0, response_1.SuccessResponse)(res, {
         message: "Note groups fetched successfully",
         data: formattedGroups,

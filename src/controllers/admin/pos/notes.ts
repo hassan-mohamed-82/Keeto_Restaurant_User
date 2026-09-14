@@ -28,6 +28,14 @@ export function formatNoteGroup(group: any, lang: Language = "en") {
     };
 }
 
+export function formatListNoteGroup(group: any, lang: Language = "en") {
+    if (!group) return null;
+    return {
+        ...group,
+        name: getLocalizedName(group, lang), 
+    };
+}
+
 // ==========================================
 // 1. Create Note Group (with optional noteItems)
 // ==========================================
@@ -182,7 +190,7 @@ export const getAllNoteGroups = async (req: Request, res: Response) => {
     }
 
     const lang = extractLang(req);
-    const formattedGroups = enrichedGroups.map((g) => formatNoteGroup(g, lang));
+    const formattedGroups = enrichedGroups.map((g) => formatListNoteGroup(g, lang));
 
     return SuccessResponse(res, {
         message: "Note groups fetched successfully",
