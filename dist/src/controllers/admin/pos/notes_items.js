@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.toggleNoteItemStatus = exports.deleteNoteItem = exports.updateNoteItem = exports.getNoteItemById = exports.getAllNoteItems = exports.createNoteItem = void 0;
 exports.formatSingleNoteItem = formatSingleNoteItem;
+exports.formatListSingleNoteItem = formatListSingleNoteItem;
 const connection_1 = require("../../../models/connection");
 const schema_1 = require("../../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -26,6 +27,14 @@ function formatSingleNoteItem(item, lang = "en") {
                 status: item.group.status,
             }
             : null,
+    };
+}
+function formatListSingleNoteItem(item, lang = "en") {
+    if (!item)
+        return null;
+    return {
+        ...item,
+        name: (0, localization_helper_1.getLocalizedName)(item, lang),
     };
 }
 // ==========================================
@@ -130,29 +139,16 @@ const getAllNoteItems = async (req, res) => {
         .offset(offset);
     // Enrich with group info
     let enrichedItems = itemsList.map((item) => ({ ...item, group: null }));
-    if (itemsList.length > 0) {
-        const groupIds = Array.from(new Set(itemsList.map((i) => i.group_note_id)));
-        const groups = await connection_1.db
-            .select({
-            id: schema_1.noteGroups.id,
-            name: schema_1.noteGroups.name,
-            nameAr: schema_1.noteGroups.nameAr,
-            nameFr: schema_1.noteGroups.nameFr,
-            status: schema_1.noteGroups.status,
-        })
-            .from(schema_1.noteGroups)
-            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.noteGroups.id, groupIds), (0, drizzle_orm_1.eq)(schema_1.noteGroups.restaurantId, restaurantId)));
-        const groupMap = new Map();
-        for (const g of groups) {
-            groupMap.set(g.id, g);
-        }
-        enrichedItems = itemsList.map((item) => ({
-            ...item,
-            group: groupMap.get(item.group_note_id) || null,
-        }));
-    }
     const lang = (0, localization_helper_1.extractLang)(req);
-    const formattedItems = enrichedItems.map((item) => formatSingleNoteItem(item, lang));
+    const formattedItems = enrichedItems.map((item) => {
+        const note_item = formatListSingleNoteItem(item, lang);
+        return {
+            id: note_item.id,
+            name: note_item.name,
+            group_note_id: note_item.group_note_id,
+            status: note_item.status,
+        };
+    });
     return (0, response_1.SuccessResponse)(res, {
         message: "Note items fetched successfully",
         data: formattedItems,

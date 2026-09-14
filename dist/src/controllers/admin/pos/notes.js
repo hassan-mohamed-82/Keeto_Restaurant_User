@@ -139,25 +139,6 @@ const getAllNoteGroups = async (req, res) => {
         .offset(offset);
     // Enrich groups with their items
     let enrichedGroups = groupsList.map((g) => ({ ...g, items: [] }));
-    if (groupsList.length > 0) {
-        const groupIds = groupsList.map((g) => g.id);
-        const allItems = await connection_1.db
-            .select()
-            .from(schema_1.noteItems)
-            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.noteItems.group_note_id, groupIds), (0, drizzle_orm_1.eq)(schema_1.noteItems.restaurantId, restaurantId)))
-            .orderBy((0, drizzle_orm_1.desc)(schema_1.noteItems.createdAt));
-        const itemsMap = new Map();
-        for (const it of allItems) {
-            if (!itemsMap.has(it.group_note_id)) {
-                itemsMap.set(it.group_note_id, []);
-            }
-            itemsMap.get(it.group_note_id).push(it);
-        }
-        enrichedGroups = groupsList.map((g) => ({
-            ...g,
-            items: itemsMap.get(g.id) || [],
-        }));
-    }
     const lang = (0, localization_helper_1.extractLang)(req);
     const formattedGroups = enrichedGroups.map((g) => {
         const name = formatListNoteGroup(g, lang);
