@@ -159,7 +159,14 @@ const getAllNoteGroups = async (req, res) => {
         }));
     }
     const lang = (0, localization_helper_1.extractLang)(req);
-    const formattedGroups = enrichedGroups.map((g) => formatListNoteGroup(g, lang));
+    const formattedGroups = enrichedGroups.map((g) => {
+        const name = formatListNoteGroup(g, lang);
+        return {
+            "id": g.id,
+            "name": name.name,
+            "status": g.status,
+        };
+    });
     return (0, response_1.SuccessResponse)(res, {
         message: "Note groups fetched successfully",
         data: formattedGroups,

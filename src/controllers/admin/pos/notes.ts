@@ -190,7 +190,14 @@ export const getAllNoteGroups = async (req: Request, res: Response) => {
     }
 
     const lang = extractLang(req);
-    const formattedGroups = enrichedGroups.map((g) => formatListNoteGroup(g, lang));
+    const formattedGroups = enrichedGroups.map((g) => {
+        const name = formatListNoteGroup(g, lang);
+        return {
+            "id": g.id,
+            "name": name.name,
+            "status": g.status,
+        };
+    });
 
     return SuccessResponse(res, {
         message: "Note groups fetched successfully",
