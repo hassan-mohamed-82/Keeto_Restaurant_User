@@ -58,9 +58,9 @@ export function sanitizeImageUrl(url: string | null | undefined): string | null 
   let sanitized = url;
 
   // 1. Remove doubled domain suffix
-  if (sanitized.includes(".keeto.org.keeto.org")) {
-    sanitized = sanitized.replace(/\.keeto\.org\.keeto\.org/g, ".keeto.org");
-  }
+  // if (sanitized.includes(".keeto.org.keeto.org")) {
+  //   sanitized = sanitized.replace(/\.keeto\.org\.keeto\.org/g, ".keeto.org");
+  // }
 
   // تحويل http لـ https فقط للروابط الخارجية
   if (sanitized.startsWith("http://") && !sanitized.includes("localhost") && !sanitized.includes("127.0.0.1")) {
