@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { db } from "../../../models/connection";
 import { offers, offerFoods, branches, food, foodVariations, variationOptions } from "../../../models/schema";
-import { eq, and, desc, inArray, count, or, like, isNull } from "drizzle-orm";
+import { eq, and, desc, inArray, count, or, like, isNull, sql } from "drizzle-orm";
 import { SuccessResponse } from "../../../utils/response";
 import { BadRequest, NotFound } from "../../../Errors";
 import { v4 as uuidv4 } from "uuid";
@@ -434,6 +434,7 @@ async function enrichOffersWithBranchesAndFoods<
 
         return {
             ...item,
+            module: parseJsonArray((item as any).module),
             name: localizedName,
             branchIds: itemBranchIds,
             branches: itemBranches,
@@ -531,10 +532,18 @@ export const createOffer = async (req: Request, res: Response) => {
         food_ids,
         branchIds,
         branch_ids,
+        module,
+        modules,
         status,
     } = req.body;
 
     const finalBranchIds = parseJsonArray(branchIds !== undefined ? branchIds : branch_ids);
+
+    const rawModule = module !== undefined ? module : modules;
+    const parsedModule = parseJsonArray(rawModule);
+    const validModules = ["pos", "web", "app"];
+    const filteredModule = parsedModule.filter((m) => validModules.includes(m)) as ("pos" | "web" | "app")[];
+    const finalModule: ("pos" | "web" | "app")[] = filteredModule.length > 0 ? filteredModule : ["pos"];
 
     const consolidatedFoods = consolidateFoodsAndVariations(
         foods,
@@ -564,6 +573,7 @@ export const createOffer = async (req: Request, res: Response) => {
         price: String(price),
         foodIds: distinctFoodIds,
         branchIds: finalBranchIds,
+        module: finalModule,
         status: status || "active",
     });
 
@@ -618,7 +628,7 @@ export const getAllOffers = async (req: Request, res: Response) => {
 
     const lang = extractLang(req);
     const params = { ...req.query, ...req.body };
-    const { status, search, all } = params;
+    const { status, search, all, module, modules } = params;
 
     const page = Math.max(1, parseInt(params.page as string) || 1);
     const limit = Math.max(1, Math.min(100, parseInt(params.limit as string) || 10));
@@ -627,6 +637,22 @@ export const getAllOffers = async (req: Request, res: Response) => {
     const conditions = [eq(offers.restaurantId, restaurantId)];
     if (status && (status === "active" || status === "inactive")) {
         conditions.push(eq(offers.status, status));
+    }
+
+    const rawFilterModule = module !== undefined ? module : modules;
+    if (rawFilterModule && typeof rawFilterModule === "string" && ["pos", "web", "app"].includes(rawFilterModule.trim().toLowerCase())) {
+        const target = rawFilterModule.trim().toLowerCase();
+        conditions.push(sql`JSON_CONTAINS(${offers.module}, ${JSON.stringify(target)})` as any);
+    } else if (Array.isArray(rawFilterModule) && rawFilterModule.length > 0) {
+        const validTargets = rawFilterModule
+            .map((m: any) => String(m).trim().toLowerCase())
+            .filter((m: string) => ["pos", "web", "app"].includes(m));
+        if (validTargets.length > 0) {
+            const orConditions = validTargets.map(
+                (target) => sql`JSON_CONTAINS(${offers.module}, ${JSON.stringify(target)})`
+            );
+            conditions.push(or(...orConditions) as any);
+        }
     }
 
     if (search && typeof search === "string" && search.trim() !== "") {
@@ -666,19 +692,21 @@ export const getAllOffers = async (req: Request, res: Response) => {
     const totalPages = isAll ? 1 : Math.ceil(totalItems / limit);
 
     const formattedOffers = rawOffers.map((item) => ({
-            id : item.id, 
-            image : item.image,
-            startDate : item.startDate,
-            endDate : item.endDate,
-            price : item.price,
-            name: getLocalizedName(
-                {
-                    name: item.name,
-                    nameAr: item.nameAr,
-                    nameFr: item.nameFr,
-                },
-                lang
-            ), 
+        id: item.id,
+        image: item.image,
+        startDate: item.startDate,
+        endDate: item.endDate,
+        price: item.price,
+        module: parseJsonArray(item.module),
+        status: item.status,
+        name: getLocalizedName(
+            {
+                name: item.name,
+                nameAr: item.nameAr,
+                nameFr: item.nameFr,
+            },
+            lang
+        ),
     }));
 
     return SuccessResponse(res, {
@@ -758,6 +786,8 @@ export const updateOffer = async (req: Request, res: Response) => {
         food_ids,
         branchIds,
         branch_ids,
+        module,
+        modules,
         status,
     } = req.body;
 
@@ -768,6 +798,16 @@ export const updateOffer = async (req: Request, res: Response) => {
     if (startDate !== undefined) updateData.startDate = new Date(startDate);
     if (endDate !== undefined) updateData.endDate = new Date(endDate);
     if (price !== undefined) updateData.price = String(price);
+
+    const rawModule = module !== undefined ? module : modules;
+    if (rawModule !== undefined) {
+        const parsedModule = parseJsonArray(rawModule);
+        const validModules = ["pos", "web", "app"];
+        const filteredModule = parsedModule.filter((m) => validModules.includes(m)) as ("pos" | "web" | "app")[];
+        if (filteredModule.length > 0) {
+            updateData.module = filteredModule;
+        }
+    }
 
     const rawFoods = foods !== undefined ? foods : (foodIds !== undefined ? foodIds : food_ids);
     if (rawFoods !== undefined) {

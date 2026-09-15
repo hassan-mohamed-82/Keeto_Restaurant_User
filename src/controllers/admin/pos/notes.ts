@@ -162,32 +162,7 @@ export const getAllNoteGroups = async (req: Request, res: Response) => {
 
     // Enrich groups with their items
     let enrichedGroups = groupsList.map((g) => ({ ...g, items: [] as any[] }));
-    if (groupsList.length > 0) {
-        const groupIds = groupsList.map((g) => g.id);
-        const allItems = await db
-            .select()
-            .from(noteItems)
-            .where(
-                and(
-                    inArray(noteItems.group_note_id, groupIds),
-                    eq(noteItems.restaurantId, restaurantId)
-                )
-            )
-            .orderBy(desc(noteItems.createdAt));
-
-        const itemsMap = new Map<string, any[]>();
-        for (const it of allItems) {
-            if (!itemsMap.has(it.group_note_id)) {
-                itemsMap.set(it.group_note_id, []);
-            }
-            itemsMap.get(it.group_note_id)!.push(it);
-        }
-
-        enrichedGroups = groupsList.map((g) => ({
-            ...g,
-            items: itemsMap.get(g.id) || [],
-        }));
-    }
+    
 
     const lang = extractLang(req);
     const formattedGroups = enrichedGroups.map((g) => {

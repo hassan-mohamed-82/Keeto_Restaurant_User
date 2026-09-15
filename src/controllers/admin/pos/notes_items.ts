@@ -25,6 +25,13 @@ export function formatSingleNoteItem(item: any, lang: Language = "en") {
             : null,
     };
 }
+export function formatListSingleNoteItem(item: any, lang: Language = "en") {
+    if (!item) return null;
+    return {
+        ...item,
+        name: getLocalizedName(item, lang), 
+    };
+}
 
 // ==========================================
 // 1. Create Note Item
@@ -163,37 +170,17 @@ export const getAllNoteItems = async (req: Request, res: Response) => {
 
     // Enrich with group info
     let enrichedItems = itemsList.map((item) => ({ ...item, group: null as any }));
-    if (itemsList.length > 0) {
-        const groupIds = Array.from(new Set(itemsList.map((i) => i.group_note_id)));
-        const groups = await db
-            .select({
-                id: noteGroups.id,
-                name: noteGroups.name,
-                nameAr: noteGroups.nameAr,
-                nameFr: noteGroups.nameFr,
-                status: noteGroups.status,
-            })
-            .from(noteGroups)
-            .where(
-                and(
-                    inArray(noteGroups.id, groupIds),
-                    eq(noteGroups.restaurantId, restaurantId)
-                )
-            );
-
-        const groupMap = new Map<string, any>();
-        for (const g of groups) {
-            groupMap.set(g.id, g);
-        }
-
-        enrichedItems = itemsList.map((item) => ({
-            ...item,
-            group: groupMap.get(item.group_note_id) || null,
-        }));
-    }
 
     const lang = extractLang(req);
-    const formattedItems = enrichedItems.map((item) => formatSingleNoteItem(item, lang));
+    const formattedItems = enrichedItems.map((item) => {
+        const note_item = formatListSingleNoteItem(item, lang);
+        return {
+            id: note_item.id,
+            name: note_item.name,
+            group_note_id: note_item.group_note_id,
+            status: note_item.status,
+        }
+    });
 
     return SuccessResponse(res, {
         message: "Note items fetched successfully",

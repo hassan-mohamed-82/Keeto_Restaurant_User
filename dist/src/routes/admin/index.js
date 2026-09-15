@@ -52,6 +52,7 @@ const bundles_1 = __importDefault(require("./pos/bundles"));
 const taxType_1 = __importDefault(require("./pos/taxType"));
 const notes_1 = __importDefault(require("./pos/notes"));
 const notesItems_1 = __importDefault(require("./pos/notesItems"));
+const offers_1 = __importDefault(require("./pos/offers"));
 const router = (0, express_1.Router)();
 router.use("/auth", auth_1.default);
 // ضفنا الـ Underscore هنا 👇
@@ -115,4 +116,8 @@ router.use("/notes-items", notesItems_1.default);
 router.use("/pos/notes-items", notesItems_1.default);
 router.use("/note-items", notesItems_1.default);
 router.use("/pos/note-items", notesItems_1.default);
+router.use("/offers", offers_1.default);
+router.use("/pos/offers", offers_1.default);
+router.use("/offer", offers_1.default);
+router.use("/pos/offer", offers_1.default);
 exports.default = router;

@@ -251,6 +251,7 @@ const getRestaurantUserStats = async (req, res) => {
         // Recent 50 orders
         connection_1.db.select({
             orderNumber: schema_1.orders.orderNumber,
+            dailyOrderNumber: schema_1.orders.dailyOrderNumber,
             totalAmount: schema_1.orders.totalAmount,
             orderSource: schema_1.orders.orderSource,
             orderType: schema_1.orders.orderType,

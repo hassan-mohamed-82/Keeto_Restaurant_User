@@ -1,9 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getOfferFoodsSchema = exports.updateOfferSchema = exports.createOfferSchema = exports.offerFoodItemSchema = exports.offerVariationSchema = exports.parseStringOrArray = exports.SUPPORTED_LANGUAGES = void 0;
+exports.getOfferFoodsSchema = exports.updateOfferSchema = exports.createOfferSchema = exports.offerFoodItemSchema = exports.offerVariationSchema = exports.parseStringOrArray = exports.OFFER_MODULES = exports.SUPPORTED_LANGUAGES = void 0;
 exports.safeParseJson = safeParseJson;
 const zod_1 = require("zod");
 exports.SUPPORTED_LANGUAGES = ["en", "ar", "fr"];
+exports.OFFER_MODULES = ["pos", "web", "app"];
 function safeParseJson(val) {
     if (typeof val === "string") {
         const trimmed = val.trim();
@@ -35,6 +36,16 @@ const parseStringOrArray = (val) => {
 exports.parseStringOrArray = parseStringOrArray;
 const normalizeOfferInput = (obj) => {
     if (obj && typeof obj === "object") {
+        // Normalize module / modules
+        if (obj.module === undefined && obj.modules !== undefined) {
+            obj.module = safeParseJson(obj.modules);
+        }
+        else if (obj.modules === undefined && obj.module !== undefined) {
+            obj.modules = safeParseJson(obj.module);
+        }
+        else if (obj.module !== undefined) {
+            obj.module = safeParseJson(obj.module);
+        }
         // Normalize branchIds
         if (obj.branchIds === undefined && obj.branch_ids !== undefined) {
             obj.branchIds = safeParseJson(obj.branch_ids);
@@ -282,6 +293,11 @@ exports.createOfferSchema = zod_1.z.preprocess(normalizeOfferInput, zod_1.z.obje
     food_ids: zod_1.z.array(zod_1.z.string().min(1)).optional(),
     branchIds: zod_1.z.array(zod_1.z.string().min(1)).optional().default([]),
     branch_ids: zod_1.z.array(zod_1.z.string().min(1)).optional(),
+    module: zod_1.z.preprocess((val) => (0, exports.parseStringOrArray)(val), zod_1.z.array(zod_1.z.enum(exports.OFFER_MODULES, {
+        errorMap: () => ({ message: "Module items must be 'pos', 'web', or 'app'" })
+    }))
+        .min(1, "At least one module must be selected ('pos', 'web', 'app')")),
+    modules: zod_1.z.preprocess((val) => (0, exports.parseStringOrArray)(val), zod_1.z.array(zod_1.z.enum(exports.OFFER_MODULES))).optional(),
     status: zod_1.z.enum(["active", "inactive"]).optional().default("active"),
 }));
 exports.updateOfferSchema = zod_1.z.preprocess(normalizeOfferInput, zod_1.z.object({
@@ -318,6 +334,11 @@ exports.updateOfferSchema = zod_1.z.preprocess(normalizeOfferInput, zod_1.z.obje
     food_ids: zod_1.z.array(zod_1.z.string().min(1)).optional(),
     branchIds: zod_1.z.array(zod_1.z.string().min(1)).optional(),
     branch_ids: zod_1.z.array(zod_1.z.string().min(1)).optional(),
+    module: zod_1.z.preprocess((val) => (0, exports.parseStringOrArray)(val), zod_1.z.array(zod_1.z.enum(exports.OFFER_MODULES, {
+        errorMap: () => ({ message: "Module items must be 'pos', 'web', or 'app'" })
+    }))
+        .min(1, "At least one module must be selected ('pos', 'web', 'app')")).optional(),
+    modules: zod_1.z.preprocess((val) => (0, exports.parseStringOrArray)(val), zod_1.z.array(zod_1.z.enum(exports.OFFER_MODULES))).optional(),
     status: zod_1.z.enum(["active", "inactive"]).optional(),
 }));
 exports.getOfferFoodsSchema = zod_1.z.object({

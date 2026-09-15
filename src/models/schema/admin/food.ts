@@ -8,7 +8,8 @@ import {
     decimal,
     int,
     boolean,
-    text
+    text,
+    time
 } from "drizzle-orm/mysql-core";
 import { sql, relations } from "drizzle-orm";
 import { addons, categories, restaurants, subcategories } from "../../schema";
@@ -60,6 +61,11 @@ export const food = mysqlTable("food", {
         .default("percentage"),
 
     discount_value: decimal("discount_value", { precision: 10, scale: 2 }),
+
+    offer_price: decimal("offer_price", { precision: 10, scale: 2 }),
+    offer_days: json("offer_days").$type<string[]>(),
+    offer_start: time("offer_start"),
+    offer_end: time("offer_end"),
 
     Maximum_Purchase: int("Maximum_Purchase"),
     points: int("points").default(0),
