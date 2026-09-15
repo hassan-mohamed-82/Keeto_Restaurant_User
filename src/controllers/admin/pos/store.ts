@@ -5,12 +5,39 @@ import { eq, and, desc, count, or, like, inArray } from "drizzle-orm";
 import { SuccessResponse } from "../../../utils/response";
 import { BadRequest, NotFound } from "../../../Errors";
 import { v4 as uuidv4 } from "uuid";
-import { extractLang, getLocalizedName, parseJsonArray } from "../../../helpers/localization.helper";
+import { extractLang, getLocalizedName, parseJsonArray, Language } from "../../../helpers/localization.helper";
 
 const buildGoogleMapsLink = (lat?: string | null, lng?: string | null): string | null => {
     if (!lat || !lng) return null;
     return `https://maps.google.com/?q=${lat},${lng}`;
 };
+
+async function resolveBranchesByIds(
+    branchIds: string[],
+    restaurantId: string,
+    lang: Language = "en"
+): Promise<Array<{ id: string; name: string }>> {
+    if (branchIds.length === 0) return [];
+    const branchRows = await db
+        .select({
+            id: branches.id,
+            name: branches.name,
+            nameAr: branches.nameAr,
+            nameFr: branches.nameFr,
+        })
+        .from(branches)
+        .where(
+            and(
+                eq(branches.restaurantId, restaurantId),
+                inArray(branches.id, branchIds)
+            )
+        );
+
+    return branchRows.map((b) => ({
+        id: b.id,
+        name: getLocalizedName(b, lang),
+    }));
+}
 
 // ==========================================
 // 1. Create Store
@@ -54,6 +81,9 @@ export const createStore = async (req: Request, res: Response) => {
         .where(eq(stores.id, id))
         .limit(1);
 
+    const lang = extractLang(req);
+    const resolvedBranches = await resolveBranchesByIds(finalBranchIds, restaurantId, lang);
+
     return SuccessResponse(
         res,
         {
@@ -61,6 +91,7 @@ export const createStore = async (req: Request, res: Response) => {
             data: {
                 ...created,
                 branche_ids: parseJsonArray(created.brancheIds),
+                branches: resolvedBranches,
                 map: buildGoogleMapsLink(created.lat, created.lng),
             },
         },
@@ -128,14 +159,52 @@ export const getAllStores = async (req: Request, res: Response) => {
     const totalItems = Number(totalCountResult[0]?.count || 0);
     const totalPages = isAll ? 1 : Math.ceil(totalItems / limit);
 
-    // Rule: In fetch all, only display name by lang along with essentials
-    const formattedStores = rawStores.map((s) => ({
-        id: s.id,
-        name: getLocalizedName(s, lang),
-        status: s.status,
-        map: buildGoogleMapsLink(s.lat, s.lng),
-        createdAt: s.createdAt,
-    }));
+    // Collect all branch IDs from all stores fetched on this page
+    const allBranchIds = Array.from(
+        new Set(rawStores.flatMap((s) => parseJsonArray(s.brancheIds)))
+    );
+
+    const branchRows = allBranchIds.length > 0
+        ? await db
+              .select({
+                  id: branches.id,
+                  name: branches.name,
+                  nameAr: branches.nameAr,
+                  nameFr: branches.nameFr,
+              })
+              .from(branches)
+              .where(
+                  and(
+                      eq(branches.restaurantId, restaurantId),
+                      inArray(branches.id, allBranchIds)
+                  )
+              )
+        : [];
+
+    const branchMap = new Map<string, { id: string; name: string }>();
+    for (const b of branchRows) {
+        branchMap.set(b.id, {
+            id: b.id,
+            name: getLocalizedName(b, lang),
+        });
+    }
+
+    const formattedStores = rawStores.map((s) => {
+        const bIds = parseJsonArray(s.brancheIds);
+        const storeBranches = bIds
+            .map((id) => branchMap.get(id))
+            .filter((b): b is { id: string; name: string } => Boolean(b));
+
+        return {
+            id: s.id,
+            name: getLocalizedName(s, lang),
+            status: s.status,
+            branche_ids: bIds,
+            branches: storeBranches,
+            map: buildGoogleMapsLink(s.lat, s.lng),
+            createdAt: s.createdAt,
+        };
+    });
 
     return SuccessResponse(res, {
         message: "Stores fetched successfully",
