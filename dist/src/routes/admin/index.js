@@ -57,6 +57,10 @@ const orderDelayAlert_1 = __importDefault(require("./orderDelayAlert"));
 const suppliers_1 = __importDefault(require("./pos/suppliers"));
 const stores_1 = __importDefault(require("./pos/stores"));
 const storeMen_1 = __importDefault(require("./pos/storeMen"));
+const captainOrders_1 = __importDefault(require("./pos/captainOrders"));
+const cashierMen_1 = __importDefault(require("./pos/cashierMen"));
+const halls_1 = __importDefault(require("./pos/halls"));
+const hallTables_1 = __importDefault(require("./pos/hallTables"));
 const router = (0, express_1.Router)();
 router.use("/auth", auth_1.default);
 // ضفنا الـ Underscore هنا 👇
@@ -132,4 +136,16 @@ router.use("/pos/stores", stores_1.default);
 // Store Men Routes
 router.use("/store-men", storeMen_1.default);
 router.use("/pos/store-men", storeMen_1.default);
+// Captain Orders Routes
+router.use("/captain-orders", captainOrders_1.default);
+router.use("/pos/captain-orders", captainOrders_1.default);
+// Cashier Men Routes
+router.use("/cashier-men", cashierMen_1.default);
+router.use("/pos/cashier-men", cashierMen_1.default);
+// Halls Routes
+router.use("/halls", halls_1.default);
+router.use("/pos/halls", halls_1.default);
+// Hall Tables Routes
+router.use("/hall-tables", hallTables_1.default);
+router.use("/pos/hall-tables", hallTables_1.default);
 exports.default = router;

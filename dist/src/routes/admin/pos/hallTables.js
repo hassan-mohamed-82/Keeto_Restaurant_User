@@ -1,0 +1,20 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const catchAsync_1 = require("../../../utils/catchAsync");
+const validation_1 = require("../../../middlewares/validation");
+const hallTable_1 = require("../../../validation/admin/pos/hallTable");
+const hallTable_2 = require("../../../controllers/admin/pos/hallTable");
+const router = (0, express_1.Router)();
+router.post("/", (0, validation_1.validate)(hallTable_1.createHallTableSchema), (0, catchAsync_1.catchAsync)(hallTable_2.createHallTable));
+router.get("/", (0, validation_1.validate)(hallTable_1.hallTableQuerySchema, "query"), (0, catchAsync_1.catchAsync)(hallTable_2.getAllHallTables));
+router.post("/list", (0, validation_1.validate)(hallTable_1.hallTableQuerySchema, "body"), (0, catchAsync_1.catchAsync)(hallTable_2.getAllHallTables));
+// Halls dropdown selection endpoint for Table
+router.get("/halls", (0, catchAsync_1.catchAsync)(hallTable_2.getHallsForTable));
+router.post("/halls", (0, catchAsync_1.catchAsync)(hallTable_2.getHallsForTable));
+router.get("/:id", (0, catchAsync_1.catchAsync)(hallTable_2.getHallTableById));
+router.put("/:id", (0, validation_1.validate)(hallTable_1.updateHallTableSchema), (0, catchAsync_1.catchAsync)(hallTable_2.updateHallTable));
+router.patch("/:id/toggle-status", (0, catchAsync_1.catchAsync)(hallTable_2.toggleHallTableStatus));
+router.patch("/:id/toggle-occupied", (0, catchAsync_1.catchAsync)(hallTable_2.toggleHallTableOccupied));
+router.delete("/:id", (0, catchAsync_1.catchAsync)(hallTable_2.deleteHallTable));
+exports.default = router;

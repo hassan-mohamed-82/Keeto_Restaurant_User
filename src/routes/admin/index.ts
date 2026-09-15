@@ -56,6 +56,10 @@ import OrderDelayAlertRouter from "./orderDelayAlert";
 import SupplierRouter from "./pos/suppliers";
 import StoreRouter from "./pos/stores";
 import StoreManRouter from "./pos/storeMen";
+import CaptainOrderRouter from "./pos/captainOrders";
+import CashierManRouter from "./pos/cashierMen";
+import HallRouter from "./pos/halls";
+import HallTableRouter from "./pos/hallTables";
 const router = Router();
 
 router.use("/auth", authRouter);
@@ -141,5 +145,21 @@ router.use("/pos/stores", StoreRouter);
 // Store Men Routes
 router.use("/store-men", StoreManRouter);
 router.use("/pos/store-men", StoreManRouter);
+
+// Captain Orders Routes
+router.use("/captain-orders", CaptainOrderRouter);
+router.use("/pos/captain-orders", CaptainOrderRouter);
+
+// Cashier Men Routes
+router.use("/cashier-men", CashierManRouter);
+router.use("/pos/cashier-men", CashierManRouter);
+
+// Halls Routes
+router.use("/halls", HallRouter);
+router.use("/pos/halls", HallRouter);
+
+// Hall Tables Routes
+router.use("/hall-tables", HallTableRouter);
+router.use("/pos/hall-tables", HallTableRouter);
 
 export default router;
