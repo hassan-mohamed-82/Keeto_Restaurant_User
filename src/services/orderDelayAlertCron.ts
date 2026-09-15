@@ -1,7 +1,7 @@
 import cron from "node-cron";
 import { db } from "../models/connection";
 import { orders, orderDelayAlertGroups, branches } from "../models/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, or, isNull } from "drizzle-orm";
 import { sendEmail } from "../utils/sendEmails";
 
 /**
@@ -206,7 +206,7 @@ export function initOrderDelayAlertCron() {
                 .from(orders)
                 .where(
                     and(
-                        eq(orders.isDelayEmailSent, false),
+                        or(eq(orders.isDelayEmailSent, false), isNull(orders.isDelayEmailSent)),
                         inArray(orders.status, ["pending", "accepted", "preparing", "out_for_delivery"])
                     )
                 );
@@ -242,7 +242,9 @@ export function initOrderDelayAlertCron() {
                 );
 
                 const restaurantGroups = groupsByRestaurant.get(order.restaurantId) || [];
-                if (restaurantGroups.length === 0) continue;
+                if (restaurantGroups.length === 0) {
+                    continue;
+                }
 
                 // Check which groups match this order's branch, orderStatus, and are overdue
                 const matchingOverdueGroups = restaurantGroups.filter((g) => {
