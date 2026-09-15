@@ -9,7 +9,7 @@ import {
 import {
     createStore,
     getAllStores,
-    getStoresForSelection,
+    getBranchForSelection,
     getStoreById,
     updateStore,
     deleteStore,
@@ -23,8 +23,8 @@ router.get("/", validate(storeQuerySchema, "query"), catchAsync(getAllStores));
 router.post("/list", validate(storeQuerySchema, "body"), catchAsync(getAllStores));
 
 // Dropdown selection endpoint
-router.get("/selection", catchAsync(getStoresForSelection));
-router.post("/selection", catchAsync(getStoresForSelection));
+router.get("/selection", catchAsync(getBranchForSelection));
+router.post("/selection", catchAsync(getBranchForSelection));
 
 router.get("/:id", catchAsync(getStoreById));
 router.put("/:id", validate(updateStoreSchema), catchAsync(updateStore));

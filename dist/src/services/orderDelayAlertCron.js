@@ -29,50 +29,65 @@ function buildDelayAlertEmailHtml(params) {
             color: #2d3748;
         }
         .container {
-            max-width: 600px;
+            max-width: 650px;
             margin: 0 auto;
             background-color: #ffffff;
             border-radius: 12px;
             overflow: hidden;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
         .header {
-            background: linear-gradient(135deg, #e53e3e 0%, #dd6b20 100%);
+            background: linear-gradient(135deg, #e53e3e 0%, #c53030 100%);
             color: #ffffff;
             padding: 24px;
             text-align: center;
         }
         .header h1 {
             margin: 0;
-            font-size: 22px;
+            font-size: 24px;
             font-weight: 700;
         }
         .header p {
             margin: 8px 0 0;
-            font-size: 14px;
+            font-size: 15px;
             opacity: 0.9;
         }
         .content {
             padding: 24px;
         }
-        .badge-warning {
-            display: inline-block;
-            background-color: #feebc8;
-            color: #c05621;
-            padding: 6px 14px;
-            border-radius: 9999px;
-            font-weight: bold;
+        .alert-box {
+            background-color: #fff5f5;
+            border-right: 4px solid #e53e3e;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+            text-align: center;
+        }
+        .alert-box strong {
+            color: #c53030;
+            font-size: 18px;
+            display: block;
+            margin-bottom: 5px;
+        }
+        .alert-box span {
+            color: #e53e3e;
             font-size: 14px;
-            margin-bottom: 20px;
+        }
+        .section-title {
+            font-size: 16px;
+            color: #4a5568;
+            border-bottom: 2px solid #edf2f7;
+            padding-bottom: 8px;
+            margin-bottom: 16px;
+            margin-top: 24px;
+            font-weight: bold;
         }
         .details-table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 10px;
-            margin-bottom: 20px;
         }
         .details-table th, .details-table td {
-            padding: 12px 14px;
+            padding: 12px;
             border-bottom: 1px solid #edf2f7;
             text-align: right;
             font-size: 14px;
@@ -87,10 +102,14 @@ function buildDelayAlertEmailHtml(params) {
             color: #1a202c;
             font-weight: 500;
         }
-        .delay-highlight {
-            color: #e53e3e;
-            font-weight: bold;
-            font-size: 16px;
+        .note-box {
+            background-color: #ebf8ff;
+            border: 1px solid #bee3f8;
+            padding: 12px;
+            border-radius: 6px;
+            color: #2b6cb0;
+            font-size: 14px;
+            margin-top: 10px;
         }
         .footer {
             background-color: #f7fafc;
@@ -105,49 +124,75 @@ function buildDelayAlertEmailHtml(params) {
 <body>
     <div class="container">
         <div class="header">
-            <h1>⚠️ تنبيه: تجاوز وقت الطلب المحدد</h1>
-            <p>مجموعة التنبيه: ${params.groupName}</p>
+            <h1>⚠️ تنبيه عاجل: تأخير في تسليم الطلب</h1>
+            <p>فرع: ${params.branchName} | مجموعة: ${params.groupName}</p>
         </div>
         <div class="content">
-            <div style="text-align: center;">
-                <span class="badge-warning">
-                    تأخر الطلب بـ ${params.elapsedMinutes} دقيقة (الحد الأقصى المسموح: ${params.thresholdMinutes} دقيقة)
-                </span>
-            </div>
             
+            <div class="alert-box">
+                <strong>تأخر الطلب بـ ${params.elapsedMinutes} دقيقة!</strong>
+                <span>(الحد الأقصى المسموح لهذا الفرع هو ${params.thresholdMinutes} دقيقة)</span>
+            </div>
+
+            <div class="section-title">📌 التفاصيل الأساسية للطلب</div>
             <table class="details-table">
                 <tr>
                     <th>رقم الطلب اليومي</th>
-                    <td><strong>#${params.dailyOrderNumber || "-"}</strong></td>
-                </tr>
-                <tr>
-                    <th>رقم الطلب المرجعي</th>
-                    <td>${params.orderNumber}</td>
-                </tr>
-                <tr>
-                    <th>الفرع</th>
-                    <td>${params.branchName}</td>
+                    <td><strong style="font-size: 16px; color: #2d3748;">#${params.dailyOrderNumber || "-"}</strong></td>
                 </tr>
                 <tr>
                     <th>حالة الطلب الحالية</th>
-                    <td>${params.statusAr}</td>
+                    <td><span style="background: #edf2f7; padding: 4px 8px; border-radius: 4px;">${params.statusAr}</span></td>
                 </tr>
                 <tr>
-                    <th>مدة التأخير</th>
-                    <td class="delay-highlight">${params.elapsedMinutes} دقيقة</td>
+                    <th>نوع الطلب</th>
+                    <td>${params.orderTypeAr} (${params.orderSourceAr})</td>
                 </tr>
                 <tr>
-                    <th>إجمالي قيمة الطلب</th>
-                    <td>${params.totalAmount} ج.م</td>
+                    <th>عدد الأصناف</th>
+                    <td><strong style="color: #e53e3e;">${params.itemsCount} أصناف</strong></td>
                 </tr>
                 <tr>
-                    <th>وقت استلام الطلب</th>
-                    <td>${params.createdAtFormatted}</td>
+                    <th>إجمالي القيمة</th>
+                    <td><strong>${params.totalAmount} ج.م</strong></td>
                 </tr>
             </table>
 
-            <p style="font-size: 13px; color: #718096; line-height: 1.6; margin: 0;">
-                💡 <strong>ملاحظة:</strong> تم إرسال هذا التنبيه آلياً مرة واحدة وفقاً لإعدادات مجموعة تنبيهات التأخير المعينة لهذا الفرع لاتخاذ الإجراء السريع.
+            <div class="section-title">⏱️ التوقيت الزمني</div>
+            <table class="details-table">
+                <tr>
+                    <th>تاريخ الطلب</th>
+                    <td>${params.orderDate}</td>
+                </tr>
+                <tr>
+                    <th>وقت استلام الطلب</th>
+                    <td>${params.orderTime}</td>
+                </tr>
+            </table>
+
+            <div class="section-title">👤 بيانات العميل والتوصيل</div>
+            <table class="details-table">
+                <tr>
+                    <th>رقم هاتف العميل</th>
+                    <td dir="ltr" style="text-align: right;"><strong>${params.customerPhone || "غير متوفر"}</strong></td>
+                </tr>
+                ${params.deliveryAddress ? `
+                <tr>
+                    <th>عنوان التوصيل</th>
+                    <td>${params.deliveryAddress}</td>
+                </tr>
+                ` : ''}
+            </table>
+
+            ${params.orderNote ? `
+            <div class="section-title">📝 ملاحظات الطلب</div>
+            <div class="note-box">
+                ${params.orderNote}
+            </div>
+            ` : ''}
+
+            <p style="font-size: 13px; color: #718096; line-height: 1.6; margin-top: 24px; text-align: center;">
+                💡 <strong>ملاحظة:</strong> تم إرسال هذا التنبيه آلياً لاتخاذ إجراء سريع لتجنب استياء العميل.
             </p>
         </div>
         <div class="footer">
@@ -157,6 +202,21 @@ function buildDelayAlertEmailHtml(params) {
 </body>
 </html>
     `;
+}
+function parseJsonField(val, fallback) {
+    if (typeof val === "string") {
+        try {
+            const parsed = JSON.parse(val);
+            return parsed !== null && parsed !== undefined ? parsed : fallback;
+        }
+        catch {
+            return fallback;
+        }
+    }
+    if (val !== undefined && val !== null) {
+        return val;
+    }
+    return fallback;
 }
 /**
  * Initialize Order Delay Alert Cron Service.
@@ -171,7 +231,6 @@ function initOrderDelayAlertCron() {
             const activeOrders = await connection_1.db
                 .select({
                 id: schema_1.orders.id,
-                orderNumber: schema_1.orders.orderNumber,
                 dailyOrderNumber: schema_1.orders.dailyOrderNumber,
                 restaurantId: schema_1.orders.restaurantId,
                 branchId: schema_1.orders.branchId,
@@ -179,9 +238,14 @@ function initOrderDelayAlertCron() {
                 totalAmount: schema_1.orders.totalAmount,
                 createdAt: schema_1.orders.createdAt,
                 branchSnapshot: schema_1.orders.branchSnapshot,
+                orderType: schema_1.orders.orderType,
+                orderSource: schema_1.orders.orderSource,
+                paymentMethod: schema_1.orders.paymentMethod,
+                shippingAddress: schema_1.orders.shippingAddress,
+                note: schema_1.orders.note,
             })
                 .from(schema_1.orders)
-                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orders.isDelayEmailSent, false), (0, drizzle_orm_1.inArray)(schema_1.orders.status, ["pending", "accepted", "preparing", "out_for_delivery"])));
+                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.orders.isDelayEmailSent, false), (0, drizzle_orm_1.isNull)(schema_1.orders.isDelayEmailSent)), (0, drizzle_orm_1.inArray)(schema_1.orders.status, ["pending", "accepted", "preparing", "out_for_delivery"])));
             if (!activeOrders || activeOrders.length === 0) {
                 return;
             }
@@ -206,15 +270,15 @@ function initOrderDelayAlertCron() {
                     continue;
                 const elapsedMinutes = Math.floor((now.getTime() - new Date(order.createdAt).getTime()) / 60000);
                 const restaurantGroups = groupsByRestaurant.get(order.restaurantId) || [];
-                if (restaurantGroups.length === 0)
+                if (restaurantGroups.length === 0) {
                     continue;
+                }
                 // Check which groups match this order's branch, orderStatus, and are overdue
                 const matchingOverdueGroups = restaurantGroups.filter((g) => {
-                    const isBranchMatch = g.allBranches ||
-                        (order.branchId && Array.isArray(g.branchIds) && g.branchIds.includes(order.branchId));
-                    const allowedStatuses = Array.isArray(g.orderStatus) && g.orderStatus.length > 0
-                        ? g.orderStatus
-                        : ["pending"];
+                    const branchIds = parseJsonField(g.branchIds, []);
+                    const isBranchMatch = Boolean(g.allBranches) ||
+                        (order.branchId && Array.isArray(branchIds) && branchIds.includes(order.branchId));
+                    const allowedStatuses = parseJsonField(g.orderStatus, ["pending"]);
                     const isStatusMatch = order.status ? allowedStatuses.includes(order.status) : false;
                     return isBranchMatch && isStatusMatch && elapsedMinutes >= g.maxDelayMinutes;
                 });
@@ -227,8 +291,9 @@ function initOrderDelayAlertCron() {
                 // Collect unique recipient emails from all matching overdue groups
                 const recipientEmails = new Set();
                 for (const g of matchingOverdueGroups) {
-                    if (Array.isArray(g.emails)) {
-                        for (const email of g.emails) {
+                    const groupEmails = parseJsonField(g.emails, []);
+                    if (Array.isArray(groupEmails)) {
+                        for (const email of groupEmails) {
                             if (email && typeof email === "string" && email.includes("@")) {
                                 recipientEmails.add(email.trim().toLowerCase());
                             }
@@ -258,7 +323,7 @@ function initOrderDelayAlertCron() {
                         branchName = foundBranch.nameAr || foundBranch.name;
                     }
                 }
-                // Arabic status translation
+                // Status translation
                 let statusAr = "معلق";
                 if (order.status === "accepted")
                     statusAr = "مقبول";
@@ -266,12 +331,46 @@ function initOrderDelayAlertCron() {
                     statusAr = "جاري التحضير";
                 else if (order.status === "out_for_delivery")
                     statusAr = "خرج للتوصيل";
-                const createdAtFormatted = new Date(order.createdAt).toLocaleTimeString("ar-EG", {
-                    hour: "2-digit",
-                    minute: "2-digit",
+                // Order Type translation
+                const orderTypesMap = {
+                    delivery: "توصيل",
+                    takeaway: "استلام من الفرع",
+                    dine_in: "صالة (داخل المطعم)"
+                };
+                const orderTypeAr = order.orderType ? (orderTypesMap[order.orderType] || order.orderType) : "غير محدد";
+                // Order Source translation
+                const orderSourcesMap = {
+                    online_order_web: "طلب عبر الويب",
+                    online_order_app: "تطبيق الهاتف",
+                    food_aggregator: "تطبيق توصيل خارجي",
+                    my_keeto: "نظام كيتو"
+                };
+                const orderSourceAr = order.orderSource ? (orderSourcesMap[order.orderSource] || order.orderSource) : "غير محدد";
+                // Date and Time formatting
+                const orderDateObj = new Date(order.createdAt);
+                const orderDate = orderDateObj.toLocaleDateString("ar-EG", {
+                    weekday: "long", year: "numeric", month: "long", day: "numeric"
                 });
+                const orderTime = orderDateObj.toLocaleTimeString("ar-EG", {
+                    hour: "2-digit", minute: "2-digit"
+                });
+                // Address & Phone extraction
+                let customerPhone = "";
+                let deliveryAddress = "";
+                if (order.shippingAddress) {
+                    const addressData = typeof order.shippingAddress === "string"
+                        ? parseJsonField(order.shippingAddress, {})
+                        : order.shippingAddress;
+                    customerPhone = addressData?.phone || "";
+                    deliveryAddress = addressData?.fulladdress || addressData?.street || "";
+                }
+                // Query total item count for the order
+                const orderItemsList = await connection_1.db
+                    .select({ id: schema_1.orderItems.id })
+                    .from(schema_1.orderItems)
+                    .where((0, drizzle_orm_1.eq)(schema_1.orderItems.orderId, order.id));
+                const itemsCount = orderItemsList.length;
                 const emailHtml = buildDelayAlertEmailHtml({
-                    orderNumber: order.orderNumber,
                     dailyOrderNumber: order.dailyOrderNumber,
                     branchName,
                     statusAr,
@@ -279,9 +378,16 @@ function initOrderDelayAlertCron() {
                     thresholdMinutes: primaryGroup.maxDelayMinutes,
                     groupName: primaryGroup.name,
                     totalAmount: order.totalAmount,
-                    createdAtFormatted,
+                    orderDate,
+                    orderTime,
+                    orderTypeAr,
+                    orderSourceAr,
+                    customerPhone,
+                    deliveryAddress,
+                    orderNote: order.note || "",
+                    itemsCount,
                 });
-                const subject = `⚠️ تنبيه تأخير: الطلب #${order.dailyOrderNumber || order.orderNumber} تجاوز ${elapsedMinutes} دقيقة!`;
+                const subject = `⚠️ تنبيه تأخير: الطلب #${order.dailyOrderNumber} تجاوز ${elapsedMinutes} دقيقة!`;
                 // Send email to all recipients
                 const sendPromises = Array.from(recipientEmails).map((to) => (0, sendEmails_1.sendEmail)({
                     to,
@@ -296,7 +402,7 @@ function initOrderDelayAlertCron() {
                     .update(schema_1.orders)
                     .set({ isDelayEmailSent: true })
                     .where((0, drizzle_orm_1.eq)(schema_1.orders.id, order.id));
-                console.log(`📧 [Delay Alert] Sent once for Order #${order.dailyOrderNumber || order.orderNumber} (Delay: ${elapsedMinutes}m) to: ${Array.from(recipientEmails).join(", ")}`);
+                console.log(`📧 [Delay Alert] Sent once for Order #${order.dailyOrderNumber} (Delay: ${elapsedMinutes}m) to: ${Array.from(recipientEmails).join(", ")}`);
             }
         }
         catch (error) {

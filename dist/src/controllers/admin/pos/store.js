@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.toggleStoreStatus = exports.deleteStore = exports.updateStore = exports.getStoreById = exports.getStoresForSelection = exports.getAllStores = exports.createStore = void 0;
+exports.toggleStoreStatus = exports.deleteStore = exports.updateStore = exports.getStoreById = exports.getBranchForSelection = exports.getAllStores = exports.createStore = void 0;
 const connection_1 = require("../../../models/connection");
 const schema_1 = require("../../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -119,32 +119,32 @@ exports.getAllStores = getAllStores;
 // ==========================================
 // 3. Get Stores For Selection (Dropdown API: id & name by lang)
 // ==========================================
-const getStoresForSelection = async (req, res) => {
+const getBranchForSelection = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) {
         throw new Errors_1.BadRequest("Restaurant context is missing or unauthorized");
     }
     const lang = (0, localization_helper_1.extractLang)(req);
-    const activeStores = await connection_1.db
+    const activeBranch = await connection_1.db
         .select({
-        id: schema_1.stores.id,
-        name: schema_1.stores.name,
-        nameAr: schema_1.stores.nameAr,
-        nameFr: schema_1.stores.nameFr,
+        id: schema_1.branches.id,
+        name: schema_1.branches.name,
+        nameAr: schema_1.branches.nameAr,
+        nameFr: schema_1.branches.nameFr,
     })
-        .from(schema_1.stores)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.stores.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.stores.status, true)))
-        .orderBy((0, drizzle_orm_1.desc)(schema_1.stores.createdAt));
-    const formatted = activeStores.map((s) => ({
+        .from(schema_1.branches)
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branches.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.branches.status, "active")))
+        .orderBy((0, drizzle_orm_1.desc)(schema_1.branches.createdAt));
+    const formatted = activeBranch.map((s) => ({
         id: s.id,
         name: (0, localization_helper_1.getLocalizedName)(s, lang),
     }));
     return (0, response_1.SuccessResponse)(res, {
-        message: "Stores for selection fetched successfully",
+        message: "Branch for selection fetched successfully",
         data: formatted,
     });
 };
-exports.getStoresForSelection = getStoresForSelection;
+exports.getBranchForSelection = getBranchForSelection;
 // ==========================================
 // 4. Get Store By ID (Full details + map link + branches as [{id, name by lang}])
 // ==========================================

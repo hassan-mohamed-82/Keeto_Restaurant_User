@@ -10,8 +10,8 @@ router.post("/", (0, validation_1.validate)(stores_1.createStoreSchema), (0, cat
 router.get("/", (0, validation_1.validate)(stores_1.storeQuerySchema, "query"), (0, catchAsync_1.catchAsync)(store_1.getAllStores));
 router.post("/list", (0, validation_1.validate)(stores_1.storeQuerySchema, "body"), (0, catchAsync_1.catchAsync)(store_1.getAllStores));
 // Dropdown selection endpoint
-router.get("/selection", (0, catchAsync_1.catchAsync)(store_1.getStoresForSelection));
-router.post("/selection", (0, catchAsync_1.catchAsync)(store_1.getStoresForSelection));
+router.get("/selection", (0, catchAsync_1.catchAsync)(store_1.getBranchForSelection));
+router.post("/selection", (0, catchAsync_1.catchAsync)(store_1.getBranchForSelection));
 router.get("/:id", (0, catchAsync_1.catchAsync)(store_1.getStoreById));
 router.put("/:id", (0, validation_1.validate)(stores_1.updateStoreSchema), (0, catchAsync_1.catchAsync)(store_1.updateStore));
 router.patch("/:id/toggle-status", (0, catchAsync_1.catchAsync)(store_1.toggleStoreStatus));

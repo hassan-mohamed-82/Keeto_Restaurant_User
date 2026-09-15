@@ -152,7 +152,7 @@ export const getAllStores = async (req: Request, res: Response) => {
 // ==========================================
 // 3. Get Stores For Selection (Dropdown API: id & name by lang)
 // ==========================================
-export const getStoresForSelection = async (req: Request, res: Response) => {
+export const getBranchForSelection = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) {
         throw new BadRequest("Restaurant context is missing or unauthorized");
@@ -160,29 +160,29 @@ export const getStoresForSelection = async (req: Request, res: Response) => {
 
     const lang = extractLang(req);
 
-    const activeStores = await db
+    const activeBranch = await db
         .select({
-            id: stores.id,
-            name: stores.name,
-            nameAr: stores.nameAr,
-            nameFr: stores.nameFr,
+            id: branches.id,
+            name: branches.name,
+            nameAr: branches.nameAr,
+            nameFr: branches.nameFr,
         })
-        .from(stores)
+        .from(branches)
         .where(
             and(
-                eq(stores.restaurantId, restaurantId),
-                eq(stores.status, true)
+                eq(branches.restaurantId, restaurantId),
+                eq(branches.status, "active")
             )
         )
-        .orderBy(desc(stores.createdAt));
+        .orderBy(desc(branches.createdAt));
 
-    const formatted = activeStores.map((s) => ({
+    const formatted = activeBranch.map((s) => ({
         id: s.id,
         name: getLocalizedName(s, lang),
     }));
 
     return SuccessResponse(res, {
-        message: "Stores for selection fetched successfully",
+        message: "Branch for selection fetched successfully",
         data: formatted,
     });
 };

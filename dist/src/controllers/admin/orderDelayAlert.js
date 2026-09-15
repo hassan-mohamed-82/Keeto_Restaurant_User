@@ -7,17 +7,46 @@ const drizzle_orm_1 = require("drizzle-orm");
 const response_1 = require("../../utils/response");
 const Errors_1 = require("../../Errors");
 const uuid_1 = require("uuid");
-// Helper to enrich groups with branch information
+// Helper to safely parse JSON strings or return array
+function parseJsonField(val, fallback) {
+    if (typeof val === "string") {
+        try {
+            const parsed = JSON.parse(val);
+            return parsed !== null && parsed !== undefined ? parsed : fallback;
+        }
+        catch {
+            return fallback;
+        }
+    }
+    if (val !== undefined && val !== null) {
+        return val;
+    }
+    return fallback;
+}
+// Helper to enrich and cleanly format groups with parsed arrays and branch details
 async function enrichGroupsWithBranches(groups) {
     const allBranchIds = new Set();
-    for (const group of groups) {
-        if (!group.allBranches && Array.isArray(group.branchIds)) {
-            for (const bId of group.branchIds) {
+    const normalizedGroups = groups.map((g) => {
+        const emails = parseJsonField(g.emails, []);
+        const branchIds = parseJsonField(g.branchIds, []);
+        const orderStatus = parseJsonField(g.orderStatus, ["pending"]);
+        const allBranches = Boolean(g.allBranches);
+        const isActive = Boolean(g.isActive);
+        if (!allBranches && Array.isArray(branchIds)) {
+            for (const bId of branchIds) {
                 if (bId)
                     allBranchIds.add(bId);
             }
         }
-    }
+        return {
+            ...g,
+            emails,
+            branchIds,
+            orderStatus,
+            allBranches,
+            isActive,
+        };
+    });
     let branchMap = new Map();
     if (allBranchIds.size > 0) {
         const branchList = await connection_1.db
@@ -32,7 +61,7 @@ async function enrichGroupsWithBranches(groups) {
             branchMap.set(b.id, b);
         }
     }
-    return groups.map((g) => {
+    return normalizedGroups.map((g) => {
         const branchesInfo = (!g.allBranches && Array.isArray(g.branchIds))
             ? g.branchIds.map((id) => branchMap.get(id) || { id, name: "Unknown" })
             : [];
