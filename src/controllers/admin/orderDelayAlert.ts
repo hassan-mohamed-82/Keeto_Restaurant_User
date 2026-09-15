@@ -30,7 +30,7 @@ async function enrichGroupsWithBranches(groups: (typeof orderDelayAlertGroups.$i
         const emails = parseJsonField<string[]>(g.emails, []);
         const branchIds = parseJsonField<string[]>(g.branchIds, []);
         const orderStatus = parseJsonField<string[]>(g.orderStatus, ["pending"]);
-        const allBranches = Boolean(g.allBranches);
+        const allBranches = g.allBranches !== false;
         const isActive = Boolean(g.isActive);
 
         if (!allBranches && Array.isArray(branchIds)) {
@@ -40,12 +40,17 @@ async function enrichGroupsWithBranches(groups: (typeof orderDelayAlertGroups.$i
         }
 
         return {
-            ...g,
+            id: g.id,
+            restaurantId: g.restaurantId,
+            name: g.name,
             emails,
-            branchIds,
-            orderStatus,
             allBranches,
+            branchIds,
+            maxDelayMinutes: g.maxDelayMinutes,
+            orderStatus,
             isActive,
+            createdAt: g.createdAt,
+            updatedAt: g.updatedAt,
         };
     });
 
@@ -86,13 +91,22 @@ export const createAlertGroup = async (req: Request, res: Response) => {
         throw new BadRequest("Restaurant context is missing or unauthorized");
     }
 
-    const { name, emails, allBranches = true, branchIds = [], maxDelayMinutes, orderStatus = ["pending"], isActive = true } = req.body;
+    const {
+        name,
+        emails,
+        allBranches = true,
+        branchIds = [],
+        maxDelayMinutes,
+        orderStatus = ["pending"],
+        isActive = true,
+    } = req.body;
 
     const id = uuidv4();
 
     await db.insert(orderDelayAlertGroups).values({
         id,
         restaurantId,
+        isSuperAdmin: false,
         name: name.trim(),
         emails: Array.isArray(emails) ? emails : [emails],
         allBranches: Boolean(allBranches),
@@ -121,7 +135,7 @@ export const createAlertGroup = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 2. Get All Alert Groups
+// 2. Get All Alert Groups (Scoped to restaurant & isSuperAdmin = false)
 // ==========================================
 export const getAllAlertGroups = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
@@ -129,10 +143,16 @@ export const getAllAlertGroups = async (req: Request, res: Response) => {
         throw new BadRequest("Restaurant context is missing or unauthorized");
     }
 
+    // Never return superadmin groups to the restaurant user
     const groups = await db
         .select()
         .from(orderDelayAlertGroups)
-        .where(eq(orderDelayAlertGroups.restaurantId, restaurantId))
+        .where(
+            and(
+                eq(orderDelayAlertGroups.restaurantId, restaurantId),
+                eq(orderDelayAlertGroups.isSuperAdmin, false)
+            )
+        )
         .orderBy(desc(orderDelayAlertGroups.createdAt));
 
     const enriched = await enrichGroupsWithBranches(groups);
@@ -160,7 +180,8 @@ export const getAlertGroupById = async (req: Request, res: Response) => {
         .where(
             and(
                 eq(orderDelayAlertGroups.id, id),
-                eq(orderDelayAlertGroups.restaurantId, restaurantId)
+                eq(orderDelayAlertGroups.restaurantId, restaurantId),
+                eq(orderDelayAlertGroups.isSuperAdmin, false)
             )
         )
         .limit(1);
@@ -194,7 +215,8 @@ export const updateAlertGroup = async (req: Request, res: Response) => {
         .where(
             and(
                 eq(orderDelayAlertGroups.id, id),
-                eq(orderDelayAlertGroups.restaurantId, restaurantId)
+                eq(orderDelayAlertGroups.restaurantId, restaurantId),
+                eq(orderDelayAlertGroups.isSuperAdmin, false)
             )
         )
         .limit(1);
@@ -230,7 +252,8 @@ export const updateAlertGroup = async (req: Request, res: Response) => {
         .where(
             and(
                 eq(orderDelayAlertGroups.id, id),
-                eq(orderDelayAlertGroups.restaurantId, restaurantId)
+                eq(orderDelayAlertGroups.restaurantId, restaurantId),
+                eq(orderDelayAlertGroups.isSuperAdmin, false)
             )
         );
 
@@ -265,7 +288,8 @@ export const toggleAlertGroupStatus = async (req: Request, res: Response) => {
         .where(
             and(
                 eq(orderDelayAlertGroups.id, id),
-                eq(orderDelayAlertGroups.restaurantId, restaurantId)
+                eq(orderDelayAlertGroups.restaurantId, restaurantId),
+                eq(orderDelayAlertGroups.isSuperAdmin, false)
             )
         )
         .limit(1);
@@ -304,7 +328,8 @@ export const deleteAlertGroup = async (req: Request, res: Response) => {
         .where(
             and(
                 eq(orderDelayAlertGroups.id, id),
-                eq(orderDelayAlertGroups.restaurantId, restaurantId)
+                eq(orderDelayAlertGroups.restaurantId, restaurantId),
+                eq(orderDelayAlertGroups.isSuperAdmin, false)
             )
         )
         .limit(1);

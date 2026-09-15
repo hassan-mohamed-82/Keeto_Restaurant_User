@@ -1,32 +1,22 @@
 import { z } from "zod";
 
-// Helper to normalize email or emails array
-const normalizeEmails = (val: unknown): unknown => {
+// Helper to normalize array or single value
+const normalizeToArray = (val: unknown): unknown => {
     if (typeof val === "string") {
-        // If comma separated or single string
-        if (val.includes(",")) {
-            return val.split(",").map(e => e.trim()).filter(Boolean);
+        try {
+            const parsed = JSON.parse(val);
+            return Array.isArray(parsed) ? parsed : [val];
+        } catch {
+            // Check if comma separated
+            if (val.includes(",")) {
+                return val.split(",").map((s) => s.trim()).filter(Boolean);
+            }
+            const trimmed = val.trim();
+            return trimmed ? [trimmed] : [];
         }
-        const trimmed = val.trim();
-        return trimmed ? [trimmed] : [];
     }
     if (Array.isArray(val)) {
-        return val.map(e => typeof e === "string" ? e.trim() : e).filter(Boolean);
-    }
-    return val;
-};
-
-// Helper to normalize branchIds
-const normalizeBranchIds = (val: unknown): unknown => {
-    if (typeof val === "string") {
-        if (val.includes(",")) {
-            return val.split(",").map(b => b.trim()).filter(Boolean);
-        }
-        const trimmed = val.trim();
-        return trimmed ? [trimmed] : [];
-    }
-    if (Array.isArray(val)) {
-        return val.map(b => typeof b === "string" ? b.trim() : b).filter(Boolean);
+        return val.map((item) => typeof item === "string" ? item.trim() : item).filter(Boolean);
     }
     return val;
 };
@@ -34,28 +24,42 @@ const normalizeBranchIds = (val: unknown): unknown => {
 // Helper to normalize orderStatus
 const normalizeOrderStatus = (val: unknown): unknown => {
     if (val === undefined || val === null) return ["pending"];
-    if (typeof val === "string") {
-        if (val.includes(",")) {
-            return val.split(",").map(s => s.trim()).filter(Boolean);
-        }
-        const trimmed = val.trim();
-        return trimmed ? [trimmed] : ["pending"];
-    }
-    if (Array.isArray(val)) {
-        const filtered = val.map(s => typeof s === "string" ? s.trim() : s).filter(Boolean);
+    const arr = normalizeToArray(val);
+    if (Array.isArray(arr)) {
+        const filtered = arr.filter(Boolean);
         return filtered.length > 0 ? filtered : ["pending"];
     }
-    return val;
+    return ["pending"];
 };
 
 export const createOrderDelayAlertGroupSchema = z.object({
+    restaurantId: z
+        .string()
+        .optional()
+        .nullable(),
+
+    isSuperAdmin: z
+        .boolean()
+        .optional()
+        .default(false),
+
+    allRestaurants: z
+        .boolean()
+        .optional()
+        .default(true),
+
+    restaurantIds: z.preprocess(
+        normalizeToArray,
+        z.array(z.string().min(1)).optional().default([])
+    ),
+
     name: z
         .string({ required_error: "اسم المجموعة مطلوب" })
         .min(1, "اسم المجموعة لا يمكن أن يكون فارغاً")
         .max(255, "اسم المجموعة طويل جداً"),
 
     emails: z.preprocess(
-        normalizeEmails,
+        normalizeToArray,
         z
             .array(z.string().email("البريد الإلكتروني غير صالح"))
             .min(1, "يجب إدخال بريد إلكتروني واحد على الأقل")
@@ -67,7 +71,7 @@ export const createOrderDelayAlertGroupSchema = z.object({
         .default(true),
 
     branchIds: z.preprocess(
-        normalizeBranchIds,
+        normalizeToArray,
         z.array(z.string().min(1)).optional().default([])
     ),
 
@@ -88,7 +92,7 @@ export const createOrderDelayAlertGroupSchema = z.object({
         .default(true),
 }).refine(
     (data) => {
-        // If allBranches is false, branchIds must have at least one branch
+        // If allBranches is explicitly false, branchIds must contain at least one branch
         if (data.allBranches === false) {
             return Array.isArray(data.branchIds) && data.branchIds.length > 0;
         }
@@ -101,6 +105,15 @@ export const createOrderDelayAlertGroupSchema = z.object({
 );
 
 export const updateOrderDelayAlertGroupSchema = z.object({
+    restaurantId: z
+        .string()
+        .optional()
+        .nullable(),
+
+    isSuperAdmin: z
+        .boolean()
+        .optional(),
+
     name: z
         .string()
         .min(1, "اسم المجموعة لا يمكن أن يكون فارغاً")
@@ -108,7 +121,7 @@ export const updateOrderDelayAlertGroupSchema = z.object({
         .optional(),
 
     emails: z.preprocess(
-        normalizeEmails,
+        normalizeToArray,
         z
             .array(z.string().email("البريد الإلكتروني غير صالح"))
             .min(1, "يجب إدخال بريد إلكتروني واحد على الأقل")
@@ -119,7 +132,7 @@ export const updateOrderDelayAlertGroupSchema = z.object({
         .optional(),
 
     branchIds: z.preprocess(
-        normalizeBranchIds,
+        normalizeToArray,
         z.array(z.string().min(1))
     ).optional(),
 
