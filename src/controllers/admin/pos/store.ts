@@ -199,10 +199,7 @@ export const getAllStores = async (req: Request, res: Response) => {
             id: s.id,
             name: getLocalizedName(s, lang),
             status: s.status,
-            branche_ids: bIds,
             branches: storeBranches,
-            map: buildGoogleMapsLink(s.lat, s.lng),
-            createdAt: s.createdAt,
         };
     });
 

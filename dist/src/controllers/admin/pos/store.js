@@ -13,6 +13,23 @@ const buildGoogleMapsLink = (lat, lng) => {
         return null;
     return `https://maps.google.com/?q=${lat},${lng}`;
 };
+async function resolveBranchesByIds(branchIds, restaurantId, lang = "en") {
+    if (branchIds.length === 0)
+        return [];
+    const branchRows = await connection_1.db
+        .select({
+        id: schema_1.branches.id,
+        name: schema_1.branches.name,
+        nameAr: schema_1.branches.nameAr,
+        nameFr: schema_1.branches.nameFr,
+    })
+        .from(schema_1.branches)
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branches.restaurantId, restaurantId), (0, drizzle_orm_1.inArray)(schema_1.branches.id, branchIds)));
+    return branchRows.map((b) => ({
+        id: b.id,
+        name: (0, localization_helper_1.getLocalizedName)(b, lang),
+    }));
+}
 // ==========================================
 // 1. Create Store
 // ==========================================
@@ -41,11 +58,14 @@ const createStore = async (req, res) => {
         .from(schema_1.stores)
         .where((0, drizzle_orm_1.eq)(schema_1.stores.id, id))
         .limit(1);
+    const lang = (0, localization_helper_1.extractLang)(req);
+    const resolvedBranches = await resolveBranchesByIds(finalBranchIds, restaurantId, lang);
     return (0, response_1.SuccessResponse)(res, {
         message: "Store created successfully",
         data: {
             ...created,
             branche_ids: (0, localization_helper_1.parseJsonArray)(created.brancheIds),
+            branches: resolvedBranches,
             map: buildGoogleMapsLink(created.lat, created.lng),
         },
     }, 201);
@@ -96,14 +116,38 @@ const getAllStores = async (req, res) => {
     ]);
     const totalItems = Number(totalCountResult[0]?.count || 0);
     const totalPages = isAll ? 1 : Math.ceil(totalItems / limit);
-    // Rule: In fetch all, only display name by lang along with essentials
-    const formattedStores = rawStores.map((s) => ({
-        id: s.id,
-        name: (0, localization_helper_1.getLocalizedName)(s, lang),
-        status: s.status,
-        map: buildGoogleMapsLink(s.lat, s.lng),
-        createdAt: s.createdAt,
-    }));
+    // Collect all branch IDs from all stores fetched on this page
+    const allBranchIds = Array.from(new Set(rawStores.flatMap((s) => (0, localization_helper_1.parseJsonArray)(s.brancheIds))));
+    const branchRows = allBranchIds.length > 0
+        ? await connection_1.db
+            .select({
+            id: schema_1.branches.id,
+            name: schema_1.branches.name,
+            nameAr: schema_1.branches.nameAr,
+            nameFr: schema_1.branches.nameFr,
+        })
+            .from(schema_1.branches)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branches.restaurantId, restaurantId), (0, drizzle_orm_1.inArray)(schema_1.branches.id, allBranchIds)))
+        : [];
+    const branchMap = new Map();
+    for (const b of branchRows) {
+        branchMap.set(b.id, {
+            id: b.id,
+            name: (0, localization_helper_1.getLocalizedName)(b, lang),
+        });
+    }
+    const formattedStores = rawStores.map((s) => {
+        const bIds = (0, localization_helper_1.parseJsonArray)(s.brancheIds);
+        const storeBranches = bIds
+            .map((id) => branchMap.get(id))
+            .filter((b) => Boolean(b));
+        return {
+            id: s.id,
+            name: (0, localization_helper_1.getLocalizedName)(s, lang),
+            status: s.status,
+            branches: storeBranches,
+        };
+    });
     return (0, response_1.SuccessResponse)(res, {
         message: "Stores fetched successfully",
         data: formattedStores,
