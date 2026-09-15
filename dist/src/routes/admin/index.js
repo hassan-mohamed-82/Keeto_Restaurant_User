@@ -53,6 +53,10 @@ const taxType_1 = __importDefault(require("./pos/taxType"));
 const notes_1 = __importDefault(require("./pos/notes"));
 const notesItems_1 = __importDefault(require("./pos/notesItems"));
 const offers_1 = __importDefault(require("./pos/offers"));
+const orderDelayAlert_1 = __importDefault(require("./orderDelayAlert"));
+const suppliers_1 = __importDefault(require("./pos/suppliers"));
+const stores_1 = __importDefault(require("./pos/stores"));
+const storeMen_1 = __importDefault(require("./pos/storeMen"));
 const router = (0, express_1.Router)();
 router.use("/auth", auth_1.default);
 // ضفنا الـ Underscore هنا 👇
@@ -97,6 +101,8 @@ router.use("/recommended-foods", recommendedFood_1.default);
 router.use("/free-delivery", freeDeliveryOffer_1.default);
 router.use("/pricing", pricing_1.default);
 router.use("/shifts", shifts_1.default);
+router.use("/order-delay-alerts", orderDelayAlert_1.default);
+// POS Routes
 router.use("/pos/shifts", shifts_1.default);
 router.use("/service-fees", serviceFees_1.default);
 router.use("/pos/service-fees", serviceFees_1.default);
@@ -116,8 +122,14 @@ router.use("/notes-items", notesItems_1.default);
 router.use("/pos/notes-items", notesItems_1.default);
 router.use("/note-items", notesItems_1.default);
 router.use("/pos/note-items", notesItems_1.default);
-router.use("/offers", offers_1.default);
 router.use("/pos/offers", offers_1.default);
-router.use("/offer", offers_1.default);
-router.use("/pos/offer", offers_1.default);
+// Suppliers Routes
+router.use("/suppliers", suppliers_1.default);
+router.use("/pos/suppliers", suppliers_1.default);
+// Stores Routes
+router.use("/stores", stores_1.default);
+router.use("/pos/stores", stores_1.default);
+// Store Men Routes
+router.use("/store-men", storeMen_1.default);
+router.use("/pos/store-men", storeMen_1.default);
 exports.default = router;

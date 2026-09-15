@@ -53,6 +53,9 @@ import NotesRouter from "./pos/notes";
 import NotesItemsRouter from "./pos/notesItems";
 import OfferRouter from "./pos/offers";
 import OrderDelayAlertRouter from "./orderDelayAlert";
+import SupplierRouter from "./pos/suppliers";
+import StoreRouter from "./pos/stores";
+import StoreManRouter from "./pos/storeMen";
 const router = Router();
 
 router.use("/auth", authRouter);
@@ -126,5 +129,17 @@ router.use("/pos/notes-items", NotesItemsRouter);
 router.use("/note-items", NotesItemsRouter);
 router.use("/pos/note-items", NotesItemsRouter);
 router.use("/pos/offers", OfferRouter);
+
+// Suppliers Routes
+router.use("/suppliers", SupplierRouter);
+router.use("/pos/suppliers", SupplierRouter);
+
+// Stores Routes
+router.use("/stores", StoreRouter);
+router.use("/pos/stores", StoreRouter);
+
+// Store Men Routes
+router.use("/store-men", StoreManRouter);
+router.use("/pos/store-men", StoreManRouter);
 
 export default router;

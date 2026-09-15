@@ -66,4 +66,7 @@ export * from "./schema/admin/taxType";
 export * from "./schema/admin/ratingRequests";
 export * from "./schema/admin/noteGroup";
 export * from "./schema/admin/orderDelayAlertGroup";
+export * from "./schema/admin/suppliers";
+export * from "./schema/admin/stores";
+export * from "./schema/admin/storeMen";
 
