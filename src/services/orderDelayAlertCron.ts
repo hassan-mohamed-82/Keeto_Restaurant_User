@@ -164,6 +164,21 @@ function buildDelayAlertEmailHtml(params: {
     `;
 }
 
+function parseJsonField<T>(val: unknown, fallback: T): T {
+    if (typeof val === "string") {
+        try {
+            const parsed = JSON.parse(val);
+            return parsed !== null && parsed !== undefined ? parsed : fallback;
+        } catch {
+            return fallback;
+        }
+    }
+    if (val !== undefined && val !== null) {
+        return val as T;
+    }
+    return fallback;
+}
+
 /**
  * Initialize Order Delay Alert Cron Service.
  * Checks for overdue orders every minute and sends an email alert exactly once per delayed order.
@@ -231,14 +246,12 @@ export function initOrderDelayAlertCron() {
 
                 // Check which groups match this order's branch, orderStatus, and are overdue
                 const matchingOverdueGroups = restaurantGroups.filter((g) => {
+                    const branchIds = parseJsonField<string[]>(g.branchIds, []);
                     const isBranchMatch =
-                        g.allBranches ||
-                        (order.branchId && Array.isArray(g.branchIds) && g.branchIds.includes(order.branchId));
+                        Boolean(g.allBranches) ||
+                        (order.branchId && Array.isArray(branchIds) && branchIds.includes(order.branchId));
 
-                    const allowedStatuses =
-                        Array.isArray(g.orderStatus) && g.orderStatus.length > 0
-                            ? g.orderStatus
-                            : ["pending"];
+                    const allowedStatuses = parseJsonField<string[]>(g.orderStatus, ["pending"]);
                     const isStatusMatch = order.status ? allowedStatuses.includes(order.status) : false;
 
                     return isBranchMatch && isStatusMatch && elapsedMinutes >= g.maxDelayMinutes;
@@ -255,8 +268,9 @@ export function initOrderDelayAlertCron() {
                 // Collect unique recipient emails from all matching overdue groups
                 const recipientEmails = new Set<string>();
                 for (const g of matchingOverdueGroups) {
-                    if (Array.isArray(g.emails)) {
-                        for (const email of g.emails) {
+                    const groupEmails = parseJsonField<string[]>(g.emails, []);
+                    if (Array.isArray(groupEmails)) {
+                        for (const email of groupEmails) {
                             if (email && typeof email === "string" && email.includes("@")) {
                                 recipientEmails.add(email.trim().toLowerCase());
                             }

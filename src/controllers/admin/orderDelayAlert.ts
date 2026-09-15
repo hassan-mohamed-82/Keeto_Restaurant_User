@@ -6,16 +6,48 @@ import { SuccessResponse } from "../../utils/response";
 import { BadRequest, NotFound } from "../../Errors";
 import { v4 as uuidv4 } from "uuid";
 
-// Helper to enrich groups with branch information
+// Helper to safely parse JSON strings or return array
+function parseJsonField<T>(val: unknown, fallback: T): T {
+    if (typeof val === "string") {
+        try {
+            const parsed = JSON.parse(val);
+            return parsed !== null && parsed !== undefined ? parsed : fallback;
+        } catch {
+            return fallback;
+        }
+    }
+    if (val !== undefined && val !== null) {
+        return val as T;
+    }
+    return fallback;
+}
+
+// Helper to enrich and cleanly format groups with parsed arrays and branch details
 async function enrichGroupsWithBranches(groups: (typeof orderDelayAlertGroups.$inferSelect)[]) {
     const allBranchIds = new Set<string>();
-    for (const group of groups) {
-        if (!group.allBranches && Array.isArray(group.branchIds)) {
-            for (const bId of group.branchIds) {
+
+    const normalizedGroups = groups.map((g) => {
+        const emails = parseJsonField<string[]>(g.emails, []);
+        const branchIds = parseJsonField<string[]>(g.branchIds, []);
+        const orderStatus = parseJsonField<string[]>(g.orderStatus, ["pending"]);
+        const allBranches = Boolean(g.allBranches);
+        const isActive = Boolean(g.isActive);
+
+        if (!allBranches && Array.isArray(branchIds)) {
+            for (const bId of branchIds) {
                 if (bId) allBranchIds.add(bId);
             }
         }
-    }
+
+        return {
+            ...g,
+            emails,
+            branchIds,
+            orderStatus,
+            allBranches,
+            isActive,
+        };
+    });
 
     let branchMap = new Map<string, { id: string; name: string; nameAr?: string | null }>();
     if (allBranchIds.size > 0) {
@@ -33,7 +65,7 @@ async function enrichGroupsWithBranches(groups: (typeof orderDelayAlertGroups.$i
         }
     }
 
-    return groups.map((g) => {
+    return normalizedGroups.map((g) => {
         const branchesInfo = (!g.allBranches && Array.isArray(g.branchIds))
             ? g.branchIds.map((id) => branchMap.get(id) || { id, name: "Unknown" })
             : [];
