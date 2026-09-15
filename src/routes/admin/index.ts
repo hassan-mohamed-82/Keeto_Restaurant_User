@@ -125,9 +125,6 @@ router.use("/notes-items", NotesItemsRouter);
 router.use("/pos/notes-items", NotesItemsRouter);
 router.use("/note-items", NotesItemsRouter);
 router.use("/pos/note-items", NotesItemsRouter);
-router.use("/offers", OfferRouter);
 router.use("/pos/offers", OfferRouter);
-router.use("/offer", OfferRouter);
-router.use("/pos/offer", OfferRouter);
 
 export default router;
