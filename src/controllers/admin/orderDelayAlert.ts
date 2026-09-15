@@ -107,6 +107,8 @@ export const createAlertGroup = async (req: Request, res: Response) => {
         id,
         restaurantId,
         isSuperAdmin: false,
+        allRestaurants: false,
+        restaurantIds: [],
         name: name.trim(),
         emails: Array.isArray(emails) ? emails : [emails],
         allBranches: Boolean(allBranches),
