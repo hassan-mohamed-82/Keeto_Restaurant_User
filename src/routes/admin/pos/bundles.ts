@@ -13,7 +13,7 @@ import {
     getFoods,
     getOfferBranches,
     getOfferFoods,
-} from "../../../controllers/admin/pos/offers";
+} from "../../../controllers/admin/pos/bundle";
 
 const router = Router();
 

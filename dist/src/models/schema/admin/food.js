@@ -36,6 +36,10 @@ exports.food = (0, mysql_core_1.mysqlTable)("food", {
     discount_type: (0, mysql_core_1.mysqlEnum)("discount_type", ["percentage", "amount"])
         .default("percentage"),
     discount_value: (0, mysql_core_1.decimal)("discount_value", { precision: 10, scale: 2 }),
+    offer_price: (0, mysql_core_1.decimal)("offer_price", { precision: 10, scale: 2 }),
+    offer_days: (0, mysql_core_1.json)("offer_days").$type(),
+    offer_start: (0, mysql_core_1.time)("offer_start"),
+    offer_end: (0, mysql_core_1.time)("offer_end"),
     Maximum_Purchase: (0, mysql_core_1.int)("Maximum_Purchase"),
     points: (0, mysql_core_1.int)("points").default(0),
     stock_type: (0, mysql_core_1.mysqlEnum)("stock_type", ["limited", "unlimited", "daily"])
