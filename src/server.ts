@@ -11,6 +11,7 @@ import http from "http";
 import { Server } from "socket.io";
 import { connectDB } from './models/connection';
 import { initOrderNotificationCron } from './services/orderNotificationCron';
+import { initOrderDelayAlertCron } from './services/orderDelayAlertCron';
 import './config/redis';
 import { initNotificationCleanupCron } from "./services/initNotificationCleanupCron";
 
@@ -20,6 +21,7 @@ const app = express();
 app.set("trust proxy", true);
 connectDB();
 initOrderNotificationCron();
+initOrderDelayAlertCron();
 initNotificationCleanupCron();
 
 const httpServer: http.Server = http.createServer(app);

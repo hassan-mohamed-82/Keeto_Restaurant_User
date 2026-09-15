@@ -51,6 +51,7 @@ import BundleRouter from "./pos/bundles";
 import TaxTypeRouter from "./pos/taxType";
 import NotesRouter from "./pos/notes";
 import NotesItemsRouter from "./pos/notesItems";
+import OrderDelayAlertRouter from "./orderDelayAlert";
 const router = Router();
 
 router.use("/auth", authRouter);
@@ -98,6 +99,12 @@ router.use("/recommended-foods", RecommendedFoodRouter);
 router.use("/free-delivery", FreeDeliveryOfferRouter);
 router.use("/pricing", PricingRouter);
 router.use("/shifts", ShiftsRouter);
+router.use("/order-delay-alerts", OrderDelayAlertRouter);
+
+
+
+
+// POS Routes
 router.use("/pos/shifts", ShiftsRouter);
 router.use("/service-fees", ServiceFeesRouter);
 router.use("/pos/service-fees", ServiceFeesRouter);
