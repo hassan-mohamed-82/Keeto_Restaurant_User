@@ -77,6 +77,7 @@ exports.orders = (0, mysql_core_1.mysqlTable)("orders", {
     shippingAddress: (0, mysql_core_1.json)("shipping_address").$type(),
     // 🟢 3. حفظ لقطة ثابته لبيانات الفرع وقت الأوردر (Branch Snapshot)
     branchSnapshot: (0, mysql_core_1.json)("branch_snapshot").$type(),
+    isDelayEmailSent: (0, mysql_core_1.boolean)("is_delay_email_sent").default(false),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow().onUpdateNow(),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
 });

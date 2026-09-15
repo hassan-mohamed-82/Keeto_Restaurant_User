@@ -79,3 +79,7 @@ __exportStar(require("./schema/admin/offers"), exports);
 __exportStar(require("./schema/admin/taxType"), exports);
 __exportStar(require("./schema/admin/ratingRequests"), exports);
 __exportStar(require("./schema/admin/noteGroup"), exports);
+__exportStar(require("./schema/admin/orderDelayAlertGroup"), exports);
+__exportStar(require("./schema/admin/suppliers"), exports);
+__exportStar(require("./schema/admin/stores"), exports);
+__exportStar(require("./schema/admin/storeMen"), exports);

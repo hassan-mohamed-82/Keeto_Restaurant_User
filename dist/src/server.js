@@ -16,6 +16,7 @@ const http_1 = __importDefault(require("http"));
 const socket_io_1 = require("socket.io");
 const connection_1 = require("./models/connection");
 const orderNotificationCron_1 = require("./services/orderNotificationCron");
+const orderDelayAlertCron_1 = require("./services/orderDelayAlertCron");
 require("./config/redis");
 const initNotificationCleanupCron_1 = require("./services/initNotificationCleanupCron");
 dotenv_1.default.config();
@@ -23,6 +24,7 @@ const app = (0, express_1.default)();
 app.set("trust proxy", true);
 (0, connection_1.connectDB)();
 (0, orderNotificationCron_1.initOrderNotificationCron)();
+(0, orderDelayAlertCron_1.initOrderDelayAlertCron)();
 (0, initNotificationCleanupCron_1.initNotificationCleanupCron)();
 const httpServer = http_1.default.createServer(app);
 const io = new socket_io_1.Server(httpServer, {
