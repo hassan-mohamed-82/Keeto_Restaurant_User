@@ -3,6 +3,9 @@ import { z } from "zod";
 export const SUPPORTED_LANGUAGES = ["en", "ar", "fr"] as const;
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 
+export const OFFER_MODULES = ["pos", "web", "app"] as const;
+export type OfferModule = (typeof OFFER_MODULES)[number];
+
 export function safeParseJson(val: any): any {
     if (typeof val === "string") {
         const trimmed = val.trim();
@@ -32,6 +35,15 @@ export const parseStringOrArray = (val: any): string[] => {
 
 const normalizeOfferInput = (obj: any) => {
     if (obj && typeof obj === "object") {
+        // Normalize module / modules
+        if (obj.module === undefined && obj.modules !== undefined) {
+            obj.module = safeParseJson(obj.modules);
+        } else if (obj.modules === undefined && obj.module !== undefined) {
+            obj.modules = safeParseJson(obj.module);
+        } else if (obj.module !== undefined) {
+            obj.module = safeParseJson(obj.module);
+        }
+
         // Normalize branchIds
         if (obj.branchIds === undefined && obj.branch_ids !== undefined) {
             obj.branchIds = safeParseJson(obj.branch_ids);
@@ -302,6 +314,17 @@ export const createOfferSchema = z.preprocess(
         food_ids: z.array(z.string().min(1)).optional(),
         branchIds: z.array(z.string().min(1)).optional().default([]),
         branch_ids: z.array(z.string().min(1)).optional(),
+        module: z.preprocess(
+            (val) => parseStringOrArray(val),
+            z.array(z.enum(OFFER_MODULES, {
+                errorMap: () => ({ message: "Module items must be 'pos', 'web', or 'app'" })
+            }))
+            .min(1, "At least one module must be selected ('pos', 'web', 'app')")
+        ).optional().default(["pos"]),
+        modules: z.preprocess(
+            (val) => parseStringOrArray(val),
+            z.array(z.enum(OFFER_MODULES))
+        ).optional(),
         status: z.enum(["active", "inactive"]).optional().default("active"),
     })
 );
@@ -343,6 +366,17 @@ export const updateOfferSchema = z.preprocess(
         food_ids: z.array(z.string().min(1)).optional(),
         branchIds: z.array(z.string().min(1)).optional(),
         branch_ids: z.array(z.string().min(1)).optional(),
+        module: z.preprocess(
+            (val) => parseStringOrArray(val),
+            z.array(z.enum(OFFER_MODULES, {
+                errorMap: () => ({ message: "Module items must be 'pos', 'web', or 'app'" })
+            }))
+            .min(1, "At least one module must be selected ('pos', 'web', 'app')")
+        ).optional(),
+        modules: z.preprocess(
+            (val) => parseStringOrArray(val),
+            z.array(z.enum(OFFER_MODULES))
+        ).optional(),
         status: z.enum(["active", "inactive"]).optional(),
     })
 );

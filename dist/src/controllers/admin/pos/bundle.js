@@ -377,6 +377,7 @@ async function enrichOffersWithBranchesAndFoods(items, restaurantId, lang = "en"
         }, lang);
         return {
             ...item,
+            module: parseJsonArray(item.module),
             name: localizedName,
             branchIds: itemBranchIds,
             branches: itemBranches,
@@ -447,8 +448,13 @@ const createOffer = async (req, res) => {
         throw new Errors_1.BadRequest("Restaurant context is missing or unauthorized");
     }
     const lang = (0, localization_helper_1.extractLang)(req);
-    const { name, nameAr, nameFr, image, startDate, endDate, price, foods, foodIds, food_ids, branchIds, branch_ids, status, } = req.body;
+    const { name, nameAr, nameFr, image, startDate, endDate, price, foods, foodIds, food_ids, branchIds, branch_ids, module, modules, status, } = req.body;
     const finalBranchIds = parseJsonArray(branchIds !== undefined ? branchIds : branch_ids);
+    const rawModule = module !== undefined ? module : modules;
+    const parsedModule = parseJsonArray(rawModule);
+    const validModules = ["pos", "web", "app"];
+    const filteredModule = parsedModule.filter((m) => validModules.includes(m));
+    const finalModule = filteredModule.length > 0 ? filteredModule : ["pos"];
     const consolidatedFoods = consolidateFoodsAndVariations(foods, foodIds !== undefined ? foodIds : food_ids);
     const distinctFoodIds = consolidatedFoods.map((f) => f.foodId);
     let savedImageUrl = null;
@@ -473,6 +479,7 @@ const createOffer = async (req, res) => {
         price: String(price),
         foodIds: distinctFoodIds,
         branchIds: finalBranchIds,
+        module: finalModule,
         status: status || "active",
     });
     if (consolidatedFoods.length > 0) {
@@ -512,13 +519,27 @@ const getAllOffers = async (req, res) => {
     }
     const lang = (0, localization_helper_1.extractLang)(req);
     const params = { ...req.query, ...req.body };
-    const { status, search, all } = params;
+    const { status, search, all, module, modules } = params;
     const page = Math.max(1, parseInt(params.page) || 1);
     const limit = Math.max(1, Math.min(100, parseInt(params.limit) || 10));
     const offset = (page - 1) * limit;
     const conditions = [(0, drizzle_orm_1.eq)(schema_1.offers.restaurantId, restaurantId)];
     if (status && (status === "active" || status === "inactive")) {
         conditions.push((0, drizzle_orm_1.eq)(schema_1.offers.status, status));
+    }
+    const rawFilterModule = module !== undefined ? module : modules;
+    if (rawFilterModule && typeof rawFilterModule === "string" && ["pos", "web", "app"].includes(rawFilterModule.trim().toLowerCase())) {
+        const target = rawFilterModule.trim().toLowerCase();
+        conditions.push((0, drizzle_orm_1.sql) `JSON_CONTAINS(${schema_1.offers.module}, ${JSON.stringify(target)})`);
+    }
+    else if (Array.isArray(rawFilterModule) && rawFilterModule.length > 0) {
+        const validTargets = rawFilterModule
+            .map((m) => String(m).trim().toLowerCase())
+            .filter((m) => ["pos", "web", "app"].includes(m));
+        if (validTargets.length > 0) {
+            const orConditions = validTargets.map((target) => (0, drizzle_orm_1.sql) `JSON_CONTAINS(${schema_1.offers.module}, ${JSON.stringify(target)})`);
+            conditions.push((0, drizzle_orm_1.or)(...orConditions));
+        }
     }
     if (search && typeof search === "string" && search.trim() !== "") {
         const term = `%${search.trim()}%`;
@@ -552,6 +573,8 @@ const getAllOffers = async (req, res) => {
         startDate: item.startDate,
         endDate: item.endDate,
         price: item.price,
+        module: parseJsonArray(item.module),
+        status: item.status,
         name: (0, localization_helper_1.getLocalizedName)({
             name: item.name,
             nameAr: item.nameAr,
@@ -613,7 +636,7 @@ const updateOffer = async (req, res) => {
     if (!existingOffer) {
         throw new Errors_1.NotFound("Bundle not found");
     }
-    const { name, nameAr, nameFr, image, startDate, endDate, price, foods, foodIds, food_ids, branchIds, branch_ids, status, } = req.body;
+    const { name, nameAr, nameFr, image, startDate, endDate, price, foods, foodIds, food_ids, branchIds, branch_ids, module, modules, status, } = req.body;
     const updateData = {};
     if (name !== undefined)
         updateData.name = name;
@@ -627,6 +650,15 @@ const updateOffer = async (req, res) => {
         updateData.endDate = new Date(endDate);
     if (price !== undefined)
         updateData.price = String(price);
+    const rawModule = module !== undefined ? module : modules;
+    if (rawModule !== undefined) {
+        const parsedModule = parseJsonArray(rawModule);
+        const validModules = ["pos", "web", "app"];
+        const filteredModule = parsedModule.filter((m) => validModules.includes(m));
+        if (filteredModule.length > 0) {
+            updateData.module = filteredModule;
+        }
+    }
     const rawFoods = foods !== undefined ? foods : (foodIds !== undefined ? foodIds : food_ids);
     if (rawFoods !== undefined) {
         const consolidatedFoods = consolidateFoodsAndVariations(Array.isArray(foods) ? foods : (Array.isArray(rawFoods) && typeof rawFoods[0] === "object" ? rawFoods : []), rawFoods);

@@ -17,6 +17,9 @@ export interface OfferFoodVariationItem {
     options: string[]; // option IDs
 }
 
+export const OFFER_MODULES = ["pos", "web", "app"] as const;
+export type OfferModule = (typeof OFFER_MODULES)[number];
+
 export const offers = mysqlTable("offers", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
     restaurantId: char("restaurant_id", { length: 36 }).references(() => restaurants.id, { onDelete: "cascade" }),
@@ -29,6 +32,7 @@ export const offers = mysqlTable("offers", {
     price: decimal("price", { precision: 10, scale: 2 }).notNull(),
     foodIds: json("food_ids").$type<string[]>().default([]).notNull(),
     branchIds: json("branch_ids").$type<string[]>().default([]).notNull(),
+    module: json("module").$type<OfferModule[]>().default(["pos"]).notNull(),
     status: mysqlEnum("status", ["active", "inactive"]).default("active").notNull(),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
