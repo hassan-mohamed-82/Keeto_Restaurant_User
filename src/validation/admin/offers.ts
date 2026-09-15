@@ -320,7 +320,7 @@ export const createOfferSchema = z.preprocess(
                 errorMap: () => ({ message: "Module items must be 'pos', 'web', or 'app'" })
             }))
             .min(1, "At least one module must be selected ('pos', 'web', 'app')")
-        ).optional().default(["pos"]),
+        ),
         modules: z.preprocess(
             (val) => parseStringOrArray(val),
             z.array(z.enum(OFFER_MODULES))

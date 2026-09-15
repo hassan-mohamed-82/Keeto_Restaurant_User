@@ -296,7 +296,7 @@ exports.createOfferSchema = zod_1.z.preprocess(normalizeOfferInput, zod_1.z.obje
     module: zod_1.z.preprocess((val) => (0, exports.parseStringOrArray)(val), zod_1.z.array(zod_1.z.enum(exports.OFFER_MODULES, {
         errorMap: () => ({ message: "Module items must be 'pos', 'web', or 'app'" })
     }))
-        .min(1, "At least one module must be selected ('pos', 'web', 'app')")).optional().default(["pos"]),
+        .min(1, "At least one module must be selected ('pos', 'web', 'app')")),
     modules: zod_1.z.preprocess((val) => (0, exports.parseStringOrArray)(val), zod_1.z.array(zod_1.z.enum(exports.OFFER_MODULES))).optional(),
     status: zod_1.z.enum(["active", "inactive"]).optional().default("active"),
 }));
