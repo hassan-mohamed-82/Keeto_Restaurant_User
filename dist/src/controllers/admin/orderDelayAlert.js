@@ -90,6 +90,8 @@ const createAlertGroup = async (req, res) => {
         id,
         restaurantId,
         isSuperAdmin: false,
+        allRestaurants: false,
+        restaurantIds: [],
         name: name.trim(),
         emails: Array.isArray(emails) ? emails : [emails],
         allBranches: Boolean(allBranches),

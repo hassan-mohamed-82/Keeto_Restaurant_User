@@ -1,0 +1,616 @@
+{
+  "info": {
+    "_postman_id": "b1304791-3cd9-4b69-be6c-c6247c2703ba",
+    "name": "Keeto Restaurant POS API",
+    "description": "Postman Collection v2.1 for Keeto Restaurant POS (CaptainOrder, CashierMan, Hall, HallTable) ready to import in Apidog",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api/restaurant",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "YOUR_JWT_TOKEN_HERE",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Captain Orders",
+      "item": [
+        {
+          "name": "Create Captain Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"محمد علي\",\n  \"user_name\": \"captain_ali\",\n  \"phone\": \"01012345678\",\n  \"password\": \"123456\",\n  \"branch_id\": \"BRANCH_UUID_HERE\",\n  \"image\": \"\",\n  \"status\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pos/captain-orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "captain-orders"]
+            }
+          }
+        },
+        {
+          "name": "Get All Captain Orders (Query)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept-Language", "value": "ar" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pos/captain-orders?page=1&limit=10&search=&status=&branch_id=",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "captain-orders"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" },
+                { "key": "search", "value": "" },
+                { "key": "status", "value": "" },
+                { "key": "branch_id", "value": "" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get All Captain Orders (Body Filter)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"page\": 1,\n  \"limit\": 10,\n  \"search\": \"\",\n  \"status\": true,\n  \"branch_id\": \"\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pos/captain-orders/list",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "captain-orders", "list"]
+            }
+          }
+        },
+        {
+          "name": "Get Branches for Captain (id, name)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept-Language", "value": "ar" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pos/captain-orders/branches",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "captain-orders", "branches"]
+            }
+          }
+        },
+        {
+          "name": "Get Captain Order By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pos/captain-orders/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "captain-orders", ":id"],
+              "variable": [
+                { "key": "id", "value": "CAPTAIN_UUID_HERE" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Captain Order",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"محمد علي بعد التعديل\",\n  \"user_name\": \"captain_ali_updated\",\n  \"phone\": \"01099999999\",\n  \"password\": \"newpassword123\",\n  \"branch_id\": \"BRANCH_UUID_HERE\",\n  \"status\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pos/captain-orders/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "captain-orders", ":id"],
+              "variable": [
+                { "key": "id", "value": "CAPTAIN_UUID_HERE" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Toggle Captain Status",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pos/captain-orders/:id/toggle-status",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "captain-orders", ":id", "toggle-status"],
+              "variable": [
+                { "key": "id", "value": "CAPTAIN_UUID_HERE" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Captain Order",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pos/captain-orders/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "captain-orders", ":id"],
+              "variable": [
+                { "key": "id", "value": "CAPTAIN_UUID_HERE" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Cashier Men",
+      "item": [
+        {
+          "name": "Create Cashier",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"أحمد إبراهيم\",\n  \"user_name\": \"cashier_ahmed\",\n  \"phone\": \"01122334455\",\n  \"password\": \"123456\",\n  \"branch_id\": \"BRANCH_UUID_HERE\",\n  \"image\": \"\",\n  \"roles\": [\"cashier\", \"pos_manager\"],\n  \"report_perimission\": [\"financial\"],\n  \"status\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pos/cashier-men",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "cashier-men"]
+            }
+          }
+        },
+        {
+          "name": "Get All Cashiers (Query)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept-Language", "value": "ar" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pos/cashier-men?page=1&limit=10&search=&status=&branch_id=",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "cashier-men"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" },
+                { "key": "search", "value": "" },
+                { "key": "status", "value": "" },
+                { "key": "branch_id", "value": "" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get All Cashiers (Body Filter)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"page\": 1,\n  \"limit\": 10,\n  \"search\": \"\",\n  \"status\": true,\n  \"branch_id\": \"\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pos/cashier-men/list",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "cashier-men", "list"]
+            }
+          }
+        },
+        {
+          "name": "Get Branches & Permissions for Cashier",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept-Language", "value": "ar" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pos/cashier-men/branches",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "cashier-men", "branches"]
+            }
+          }
+        },
+        {
+          "name": "Get Cashier By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pos/cashier-men/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "cashier-men", ":id"],
+              "variable": [
+                { "key": "id", "value": "CASHIER_UUID_HERE" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Cashier",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"أحمد إبراهيم المعدل\",\n  \"user_name\": \"cashier_ahmed\",\n  \"phone\": \"01122334455\",\n  \"password\": \"newpass123\",\n  \"branch_id\": \"BRANCH_UUID_HERE\",\n  \"roles\": [\"cashier\"],\n  \"report_perimission\": [\"all_reports\"],\n  \"status\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pos/cashier-men/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "cashier-men", ":id"],
+              "variable": [
+                { "key": "id", "value": "CASHIER_UUID_HERE" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Toggle Cashier Status",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pos/cashier-men/:id/toggle-status",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "cashier-men", ":id", "toggle-status"],
+              "variable": [
+                { "key": "id", "value": "CASHIER_UUID_HERE" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Cashier",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pos/cashier-men/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "cashier-men", ":id"],
+              "variable": [
+                { "key": "id", "value": "CASHIER_UUID_HERE" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Halls",
+      "item": [
+        {
+          "name": "Create Hall",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Main Hall\",\n  \"nameAr\": \"الصالة الرئيسية\",\n  \"nameFr\": \"Salle Principale\",\n  \"branch_id\": \"BRANCH_UUID_HERE\",\n  \"lat\": \"30.0444\",\n  \"lng\": \"31.2357\",\n  \"status\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pos/halls",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "halls"]
+            }
+          }
+        },
+        {
+          "name": "Get All Halls (Query)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept-Language", "value": "ar" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pos/halls?page=1&limit=10&search=&status=&branch_id=",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "halls"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" },
+                { "key": "search", "value": "" },
+                { "key": "status", "value": "" },
+                { "key": "branch_id", "value": "" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get All Halls (Body Filter)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"page\": 1,\n  \"limit\": 10,\n  \"search\": \"\",\n  \"status\": true,\n  \"branch_id\": \"\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pos/halls/list",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "halls", "list"]
+            }
+          }
+        },
+        {
+          "name": "Get Branches for Hall (id, name)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept-Language", "value": "ar" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pos/halls/branches",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "halls", "branches"]
+            }
+          }
+        },
+        {
+          "name": "Get Hall By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pos/halls/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "halls", ":id"],
+              "variable": [
+                { "key": "id", "value": "HALL_UUID_HERE" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Hall",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"VIP Hall\",\n  \"nameAr\": \"صالة كبار الزوار\",\n  \"nameFr\": \"Salle VIP\",\n  \"branch_id\": \"BRANCH_UUID_HERE\",\n  \"lat\": \"30.0500\",\n  \"lng\": \"31.2400\",\n  \"status\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pos/halls/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "halls", ":id"],
+              "variable": [
+                { "key": "id", "value": "HALL_UUID_HERE" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Toggle Hall Status",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pos/halls/:id/toggle-status",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "halls", ":id", "toggle-status"],
+              "variable": [
+                { "key": "id", "value": "HALL_UUID_HERE" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Hall",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pos/halls/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "halls", ":id"],
+              "variable": [
+                { "key": "id", "value": "HALL_UUID_HERE" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Hall Tables",
+      "item": [
+        {
+          "name": "Create Hall Table (Auto QR & occupied=false)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tbl_number\": \"T-12\",\n  \"capacity\": 4,\n  \"hall_id\": \"HALL_UUID_HERE\",\n  \"status\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pos/hall-tables",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "hall-tables"]
+            }
+          }
+        },
+        {
+          "name": "Get All Hall Tables (Query)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept-Language", "value": "ar" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pos/hall-tables?page=1&limit=10&search=&status=&occupied=&hall_id=",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "hall-tables"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" },
+                { "key": "search", "value": "" },
+                { "key": "status", "value": "" },
+                { "key": "occupied", "value": "" },
+                { "key": "hall_id", "value": "" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get All Hall Tables (Body Filter)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"page\": 1,\n  \"limit\": 10,\n  \"search\": \"\",\n  \"status\": true,\n  \"occupied\": false,\n  \"hall_id\": \"\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pos/hall-tables/list",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "hall-tables", "list"]
+            }
+          }
+        },
+        {
+          "name": "Get Halls for Table (id, name)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept-Language", "value": "ar" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pos/hall-tables/halls",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "hall-tables", "halls"]
+            }
+          }
+        },
+        {
+          "name": "Get Hall Table By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pos/hall-tables/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "hall-tables", ":id"],
+              "variable": [
+                { "key": "id", "value": "TABLE_UUID_HERE" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Hall Table (qr & occupied ignored)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tbl_number\": \"T-15\",\n  \"capacity\": 6,\n  \"hall_id\": \"HALL_UUID_HERE\",\n  \"status\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pos/hall-tables/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "hall-tables", ":id"],
+              "variable": [
+                { "key": "id", "value": "TABLE_UUID_HERE" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Toggle Table Status",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pos/hall-tables/:id/toggle-status",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "hall-tables", ":id", "toggle-status"],
+              "variable": [
+                { "key": "id", "value": "TABLE_UUID_HERE" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Toggle Table Occupied",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pos/hall-tables/:id/toggle-occupied",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "hall-tables", ":id", "toggle-occupied"],
+              "variable": [
+                { "key": "id", "value": "TABLE_UUID_HERE" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Hall Table",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pos/hall-tables/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "hall-tables", ":id"],
+              "variable": [
+                { "key": "id", "value": "TABLE_UUID_HERE" }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const catchAsync_1 = require("../../../utils/catchAsync");
+const validation_1 = require("../../../middlewares/validation");
+const suppliers_1 = require("../../../validation/admin/suppliers");
+const supplier_1 = require("../../../controllers/admin/pos/supplier");
+const router = (0, express_1.Router)();
+router.post("/", (0, validation_1.validate)(suppliers_1.createSupplierSchema), (0, catchAsync_1.catchAsync)(supplier_1.createSupplier));
+router.get("/", (0, validation_1.validate)(suppliers_1.supplierQuerySchema, "query"), (0, catchAsync_1.catchAsync)(supplier_1.getAllSuppliers));
+router.post("/list", (0, validation_1.validate)(suppliers_1.supplierQuerySchema, "body"), (0, catchAsync_1.catchAsync)(supplier_1.getAllSuppliers));
+router.get("/:id", (0, catchAsync_1.catchAsync)(supplier_1.getSupplierById));
+router.put("/:id", (0, validation_1.validate)(suppliers_1.updateSupplierSchema), (0, catchAsync_1.catchAsync)(supplier_1.updateSupplier));
+router.patch("/:id/toggle-status", (0, catchAsync_1.catchAsync)(supplier_1.toggleSupplierStatus));
+router.delete("/:id", (0, catchAsync_1.catchAsync)(supplier_1.deleteSupplier));
+exports.default = router;
