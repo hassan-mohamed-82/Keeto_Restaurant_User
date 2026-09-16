@@ -35,6 +35,7 @@ const getCashiers = async (req, res) => {
         cashiers: schema_1.cashiers,
         financialAccount: schema_1.FinancialAccounts,
         cashierManId: schema_1.cashierMen.id,
+        cashierManMyId: schema_1.cashierMen.myId,
         cashierManName: schema_1.cashierMen.name,
         cashierManUserName: schema_1.cashierMen.userName,
     })
@@ -48,6 +49,7 @@ const getCashiers = async (req, res) => {
         cashier_man: row.cashierManId
             ? {
                 id: row.cashierManId,
+                my_id: row.cashierManMyId,
                 name: row.cashierManName || row.cashierManUserName,
             }
             : null,

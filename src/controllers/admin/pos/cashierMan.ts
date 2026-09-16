@@ -26,6 +26,8 @@ export const createCashierMan = async (req: Request, res: Response) => {
         password,
         branch_id,
         branchId,
+        my_id,
+        myId,
         image,
         roles,
         report_perimission,
@@ -93,11 +95,15 @@ export const createCashierMan = async (req: Request, res: Response) => {
     const parsedRoles = parseJsonArray(roles);
     const parsedPermissions = parseJsonArray(report_perimission);
 
+    const rawMyId = my_id !== undefined ? my_id : myId;
+    const finalMyId = rawMyId && typeof rawMyId === "string" && rawMyId.trim() !== "" ? rawMyId.trim() : null;
+
     const id = uuidv4();
     await db.insert(cashierMen).values({
         id,
         restaurantId,
         branchId: targetBranchId,
+        myId: finalMyId,
         name: name ? name.trim() : user_name.trim(),
         userName: user_name.trim(),
         phone: phone.trim(),
@@ -113,6 +119,7 @@ export const createCashierMan = async (req: Request, res: Response) => {
             id: cashierMen.id,
             restaurantId: cashierMen.restaurantId,
             branchId: cashierMen.branchId,
+            my_id: cashierMen.myId,
             name: cashierMen.name,
             userName: cashierMen.userName,
             phone: cashierMen.phone,
@@ -148,7 +155,7 @@ export const getAllCashierMen = async (req: Request, res: Response) => {
 
     const lang = extractLang(req);
     const params = { ...req.query, ...req.body };
-    const { search, status, branch_id, branchId, all } = params;
+    const { search, status, branch_id, branchId, my_id, myId, all } = params;
 
     const page = Math.max(1, parseInt(params.page as string) || 1);
     const limit = Math.max(1, Math.min(100, parseInt(params.limit as string) || 10));
@@ -159,6 +166,11 @@ export const getAllCashierMen = async (req: Request, res: Response) => {
     const targetBranchId = branch_id || branchId;
     if (targetBranchId) {
         conditions.push(eq(cashierMen.branchId, targetBranchId));
+    }
+
+    const filterMyId = my_id || myId;
+    if (filterMyId && typeof filterMyId === "string" && filterMyId.trim() !== "") {
+        conditions.push(eq(cashierMen.myId, filterMyId.trim()));
     }
 
     if (status !== undefined && status !== "") {
@@ -172,7 +184,8 @@ export const getAllCashierMen = async (req: Request, res: Response) => {
             or(
                 like(cashierMen.name, term),
                 like(cashierMen.userName, term),
-                like(cashierMen.phone, term)
+                like(cashierMen.phone, term),
+                like(cashierMen.myId, term)
             ) as any
         );
     }
@@ -191,6 +204,7 @@ export const getAllCashierMen = async (req: Request, res: Response) => {
                       restaurantId: cashierMen.restaurantId,
                       branchId: cashierMen.branchId,
                       cashierId: cashierMen.cashierId,
+                      myId: cashierMen.myId,
                       cashierName: cashiers.name,
                       cashierArName: cashiers.ar_name,
                       name: cashierMen.name,
@@ -219,6 +233,7 @@ export const getAllCashierMen = async (req: Request, res: Response) => {
                       restaurantId: cashierMen.restaurantId,
                       branchId: cashierMen.branchId,
                       cashierId: cashierMen.cashierId,
+                      myId: cashierMen.myId,
                       cashierName: cashiers.name,
                       cashierArName: cashiers.ar_name,
                       name: cashierMen.name,
@@ -250,6 +265,7 @@ export const getAllCashierMen = async (req: Request, res: Response) => {
 
     const formattedList = rawCashiers.map((item) => ({
         id: item.id,
+        my_id: item.myId,
         name: item.name,
         user_name: item.userName,
         phone: item.phone,
@@ -351,6 +367,8 @@ export const getCashierManById = async (req: Request, res: Response) => {
             id: cashierMen.id,
             restaurantId: cashierMen.restaurantId,
             branchId: cashierMen.branchId,
+            cashierId: cashierMen.cashierId,
+            myId: cashierMen.myId,
             name: cashierMen.name,
             userName: cashierMen.userName,
             phone: cashierMen.phone,
@@ -377,6 +395,7 @@ export const getCashierManById = async (req: Request, res: Response) => {
 
     const result = {
         id: row.id,
+        my_id: row.myId,
         name: row.name,
         user_name: row.userName,
         phone: row.phone,
@@ -436,6 +455,8 @@ export const updateCashierMan = async (req: Request, res: Response) => {
         password,
         branch_id,
         branchId,
+        my_id,
+        myId,
         image,
         roles,
         report_perimission,
@@ -502,6 +523,11 @@ export const updateCashierMan = async (req: Request, res: Response) => {
     if (report_perimission !== undefined) updateData.report_perimission = parseJsonArray(report_perimission);
     if (status !== undefined) updateData.status = Boolean(status);
 
+    if (my_id !== undefined || myId !== undefined) {
+        const rawMyId = my_id !== undefined ? my_id : myId;
+        updateData.myId = rawMyId && typeof rawMyId === "string" && rawMyId.trim() !== "" ? rawMyId.trim() : null;
+    }
+
     // Hash password if provided
     if (password && typeof password === "string" && password.trim() !== "") {
         updateData.password = await bcrypt.hash(password, 10);
@@ -525,6 +551,7 @@ export const updateCashierMan = async (req: Request, res: Response) => {
             id: cashierMen.id,
             restaurantId: cashierMen.restaurantId,
             branchId: cashierMen.branchId,
+            my_id: cashierMen.myId,
             name: cashierMen.name,
             userName: cashierMen.userName,
             phone: cashierMen.phone,

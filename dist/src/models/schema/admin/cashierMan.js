@@ -16,6 +16,7 @@ exports.cashierMen = (0, mysql_core_1.mysqlTable)("cashier_men", {
         .notNull(),
     cashierId: (0, mysql_core_1.char)("cashier_id", { length: 36 })
         .references(() => cashier_1.cashiers.id, { onDelete: "set null" }),
+    myId: (0, mysql_core_1.varchar)("my_id", { length: 255 }),
     name: (0, mysql_core_1.varchar)("name", { length: 255 }),
     userName: (0, mysql_core_1.varchar)("user_name", { length: 255 }).notNull(),
     phone: (0, mysql_core_1.varchar)("phone", { length: 50 }).notNull(),

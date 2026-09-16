@@ -37,6 +37,7 @@ export const getCashiers = async (req: Request, res: Response) => {
             cashiers: cashiers,
             financialAccount: FinancialAccounts,
             cashierManId: cashierMen.id,
+            cashierManMyId: cashierMen.myId,
             cashierManName: cashierMen.name,
             cashierManUserName: cashierMen.userName,
         })
@@ -51,6 +52,7 @@ export const getCashiers = async (req: Request, res: Response) => {
         cashier_man: row.cashierManId
             ? {
                   id: row.cashierManId,
+                  my_id: row.cashierManMyId,
                   name: row.cashierManName || row.cashierManUserName,
               }
             : null,
