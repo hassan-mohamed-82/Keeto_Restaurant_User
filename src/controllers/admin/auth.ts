@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { branches, restaurants, restrauntadmin, rolesadmin, restaurantSchedules } from "../../models/schema";
+import { branches, restaurants, restrauntadmin, restaurantSchedules } from "../../models/schema";
+import { role_restaurant } from "../../models/schema/admin/role_restaurant";
 import { eq, inArray, and } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
@@ -85,10 +86,10 @@ export async function login(req: Request, res: Response) {
     if (user.roleId) {
         const [roleResult] = await db
             .select()
-            .from(rolesadmin)
-            .where(eq(rolesadmin.id, user.roleId))
+            .from(role_restaurant)
+            .where(eq(role_restaurant.id, user.roleId))
             .limit(1);
-        role = roleResult;
+        role = roleResult ?? null;
     }
 
     // 5.5 جلب جدول مواعيد المطعم (Restaurant Schedules)
