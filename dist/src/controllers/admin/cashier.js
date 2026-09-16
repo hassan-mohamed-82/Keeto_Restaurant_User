@@ -30,29 +30,10 @@ const getCashiers = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new Errors_1.BadRequest("Restaurant context missing");
-    const allCashiers = await connection_1.db
-        .select({
-        cashier: schema_1.cashiers,
-        financialAccount: schema_1.FinancialAccounts,
-        cashierManId: schema_1.cashierMen.id,
-        cashierManName: schema_1.cashierMen.name,
-        cashierManUserName: schema_1.cashierMen.userName,
-    })
-        .from(schema_1.cashiers)
+    const allCashiers = await connection_1.db.select().from(schema_1.cashiers)
         .where((0, drizzle_orm_1.eq)(schema_1.cashiers.restaurantid, restaurantId))
-        .innerJoin(schema_1.FinancialAccounts, (0, drizzle_orm_1.eq)(schema_1.cashiers.financialAccountId, schema_1.FinancialAccounts.id))
-        .leftJoin(schema_1.cashierMen, (0, drizzle_orm_1.eq)(schema_1.cashiers.cashierManId, schema_1.cashierMen.id));
-    const formatted = allCashiers.map((row) => ({
-        ...row.cashier,
-        financialAccount: row.financialAccount,
-        cashier_man: row.cashierManId
-            ? {
-                id: row.cashierManId,
-                name: row.cashierManName || row.cashierManUserName,
-            }
-            : null,
-    }));
-    return (0, response_1.SuccessResponse)(res, { message: "Cashiers fetched successfully", data: formatted });
+        .innerJoin(schema_1.FinancialAccounts, (0, drizzle_orm_1.eq)(schema_1.cashiers.financialAccountId, schema_1.FinancialAccounts.id));
+    return (0, response_1.SuccessResponse)(res, { message: "Cashiers fetched successfully", data: allCashiers });
 };
 exports.getCashiers = getCashiers;
 const getCashierById = async (req, res) => {

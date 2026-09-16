@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { cashiers, FinancialAccounts, cashierMen } from "../../models/schema";
+import { cashiers,FinancialAccounts } from "../../models/schema";
 import { eq, and } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest, NotFound } from "../../Errors";
@@ -22,7 +22,7 @@ export const createCashier = async (req: Request, res: Response) => {
         status: status || "active",
         branchid,
         cashier_active: cashier_active !== undefined ? cashier_active : true,
-        financialAccountId,
+          financialAccountId  ,
     });
 
     return SuccessResponse(res, { message: "Cashier created successfully" }, 201);
@@ -32,31 +32,12 @@ export const getCashiers = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Restaurant context missing");
 
-    const allCashiers = await db
-        .select({
-            cashier: cashiers,
-            financialAccount: FinancialAccounts,
-            cashierManId: cashierMen.id,
-            cashierManName: cashierMen.name,
-            cashierManUserName: cashierMen.userName,
-        })
-        .from(cashiers)
+    const allCashiers = await db.select().from(cashiers)
         .where(eq(cashiers.restaurantid, restaurantId))
-        .innerJoin(FinancialAccounts, eq(cashiers.financialAccountId, FinancialAccounts.id))
-        .leftJoin(cashierMen, eq(cashiers.cashierManId, cashierMen.id));
+        .innerJoin(FinancialAccounts, eq(cashiers.financialAccountId, FinancialAccounts.id));
 
-    const formatted = allCashiers.map((row) => ({
-        ...row.cashier,
-        financialAccount: row.financialAccount,
-        cashier_man: row.cashierManId
-            ? {
-                  id: row.cashierManId,
-                  name: row.cashierManName || row.cashierManUserName,
-              }
-            : null,
-    }));
 
-    return SuccessResponse(res, { message: "Cashiers fetched successfully", data: formatted });
+    return SuccessResponse(res, { message: "Cashiers fetched successfully", data: allCashiers });
 };
 
 export const getCashierById = async (req: Request, res: Response) => {
