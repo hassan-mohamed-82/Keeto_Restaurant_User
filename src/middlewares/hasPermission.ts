@@ -1,10 +1,25 @@
 import { Request, Response, NextFunction } from "express";
 import { db } from "../models/connection";
-import { restrauntadmin, rolesadmin } from "../models/schema";
+import { restrauntadmin } from "../models/schema";
+import { role_restaurant } from "../models/schema/admin/role_restaurant";
 import { eq } from "drizzle-orm";
 import { UnauthorizedError } from "../Errors";
 import { ForbiddenError } from "../Errors/forbiddenError";
 import { ModuleName, ActionName, Permission } from "../types/custom";
+
+const parsePermissions = (permissions: any): Permission[] => {
+    if (!permissions) return [];
+    try {
+        if (Array.isArray(permissions)) return permissions;
+        if (typeof permissions === "string") {
+            const parsed = JSON.parse(permissions);
+            return Array.isArray(parsed) ? parsed : [];
+        }
+        return [];
+    } catch {
+        return [];
+    }
+};
 
 /**
  * Middleware للتحقق من الصلاحيات (Permissions)
@@ -91,18 +106,18 @@ export const hasPermission = (
                 if (admin.roleId) {
                     const [role] = await db
                         .select()
-                        .from(rolesadmin)
-                        .where(eq(rolesadmin.id, admin.roleId))
+                        .from(role_restaurant)
+                        .where(eq(role_restaurant.id, admin.roleId))
                         .limit(1);
 
                     if (role && role.permissions) {
-                        allPermissions = [...allPermissions, ...(role.permissions as Permission[])];
+                        allPermissions = [...allPermissions, ...parsePermissions(role.permissions)];
                     }
                 }
 
                 // ب. الصلاحيات المخصصة (Custom Permissions)
-                if (admin.permissions && Array.isArray(admin.permissions)) {
-                    allPermissions = [...allPermissions, ...(admin.permissions as Permission[])];
+                if (admin.permissions) {
+                    allPermissions = [...allPermissions, ...parsePermissions(admin.permissions)];
                 }
 
                 // التحقق من وجود الصلاحية المطلوبة
@@ -202,17 +217,17 @@ export const hasAnyPermission = (
                 if (admin.roleId) {
                     const [role] = await db
                         .select()
-                        .from(rolesadmin)
-                        .where(eq(rolesadmin.id, admin.roleId))
+                        .from(role_restaurant)
+                        .where(eq(role_restaurant.id, admin.roleId))
                         .limit(1);
 
                     if (role && role.permissions) {
-                        allPermissions = [...allPermissions, ...(role.permissions as Permission[])];
+                        allPermissions = [...allPermissions, ...parsePermissions(role.permissions)];
                     }
                 }
 
-                if (admin.permissions && Array.isArray(admin.permissions)) {
-                    allPermissions = [...allPermissions, ...(admin.permissions as Permission[])];
+                if (admin.permissions) {
+                    allPermissions = [...allPermissions, ...parsePermissions(admin.permissions)];
                 }
 
                 // التحقق من وجود أي من الصلاحيات المطلوبة
@@ -308,17 +323,17 @@ export const hasAllPermissions = (
                 if (admin.roleId) {
                     const [role] = await db
                         .select()
-                        .from(rolesadmin)
-                        .where(eq(rolesadmin.id, admin.roleId))
+                        .from(role_restaurant)
+                        .where(eq(role_restaurant.id, admin.roleId))
                         .limit(1);
 
                     if (role && role.permissions) {
-                        allPermissions = [...allPermissions, ...(role.permissions as Permission[])];
+                        allPermissions = [...allPermissions, ...parsePermissions(role.permissions)];
                     }
                 }
 
-                if (admin.permissions && Array.isArray(admin.permissions)) {
-                    allPermissions = [...allPermissions, ...(admin.permissions as Permission[])];
+                if (admin.permissions) {
+                    allPermissions = [...allPermissions, ...parsePermissions(admin.permissions)];
                 }
 
                 // التحقق من وجود كل الصلاحيات المطلوبة
@@ -373,17 +388,17 @@ export const checkUserPermission = async (
     if (admin.roleId) {
         const [role] = await db
             .select()
-            .from(rolesadmin)
-            .where(eq(rolesadmin.id, admin.roleId))
+            .from(role_restaurant)
+            .where(eq(role_restaurant.id, admin.roleId))
             .limit(1);
 
         if (role && role.permissions) {
-            allPermissions = [...allPermissions, ...(role.permissions as Permission[])];
+            allPermissions = [...allPermissions, ...parsePermissions(role.permissions)];
         }
     }
 
-    if (admin.permissions && Array.isArray(admin.permissions)) {
-        allPermissions = [...allPermissions, ...(admin.permissions as Permission[])];
+    if (admin.permissions) {
+        allPermissions = [...allPermissions, ...parsePermissions(admin.permissions)];
     }
 
     // التحقق من الصلاحية

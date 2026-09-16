@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.login = login;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
+const role_restaurant_1 = require("../../models/schema/admin/role_restaurant");
 const drizzle_orm_1 = require("drizzle-orm");
 const response_1 = require("../../utils/response");
 const BadRequest_1 = require("../../Errors/BadRequest");
@@ -78,10 +79,10 @@ async function login(req, res) {
     if (user.roleId) {
         const [roleResult] = await connection_1.db
             .select()
-            .from(schema_1.rolesadmin)
-            .where((0, drizzle_orm_1.eq)(schema_1.rolesadmin.id, user.roleId))
+            .from(role_restaurant_1.role_restaurant)
+            .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.id, user.roleId))
             .limit(1);
-        role = roleResult;
+        role = roleResult ?? null;
     }
     // 5.5 جلب جدول مواعيد المطعم (Restaurant Schedules)
     let schedules = [];
@@ -114,6 +115,51 @@ async function login(req, res) {
     };
     const token = (0, jwt_1.generateRestaurantAdminToken)(tokenPayload);
     // 7. صياغة الاستجابة الموحدة لتناسب الـ Frontend
+    // Owner → empty array signals "all permissions granted"
+    // Others → merge role permissions + custom permissions, deduped by module
+    let resolvedPermissions;
+    if (user.type === "owner") {
+        resolvedPermissions = [];
+    }
+    else {
+        const parsePerms = (p) => {
+            if (!p)
+                return [];
+            if (Array.isArray(p))
+                return p;
+            if (typeof p === "string") {
+                try {
+                    const parsed = JSON.parse(p);
+                    return Array.isArray(parsed) ? parsed : [];
+                }
+                catch {
+                    return [];
+                }
+            }
+            return [];
+        };
+        let effectivePermissions = [
+            ...(role && role.permissions ? parsePerms(role.permissions) : []),
+            ...(user.permissions ? parsePerms(user.permissions) : [])
+        ];
+        // Deduplicate: merge actions for the same module
+        const mergedPermissionsMap = new Map();
+        for (const perm of effectivePermissions) {
+            if (!perm?.module)
+                continue;
+            if (!mergedPermissionsMap.has(perm.module)) {
+                mergedPermissionsMap.set(perm.module, new Set());
+            }
+            for (const act of perm.actions ?? []) {
+                if (act?.action)
+                    mergedPermissionsMap.get(perm.module).add(act.action);
+            }
+        }
+        resolvedPermissions = Array.from(mergedPermissionsMap.entries()).map(([module, actions]) => ({
+            module,
+            actions: Array.from(actions).map(a => ({ action: a })),
+        }));
+    }
     return (0, response_1.SuccessResponse)(res, {
         message: `${user.type === "owner" ? "Owner" : "Staff"} logged in successfully`,
         token,
@@ -123,7 +169,7 @@ async function login(req, res) {
             email: user.email,
             phoneNumber: user.phoneNumber,
             roleId: user.roleId,
-            permissions: user.permissions || [],
+            permissions: resolvedPermissions,
             status: user.status,
             type: user.type,
             restaurantId: user.restaurantId,

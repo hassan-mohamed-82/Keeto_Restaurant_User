@@ -3,9 +3,26 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.checkUserPermission = exports.hasAllPermissions = exports.hasAnyPermission = exports.hasPermission = void 0;
 const connection_1 = require("../models/connection");
 const schema_1 = require("../models/schema");
+const role_restaurant_1 = require("../models/schema/admin/role_restaurant");
 const drizzle_orm_1 = require("drizzle-orm");
 const Errors_1 = require("../Errors");
 const forbiddenError_1 = require("../Errors/forbiddenError");
+const parsePermissions = (permissions) => {
+    if (!permissions)
+        return [];
+    try {
+        if (Array.isArray(permissions))
+            return permissions;
+        if (typeof permissions === "string") {
+            const parsed = JSON.parse(permissions);
+            return Array.isArray(parsed) ? parsed : [];
+        }
+        return [];
+    }
+    catch {
+        return [];
+    }
+};
 /**
  * Middleware للتحقق من الصلاحيات (Permissions)
  *
@@ -75,16 +92,16 @@ const hasPermission = (module, action, checkBranch = false) => {
                 if (admin.roleId) {
                     const [role] = await connection_1.db
                         .select()
-                        .from(schema_1.rolesadmin)
-                        .where((0, drizzle_orm_1.eq)(schema_1.rolesadmin.id, admin.roleId))
+                        .from(role_restaurant_1.role_restaurant)
+                        .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.id, admin.roleId))
                         .limit(1);
                     if (role && role.permissions) {
-                        allPermissions = [...allPermissions, ...role.permissions];
+                        allPermissions = [...allPermissions, ...parsePermissions(role.permissions)];
                     }
                 }
                 // ب. الصلاحيات المخصصة (Custom Permissions)
-                if (admin.permissions && Array.isArray(admin.permissions)) {
-                    allPermissions = [...allPermissions, ...admin.permissions];
+                if (admin.permissions) {
+                    allPermissions = [...allPermissions, ...parsePermissions(admin.permissions)];
                 }
                 // التحقق من وجود الصلاحية المطلوبة
                 const hasRequiredPermission = allPermissions.some(permission => {
@@ -163,15 +180,15 @@ const hasAnyPermission = (permissions, checkBranch = false) => {
                 if (admin.roleId) {
                     const [role] = await connection_1.db
                         .select()
-                        .from(schema_1.rolesadmin)
-                        .where((0, drizzle_orm_1.eq)(schema_1.rolesadmin.id, admin.roleId))
+                        .from(role_restaurant_1.role_restaurant)
+                        .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.id, admin.roleId))
                         .limit(1);
                     if (role && role.permissions) {
-                        allPermissions = [...allPermissions, ...role.permissions];
+                        allPermissions = [...allPermissions, ...parsePermissions(role.permissions)];
                     }
                 }
-                if (admin.permissions && Array.isArray(admin.permissions)) {
-                    allPermissions = [...allPermissions, ...admin.permissions];
+                if (admin.permissions) {
+                    allPermissions = [...allPermissions, ...parsePermissions(admin.permissions)];
                 }
                 // التحقق من وجود أي من الصلاحيات المطلوبة
                 const hasAnyRequiredPermission = permissions.some(({ module, action }) => {
@@ -249,15 +266,15 @@ const hasAllPermissions = (permissions, checkBranch = false) => {
                 if (admin.roleId) {
                     const [role] = await connection_1.db
                         .select()
-                        .from(schema_1.rolesadmin)
-                        .where((0, drizzle_orm_1.eq)(schema_1.rolesadmin.id, admin.roleId))
+                        .from(role_restaurant_1.role_restaurant)
+                        .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.id, admin.roleId))
                         .limit(1);
                     if (role && role.permissions) {
-                        allPermissions = [...allPermissions, ...role.permissions];
+                        allPermissions = [...allPermissions, ...parsePermissions(role.permissions)];
                     }
                 }
-                if (admin.permissions && Array.isArray(admin.permissions)) {
-                    allPermissions = [...allPermissions, ...admin.permissions];
+                if (admin.permissions) {
+                    allPermissions = [...allPermissions, ...parsePermissions(admin.permissions)];
                 }
                 // التحقق من وجود كل الصلاحيات المطلوبة
                 const hasAllRequiredPermissions = permissions.every(({ module, action }) => {
@@ -303,15 +320,15 @@ const checkUserPermission = async (userId, module, action) => {
     if (admin.roleId) {
         const [role] = await connection_1.db
             .select()
-            .from(schema_1.rolesadmin)
-            .where((0, drizzle_orm_1.eq)(schema_1.rolesadmin.id, admin.roleId))
+            .from(role_restaurant_1.role_restaurant)
+            .where((0, drizzle_orm_1.eq)(role_restaurant_1.role_restaurant.id, admin.roleId))
             .limit(1);
         if (role && role.permissions) {
-            allPermissions = [...allPermissions, ...role.permissions];
+            allPermissions = [...allPermissions, ...parsePermissions(role.permissions)];
         }
     }
-    if (admin.permissions && Array.isArray(admin.permissions)) {
-        allPermissions = [...allPermissions, ...admin.permissions];
+    if (admin.permissions) {
+        allPermissions = [...allPermissions, ...parsePermissions(admin.permissions)];
     }
     // التحقق من الصلاحية
     return allPermissions.some(permission => {

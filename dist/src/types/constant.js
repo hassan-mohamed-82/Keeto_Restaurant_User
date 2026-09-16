@@ -1,37 +1,61 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.LINK_TYPES = exports.BASE64_IMAGE_REGEX = exports.ACTION_NAMES = exports.MODULES = void 0;
+exports.LINK_TYPES = exports.BASE64_IMAGE_REGEX = exports.MODULE_RESTRICTED_ACTIONS = exports.ACTION_NAMES = exports.MODULES = void 0;
 exports.MODULES = [
+    // ─── Core Admin ───────────────────────────────────────
+    "dashboard", // view-only: overview & stats
     "restrauntadmins",
     "role_restaurant",
-    "addon",
-    "basiccampaign",
-    "branchemenu",
-    "branches",
-    "city",
-    "country",
-    "coupon",
-    "discount",
+    "restaurantadmin",
+    // ─── Menu ─────────────────────────────────────────────
     "food",
     "foodingredients",
-    "image",
     "ingredients",
     "ingredientscategory",
-    "notification",
+    "addon",
+    "subcategory",
+    "image",
+    "foodLocks",
+    "recommendedFood",
+    "pointsProducts",
+    // ─── Orders ───────────────────────────────────────────
     "order",
-    "policy",
-    "popup",
-    "rating",
-    "report",
-    "restaurant_wallet",
-    "restaurantsetting",
+    "pointsOrders",
+    // ─── Branches & Zones ─────────────────────────────────
+    "branches",
+    "branchemenu",
+    "zone",
     "restaurantZoneDeliveryfees",
     "restaurant QR",
-    "restaurantadmin",
-    "subcategory",
-    "zone",
-    "delivery_man"
+    // ─── Marketing ────────────────────────────────────────
+    "basiccampaign",
+    "coupon",
+    "discount",
+    "popup",
+    "slider",
+    "notification",
+    "freeDeliveryOffer",
+    // ─── Finance ──────────────────────────────────────────
+    "restaurant_wallet",
+    "financialAccount",
+    "expense",
+    "expenseCategory",
+    "report",
+    // ─── Customers & Ratings ──────────────────────────────
+    "rating",
+    "customerRatings",
+    // ─── Settings ─────────────────────────────────────────
+    "restaurantsetting",
+    "policy",
+    "city",
+    "country",
+    "delivery_man",
+    "socialmedia",
 ];
-exports.ACTION_NAMES = ["View", "Add", "Edit", "Delete", "Status"];
+exports.ACTION_NAMES = ["View", "Add", "Edit", "Delete", "Status", "filter"];
+/** Modules that support only a restricted subset of actions */
+exports.MODULE_RESTRICTED_ACTIONS = {
+    dashboard: ["View"],
+};
 exports.BASE64_IMAGE_REGEX = /^data:image\/(jpeg|jpg|png|gif|webp);base64,/;
 exports.LINK_TYPES = ["link", "subcategory", "product", "discount"];

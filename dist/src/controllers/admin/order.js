@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -58,7 +91,15 @@ const getRestaurantOrders = async (req, res) => {
     if (cityId && cityId !== "null" && cityId !== "undefined") {
         conditions.push((0, drizzle_orm_1.eq)(schema_1.zones.cityId, cityId));
     }
-    const dateConditions = await (0, order_helper_1.buildOrderDateConditions)(req, adminRestaurantId);
+    const dateConditions = await (0, order_helper_1.buildOrderDateConditions)(req, adminRestaurantId, 
+    // owner & branch_manager always have filter access;
+    // for subadmin/staff we check their permissions at runtime
+    req.user.type === "owner"
+        ? true
+        : await (async () => {
+            const { checkUserPermission } = await Promise.resolve().then(() => __importStar(require("../../middlewares/hasPermission")));
+            return checkUserPermission(req.user.id, "order", "filter");
+        })());
     conditions.push(...dateConditions);
     const rawRestaurantOrders = await connection_1.db
         .select({
@@ -252,7 +293,12 @@ const getOrdersByStatus = async (req, res, status) => {
     if (cityId && cityId !== "null" && cityId !== "undefined") {
         conditions.push((0, drizzle_orm_1.eq)(schema_1.zones.cityId, cityId));
     }
-    const dateConditions = await (0, order_helper_1.buildOrderDateConditions)(req, adminRestaurantId);
+    const dateConditions = await (0, order_helper_1.buildOrderDateConditions)(req, adminRestaurantId, req.user.type === "owner" || req.user.type === "branch_manager"
+        ? true
+        : await (async () => {
+            const { checkUserPermission } = await Promise.resolve().then(() => __importStar(require("../../middlewares/hasPermission")));
+            return checkUserPermission(req.user.id, "order", "filter");
+        })());
     conditions.push(...dateConditions);
     const rawResult = await connection_1.db
         .select({
@@ -1572,7 +1618,12 @@ const getallnumbersoforders = async (req, res) => {
         conditions.push((0, drizzle_orm_1.eq)(schema_1.zones.cityId, cityId));
     }
     //-----------------------
-    const dateConditions = await (0, order_helper_1.buildOrderDateConditions)(req, adminRestaurantId);
+    const dateConditions = await (0, order_helper_1.buildOrderDateConditions)(req, adminRestaurantId, req.user.type === "owner" || req.user.type === "branch_manager"
+        ? true
+        : await (async () => {
+            const { checkUserPermission } = await Promise.resolve().then(() => __importStar(require("../../middlewares/hasPermission")));
+            return checkUserPermission(req.user.id, "order", "filter");
+        })());
     conditions.push(...dateConditions);
     //-----------------------
     const statusCountsResult = await connection_1.db

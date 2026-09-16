@@ -135,14 +135,24 @@ export async function login(req: Request, res: Response) {
     if (user.type === "owner") {
         resolvedPermissions = [];
     } else {
-        let effectivePermissions: any[] = [];
-        if (role && (role as any).permissions) {
-            const rp = (role as any).permissions;
-            effectivePermissions = [...effectivePermissions, ...(Array.isArray(rp) ? rp : [])];
-        }
-        if (user.permissions && Array.isArray(user.permissions)) {
-            effectivePermissions = [...effectivePermissions, ...(user.permissions as any[])];
-        }
+        const parsePerms = (p: any): any[] => {
+            if (!p) return [];
+            if (Array.isArray(p)) return p;
+            if (typeof p === "string") {
+                try {
+                    const parsed = JSON.parse(p);
+                    return Array.isArray(parsed) ? parsed : [];
+                } catch {
+                    return [];
+                }
+            }
+            return [];
+        };
+
+        let effectivePermissions: any[] = [
+            ...(role && (role as any).permissions ? parsePerms((role as any).permissions) : []),
+            ...(user.permissions ? parsePerms(user.permissions) : [])
+        ];
 
         // Deduplicate: merge actions for the same module
         const mergedPermissionsMap = new Map<string, Set<string>>();
