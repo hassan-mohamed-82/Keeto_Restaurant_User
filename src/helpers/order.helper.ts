@@ -6,6 +6,7 @@ import { db } from "../models/connection";
 import { orders, restaurantSettings, restaurantSchedules } from "../models/schema";
 import { eq, gte, lte } from "drizzle-orm";
 import { BadRequest } from "../Errors/BadRequest";
+import { ForbiddenError } from "../Errors/forbiddenError";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -70,7 +71,18 @@ export const getRestaurantShiftStartTime = async (restaurantId: string): Promise
 // ==========================================
 // 2. Helper: بناء شروط التاريخ وفحص مدخلات المطور/العميل
 // ==========================================
-export const buildOrderDateConditions = async (req: Request, restaurantId: string): Promise<any[]> => {
+/**
+ * @param req              - Express request
+ * @param restaurantId     - Restaurant context
+ * @param hasFilterPermission - Whether the caller has the "filter" permission on the orders module.
+ *                             When false, any attempt to supply custom date params throws a ForbiddenError
+ *                             and only the current shift's orders are returned.
+ */
+export const buildOrderDateConditions = async (
+    req: Request,
+    restaurantId: string,
+    hasFilterPermission: boolean = true
+): Promise<any[]> => {
     const conditions: any[] = [];
 
     const rawStartDate = (
@@ -91,6 +103,13 @@ export const buildOrderDateConditions = async (req: Request, restaurantId: strin
 
     let startDate: Date;
     let endDate: Date | undefined;
+
+    // 0. إذا لم يكن للمستخدم صلاحية filter، يُرفض أي طلب بفلتر تاريخ
+    if (!hasFilterPermission && (rawStartDate || rawEndDate)) {
+        throw new ForbiddenError(
+            "You don't have permission to filter orders by date. Only current shift orders are available."
+        );
+    }
 
     // 1. معالجة تاريخ البداية
     if (rawStartDate) {

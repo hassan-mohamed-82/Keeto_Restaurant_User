@@ -126,6 +126,40 @@ export async function login(req: Request, res: Response) {
     const token = generateRestaurantAdminToken(tokenPayload);
 
     // 7. صياغة الاستجابة الموحدة لتناسب الـ Frontend
+
+    // Owner → empty array signals "all permissions granted"
+    // Others → merge role permissions + custom permissions, deduped by module
+    let resolvedPermissions: any[];
+
+    if (user.type === "owner") {
+        resolvedPermissions = [];
+    } else {
+        let effectivePermissions: any[] = [];
+        if (role && (role as any).permissions) {
+            const rp = (role as any).permissions;
+            effectivePermissions = [...effectivePermissions, ...(Array.isArray(rp) ? rp : [])];
+        }
+        if (user.permissions && Array.isArray(user.permissions)) {
+            effectivePermissions = [...effectivePermissions, ...(user.permissions as any[])];
+        }
+
+        // Deduplicate: merge actions for the same module
+        const mergedPermissionsMap = new Map<string, Set<string>>();
+        for (const perm of effectivePermissions) {
+            if (!perm?.module) continue;
+            if (!mergedPermissionsMap.has(perm.module)) {
+                mergedPermissionsMap.set(perm.module, new Set());
+            }
+            for (const act of perm.actions ?? []) {
+                if (act?.action) mergedPermissionsMap.get(perm.module)!.add(act.action);
+            }
+        }
+        resolvedPermissions = Array.from(mergedPermissionsMap.entries()).map(([module, actions]) => ({
+            module,
+            actions: Array.from(actions).map(a => ({ action: a })),
+        }));
+    }
+
     return SuccessResponse(res, {
         message: `${user.type === "owner" ? "Owner" : "Staff"} logged in successfully`,
         token,
@@ -135,7 +169,7 @@ export async function login(req: Request, res: Response) {
             email: user.email,
             phoneNumber: user.phoneNumber,
             roleId: user.roleId,
-            permissions: user.permissions || [],
+            permissions: resolvedPermissions,
             status: user.status,
             type: user.type,
             restaurantId: user.restaurantId,

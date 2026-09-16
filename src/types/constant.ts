@@ -1,36 +1,61 @@
 export const MODULES = [
+    // ─── Core Admin ───────────────────────────────────────
+    "dashboard",           // view-only: overview & stats
     "restrauntadmins",
     "role_restaurant",
-    "addon",
-    "basiccampaign",
-    "branchemenu",
-    "branches",
-    "city",
-    "country",
-    "coupon",
-    "discount",
+    "restaurantadmin",
+    // ─── Menu ─────────────────────────────────────────────
     "food",
     "foodingredients",
-    "image",
     "ingredients",
     "ingredientscategory",
-    "notification",
+    "addon",
+    "subcategory",
+    "image",
+    "foodLocks",
+    "recommendedFood",
+    "pointsProducts",
+    // ─── Orders ───────────────────────────────────────────
     "order",
-    "policy",
-    "popup",
-    "rating",
-    "report",
-    "restaurant_wallet",
-    "restaurantsetting",
+    "pointsOrders",
+    // ─── Branches & Zones ─────────────────────────────────
+    "branches",
+    "branchemenu",
+    "zone",
     "restaurantZoneDeliveryfees",
     "restaurant QR",
-    "restaurantadmin",
-    "subcategory",
-    "zone",
-    "delivery_man" 
+    // ─── Marketing ────────────────────────────────────────
+    "basiccampaign",
+    "coupon",
+    "discount",
+    "popup",
+    "slider",
+    "notification",
+    "freeDeliveryOffer",
+    // ─── Finance ──────────────────────────────────────────
+    "restaurant_wallet",
+    "financialAccount",
+    "expense",
+    "expenseCategory",
+    "report",
+    // ─── Customers & Ratings ──────────────────────────────
+    "rating",
+    "customerRatings",
+    // ─── Settings ─────────────────────────────────────────
+    "restaurantsetting",
+    "policy",
+    "city",
+    "country",
+    "delivery_man",
+    "socialmedia",
 ] as const;
 
-export const ACTION_NAMES = ["View", "Add", "Edit", "Delete", "Status"] as const;
+export const ACTION_NAMES = ["View", "Add", "Edit", "Delete", "Status", "filter"] as const;
+
+/** Modules that support only a restricted subset of actions */
+export const MODULE_RESTRICTED_ACTIONS: Partial<Record<ModuleName, readonly string[]>> = {
+    dashboard: ["View"],
+};
 
 export type ModuleName = (typeof MODULES)[number];
 export type ActionName = (typeof ACTION_NAMES)[number];

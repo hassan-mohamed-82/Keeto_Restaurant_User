@@ -106,7 +106,18 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
         conditions.push(eq(zones.cityId, cityId));
     }
 
-    const dateConditions = await buildOrderDateConditions(req, adminRestaurantId);
+    const dateConditions = await buildOrderDateConditions(
+        req,
+        adminRestaurantId,
+        // owner & branch_manager always have filter access;
+        // for subadmin/staff we check their permissions at runtime
+        req.user.type === "owner"
+            ? true
+            : await (async () => {
+                  const { checkUserPermission } = await import("../../middlewares/hasPermission");
+                  return checkUserPermission(req.user!.id, "order", "filter" as any);
+              })()
+    );
     conditions.push(...dateConditions);
 
     const rawRestaurantOrders = await db
@@ -323,7 +334,16 @@ export const getOrdersByStatus = async (
         conditions.push(eq(zones.cityId, cityId));
     }
 
-    const dateConditions = await buildOrderDateConditions(req, adminRestaurantId);
+    const dateConditions = await buildOrderDateConditions(
+        req,
+        adminRestaurantId,
+        req.user!.type === "owner" || req.user!.type === "branch_manager"
+            ? true
+            : await (async () => {
+                  const { checkUserPermission } = await import("../../middlewares/hasPermission");
+                  return checkUserPermission(req.user!.id, "order", "filter" as any);
+              })()
+    );
     conditions.push(...dateConditions);
 
     const rawResult = await db
@@ -1783,7 +1803,16 @@ export const getallnumbersoforders = async (req: Request, res: Response) => {
     }
 
     //-----------------------
-    const dateConditions = await buildOrderDateConditions(req, adminRestaurantId);
+    const dateConditions = await buildOrderDateConditions(
+        req,
+        adminRestaurantId,
+        req.user!.type === "owner" || req.user!.type === "branch_manager"
+            ? true
+            : await (async () => {
+                  const { checkUserPermission } = await import("../../middlewares/hasPermission");
+                  return checkUserPermission(req.user!.id, "order", "filter" as any);
+              })()
+    );
     conditions.push(...dateConditions);
     //-----------------------
 
