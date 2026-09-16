@@ -257,30 +257,53 @@ function initOrderDelayAlertCron() {
             if (!activeGroups || activeGroups.length === 0) {
                 return;
             }
-            // Group alert groups by restaurantId for fast matching
+            // Group alert groups into superadmin and per-restaurant groups
+            const superAdminGroups = [];
             const groupsByRestaurant = new Map();
             for (const group of activeGroups) {
-                const list = groupsByRestaurant.get(group.restaurantId) || [];
-                list.push(group);
-                groupsByRestaurant.set(group.restaurantId, list);
+                if (group.isSuperAdmin || !group.restaurantId) {
+                    superAdminGroups.push(group);
+                }
+                else {
+                    const list = groupsByRestaurant.get(group.restaurantId) || [];
+                    list.push(group);
+                    groupsByRestaurant.set(group.restaurantId, list);
+                }
             }
             // 3. Process each overdue order
             for (const order of activeOrders) {
                 if (!order.createdAt)
                     continue;
                 const elapsedMinutes = Math.floor((now.getTime() - new Date(order.createdAt).getTime()) / 60000);
-                const restaurantGroups = groupsByRestaurant.get(order.restaurantId) || [];
-                if (restaurantGroups.length === 0) {
+                const restaurantGroups = order.restaurantId ? (groupsByRestaurant.get(order.restaurantId) || []) : [];
+                const relevantGroups = [...restaurantGroups, ...superAdminGroups];
+                if (relevantGroups.length === 0) {
                     continue;
                 }
-                // Check which groups match this order's branch, orderStatus, and are overdue
-                const matchingOverdueGroups = restaurantGroups.filter((g) => {
+                // Check which groups match this order, branch, status, and delay
+                const matchingOverdueGroups = relevantGroups.filter((g) => {
+                    const allowedStatuses = parseJsonField(g.orderStatus, ["pending"]);
+                    const isStatusMatch = order.status ? allowedStatuses.includes(order.status) : false;
+                    const isDelayMatch = elapsedMinutes >= g.maxDelayMinutes;
+                    if (!isStatusMatch || !isDelayMatch) {
+                        return false;
+                    }
+                    // For SuperAdmin groups: check restaurant scope precisely
+                    if (g.isSuperAdmin) {
+                        // إذا كان مفعلاً اختيار كل المطاعم أو القيمة فارغة/true
+                        const isAllRestaurants = g.allRestaurants === true || g.allRestaurants === null || g.allRestaurants === undefined;
+                        if (isAllRestaurants) {
+                            return true; // يشمل كل المطاعم بدون استثناء
+                        }
+                        // وإلا، نتحقق هل مطعم الأوردر موجود ضمن القائمة المحددة
+                        const restaurantIds = parseJsonField(g.restaurantIds, []);
+                        return order.restaurantId && Array.isArray(restaurantIds) && restaurantIds.includes(order.restaurantId);
+                    }
+                    // For Restaurant groups: check branch scope
                     const branchIds = parseJsonField(g.branchIds, []);
                     const isBranchMatch = Boolean(g.allBranches) ||
                         (order.branchId && Array.isArray(branchIds) && branchIds.includes(order.branchId));
-                    const allowedStatuses = parseJsonField(g.orderStatus, ["pending"]);
-                    const isStatusMatch = order.status ? allowedStatuses.includes(order.status) : false;
-                    return isBranchMatch && isStatusMatch && elapsedMinutes >= g.maxDelayMinutes;
+                    return isBranchMatch;
                 });
                 if (matchingOverdueGroups.length === 0) {
                     continue;

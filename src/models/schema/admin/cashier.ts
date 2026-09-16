@@ -4,11 +4,13 @@ import {
     char,
     boolean,
     timestamp,
-    mysqlEnum
+    mysqlEnum,
+    type AnyMySqlColumn,
 } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
 import { branches, restaurants } from "../../schema";
 import { FinancialAccounts } from "../../schema";
+import { cashierMen } from "./cashierMan";
 
 export const cashiers = mysqlTable("cashiers", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
@@ -24,6 +26,8 @@ export const cashiers = mysqlTable("cashiers", {
     
     financialAccountId: char("financial_account_id", { length: 36 }).references(() => FinancialAccounts.id).notNull(),
     
+    cashierManId: char("cashier_man_id", { length: 36 }).references((): AnyMySqlColumn => cashierMen.id, { onDelete: "set null" }),
+
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
 });

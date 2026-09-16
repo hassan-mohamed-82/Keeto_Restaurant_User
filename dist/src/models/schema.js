@@ -83,3 +83,7 @@ __exportStar(require("./schema/admin/orderDelayAlertGroup"), exports);
 __exportStar(require("./schema/admin/suppliers"), exports);
 __exportStar(require("./schema/admin/stores"), exports);
 __exportStar(require("./schema/admin/storeMen"), exports);
+__exportStar(require("./schema/admin/captainOrder"), exports);
+__exportStar(require("./schema/admin/cashierMan"), exports);
+__exportStar(require("./schema/admin/hall"), exports);
+__exportStar(require("./schema/admin/hallTable"), exports);

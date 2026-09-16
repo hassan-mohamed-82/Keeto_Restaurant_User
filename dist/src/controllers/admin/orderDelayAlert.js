@@ -30,7 +30,7 @@ async function enrichGroupsWithBranches(groups) {
         const emails = parseJsonField(g.emails, []);
         const branchIds = parseJsonField(g.branchIds, []);
         const orderStatus = parseJsonField(g.orderStatus, ["pending"]);
-        const allBranches = Boolean(g.allBranches);
+        const allBranches = g.allBranches !== false;
         const isActive = Boolean(g.isActive);
         if (!allBranches && Array.isArray(branchIds)) {
             for (const bId of branchIds) {
@@ -39,12 +39,17 @@ async function enrichGroupsWithBranches(groups) {
             }
         }
         return {
-            ...g,
+            id: g.id,
+            restaurantId: g.restaurantId,
+            name: g.name,
             emails,
-            branchIds,
-            orderStatus,
             allBranches,
+            branchIds,
+            maxDelayMinutes: g.maxDelayMinutes,
+            orderStatus,
             isActive,
+            createdAt: g.createdAt,
+            updatedAt: g.updatedAt,
         };
     });
     let branchMap = new Map();
@@ -79,11 +84,14 @@ const createAlertGroup = async (req, res) => {
     if (!restaurantId) {
         throw new Errors_1.BadRequest("Restaurant context is missing or unauthorized");
     }
-    const { name, emails, allBranches = true, branchIds = [], maxDelayMinutes, orderStatus = ["pending"], isActive = true } = req.body;
+    const { name, emails, allBranches = true, branchIds = [], maxDelayMinutes, orderStatus = ["pending"], isActive = true, } = req.body;
     const id = (0, uuid_1.v4)();
     await connection_1.db.insert(schema_1.orderDelayAlertGroups).values({
         id,
         restaurantId,
+        isSuperAdmin: false,
+        allRestaurants: false,
+        restaurantIds: [],
         name: name.trim(),
         emails: Array.isArray(emails) ? emails : [emails],
         allBranches: Boolean(allBranches),
@@ -105,17 +113,18 @@ const createAlertGroup = async (req, res) => {
 };
 exports.createAlertGroup = createAlertGroup;
 // ==========================================
-// 2. Get All Alert Groups
+// 2. Get All Alert Groups (Scoped to restaurant & isSuperAdmin = false)
 // ==========================================
 const getAllAlertGroups = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) {
         throw new Errors_1.BadRequest("Restaurant context is missing or unauthorized");
     }
+    // Never return superadmin groups to the restaurant user
     const groups = await connection_1.db
         .select()
         .from(schema_1.orderDelayAlertGroups)
-        .where((0, drizzle_orm_1.eq)(schema_1.orderDelayAlertGroups.restaurantId, restaurantId))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orderDelayAlertGroups.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.orderDelayAlertGroups.isSuperAdmin, false)))
         .orderBy((0, drizzle_orm_1.desc)(schema_1.orderDelayAlertGroups.createdAt));
     const enriched = await enrichGroupsWithBranches(groups);
     return (0, response_1.SuccessResponse)(res, {
@@ -136,7 +145,7 @@ const getAlertGroupById = async (req, res) => {
     const [group] = await connection_1.db
         .select()
         .from(schema_1.orderDelayAlertGroups)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orderDelayAlertGroups.id, id), (0, drizzle_orm_1.eq)(schema_1.orderDelayAlertGroups.restaurantId, restaurantId)))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orderDelayAlertGroups.id, id), (0, drizzle_orm_1.eq)(schema_1.orderDelayAlertGroups.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.orderDelayAlertGroups.isSuperAdmin, false)))
         .limit(1);
     if (!group) {
         throw new Errors_1.NotFound("مجموعة التنبيه غير موجودة");
@@ -160,7 +169,7 @@ const updateAlertGroup = async (req, res) => {
     const [existing] = await connection_1.db
         .select()
         .from(schema_1.orderDelayAlertGroups)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orderDelayAlertGroups.id, id), (0, drizzle_orm_1.eq)(schema_1.orderDelayAlertGroups.restaurantId, restaurantId)))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orderDelayAlertGroups.id, id), (0, drizzle_orm_1.eq)(schema_1.orderDelayAlertGroups.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.orderDelayAlertGroups.isSuperAdmin, false)))
         .limit(1);
     if (!existing) {
         throw new Errors_1.NotFound("مجموعة التنبيه غير موجودة");
@@ -190,7 +199,7 @@ const updateAlertGroup = async (req, res) => {
     await connection_1.db
         .update(schema_1.orderDelayAlertGroups)
         .set(updateData)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orderDelayAlertGroups.id, id), (0, drizzle_orm_1.eq)(schema_1.orderDelayAlertGroups.restaurantId, restaurantId)));
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orderDelayAlertGroups.id, id), (0, drizzle_orm_1.eq)(schema_1.orderDelayAlertGroups.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.orderDelayAlertGroups.isSuperAdmin, false)));
     const [updated] = await connection_1.db
         .select()
         .from(schema_1.orderDelayAlertGroups)
@@ -215,7 +224,7 @@ const toggleAlertGroupStatus = async (req, res) => {
     const [existing] = await connection_1.db
         .select()
         .from(schema_1.orderDelayAlertGroups)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orderDelayAlertGroups.id, id), (0, drizzle_orm_1.eq)(schema_1.orderDelayAlertGroups.restaurantId, restaurantId)))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orderDelayAlertGroups.id, id), (0, drizzle_orm_1.eq)(schema_1.orderDelayAlertGroups.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.orderDelayAlertGroups.isSuperAdmin, false)))
         .limit(1);
     if (!existing) {
         throw new Errors_1.NotFound("مجموعة التنبيه غير موجودة");
@@ -243,7 +252,7 @@ const deleteAlertGroup = async (req, res) => {
     const [existing] = await connection_1.db
         .select()
         .from(schema_1.orderDelayAlertGroups)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orderDelayAlertGroups.id, id), (0, drizzle_orm_1.eq)(schema_1.orderDelayAlertGroups.restaurantId, restaurantId)))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orderDelayAlertGroups.id, id), (0, drizzle_orm_1.eq)(schema_1.orderDelayAlertGroups.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.orderDelayAlertGroups.isSuperAdmin, false)))
         .limit(1);
     if (!existing) {
         throw new Errors_1.NotFound("مجموعة التنبيه غير موجودة");
