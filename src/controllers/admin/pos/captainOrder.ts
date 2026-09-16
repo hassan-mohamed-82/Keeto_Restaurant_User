@@ -1,13 +1,13 @@
 import { Request, Response } from "express";
 import { db } from "../../../models/connection";
-import { captainOrders, branches } from "../../../models/schema";
-import { eq, and, desc, count, or, like, ne } from "drizzle-orm";
+import { captainOrders, branches, halls } from "../../../models/schema";
+import { eq, and, desc, count, or, like, ne, inArray } from "drizzle-orm";
 import { SuccessResponse } from "../../../utils/response";
 import { BadRequest, NotFound } from "../../../Errors";
 import { v4 as uuidv4 } from "uuid";
 import bcrypt from "bcrypt";
 import { saveBase64Image, handleImageUpdate, deleteImage } from "../../../utils/handleImages";
-import { extractLang, getLocalizedName } from "../../../helpers/localization.helper";
+import { extractLang, getLocalizedName, parseJsonArray } from "../../../helpers/localization.helper";
 
 // ==========================================
 // 1. Create CaptainOrder
@@ -18,6 +18,8 @@ export const createCaptainOrder = async (req: Request, res: Response) => {
         throw new BadRequest("Restaurant context is missing or unauthorized");
     }
 
+    const lang = extractLang(req);
+
     const {
         name,
         user_name,
@@ -25,6 +27,8 @@ export const createCaptainOrder = async (req: Request, res: Response) => {
         password,
         branch_id,
         branchId,
+        hall_ids,
+        hallIds,
         image,
         status,
     } = req.body;
@@ -42,32 +46,68 @@ export const createCaptainOrder = async (req: Request, res: Response) => {
         throw new BadRequest("Invalid branch selected: branch not found or does not belong to your restaurant");
     }
 
-    // 2. Check user_name uniqueness
+    // 2. Validate hall_ids
+    const finalHallIds = parseJsonArray(hall_ids || hallIds);
+    if (!finalHallIds || finalHallIds.length === 0) {
+        throw new BadRequest("hall_ids is required and must contain at least one hall");
+    }
+
+    const validHalls = await db
+        .select({
+            id: halls.id,
+            name: halls.name,
+            nameAr: halls.nameAr,
+            nameFr: halls.nameFr,
+        })
+        .from(halls)
+        .where(
+            and(
+                eq(halls.restaurantId, restaurantId),
+                eq(halls.branchId, targetBranchId),
+                inArray(halls.id, finalHallIds)
+            )
+        );
+
+    if (validHalls.length !== finalHallIds.length) {
+        throw new BadRequest("One or more selected halls are invalid or do not belong to the selected branch");
+    }
+
+    // 3. Check user_name uniqueness within restaurant
     const [existingUserName] = await db
         .select({ id: captainOrders.id })
         .from(captainOrders)
-        .where(eq(captainOrders.userName, user_name.trim()))
+        .where(
+            and(
+                eq(captainOrders.restaurantId, restaurantId),
+                eq(captainOrders.userName, user_name.trim())
+            )
+        )
         .limit(1);
 
     if (existingUserName) {
-        throw new BadRequest("User name is already in use by another captain");
+        throw new BadRequest("User name is already in use in your restaurant");
     }
 
-    // 3. Check phone uniqueness
+    // 4. Check phone uniqueness within restaurant
     const [existingPhone] = await db
         .select({ id: captainOrders.id })
         .from(captainOrders)
-        .where(eq(captainOrders.phone, phone.trim()))
+        .where(
+            and(
+                eq(captainOrders.restaurantId, restaurantId),
+                eq(captainOrders.phone, phone.trim())
+            )
+        )
         .limit(1);
 
     if (existingPhone) {
-        throw new BadRequest("Phone number is already in use by another captain");
+        throw new BadRequest("Phone number is already in use in your restaurant");
     }
 
-    // 4. Hash password with bcrypt
+    // 5. Hash password with bcrypt
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // 5. Handle image if provided (not required)
+    // 6. Handle image if provided (not required)
     let savedImageUrl: string | null = null;
     if (image) {
         if (typeof image === "string" && image.startsWith("http")) {
@@ -87,6 +127,7 @@ export const createCaptainOrder = async (req: Request, res: Response) => {
         phone: phone.trim(),
         password: hashedPassword,
         image: savedImageUrl,
+        hallIds: finalHallIds,
         status: status !== undefined ? Boolean(status) : true,
     });
 
@@ -99,6 +140,7 @@ export const createCaptainOrder = async (req: Request, res: Response) => {
             userName: captainOrders.userName,
             phone: captainOrders.phone,
             image: captainOrders.image,
+            hallIds: captainOrders.hallIds,
             status: captainOrders.status,
             createdAt: captainOrders.createdAt,
             updatedAt: captainOrders.updatedAt,
@@ -107,11 +149,22 @@ export const createCaptainOrder = async (req: Request, res: Response) => {
         .where(eq(captainOrders.id, id))
         .limit(1);
 
+    const formattedCreated = {
+        ...created,
+        hall_ids: parseJsonArray(created.hallIds),
+        halls: validHalls.map((h) => ({
+            id: h.id,
+            name: getLocalizedName(h, lang),
+            nameAr: h.nameAr,
+            nameFr: h.nameFr,
+        })),
+    };
+
     return SuccessResponse(
         res,
         {
             message: "Captain order created successfully",
-            data: created,
+            data: formattedCreated,
         },
         201
     );
@@ -174,6 +227,7 @@ export const getAllCaptainOrders = async (req: Request, res: Response) => {
                       userName: captainOrders.userName,
                       phone: captainOrders.phone,
                       image: captainOrders.image,
+                      hallIds: captainOrders.hallIds,
                       status: captainOrders.status,
                       createdAt: captainOrders.createdAt,
                       updatedAt: captainOrders.updatedAt,
@@ -196,6 +250,7 @@ export const getAllCaptainOrders = async (req: Request, res: Response) => {
                       userName: captainOrders.userName,
                       phone: captainOrders.phone,
                       image: captainOrders.image,
+                      hallIds: captainOrders.hallIds,
                       status: captainOrders.status,
                       createdAt: captainOrders.createdAt,
                       updatedAt: captainOrders.updatedAt,
@@ -222,6 +277,7 @@ export const getAllCaptainOrders = async (req: Request, res: Response) => {
         user_name: item.userName,
         phone: item.phone,
         image: item.image,
+        hall_ids: parseJsonArray(item.hallIds),
         status: item.status,
         branch: item.branchId
             ? {
@@ -312,6 +368,7 @@ export const getCaptainOrderById = async (req: Request, res: Response) => {
             userName: captainOrders.userName,
             phone: captainOrders.phone,
             image: captainOrders.image,
+            hallIds: captainOrders.hallIds,
             status: captainOrders.status,
             createdAt: captainOrders.createdAt,
             updatedAt: captainOrders.updatedAt,
@@ -330,12 +387,43 @@ export const getCaptainOrderById = async (req: Request, res: Response) => {
         throw new NotFound("Captain order not found");
     }
 
+    const hallIdList = parseJsonArray(row.hallIds);
+    let assignedHalls: any[] = [];
+    if (hallIdList.length > 0) {
+        const rawHalls = await db
+            .select({
+                id: halls.id,
+                name: halls.name,
+                nameAr: halls.nameAr,
+                nameFr: halls.nameFr,
+                status: halls.status,
+            })
+            .from(halls)
+            .where(
+                and(
+                    eq(halls.restaurantId, restaurantId),
+                    inArray(halls.id, hallIdList)
+                )
+            );
+
+        assignedHalls = rawHalls.map((h) => ({
+            id: h.id,
+            name: getLocalizedName(h, lang),
+            nameAr: h.nameAr,
+            nameFr: h.nameFr,
+            status: h.status,
+        }));
+    }
+
     const result = {
         id: row.id,
         name: row.name,
         user_name: row.userName,
         phone: row.phone,
         image: row.image,
+        hallIds: hallIdList,
+        hall_ids: hallIdList,
+        halls: assignedHalls,
         status: row.status,
         branch: row.branchId
             ? {
@@ -370,6 +458,7 @@ export const updateCaptainOrder = async (req: Request, res: Response) => {
         throw new BadRequest("Restaurant context is missing or unauthorized");
     }
 
+    const lang = extractLang(req);
     const { id } = req.params;
 
     const [existing] = await db
@@ -389,6 +478,8 @@ export const updateCaptainOrder = async (req: Request, res: Response) => {
         password,
         branch_id,
         branchId,
+        hall_ids,
+        hallIds,
         image,
         status,
     } = req.body;
@@ -411,11 +502,17 @@ export const updateCaptainOrder = async (req: Request, res: Response) => {
         const [existingUserName] = await db
             .select({ id: captainOrders.id })
             .from(captainOrders)
-            .where(and(eq(captainOrders.userName, user_name.trim()), ne(captainOrders.id, id)))
+            .where(
+                and(
+                    eq(captainOrders.restaurantId, restaurantId),
+                    eq(captainOrders.userName, user_name.trim()),
+                    ne(captainOrders.id, id)
+                )
+            )
             .limit(1);
 
         if (existingUserName) {
-            throw new BadRequest("User name is already in use by another captain");
+            throw new BadRequest("User name is already in use in your restaurant");
         }
     }
 
@@ -424,11 +521,17 @@ export const updateCaptainOrder = async (req: Request, res: Response) => {
         const [existingPhone] = await db
             .select({ id: captainOrders.id })
             .from(captainOrders)
-            .where(and(eq(captainOrders.phone, phone.trim()), ne(captainOrders.id, id)))
+            .where(
+                and(
+                    eq(captainOrders.restaurantId, restaurantId),
+                    eq(captainOrders.phone, phone.trim()),
+                    ne(captainOrders.id, id)
+                )
+            )
             .limit(1);
 
         if (existingPhone) {
-            throw new BadRequest("Phone number is already in use by another captain");
+            throw new BadRequest("Phone number is already in use in your restaurant");
         }
     }
 
@@ -438,6 +541,51 @@ export const updateCaptainOrder = async (req: Request, res: Response) => {
     if (phone !== undefined) updateData.phone = phone.trim();
     if (targetBranchId !== undefined) updateData.branchId = targetBranchId;
     if (status !== undefined) updateData.status = Boolean(status);
+
+    // Validate and update hall_ids if provided
+    if (hall_ids !== undefined || hallIds !== undefined) {
+        const rawHallsInput = hall_ids !== undefined ? hall_ids : hallIds;
+        const finalHallIds = parseJsonArray(rawHallsInput);
+        if (finalHallIds.length === 0) {
+            throw new BadRequest("At least one hall must be selected");
+        }
+
+        const branchToCheck = targetBranchId || existing.branchId;
+        const validHalls = await db
+            .select({ id: halls.id })
+            .from(halls)
+            .where(
+                and(
+                    eq(halls.restaurantId, restaurantId),
+                    eq(halls.branchId, branchToCheck),
+                    inArray(halls.id, finalHallIds)
+                )
+            );
+
+        if (validHalls.length !== finalHallIds.length) {
+            throw new BadRequest("One or more selected halls are invalid or do not belong to the selected branch");
+        }
+
+        updateData.hallIds = finalHallIds;
+    } else if (targetBranchId && targetBranchId !== existing.branchId) {
+        // If branch changed but halls were not re-sent, check if existing halls belong to new branch
+        const existingHalls = parseJsonArray(existing.hallIds);
+        if (existingHalls.length > 0) {
+            const validInNewBranch = await db
+                .select({ id: halls.id })
+                .from(halls)
+                .where(
+                    and(
+                        eq(halls.restaurantId, restaurantId),
+                        eq(halls.branchId, targetBranchId),
+                        inArray(halls.id, existingHalls)
+                    )
+                );
+            if (validInNewBranch.length !== existingHalls.length) {
+                throw new BadRequest("Branch changed: please provide new hall_ids belonging to the new branch");
+            }
+        }
+    }
 
     // Hash password if provided
     if (password && typeof password === "string" && password.trim() !== "") {
@@ -466,6 +614,7 @@ export const updateCaptainOrder = async (req: Request, res: Response) => {
             userName: captainOrders.userName,
             phone: captainOrders.phone,
             image: captainOrders.image,
+            hallIds: captainOrders.hallIds,
             status: captainOrders.status,
             createdAt: captainOrders.createdAt,
             updatedAt: captainOrders.updatedAt,
@@ -474,9 +623,42 @@ export const updateCaptainOrder = async (req: Request, res: Response) => {
         .where(and(eq(captainOrders.id, id), eq(captainOrders.restaurantId, restaurantId)))
         .limit(1);
 
+    const hallIdList = parseJsonArray(updated.hallIds);
+    let assignedHalls: any[] = [];
+    if (hallIdList.length > 0) {
+        const rawHalls = await db
+            .select({
+                id: halls.id,
+                name: halls.name,
+                nameAr: halls.nameAr,
+                nameFr: halls.nameFr,
+                status: halls.status,
+            })
+            .from(halls)
+            .where(
+                and(
+                    eq(halls.restaurantId, restaurantId),
+                    inArray(halls.id, hallIdList)
+                )
+            );
+
+        assignedHalls = rawHalls.map((h) => ({
+            id: h.id,
+            name: getLocalizedName(h, lang),
+            nameAr: h.nameAr,
+            nameFr: h.nameFr,
+            status: h.status,
+        }));
+    }
+
     return SuccessResponse(res, {
         message: "Captain order updated successfully",
-        data: updated,
+        data: {
+            ...updated,
+            hall_ids: hallIdList,
+            hallIds: hallIdList,
+            halls: assignedHalls,
+        },
     });
 };
 
@@ -546,5 +728,121 @@ export const toggleCaptainOrderStatus = async (req: Request, res: Response) => {
     return SuccessResponse(res, {
         message: `Captain order status changed to ${newStatus ? "active" : "inactive"}`,
         data: { id, status: newStatus },
+    });
+};
+
+// ==========================================
+// 8. Get Halls of a Specific CaptainOrder
+// ==========================================
+export const getCaptainOrderHalls = async (req: Request, res: Response) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId) {
+        throw new BadRequest("Restaurant context is missing or unauthorized");
+    }
+
+    const lang = extractLang(req);
+    const { id } = req.params;
+
+    const [captain] = await db
+        .select({
+            id: captainOrders.id,
+            name: captainOrders.name,
+            branchId: captainOrders.branchId,
+            hallIds: captainOrders.hallIds,
+        })
+        .from(captainOrders)
+        .where(and(eq(captainOrders.id, id), eq(captainOrders.restaurantId, restaurantId)))
+        .limit(1);
+
+    if (!captain) {
+        throw new NotFound("Captain order not found");
+    }
+
+    const hallIdList = parseJsonArray(captain.hallIds);
+    if (hallIdList.length === 0) {
+        return SuccessResponse(res, {
+            message: "Captain order halls fetched successfully",
+            data: [],
+        });
+    }
+
+    const rawHalls = await db
+        .select({
+            id: halls.id,
+            name: halls.name,
+            nameAr: halls.nameAr,
+            nameFr: halls.nameFr,
+            status: halls.status,
+        })
+        .from(halls)
+        .where(
+            and(
+                eq(halls.restaurantId, restaurantId),
+                inArray(halls.id, hallIdList)
+            )
+        );
+
+    const formatted = rawHalls.map((h) => ({
+        id: h.id,
+        name: getLocalizedName(h, lang),
+        nameAr: h.nameAr,
+        nameFr: h.nameFr,
+        status: h.status,
+    }));
+
+    return SuccessResponse(res, {
+        message: "Captain order halls fetched successfully",
+        data: formatted,
+    });
+};
+
+// ==========================================
+// 9. Get Available Halls for Selection (by branch)
+// ==========================================
+export const getHallsForCaptain = async (req: Request, res: Response) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId) {
+        throw new BadRequest("Restaurant context is missing or unauthorized");
+    }
+
+    const lang = extractLang(req);
+    const branchId =
+        req.query?.branch_id ||
+        req.query?.branchId ||
+        req.body?.branch_id ||
+        req.body?.branchId;
+
+    const conditions = [
+        eq(halls.restaurantId, restaurantId),
+        eq(halls.status, true),
+    ];
+
+    if (branchId && typeof branchId === "string") {
+        conditions.push(eq(halls.branchId, branchId));
+    }
+
+    const rawHalls = await db
+        .select({
+            id: halls.id,
+            branchId: halls.branchId,
+            name: halls.name,
+            nameAr: halls.nameAr,
+            nameFr: halls.nameFr,
+        })
+        .from(halls)
+        .where(and(...conditions))
+        .orderBy(desc(halls.createdAt));
+
+    const formatted = rawHalls.map((h) => ({
+        id: h.id,
+        branchId: h.branchId,
+        name: getLocalizedName(h, lang),
+        nameAr: h.nameAr,
+        nameFr: h.nameFr,
+    }));
+
+    return SuccessResponse(res, {
+        message: "Halls for captain fetched successfully",
+        data: formatted,
     });
 };

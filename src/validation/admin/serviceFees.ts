@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 export const SERVICE_FEE_MODULES = ["take_away", "dine_in", "delivery", "car", "all"] as const;
-export const SERVICE_FEE_TYPES = ["web", "app", "all"] as const;
 export const AMOUNT_TYPES = ["percentage", "value"] as const;
 export type AmountType = (typeof AMOUNT_TYPES)[number];
 export const SUPPORTED_LANGUAGES = ["en", "ar", "fr"] as const;
@@ -59,10 +58,6 @@ export const createServiceFeeSchema = z.preprocess(
             invalid_type_error: "amount_type must be either 'percentage' or 'value'",
         }),
         amount_type: z.enum(AMOUNT_TYPES).optional(),
-        type: z.enum(SERVICE_FEE_TYPES, {
-            required_error: "Type is required and must be one of: web, app, all",
-            invalid_type_error: "Type must be one of: web, app, all",
-        }),
         branchIds: z
             .array(z.string().min(1, "Branch ID cannot be empty"), {
                 required_error: "branchIds is required and must be an array of branch IDs",
@@ -111,7 +106,6 @@ export const updateServiceFeeSchema = z.preprocess(
             .optional(),
         amountType: z.enum(AMOUNT_TYPES).optional(),
         amount_type: z.enum(AMOUNT_TYPES).optional(),
-        type: z.enum(SERVICE_FEE_TYPES).optional(),
         branchIds: z
             .array(z.string().min(1, "Branch ID cannot be empty"))
             .min(1, "At least one branch ID must be provided")

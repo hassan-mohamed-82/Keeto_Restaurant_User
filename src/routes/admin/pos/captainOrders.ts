@@ -10,6 +10,8 @@ import {
     createCaptainOrder,
     getAllCaptainOrders,
     getBranchesForCaptain,
+    getHallsForCaptain,
+    getCaptainOrderHalls,
     getCaptainOrderById,
     updateCaptainOrder,
     deleteCaptainOrder,
@@ -22,9 +24,15 @@ router.post("/", validate(createCaptainOrderSchema), catchAsync(createCaptainOrd
 router.get("/", validate(captainOrderQuerySchema, "query"), catchAsync(getAllCaptainOrders));
 router.post("/list", validate(captainOrderQuerySchema, "body"), catchAsync(getAllCaptainOrders));
 
-// Branches selection endpoint for Captain
+// Branches & Halls selection endpoints for Captain
 router.get("/branches", catchAsync(getBranchesForCaptain));
 router.post("/branches", catchAsync(getBranchesForCaptain));
+router.get("/halls", catchAsync(getHallsForCaptain));
+router.post("/halls", catchAsync(getHallsForCaptain));
+
+// Halls of a specific Captain Order
+router.get("/:id/halls", catchAsync(getCaptainOrderHalls));
+router.post("/:id/halls", catchAsync(getCaptainOrderHalls));
 
 router.get("/:id", catchAsync(getCaptainOrderById));
 router.put("/:id", validate(updateCaptainOrderSchema), catchAsync(updateCaptainOrder));

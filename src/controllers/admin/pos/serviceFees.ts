@@ -7,7 +7,6 @@ import { BadRequest, NotFound } from "../../../Errors";
 import { v4 as uuidv4 } from "uuid";
 import {
     SERVICE_FEE_MODULES,
-    SERVICE_FEE_TYPES,
     AMOUNT_TYPES,
 } from "../../../validation/admin/serviceFees";
 
@@ -31,7 +30,6 @@ function formatServiceFeeItem(item: any, lang: Language = "en") {
         name: localizedName, 
         amount: item.amount,
         amountType: item.amountType,
-        type: item.type,
         modules: parseJsonArray(item.modules), 
         status: item.status,
         createdAt: item.createdAt,
@@ -105,7 +103,6 @@ async function enrichServiceFeesWithBranches(
             nameFr: item.nameFr,
             amount: item.amount,
             amountType: item.amountType,
-            type: item.type,
             modules: parseJsonArray(item.modules),
             branchIds: itemBranchIds,
             branches: itemBranches,
@@ -126,7 +123,7 @@ export const createServiceFee = async (req: Request, res: Response) => {
     }
 
     const lang = extractLang(req);
-    const { name, nameAr, nameFr, amount, amountType, amount_type, type, branchIds, modules, status } = req.body;
+    const { name, nameAr, nameFr, amount, amountType, amount_type, branchIds, modules, status } = req.body;
 
     const finalAmountType = amountType || amount_type || "percentage";
     const finalBranchIds = parseJsonArray(branchIds);
@@ -141,7 +138,6 @@ export const createServiceFee = async (req: Request, res: Response) => {
         nameFr: nameFr || null,
         amount: String(amount),
         amountType: finalAmountType,
-        type,
         branchIds: finalBranchIds,
         modules: finalModules as any,
         status: status || "active",
@@ -176,7 +172,7 @@ export const getAllServiceFees = async (req: Request, res: Response) => {
 
     const lang = extractLang(req);
     const params = { ...req.query, ...req.body };
-    const { status, type, search, all } = params;
+    const { status, search, all } = params;
 
     const page = Math.max(1, parseInt(params.page as string) || 1);
     const limit = Math.max(1, Math.min(100, parseInt(params.limit as string) || 10));
@@ -185,9 +181,6 @@ export const getAllServiceFees = async (req: Request, res: Response) => {
     const conditions = [eq(serviceFees.restaurantId, restaurantId)];
     if (status && (status === "active" || status === "inactive")) {
         conditions.push(eq(serviceFees.status, status));
-    }
-    if (type && (type === "web" || type === "app" || type === "all")) {
-        conditions.push(eq(serviceFees.type, type));
     }
 
     if (search && typeof search === "string" && search.trim() !== "") {
@@ -279,7 +272,6 @@ export const getServiceFeeListOptions = async (req: Request, res: Response) => {
         data: {
             branches: localizedBranches,
             modules: SERVICE_FEE_MODULES,
-            types: SERVICE_FEE_TYPES,
             amountTypes: AMOUNT_TYPES,
         },
     });
@@ -337,7 +329,7 @@ export const updateServiceFee = async (req: Request, res: Response) => {
         throw new NotFound("Service fee not found");
     }
 
-    const { name, nameAr, nameFr, amount, amountType, amount_type, type, branchIds, modules, status } = req.body;
+    const { name, nameAr, nameFr, amount, amountType, amount_type, branchIds, modules, status } = req.body;
 
     const updateData: Partial<typeof serviceFees.$inferInsert> = {};
     if (name !== undefined) updateData.name = name;
@@ -346,7 +338,6 @@ export const updateServiceFee = async (req: Request, res: Response) => {
     if (amount !== undefined) updateData.amount = String(amount);
     const finalAmountType = amountType || amount_type;
     if (finalAmountType !== undefined) updateData.amountType = finalAmountType;
-    if (type !== undefined) updateData.type = type;
     if (branchIds !== undefined) updateData.branchIds = parseJsonArray(branchIds);
     if (modules !== undefined) updateData.modules = parseJsonArray(modules) as any;
     if (status !== undefined) updateData.status = status;

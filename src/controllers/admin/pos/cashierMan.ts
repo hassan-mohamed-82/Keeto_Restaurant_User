@@ -45,26 +45,36 @@ export const createCashierMan = async (req: Request, res: Response) => {
         throw new BadRequest("Invalid branch selected: branch not found or does not belong to your restaurant");
     }
 
-    // 2. Check user_name uniqueness
+    // 2. Check user_name uniqueness within restaurant
     const [existingUserName] = await db
         .select({ id: cashierMen.id })
         .from(cashierMen)
-        .where(eq(cashierMen.userName, user_name.trim()))
+        .where(
+            and(
+                eq(cashierMen.restaurantId, restaurantId),
+                eq(cashierMen.userName, user_name.trim())
+            )
+        )
         .limit(1);
 
     if (existingUserName) {
-        throw new BadRequest("User name is already in use by another cashier");
+        throw new BadRequest("User name is already in use in your restaurant");
     }
 
-    // 3. Check phone uniqueness
+    // 3. Check phone uniqueness within restaurant
     const [existingPhone] = await db
         .select({ id: cashierMen.id })
         .from(cashierMen)
-        .where(eq(cashierMen.phone, phone.trim()))
+        .where(
+            and(
+                eq(cashierMen.restaurantId, restaurantId),
+                eq(cashierMen.phone, phone.trim())
+            )
+        )
         .limit(1);
 
     if (existingPhone) {
-        throw new BadRequest("Phone number is already in use by another cashier");
+        throw new BadRequest("Phone number is already in use in your restaurant");
     }
 
     // 4. Hash password with bcrypt
@@ -450,11 +460,17 @@ export const updateCashierMan = async (req: Request, res: Response) => {
         const [existingUserName] = await db
             .select({ id: cashierMen.id })
             .from(cashierMen)
-            .where(and(eq(cashierMen.userName, user_name.trim()), ne(cashierMen.id, id)))
+            .where(
+                and(
+                    eq(cashierMen.restaurantId, restaurantId),
+                    eq(cashierMen.userName, user_name.trim()),
+                    ne(cashierMen.id, id)
+                )
+            )
             .limit(1);
 
         if (existingUserName) {
-            throw new BadRequest("User name is already in use by another cashier");
+            throw new BadRequest("User name is already in use in your restaurant");
         }
     }
 
@@ -463,11 +479,17 @@ export const updateCashierMan = async (req: Request, res: Response) => {
         const [existingPhone] = await db
             .select({ id: cashierMen.id })
             .from(cashierMen)
-            .where(and(eq(cashierMen.phone, phone.trim()), ne(cashierMen.id, id)))
+            .where(
+                and(
+                    eq(cashierMen.restaurantId, restaurantId),
+                    eq(cashierMen.phone, phone.trim()),
+                    ne(cashierMen.id, id)
+                )
+            )
             .limit(1);
 
         if (existingPhone) {
-            throw new BadRequest("Phone number is already in use by another cashier");
+            throw new BadRequest("Phone number is already in use in your restaurant");
         }
     }
 

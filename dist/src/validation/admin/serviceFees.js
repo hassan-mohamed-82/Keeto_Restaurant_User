@@ -1,9 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateServiceFeeSchema = exports.createServiceFeeSchema = exports.foodFilterSchema = exports.subcategoryFilterSchema = exports.SUPPORTED_LANGUAGES = exports.AMOUNT_TYPES = exports.SERVICE_FEE_TYPES = exports.SERVICE_FEE_MODULES = void 0;
+exports.updateServiceFeeSchema = exports.createServiceFeeSchema = exports.foodFilterSchema = exports.subcategoryFilterSchema = exports.SUPPORTED_LANGUAGES = exports.AMOUNT_TYPES = exports.SERVICE_FEE_MODULES = void 0;
 const zod_1 = require("zod");
 exports.SERVICE_FEE_MODULES = ["take_away", "dine_in", "delivery", "car", "all"];
-exports.SERVICE_FEE_TYPES = ["web", "app", "all"];
 exports.AMOUNT_TYPES = ["percentage", "value"];
 exports.SUPPORTED_LANGUAGES = ["en", "ar", "fr"];
 exports.subcategoryFilterSchema = zod_1.z.object({
@@ -50,10 +49,6 @@ exports.createServiceFeeSchema = zod_1.z.preprocess(normalizeServiceFeeInput, zo
         invalid_type_error: "amount_type must be either 'percentage' or 'value'",
     }),
     amount_type: zod_1.z.enum(exports.AMOUNT_TYPES).optional(),
-    type: zod_1.z.enum(exports.SERVICE_FEE_TYPES, {
-        required_error: "Type is required and must be one of: web, app, all",
-        invalid_type_error: "Type must be one of: web, app, all",
-    }),
     branchIds: zod_1.z
         .array(zod_1.z.string().min(1, "Branch ID cannot be empty"), {
         required_error: "branchIds is required and must be an array of branch IDs",
@@ -92,7 +87,6 @@ exports.updateServiceFeeSchema = zod_1.z.preprocess(normalizeServiceFeeInput, zo
         .optional(),
     amountType: zod_1.z.enum(exports.AMOUNT_TYPES).optional(),
     amount_type: zod_1.z.enum(exports.AMOUNT_TYPES).optional(),
-    type: zod_1.z.enum(exports.SERVICE_FEE_TYPES).optional(),
     branchIds: zod_1.z
         .array(zod_1.z.string().min(1, "Branch ID cannot be empty"))
         .min(1, "At least one branch ID must be provided")

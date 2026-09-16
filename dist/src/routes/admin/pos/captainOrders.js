@@ -9,9 +9,14 @@ const router = (0, express_1.Router)();
 router.post("/", (0, validation_1.validate)(captainOrder_1.createCaptainOrderSchema), (0, catchAsync_1.catchAsync)(captainOrder_2.createCaptainOrder));
 router.get("/", (0, validation_1.validate)(captainOrder_1.captainOrderQuerySchema, "query"), (0, catchAsync_1.catchAsync)(captainOrder_2.getAllCaptainOrders));
 router.post("/list", (0, validation_1.validate)(captainOrder_1.captainOrderQuerySchema, "body"), (0, catchAsync_1.catchAsync)(captainOrder_2.getAllCaptainOrders));
-// Branches selection endpoint for Captain
+// Branches & Halls selection endpoints for Captain
 router.get("/branches", (0, catchAsync_1.catchAsync)(captainOrder_2.getBranchesForCaptain));
 router.post("/branches", (0, catchAsync_1.catchAsync)(captainOrder_2.getBranchesForCaptain));
+router.get("/halls", (0, catchAsync_1.catchAsync)(captainOrder_2.getHallsForCaptain));
+router.post("/halls", (0, catchAsync_1.catchAsync)(captainOrder_2.getHallsForCaptain));
+// Halls of a specific Captain Order
+router.get("/:id/halls", (0, catchAsync_1.catchAsync)(captainOrder_2.getCaptainOrderHalls));
+router.post("/:id/halls", (0, catchAsync_1.catchAsync)(captainOrder_2.getCaptainOrderHalls));
 router.get("/:id", (0, catchAsync_1.catchAsync)(captainOrder_2.getCaptainOrderById));
 router.put("/:id", (0, validation_1.validate)(captainOrder_1.updateCaptainOrderSchema), (0, catchAsync_1.catchAsync)(captainOrder_2.updateCaptainOrder));
 router.patch("/:id/toggle-status", (0, catchAsync_1.catchAsync)(captainOrder_2.toggleCaptainOrderStatus));

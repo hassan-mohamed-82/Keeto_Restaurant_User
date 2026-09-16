@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.toggleCaptainOrderStatus = exports.deleteCaptainOrder = exports.updateCaptainOrder = exports.getCaptainOrderById = exports.getBranchesForCaptain = exports.getAllCaptainOrders = exports.createCaptainOrder = void 0;
+exports.getHallsForCaptain = exports.getCaptainOrderHalls = exports.toggleCaptainOrderStatus = exports.deleteCaptainOrder = exports.updateCaptainOrder = exports.getCaptainOrderById = exports.getBranchesForCaptain = exports.getAllCaptainOrders = exports.createCaptainOrder = void 0;
 const connection_1 = require("../../../models/connection");
 const schema_1 = require("../../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -21,7 +21,8 @@ const createCaptainOrder = async (req, res) => {
     if (!restaurantId) {
         throw new Errors_1.BadRequest("Restaurant context is missing or unauthorized");
     }
-    const { name, user_name, phone, password, branch_id, branchId, image, status, } = req.body;
+    const lang = (0, localization_helper_1.extractLang)(req);
+    const { name, user_name, phone, password, branch_id, branchId, hall_ids, hallIds, image, status, } = req.body;
     const targetBranchId = branch_id || branchId;
     // 1. Validate Branch belongs to restaurant
     const [targetBranch] = await connection_1.db
@@ -32,27 +33,44 @@ const createCaptainOrder = async (req, res) => {
     if (!targetBranch) {
         throw new Errors_1.BadRequest("Invalid branch selected: branch not found or does not belong to your restaurant");
     }
-    // 2. Check user_name uniqueness
+    // 2. Validate hall_ids
+    const finalHallIds = (0, localization_helper_1.parseJsonArray)(hall_ids || hallIds);
+    if (!finalHallIds || finalHallIds.length === 0) {
+        throw new Errors_1.BadRequest("hall_ids is required and must contain at least one hall");
+    }
+    const validHalls = await connection_1.db
+        .select({
+        id: schema_1.halls.id,
+        name: schema_1.halls.name,
+        nameAr: schema_1.halls.nameAr,
+        nameFr: schema_1.halls.nameFr,
+    })
+        .from(schema_1.halls)
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.halls.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.halls.branchId, targetBranchId), (0, drizzle_orm_1.inArray)(schema_1.halls.id, finalHallIds)));
+    if (validHalls.length !== finalHallIds.length) {
+        throw new Errors_1.BadRequest("One or more selected halls are invalid or do not belong to the selected branch");
+    }
+    // 3. Check user_name uniqueness within restaurant
     const [existingUserName] = await connection_1.db
         .select({ id: schema_1.captainOrders.id })
         .from(schema_1.captainOrders)
-        .where((0, drizzle_orm_1.eq)(schema_1.captainOrders.userName, user_name.trim()))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.captainOrders.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.captainOrders.userName, user_name.trim())))
         .limit(1);
     if (existingUserName) {
-        throw new Errors_1.BadRequest("User name is already in use by another captain");
+        throw new Errors_1.BadRequest("User name is already in use in your restaurant");
     }
-    // 3. Check phone uniqueness
+    // 4. Check phone uniqueness within restaurant
     const [existingPhone] = await connection_1.db
         .select({ id: schema_1.captainOrders.id })
         .from(schema_1.captainOrders)
-        .where((0, drizzle_orm_1.eq)(schema_1.captainOrders.phone, phone.trim()))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.captainOrders.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.captainOrders.phone, phone.trim())))
         .limit(1);
     if (existingPhone) {
-        throw new Errors_1.BadRequest("Phone number is already in use by another captain");
+        throw new Errors_1.BadRequest("Phone number is already in use in your restaurant");
     }
-    // 4. Hash password with bcrypt
+    // 5. Hash password with bcrypt
     const hashedPassword = await bcrypt_1.default.hash(password, 10);
-    // 5. Handle image if provided (not required)
+    // 6. Handle image if provided (not required)
     let savedImageUrl = null;
     if (image) {
         if (typeof image === "string" && image.startsWith("http")) {
@@ -72,6 +90,7 @@ const createCaptainOrder = async (req, res) => {
         phone: phone.trim(),
         password: hashedPassword,
         image: savedImageUrl,
+        hallIds: finalHallIds,
         status: status !== undefined ? Boolean(status) : true,
     });
     const [created] = await connection_1.db
@@ -83,6 +102,7 @@ const createCaptainOrder = async (req, res) => {
         userName: schema_1.captainOrders.userName,
         phone: schema_1.captainOrders.phone,
         image: schema_1.captainOrders.image,
+        hallIds: schema_1.captainOrders.hallIds,
         status: schema_1.captainOrders.status,
         createdAt: schema_1.captainOrders.createdAt,
         updatedAt: schema_1.captainOrders.updatedAt,
@@ -90,9 +110,19 @@ const createCaptainOrder = async (req, res) => {
         .from(schema_1.captainOrders)
         .where((0, drizzle_orm_1.eq)(schema_1.captainOrders.id, id))
         .limit(1);
+    const formattedCreated = {
+        ...created,
+        hall_ids: (0, localization_helper_1.parseJsonArray)(created.hallIds),
+        halls: validHalls.map((h) => ({
+            id: h.id,
+            name: (0, localization_helper_1.getLocalizedName)(h, lang),
+            nameAr: h.nameAr,
+            nameFr: h.nameFr,
+        })),
+    };
     return (0, response_1.SuccessResponse)(res, {
         message: "Captain order created successfully",
-        data: created,
+        data: formattedCreated,
     }, 201);
 };
 exports.createCaptainOrder = createCaptainOrder;
@@ -139,6 +169,7 @@ const getAllCaptainOrders = async (req, res) => {
                 userName: schema_1.captainOrders.userName,
                 phone: schema_1.captainOrders.phone,
                 image: schema_1.captainOrders.image,
+                hallIds: schema_1.captainOrders.hallIds,
                 status: schema_1.captainOrders.status,
                 createdAt: schema_1.captainOrders.createdAt,
                 updatedAt: schema_1.captainOrders.updatedAt,
@@ -161,6 +192,7 @@ const getAllCaptainOrders = async (req, res) => {
                 userName: schema_1.captainOrders.userName,
                 phone: schema_1.captainOrders.phone,
                 image: schema_1.captainOrders.image,
+                hallIds: schema_1.captainOrders.hallIds,
                 status: schema_1.captainOrders.status,
                 createdAt: schema_1.captainOrders.createdAt,
                 updatedAt: schema_1.captainOrders.updatedAt,
@@ -185,6 +217,7 @@ const getAllCaptainOrders = async (req, res) => {
         user_name: item.userName,
         phone: item.phone,
         image: item.image,
+        hall_ids: (0, localization_helper_1.parseJsonArray)(item.hallIds),
         status: item.status,
         branch: item.branchId
             ? {
@@ -260,6 +293,7 @@ const getCaptainOrderById = async (req, res) => {
         userName: schema_1.captainOrders.userName,
         phone: schema_1.captainOrders.phone,
         image: schema_1.captainOrders.image,
+        hallIds: schema_1.captainOrders.hallIds,
         status: schema_1.captainOrders.status,
         createdAt: schema_1.captainOrders.createdAt,
         updatedAt: schema_1.captainOrders.updatedAt,
@@ -276,12 +310,36 @@ const getCaptainOrderById = async (req, res) => {
     if (!row) {
         throw new Errors_1.NotFound("Captain order not found");
     }
+    const hallIdList = (0, localization_helper_1.parseJsonArray)(row.hallIds);
+    let assignedHalls = [];
+    if (hallIdList.length > 0) {
+        const rawHalls = await connection_1.db
+            .select({
+            id: schema_1.halls.id,
+            name: schema_1.halls.name,
+            nameAr: schema_1.halls.nameAr,
+            nameFr: schema_1.halls.nameFr,
+            status: schema_1.halls.status,
+        })
+            .from(schema_1.halls)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.halls.restaurantId, restaurantId), (0, drizzle_orm_1.inArray)(schema_1.halls.id, hallIdList)));
+        assignedHalls = rawHalls.map((h) => ({
+            id: h.id,
+            name: (0, localization_helper_1.getLocalizedName)(h, lang),
+            nameAr: h.nameAr,
+            nameFr: h.nameFr,
+            status: h.status,
+        }));
+    }
     const result = {
         id: row.id,
         name: row.name,
         user_name: row.userName,
         phone: row.phone,
         image: row.image,
+        hallIds: hallIdList,
+        hall_ids: hallIdList,
+        halls: assignedHalls,
         status: row.status,
         branch: row.branchId
             ? {
@@ -311,6 +369,7 @@ const updateCaptainOrder = async (req, res) => {
     if (!restaurantId) {
         throw new Errors_1.BadRequest("Restaurant context is missing or unauthorized");
     }
+    const lang = (0, localization_helper_1.extractLang)(req);
     const { id } = req.params;
     const [existing] = await connection_1.db
         .select()
@@ -320,7 +379,7 @@ const updateCaptainOrder = async (req, res) => {
     if (!existing) {
         throw new Errors_1.NotFound("Captain order not found");
     }
-    const { name, user_name, phone, password, branch_id, branchId, image, status, } = req.body;
+    const { name, user_name, phone, password, branch_id, branchId, hall_ids, hallIds, image, status, } = req.body;
     const targetBranchId = branch_id || branchId;
     if (targetBranchId && targetBranchId !== existing.branchId) {
         const [targetBranch] = await connection_1.db
@@ -337,10 +396,10 @@ const updateCaptainOrder = async (req, res) => {
         const [existingUserName] = await connection_1.db
             .select({ id: schema_1.captainOrders.id })
             .from(schema_1.captainOrders)
-            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.captainOrders.userName, user_name.trim()), (0, drizzle_orm_1.ne)(schema_1.captainOrders.id, id)))
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.captainOrders.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.captainOrders.userName, user_name.trim()), (0, drizzle_orm_1.ne)(schema_1.captainOrders.id, id)))
             .limit(1);
         if (existingUserName) {
-            throw new Errors_1.BadRequest("User name is already in use by another captain");
+            throw new Errors_1.BadRequest("User name is already in use in your restaurant");
         }
     }
     // Check phone uniqueness if changed
@@ -348,10 +407,10 @@ const updateCaptainOrder = async (req, res) => {
         const [existingPhone] = await connection_1.db
             .select({ id: schema_1.captainOrders.id })
             .from(schema_1.captainOrders)
-            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.captainOrders.phone, phone.trim()), (0, drizzle_orm_1.ne)(schema_1.captainOrders.id, id)))
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.captainOrders.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.captainOrders.phone, phone.trim()), (0, drizzle_orm_1.ne)(schema_1.captainOrders.id, id)))
             .limit(1);
         if (existingPhone) {
-            throw new Errors_1.BadRequest("Phone number is already in use by another captain");
+            throw new Errors_1.BadRequest("Phone number is already in use in your restaurant");
         }
     }
     const updateData = {};
@@ -365,6 +424,36 @@ const updateCaptainOrder = async (req, res) => {
         updateData.branchId = targetBranchId;
     if (status !== undefined)
         updateData.status = Boolean(status);
+    // Validate and update hall_ids if provided
+    if (hall_ids !== undefined || hallIds !== undefined) {
+        const rawHallsInput = hall_ids !== undefined ? hall_ids : hallIds;
+        const finalHallIds = (0, localization_helper_1.parseJsonArray)(rawHallsInput);
+        if (finalHallIds.length === 0) {
+            throw new Errors_1.BadRequest("At least one hall must be selected");
+        }
+        const branchToCheck = targetBranchId || existing.branchId;
+        const validHalls = await connection_1.db
+            .select({ id: schema_1.halls.id })
+            .from(schema_1.halls)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.halls.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.halls.branchId, branchToCheck), (0, drizzle_orm_1.inArray)(schema_1.halls.id, finalHallIds)));
+        if (validHalls.length !== finalHallIds.length) {
+            throw new Errors_1.BadRequest("One or more selected halls are invalid or do not belong to the selected branch");
+        }
+        updateData.hallIds = finalHallIds;
+    }
+    else if (targetBranchId && targetBranchId !== existing.branchId) {
+        // If branch changed but halls were not re-sent, check if existing halls belong to new branch
+        const existingHalls = (0, localization_helper_1.parseJsonArray)(existing.hallIds);
+        if (existingHalls.length > 0) {
+            const validInNewBranch = await connection_1.db
+                .select({ id: schema_1.halls.id })
+                .from(schema_1.halls)
+                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.halls.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.halls.branchId, targetBranchId), (0, drizzle_orm_1.inArray)(schema_1.halls.id, existingHalls)));
+            if (validInNewBranch.length !== existingHalls.length) {
+                throw new Errors_1.BadRequest("Branch changed: please provide new hall_ids belonging to the new branch");
+            }
+        }
+    }
     // Hash password if provided
     if (password && typeof password === "string" && password.trim() !== "") {
         updateData.password = await bcrypt_1.default.hash(password, 10);
@@ -389,6 +478,7 @@ const updateCaptainOrder = async (req, res) => {
         userName: schema_1.captainOrders.userName,
         phone: schema_1.captainOrders.phone,
         image: schema_1.captainOrders.image,
+        hallIds: schema_1.captainOrders.hallIds,
         status: schema_1.captainOrders.status,
         createdAt: schema_1.captainOrders.createdAt,
         updatedAt: schema_1.captainOrders.updatedAt,
@@ -396,9 +486,35 @@ const updateCaptainOrder = async (req, res) => {
         .from(schema_1.captainOrders)
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.captainOrders.id, id), (0, drizzle_orm_1.eq)(schema_1.captainOrders.restaurantId, restaurantId)))
         .limit(1);
+    const hallIdList = (0, localization_helper_1.parseJsonArray)(updated.hallIds);
+    let assignedHalls = [];
+    if (hallIdList.length > 0) {
+        const rawHalls = await connection_1.db
+            .select({
+            id: schema_1.halls.id,
+            name: schema_1.halls.name,
+            nameAr: schema_1.halls.nameAr,
+            nameFr: schema_1.halls.nameFr,
+            status: schema_1.halls.status,
+        })
+            .from(schema_1.halls)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.halls.restaurantId, restaurantId), (0, drizzle_orm_1.inArray)(schema_1.halls.id, hallIdList)));
+        assignedHalls = rawHalls.map((h) => ({
+            id: h.id,
+            name: (0, localization_helper_1.getLocalizedName)(h, lang),
+            nameAr: h.nameAr,
+            nameFr: h.nameFr,
+            status: h.status,
+        }));
+    }
     return (0, response_1.SuccessResponse)(res, {
         message: "Captain order updated successfully",
-        data: updated,
+        data: {
+            ...updated,
+            hall_ids: hallIdList,
+            hallIds: hallIdList,
+            halls: assignedHalls,
+        },
     });
 };
 exports.updateCaptainOrder = updateCaptainOrder;
@@ -459,3 +575,100 @@ const toggleCaptainOrderStatus = async (req, res) => {
     });
 };
 exports.toggleCaptainOrderStatus = toggleCaptainOrderStatus;
+// ==========================================
+// 8. Get Halls of a Specific CaptainOrder
+// ==========================================
+const getCaptainOrderHalls = async (req, res) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId) {
+        throw new Errors_1.BadRequest("Restaurant context is missing or unauthorized");
+    }
+    const lang = (0, localization_helper_1.extractLang)(req);
+    const { id } = req.params;
+    const [captain] = await connection_1.db
+        .select({
+        id: schema_1.captainOrders.id,
+        name: schema_1.captainOrders.name,
+        branchId: schema_1.captainOrders.branchId,
+        hallIds: schema_1.captainOrders.hallIds,
+    })
+        .from(schema_1.captainOrders)
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.captainOrders.id, id), (0, drizzle_orm_1.eq)(schema_1.captainOrders.restaurantId, restaurantId)))
+        .limit(1);
+    if (!captain) {
+        throw new Errors_1.NotFound("Captain order not found");
+    }
+    const hallIdList = (0, localization_helper_1.parseJsonArray)(captain.hallIds);
+    if (hallIdList.length === 0) {
+        return (0, response_1.SuccessResponse)(res, {
+            message: "Captain order halls fetched successfully",
+            data: [],
+        });
+    }
+    const rawHalls = await connection_1.db
+        .select({
+        id: schema_1.halls.id,
+        name: schema_1.halls.name,
+        nameAr: schema_1.halls.nameAr,
+        nameFr: schema_1.halls.nameFr,
+        status: schema_1.halls.status,
+    })
+        .from(schema_1.halls)
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.halls.restaurantId, restaurantId), (0, drizzle_orm_1.inArray)(schema_1.halls.id, hallIdList)));
+    const formatted = rawHalls.map((h) => ({
+        id: h.id,
+        name: (0, localization_helper_1.getLocalizedName)(h, lang),
+        nameAr: h.nameAr,
+        nameFr: h.nameFr,
+        status: h.status,
+    }));
+    return (0, response_1.SuccessResponse)(res, {
+        message: "Captain order halls fetched successfully",
+        data: formatted,
+    });
+};
+exports.getCaptainOrderHalls = getCaptainOrderHalls;
+// ==========================================
+// 9. Get Available Halls for Selection (by branch)
+// ==========================================
+const getHallsForCaptain = async (req, res) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId) {
+        throw new Errors_1.BadRequest("Restaurant context is missing or unauthorized");
+    }
+    const lang = (0, localization_helper_1.extractLang)(req);
+    const branchId = req.query?.branch_id ||
+        req.query?.branchId ||
+        req.body?.branch_id ||
+        req.body?.branchId;
+    const conditions = [
+        (0, drizzle_orm_1.eq)(schema_1.halls.restaurantId, restaurantId),
+        (0, drizzle_orm_1.eq)(schema_1.halls.status, true),
+    ];
+    if (branchId && typeof branchId === "string") {
+        conditions.push((0, drizzle_orm_1.eq)(schema_1.halls.branchId, branchId));
+    }
+    const rawHalls = await connection_1.db
+        .select({
+        id: schema_1.halls.id,
+        branchId: schema_1.halls.branchId,
+        name: schema_1.halls.name,
+        nameAr: schema_1.halls.nameAr,
+        nameFr: schema_1.halls.nameFr,
+    })
+        .from(schema_1.halls)
+        .where((0, drizzle_orm_1.and)(...conditions))
+        .orderBy((0, drizzle_orm_1.desc)(schema_1.halls.createdAt));
+    const formatted = rawHalls.map((h) => ({
+        id: h.id,
+        branchId: h.branchId,
+        name: (0, localization_helper_1.getLocalizedName)(h, lang),
+        nameAr: h.nameAr,
+        nameFr: h.nameFr,
+    }));
+    return (0, response_1.SuccessResponse)(res, {
+        message: "Halls for captain fetched successfully",
+        data: formatted,
+    });
+};
+exports.getHallsForCaptain = getHallsForCaptain;
