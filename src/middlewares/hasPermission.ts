@@ -124,7 +124,7 @@ export const hasPermission = (
                 const hasRequiredPermission = allPermissions.some(permission => {
                     if (permission.module !== module) return false;
                     
-                    return permission.actions.some(a => a.action === action);
+                    return permission.actions.some(a => ((typeof a === "string" ? a : (a as any)?.action) || "").toLowerCase() === action.toLowerCase());
                 });
 
                 if (!hasRequiredPermission) {
@@ -234,7 +234,7 @@ export const hasAnyPermission = (
                 const hasAnyRequiredPermission = permissions.some(({ module, action }) => {
                     return allPermissions.some(permission => {
                         if (permission.module !== module) return false;
-                        return permission.actions.some(a => a.action === action);
+                        return permission.actions.some(a => ((typeof a === "string" ? a : (a as any)?.action) || "").toLowerCase() === action.toLowerCase());
                     });
                 });
 
@@ -340,7 +340,7 @@ export const hasAllPermissions = (
                 const hasAllRequiredPermissions = permissions.every(({ module, action }) => {
                     return allPermissions.some(permission => {
                         if (permission.module !== module) return false;
-                        return permission.actions.some(a => a.action === action);
+                        return permission.actions.some(a => ((typeof a === "string" ? a : (a as any)?.action) || "").toLowerCase() === action.toLowerCase());
                     });
                 });
 
@@ -404,6 +404,6 @@ export const checkUserPermission = async (
     // التحقق من الصلاحية
     return allPermissions.some(permission => {
         if (permission.module !== module) return false;
-        return permission.actions.some(a => a.action === action);
+        return permission.actions.some(a => ((typeof a === "string" ? a : (a as any)?.action) || "").toLowerCase() === action.toLowerCase());
     });
 };

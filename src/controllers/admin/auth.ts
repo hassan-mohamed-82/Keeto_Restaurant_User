@@ -162,12 +162,13 @@ export async function login(req: Request, res: Response) {
                 mergedPermissionsMap.set(perm.module, new Set());
             }
             for (const act of perm.actions ?? []) {
-                if (act?.action) mergedPermissionsMap.get(perm.module)!.add(act.action);
+                const actionName = typeof act === "string" ? act : act?.action;
+                if (actionName) mergedPermissionsMap.get(perm.module)!.add(actionName);
             }
         }
         resolvedPermissions = Array.from(mergedPermissionsMap.entries()).map(([module, actions]) => ({
             module,
-            actions: Array.from(actions).map(a => ({ action: a })),
+            actions: Array.from(actions),
         }));
     }
 
