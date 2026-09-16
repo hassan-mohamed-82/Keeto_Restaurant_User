@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { db } from "../../../models/connection";
-import { cashierMen, branches } from "../../../models/schema";
+import { cashierMen, branches, cashiers } from "../../../models/schema";
 import { eq, and, desc, count, or, like, ne } from "drizzle-orm";
 import { SuccessResponse } from "../../../utils/response";
 import { BadRequest, NotFound } from "../../../Errors";
@@ -180,6 +180,9 @@ export const getAllCashierMen = async (req: Request, res: Response) => {
                       id: cashierMen.id,
                       restaurantId: cashierMen.restaurantId,
                       branchId: cashierMen.branchId,
+                      cashierId: cashierMen.cashierId,
+                      cashierName: cashiers.name,
+                      cashierArName: cashiers.ar_name,
                       name: cashierMen.name,
                       userName: cashierMen.userName,
                       phone: cashierMen.phone,
@@ -197,6 +200,7 @@ export const getAllCashierMen = async (req: Request, res: Response) => {
                   })
                   .from(cashierMen)
                   .leftJoin(branches, eq(cashierMen.branchId, branches.id))
+                  .leftJoin(cashiers, eq(cashierMen.cashierId, cashiers.id))
                   .where(and(...conditions))
                   .orderBy(desc(cashierMen.createdAt))
             : db
@@ -204,6 +208,9 @@ export const getAllCashierMen = async (req: Request, res: Response) => {
                       id: cashierMen.id,
                       restaurantId: cashierMen.restaurantId,
                       branchId: cashierMen.branchId,
+                      cashierId: cashierMen.cashierId,
+                      cashierName: cashiers.name,
+                      cashierArName: cashiers.ar_name,
                       name: cashierMen.name,
                       userName: cashierMen.userName,
                       phone: cashierMen.phone,
@@ -221,6 +228,7 @@ export const getAllCashierMen = async (req: Request, res: Response) => {
                   })
                   .from(cashierMen)
                   .leftJoin(branches, eq(cashierMen.branchId, branches.id))
+                  .leftJoin(cashiers, eq(cashierMen.cashierId, cashiers.id))
                   .where(and(...conditions))
                   .orderBy(desc(cashierMen.createdAt))
                   .limit(limit)
@@ -250,6 +258,12 @@ export const getAllCashierMen = async (req: Request, res: Response) => {
                       },
                       lang
                   ),
+              }
+            : null,
+        cashier: item.cashierId
+            ? {
+                  id: item.cashierId,
+                  name: lang === "ar" && item.cashierArName ? item.cashierArName : (item.cashierName || ""),
               }
             : null,
         map: item.branchLat && item.branchLng ? `https://maps.google.com/?q=${item.branchLat},${item.branchLng}` : null,

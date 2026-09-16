@@ -5,10 +5,12 @@ import {
     timestamp,
     boolean,
     json,
+    type AnyMySqlColumn,
 } from "drizzle-orm/mysql-core";
 import { sql, relations } from "drizzle-orm";
 import { restaurants } from "./restaurants";
 import { branches } from "./branches";
+import { cashiers } from "./cashier";
 
 export const cashierMen = mysqlTable("cashier_men", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
@@ -18,6 +20,8 @@ export const cashierMen = mysqlTable("cashier_men", {
     branchId: char("branch_id", { length: 36 })
         .references(() => branches.id, { onDelete: "cascade" })
         .notNull(),
+    cashierId: char("cashier_id", { length: 36 })
+        .references((): AnyMySqlColumn => cashiers.id, { onDelete: "set null" }),
     name: varchar("name", { length: 255 }),
     userName: varchar("user_name", { length: 255 }).unique().notNull(),
     phone: varchar("phone", { length: 50 }).unique().notNull(),
@@ -38,6 +42,10 @@ export const cashierMenRelations = relations(cashierMen, ({ one }) => ({
     branch: one(branches, {
         fields: [cashierMen.branchId],
         references: [branches.id],
+    }),
+    cashier: one(cashiers, {
+        fields: [cashierMen.cashierId],
+        references: [cashiers.id],
     }),
 }));
 
