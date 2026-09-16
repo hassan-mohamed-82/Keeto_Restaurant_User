@@ -25,6 +25,7 @@ export const cashierMen = mysqlTable(
             .notNull(),
         cashierId: char("cashier_id", { length: 36 })
             .references((): AnyMySqlColumn => cashiers.id, { onDelete: "set null" }),
+        myId: varchar("my_id", { length: 255 }),
         name: varchar("name", { length: 255 }),
         userName: varchar("user_name", { length: 255 }).notNull(),
         phone: varchar("phone", { length: 50 }).notNull(),

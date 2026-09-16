@@ -22,7 +22,7 @@ const createCashierMan = async (req, res) => {
     if (!restaurantId) {
         throw new Errors_1.BadRequest("Restaurant context is missing or unauthorized");
     }
-    const { name, user_name, phone, password, branch_id, branchId, image, roles, report_perimission, status, } = req.body;
+    const { name, user_name, phone, password, branch_id, branchId, my_id, myId, image, roles, report_perimission, status, } = req.body;
     const targetBranchId = branch_id || branchId;
     // 1. Validate Branch belongs to restaurant
     const [targetBranch] = await connection_1.db
@@ -65,11 +65,14 @@ const createCashierMan = async (req, res) => {
     }
     const parsedRoles = (0, localization_helper_1.parseJsonArray)(roles);
     const parsedPermissions = (0, localization_helper_1.parseJsonArray)(report_perimission);
+    const rawMyId = my_id !== undefined ? my_id : myId;
+    const finalMyId = rawMyId && typeof rawMyId === "string" && rawMyId.trim() !== "" ? rawMyId.trim() : null;
     const id = (0, uuid_1.v4)();
     await connection_1.db.insert(schema_1.cashierMen).values({
         id,
         restaurantId,
         branchId: targetBranchId,
+        myId: finalMyId,
         name: name ? name.trim() : user_name.trim(),
         userName: user_name.trim(),
         phone: phone.trim(),
@@ -84,6 +87,7 @@ const createCashierMan = async (req, res) => {
         id: schema_1.cashierMen.id,
         restaurantId: schema_1.cashierMen.restaurantId,
         branchId: schema_1.cashierMen.branchId,
+        my_id: schema_1.cashierMen.myId,
         name: schema_1.cashierMen.name,
         userName: schema_1.cashierMen.userName,
         phone: schema_1.cashierMen.phone,
@@ -113,7 +117,7 @@ const getAllCashierMen = async (req, res) => {
     }
     const lang = (0, localization_helper_1.extractLang)(req);
     const params = { ...req.query, ...req.body };
-    const { search, status, branch_id, branchId, all } = params;
+    const { search, status, branch_id, branchId, my_id, myId, all } = params;
     const page = Math.max(1, parseInt(params.page) || 1);
     const limit = Math.max(1, Math.min(100, parseInt(params.limit) || 10));
     const offset = (page - 1) * limit;
@@ -122,13 +126,17 @@ const getAllCashierMen = async (req, res) => {
     if (targetBranchId) {
         conditions.push((0, drizzle_orm_1.eq)(schema_1.cashierMen.branchId, targetBranchId));
     }
+    const filterMyId = my_id || myId;
+    if (filterMyId && typeof filterMyId === "string" && filterMyId.trim() !== "") {
+        conditions.push((0, drizzle_orm_1.eq)(schema_1.cashierMen.myId, filterMyId.trim()));
+    }
     if (status !== undefined && status !== "") {
         const boolStatus = status === true || status === "true" || status === 1 || status === "1";
         conditions.push((0, drizzle_orm_1.eq)(schema_1.cashierMen.status, boolStatus));
     }
     if (search && typeof search === "string" && search.trim() !== "") {
         const term = `%${search.trim()}%`;
-        conditions.push((0, drizzle_orm_1.or)((0, drizzle_orm_1.like)(schema_1.cashierMen.name, term), (0, drizzle_orm_1.like)(schema_1.cashierMen.userName, term), (0, drizzle_orm_1.like)(schema_1.cashierMen.phone, term)));
+        conditions.push((0, drizzle_orm_1.or)((0, drizzle_orm_1.like)(schema_1.cashierMen.name, term), (0, drizzle_orm_1.like)(schema_1.cashierMen.userName, term), (0, drizzle_orm_1.like)(schema_1.cashierMen.phone, term), (0, drizzle_orm_1.like)(schema_1.cashierMen.myId, term)));
     }
     const isAll = all === "true" || all === true;
     const [totalCountResult, rawCashiers] = await Promise.all([
@@ -143,6 +151,7 @@ const getAllCashierMen = async (req, res) => {
                 restaurantId: schema_1.cashierMen.restaurantId,
                 branchId: schema_1.cashierMen.branchId,
                 cashierId: schema_1.cashierMen.cashierId,
+                myId: schema_1.cashierMen.myId,
                 cashierName: schema_1.cashiers.name,
                 cashierArName: schema_1.cashiers.ar_name,
                 name: schema_1.cashierMen.name,
@@ -171,6 +180,7 @@ const getAllCashierMen = async (req, res) => {
                 restaurantId: schema_1.cashierMen.restaurantId,
                 branchId: schema_1.cashierMen.branchId,
                 cashierId: schema_1.cashierMen.cashierId,
+                myId: schema_1.cashierMen.myId,
                 cashierName: schema_1.cashiers.name,
                 cashierArName: schema_1.cashiers.ar_name,
                 name: schema_1.cashierMen.name,
@@ -200,6 +210,7 @@ const getAllCashierMen = async (req, res) => {
     const totalPages = isAll ? 1 : Math.ceil(totalItems / limit);
     const formattedList = rawCashiers.map((item) => ({
         id: item.id,
+        my_id: item.myId,
         name: item.name,
         user_name: item.userName,
         phone: item.phone,
@@ -286,6 +297,8 @@ const getCashierManById = async (req, res) => {
         id: schema_1.cashierMen.id,
         restaurantId: schema_1.cashierMen.restaurantId,
         branchId: schema_1.cashierMen.branchId,
+        cashierId: schema_1.cashierMen.cashierId,
+        myId: schema_1.cashierMen.myId,
         name: schema_1.cashierMen.name,
         userName: schema_1.cashierMen.userName,
         phone: schema_1.cashierMen.phone,
@@ -310,6 +323,7 @@ const getCashierManById = async (req, res) => {
     }
     const result = {
         id: row.id,
+        my_id: row.myId,
         name: row.name,
         user_name: row.userName,
         phone: row.phone,
@@ -354,7 +368,7 @@ const updateCashierMan = async (req, res) => {
     if (!existing) {
         throw new Errors_1.NotFound("Cashier not found");
     }
-    const { name, user_name, phone, password, branch_id, branchId, image, roles, report_perimission, status, } = req.body;
+    const { name, user_name, phone, password, branch_id, branchId, my_id, myId, image, roles, report_perimission, status, } = req.body;
     const targetBranchId = branch_id || branchId;
     if (targetBranchId && targetBranchId !== existing.branchId) {
         const [targetBranch] = await connection_1.db
@@ -403,6 +417,10 @@ const updateCashierMan = async (req, res) => {
         updateData.report_perimission = (0, localization_helper_1.parseJsonArray)(report_perimission);
     if (status !== undefined)
         updateData.status = Boolean(status);
+    if (my_id !== undefined || myId !== undefined) {
+        const rawMyId = my_id !== undefined ? my_id : myId;
+        updateData.myId = rawMyId && typeof rawMyId === "string" && rawMyId.trim() !== "" ? rawMyId.trim() : null;
+    }
     // Hash password if provided
     if (password && typeof password === "string" && password.trim() !== "") {
         updateData.password = await bcrypt_1.default.hash(password, 10);
@@ -423,6 +441,7 @@ const updateCashierMan = async (req, res) => {
         id: schema_1.cashierMen.id,
         restaurantId: schema_1.cashierMen.restaurantId,
         branchId: schema_1.cashierMen.branchId,
+        my_id: schema_1.cashierMen.myId,
         name: schema_1.cashierMen.name,
         userName: schema_1.cashierMen.userName,
         phone: schema_1.cashierMen.phone,

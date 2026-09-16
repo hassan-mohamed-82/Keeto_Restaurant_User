@@ -28,7 +28,7 @@ const preprocessArray = (val) => {
     }
     return [val];
 };
-const normalizeBranchId = (obj) => {
+const normalizeCashierManInput = (obj) => {
     if (obj && typeof obj === "object") {
         if (obj.branch_id === undefined && obj.branchId !== undefined) {
             obj.branch_id = obj.branchId;
@@ -36,11 +36,17 @@ const normalizeBranchId = (obj) => {
         else if (obj.branchId === undefined && obj.branch_id !== undefined) {
             obj.branchId = obj.branch_id;
         }
+        if (obj.my_id === undefined && obj.myId !== undefined) {
+            obj.my_id = obj.myId;
+        }
+        else if (obj.myId === undefined && obj.my_id !== undefined) {
+            obj.myId = obj.my_id;
+        }
     }
     return obj;
 };
 exports.ALLOWED_REPORT_PERMISSIONS = ["unactive", "financial", "all_reports"];
-exports.createCashierManSchema = zod_1.z.preprocess(normalizeBranchId, zod_1.z.object({
+exports.createCashierManSchema = zod_1.z.preprocess(normalizeCashierManInput, zod_1.z.object({
     name: zod_1.z.string().trim().max(255).optional(),
     user_name: zod_1.z.string({ required_error: "user_name is required" }).trim().min(1, "user_name cannot be empty").max(255),
     phone: zod_1.z.string({ required_error: "Phone is required" }).trim().min(1, "Phone cannot be empty").max(50),
@@ -49,12 +55,14 @@ exports.createCashierManSchema = zod_1.z.preprocess(normalizeBranchId, zod_1.z.o
     branchId: zod_1.z.string().optional(),
     restaurant_id: zod_1.z.string().optional(),
     restaurantId: zod_1.z.string().optional(),
+    my_id: zod_1.z.string().trim().max(255).optional().nullable().or(zod_1.z.literal("")),
+    myId: zod_1.z.string().trim().max(255).optional().nullable().or(zod_1.z.literal("")),
     image: zod_1.z.string().optional().nullable().or(zod_1.z.literal("")),
     roles: zod_1.z.preprocess(preprocessArray, zod_1.z.array(zod_1.z.string()).optional().default([])),
     report_perimission: zod_1.z.preprocess(preprocessArray, zod_1.z.array(zod_1.z.string()).optional().default([])),
     status: zod_1.z.preprocess(preprocessBoolean, zod_1.z.boolean().optional().default(true)),
 }));
-exports.updateCashierManSchema = zod_1.z.preprocess(normalizeBranchId, zod_1.z.object({
+exports.updateCashierManSchema = zod_1.z.preprocess(normalizeCashierManInput, zod_1.z.object({
     name: zod_1.z.string().trim().max(255).optional(),
     user_name: zod_1.z.string().trim().min(1, "user_name cannot be empty").max(255).optional(),
     phone: zod_1.z.string().trim().min(1, "Phone cannot be empty").max(50).optional(),
@@ -63,6 +71,8 @@ exports.updateCashierManSchema = zod_1.z.preprocess(normalizeBranchId, zod_1.z.o
     branchId: zod_1.z.string().optional(),
     restaurant_id: zod_1.z.string().optional(),
     restaurantId: zod_1.z.string().optional(),
+    my_id: zod_1.z.string().trim().max(255).optional().nullable().or(zod_1.z.literal("")),
+    myId: zod_1.z.string().trim().max(255).optional().nullable().or(zod_1.z.literal("")),
     image: zod_1.z.string().optional().nullable().or(zod_1.z.literal("")),
     roles: zod_1.z.preprocess(preprocessArray, zod_1.z.array(zod_1.z.string()).optional()),
     report_perimission: zod_1.z.preprocess(preprocessArray, zod_1.z.array(zod_1.z.string()).optional()),
@@ -75,5 +85,7 @@ exports.cashierManQuerySchema = zod_1.z.object({
     search: zod_1.z.string().optional(),
     branch_id: zod_1.z.string().optional(),
     branchId: zod_1.z.string().optional(),
+    my_id: zod_1.z.string().optional(),
+    myId: zod_1.z.string().optional(),
     status: zod_1.z.preprocess(preprocessBoolean, zod_1.z.boolean().optional()),
 });

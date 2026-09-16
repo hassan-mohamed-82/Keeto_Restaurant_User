@@ -339,31 +339,32 @@ const getMenuWithDynamicPricing = async (req, res) => {
             categoryId: schema_1.food.categoryid,
             subcategoryId: schema_1.food.subcategoryid,
             mainBasePrice: schema_1.food.price,
-            isOutOfStock: schema_1.food.isOutOfStock,
+            globalStatus: schema_1.food.status,
+            globalIsOutOfStock: schema_1.food.isOutOfStock,
             points: schema_1.food.points,
+            branchStatus: schema_1.branchMenuItems.status,
+            branchStockType: schema_1.branchMenuItems.stockType,
+            branchStockQty: schema_1.branchMenuItems.stockQty,
             branchOverridePrice: branchOnlyAlias.price,
+            branchOverrideStatus: branchOnlyAlias.status,
             branchChannelPrice: branchModuleAlias.price,
+            branchChannelStatus: branchModuleAlias.status,
             globalChannelPrice: moduleOnlyAlias.price,
+            globalChannelStatus: moduleOnlyAlias.status,
             finalCalculatedPrice: (0, drizzle_orm_1.sql) `
                     COALESCE(
-                        ${branchModuleAlias.price},
-                        ${branchOnlyAlias.price},
-                        ${moduleOnlyAlias.price},
+                        CASE WHEN ${branchModuleAlias.status} != 'inactive' THEN ${branchModuleAlias.price} ELSE NULL END,
+                        CASE WHEN ${branchOnlyAlias.status} != 'inactive' THEN ${branchOnlyAlias.price} ELSE NULL END,
+                        CASE WHEN ${moduleOnlyAlias.status} != 'inactive' THEN ${moduleOnlyAlias.price} ELSE NULL END,
                         ${schema_1.food.price}
                     )
-                `,
-            isAvailable: (0, drizzle_orm_1.sql) `
-                    CASE 
-                        WHEN ${schema_1.branchMenuItems.status} IS NOT NULL THEN (CASE WHEN ${schema_1.branchMenuItems.status} = 'active' THEN 1 ELSE 0 END)
-                        ELSE 1
-                    END
                 `,
         })
             .from(schema_1.food)
             .leftJoin(schema_1.branchMenuItems, (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.foodId, schema_1.food.id), (0, drizzle_orm_1.eq)(schema_1.branchMenuItems.branchId, singleBranchId)))
-            .leftJoin(branchModuleAlias, (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(branchModuleAlias.foodId, schema_1.food.id), (0, drizzle_orm_1.eq)(branchModuleAlias.branchId, singleBranchId), (0, drizzle_orm_1.eq)(branchModuleAlias.serviceModule, singleModule), (0, drizzle_orm_1.eq)(branchModuleAlias.status, "active")))
-            .leftJoin(branchOnlyAlias, (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(branchOnlyAlias.foodId, schema_1.food.id), (0, drizzle_orm_1.eq)(branchOnlyAlias.branchId, singleBranchId), (0, drizzle_orm_1.isNull)(branchOnlyAlias.serviceModule), (0, drizzle_orm_1.eq)(branchOnlyAlias.status, "active")))
-            .leftJoin(moduleOnlyAlias, (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(moduleOnlyAlias.foodId, schema_1.food.id), (0, drizzle_orm_1.isNull)(moduleOnlyAlias.branchId), (0, drizzle_orm_1.eq)(moduleOnlyAlias.serviceModule, singleModule), (0, drizzle_orm_1.eq)(moduleOnlyAlias.status, "active")))
+            .leftJoin(branchModuleAlias, (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(branchModuleAlias.foodId, schema_1.food.id), (0, drizzle_orm_1.eq)(branchModuleAlias.branchId, singleBranchId), (0, drizzle_orm_1.eq)(branchModuleAlias.serviceModule, singleModule)))
+            .leftJoin(branchOnlyAlias, (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(branchOnlyAlias.foodId, schema_1.food.id), (0, drizzle_orm_1.eq)(branchOnlyAlias.branchId, singleBranchId), (0, drizzle_orm_1.isNull)(branchOnlyAlias.serviceModule)))
+            .leftJoin(moduleOnlyAlias, (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(moduleOnlyAlias.foodId, schema_1.food.id), (0, drizzle_orm_1.isNull)(moduleOnlyAlias.branchId), (0, drizzle_orm_1.eq)(moduleOnlyAlias.serviceModule, singleModule)))
             .where((0, drizzle_orm_1.and)(...foodConditions));
         const foodIds = menuItems.map((item) => item.id);
         let variationsData = [];
@@ -382,26 +383,24 @@ const getMenuWithDynamicPricing = async (req, res) => {
                 optionName: schema_1.variationOptions.optionName,
                 optionNameAr: schema_1.variationOptions.optionNameAr,
                 baseAdditionalPrice: schema_1.variationOptions.additionalPrice,
+                baseOptionStatus: schema_1.variationOptions.status,
+                branchModuleVarStatus: branchModuleVar.status,
+                branchOnlyVarStatus: branchOnlyVar.status,
+                moduleOnlyVarStatus: moduleOnlyVar.status,
                 finalOptionPrice: (0, drizzle_orm_1.sql) `
                         COALESCE(
-                            ${branchModuleVar.price},
-                            ${branchOnlyVar.price},
-                            ${moduleOnlyVar.price},
+                            CASE WHEN ${branchModuleVar.status} != 'inactive' THEN ${branchModuleVar.price} ELSE NULL END,
+                            CASE WHEN ${branchOnlyVar.status} != 'inactive' THEN ${branchOnlyVar.price} ELSE NULL END,
+                            CASE WHEN ${moduleOnlyVar.status} != 'inactive' THEN ${moduleOnlyVar.price} ELSE NULL END,
                             ${schema_1.variationOptions.additionalPrice}
                         )
-                    `,
-                isOptionAvailable: (0, drizzle_orm_1.sql) `
-                        CASE 
-                            WHEN ${schema_1.variationOptions.status} = 0 THEN 0
-                            ELSE 1
-                        END
                     `,
             })
                 .from(schema_1.foodVariations)
                 .innerJoin(schema_1.variationOptions, (0, drizzle_orm_1.eq)(schema_1.variationOptions.variationId, schema_1.foodVariations.id))
-                .leftJoin(branchModuleVar, (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(branchModuleVar.variantId, schema_1.variationOptions.id), (0, drizzle_orm_1.eq)(branchModuleVar.branchId, singleBranchId), (0, drizzle_orm_1.eq)(branchModuleVar.serviceModule, singleModule), (0, drizzle_orm_1.eq)(branchModuleVar.status, "active")))
-                .leftJoin(branchOnlyVar, (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(branchOnlyVar.variantId, schema_1.variationOptions.id), (0, drizzle_orm_1.eq)(branchOnlyVar.branchId, singleBranchId), (0, drizzle_orm_1.isNull)(branchOnlyVar.serviceModule), (0, drizzle_orm_1.eq)(branchOnlyVar.status, "active")))
-                .leftJoin(moduleOnlyVar, (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(moduleOnlyVar.variantId, schema_1.variationOptions.id), (0, drizzle_orm_1.isNull)(moduleOnlyVar.branchId), (0, drizzle_orm_1.eq)(moduleOnlyVar.serviceModule, singleModule), (0, drizzle_orm_1.eq)(moduleOnlyVar.status, "active")))
+                .leftJoin(branchModuleVar, (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(branchModuleVar.variantId, schema_1.variationOptions.id), (0, drizzle_orm_1.eq)(branchModuleVar.branchId, singleBranchId), (0, drizzle_orm_1.eq)(branchModuleVar.serviceModule, singleModule)))
+                .leftJoin(branchOnlyVar, (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(branchOnlyVar.variantId, schema_1.variationOptions.id), (0, drizzle_orm_1.eq)(branchOnlyVar.branchId, singleBranchId), (0, drizzle_orm_1.isNull)(branchOnlyVar.serviceModule)))
+                .leftJoin(moduleOnlyVar, (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(moduleOnlyVar.variantId, schema_1.variationOptions.id), (0, drizzle_orm_1.isNull)(moduleOnlyVar.branchId), (0, drizzle_orm_1.eq)(moduleOnlyVar.serviceModule, singleModule)))
                 .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.foodVariations.status, true), (0, drizzle_orm_1.inArray)(schema_1.foodVariations.foodId, foodIds)));
         }
         const variationsByFoodId = {};
@@ -420,20 +419,63 @@ const getMenuWithDynamicPricing = async (req, res) => {
                 };
                 variationsByFoodId[v.foodId].push(varGroup);
             }
+            let isOptionAvailable = Boolean(v.baseOptionStatus !== 0 && v.baseOptionStatus !== false);
+            if (v.moduleOnlyVarStatus)
+                isOptionAvailable = v.moduleOnlyVarStatus !== "inactive";
+            if (v.branchOnlyVarStatus)
+                isOptionAvailable = v.branchOnlyVarStatus !== "inactive";
+            if (v.branchModuleVarStatus)
+                isOptionAvailable = v.branchModuleVarStatus !== "inactive";
             varGroup.options.push({
                 id: v.optionId,
                 name: v.optionName,
                 nameAr: v.optionNameAr,
                 price: v.finalOptionPrice,
-                isAvailable: Boolean(v.isOptionAvailable),
+                isAvailable: isOptionAvailable,
             });
         }
-        const finalMenu = menuItems.map((item) => ({
-            ...item,
-            isOutOfStock: Boolean(item.isOutOfStock),
-            isAvailable: Boolean(item.isAvailable),
-            variations: variationsByFoodId[item.id] || [],
-        }));
+        const finalMenu = menuItems.map((item) => {
+            // Out of stock calculation: branch override or global food
+            let isOutOfStock = Boolean(item.globalIsOutOfStock);
+            if (item.branchStockType !== null && item.branchStockType !== undefined) {
+                isOutOfStock = item.branchStockType === "limited" && (item.branchStockQty ?? 0) <= 0;
+            }
+            // Effective status hierarchy: branch+module -> branch -> module -> branchMenuItem -> global food
+            let effectiveStatus = item.globalStatus || "active";
+            if (item.branchStatus) {
+                effectiveStatus = item.branchStatus;
+            }
+            if (item.globalChannelStatus) {
+                effectiveStatus = item.globalChannelStatus;
+            }
+            if (item.branchOverrideStatus) {
+                effectiveStatus = item.branchOverrideStatus;
+            }
+            if (item.branchChannelStatus) {
+                effectiveStatus = item.branchChannelStatus;
+            }
+            const isAvailable = effectiveStatus === "active";
+            return {
+                id: item.id,
+                name: item.name,
+                nameAr: item.nameAr,
+                nameFr: item.nameFr,
+                description: item.description,
+                image: item.image,
+                categoryId: item.categoryId,
+                subcategoryId: item.subcategoryId,
+                mainBasePrice: item.mainBasePrice,
+                points: item.points,
+                status: effectiveStatus,
+                isOutOfStock,
+                isAvailable,
+                branchOverridePrice: item.branchOverridePrice,
+                branchChannelPrice: item.branchChannelPrice,
+                globalChannelPrice: item.globalChannelPrice,
+                finalCalculatedPrice: item.finalCalculatedPrice,
+                variations: variationsByFoodId[item.id] || [],
+            };
+        });
         // ── Subcategory rollup ────────────────────────────────────────────────
         const uniqueSubcategoryIds = [
             ...new Set(finalMenu.map((item) => item.subcategoryId).filter(Boolean)),
@@ -559,6 +601,8 @@ const getMenuWithDynamicPricing = async (req, res) => {
             foodId: schema_1.branchMenuItems.foodId,
             branchId: schema_1.branchMenuItems.branchId,
             status: schema_1.branchMenuItems.status,
+            stockType: schema_1.branchMenuItems.stockType,
+            stockQty: schema_1.branchMenuItems.stockQty,
         })
             .from(schema_1.branchMenuItems)
             .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.branchMenuItems.foodId, foodIds), (0, drizzle_orm_1.inArray)(schema_1.branchMenuItems.branchId, branchIds)))
@@ -607,6 +651,7 @@ const getMenuWithDynamicPricing = async (req, res) => {
             optionName: schema_1.variationOptions.optionName,
             optionNameAr: schema_1.variationOptions.optionNameAr,
             additionalPrice: schema_1.variationOptions.additionalPrice,
+            status: schema_1.variationOptions.status,
         })
             .from(schema_1.variationOptions)
             .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.variationOptions.status, true), (0, drizzle_orm_1.inArray)(schema_1.variationOptions.variationId, varIds)))
@@ -646,10 +691,31 @@ const getMenuWithDynamicPricing = async (req, res) => {
         const itemBranchOverrides = itemOverrides.filter((b) => b.serviceModule == null);
         const itemChannels = itemOverrides.filter((b) => b.serviceModule != null);
         const singleBranch = branchIds.length === 1 ? branchIds[0] : null;
-        const branchStatus = singleBranch
+        const singleModule = serviceModules.length === 1 ? serviceModules[0] : null;
+        const branchItem = singleBranch
             ? branchStatusRows.find((b) => b.foodId === f.id && b.branchId === singleBranch)
             : null;
-        const status = branchStatus?.status ?? f.globalStatus;
+        // 1. Calculate isOutOfStock
+        let isOutOfStock = Boolean(f.isOutOfStock);
+        if (branchItem && branchItem.stockType !== null && branchItem.stockType !== undefined) {
+            isOutOfStock = branchItem.stockType === "limited" && (branchItem.stockQty ?? 0) <= 0;
+        }
+        // 2. Calculate effective status
+        let effectiveStatus = f.globalStatus || "active";
+        if (branchItem?.status) {
+            effectiveStatus = branchItem.status;
+        }
+        const relevantOverrides = itemOverrides.filter((ov) => {
+            const matchBranch = !ov.branchId || (singleBranch && ov.branchId === singleBranch);
+            const matchModule = !ov.serviceModule || (singleModule && ov.serviceModule === singleModule);
+            return matchBranch && matchModule;
+        });
+        const sortedOverrides = [...relevantOverrides].sort((a, b) => (0, pricing_overrides_1.overrideRank)(b) - (0, pricing_overrides_1.overrideRank)(a));
+        if (sortedOverrides.length > 0 && sortedOverrides[0].status) {
+            effectiveStatus = sortedOverrides[0].status;
+        }
+        // 3. Calculate isAvailable
+        const isAvailable = effectiveStatus === "active";
         const itemVariations = allVariations
             .filter((v) => v.foodId === f.id)
             .map((v) => {
@@ -657,7 +723,19 @@ const getMenuWithDynamicPricing = async (req, res) => {
                 .filter((o) => o.variationId === v.id)
                 .map((o) => {
                 const optOverrides = variantOverrideList.filter((vc) => vc.variantId === o.id);
-                const winning = (0, pricing_overrides_1.pickBestOverride)(optOverrides);
+                const relevantOptOverrides = optOverrides.filter((ov) => {
+                    const matchBranch = !ov.branchId || (singleBranch && ov.branchId === singleBranch);
+                    const matchModule = !ov.serviceModule || (singleModule && ov.serviceModule === singleModule);
+                    return matchBranch && matchModule;
+                });
+                const sortedOptOverrides = [...relevantOptOverrides].sort((a, b) => (0, pricing_overrides_1.overrideRank)(b) - (0, pricing_overrides_1.overrideRank)(a));
+                const winning = (0, pricing_overrides_1.pickBestOverride)(relevantOptOverrides);
+                let isOptAvailable = Boolean(o.status !== false && o.status !== 0);
+                if (sortedOptOverrides.length > 0 && sortedOptOverrides[0].status) {
+                    if (sortedOptOverrides[0].status === "inactive") {
+                        isOptAvailable = false;
+                    }
+                }
                 return {
                     id: o.id,
                     name: o.optionName,
@@ -665,7 +743,7 @@ const getMenuWithDynamicPricing = async (req, res) => {
                     baseAdditionalPrice: o.additionalPrice,
                     price: winning?.price || o.additionalPrice,
                     channelPricing: optOverrides.filter((ov) => ov.serviceModule != null),
-                    isAvailable: true,
+                    isAvailable: isOptAvailable,
                 };
             });
             return {
@@ -688,9 +766,9 @@ const getMenuWithDynamicPricing = async (req, res) => {
             subcategoryId: f.subcategoryId,
             mainBasePrice: f.mainBasePrice,
             points: f.points,
-            status,
-            isOutOfStock: Boolean(f.isOutOfStock),
-            isAvailable: true,
+            status: effectiveStatus,
+            isOutOfStock,
+            isAvailable,
             branchOverrides: itemBranchOverrides,
             channelPricing: itemChannels,
             finalCalculatedPrice: winningFood?.price || f.mainBasePrice,
@@ -868,7 +946,7 @@ const upsertProductChannelPricing = async (req, res) => {
                 throw new BadRequest_1.BadRequest("foodId is required");
             if (entry.price === undefined || entry.price === null || entry.price === "")
                 throw new BadRequest_1.BadRequest("price is required");
-            // branchId can be an array of branch IDs, "all" (all branches + global), single branch ID, null (global), or undefined
+            // branchId can be an array of branch IDs, "all" / null / undefined / "global" (single global record where branch_id = null), or single branch ID
             const rawBranch = entry.branchId;
             let targetBranches;
             if (rawBranch === undefined || rawBranch === null || rawBranch === "" || rawBranch === "global") {
@@ -876,30 +954,28 @@ const upsertProductChannelPricing = async (req, res) => {
             }
             else {
                 const parsedBranches = parseArrayParam(rawBranch);
-                if (parsedBranches.includes("all")) {
-                    const allRestaurantBranches = await tx
-                        .select({ id: schema_1.branches.id })
-                        .from(schema_1.branches)
-                        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branches.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.branches.status, "active")));
-                    const branchIds = allRestaurantBranches.map((b) => b.id);
-                    targetBranches = [...branchIds, null];
+                if (parsedBranches.includes("all") || parsedBranches.length === 0) {
+                    targetBranches = [null];
                 }
                 else {
-                    targetBranches = parsedBranches.length > 0 ? parsedBranches : [null];
+                    targetBranches = parsedBranches;
                 }
             }
-            // serviceModule can be an array ("takeaway", "delivery"), single string, or "all"
+            // serviceModule can be an array ("takeaway", "delivery"), single string, or "all" / null / undefined (single global record where service_module = null)
             const rawModule = entry.serviceModule;
             let targetModules;
-            const parsedModules = parseArrayParam(rawModule);
-            if (!rawModule || rawModule === "all" || parsedModules.includes("all") || parsedModules.length === 0) {
-                targetModules = ["takeaway", "dine_in", "delivery"];
+            if (rawModule === undefined || rawModule === null || rawModule === "" || rawModule === "all") {
+                targetModules = [null];
             }
             else {
-                targetModules = parsedModules;
+                const parsedModules = parseArrayParam(rawModule);
+                if (parsedModules.includes("all") || parsedModules.length === 0) {
+                    targetModules = [null];
+                }
+                else {
+                    targetModules = parsedModules;
+                }
             }
-            if (targetModules.length === 0)
-                throw new BadRequest_1.BadRequest("serviceModule is required (e.g. takeaway, dine_in, delivery, all)");
             const priceVal = String(entry.price);
             const statusVal = entry.status === "inactive" ? "inactive" : "active";
             for (const targetBranchId of targetBranches) {
@@ -935,7 +1011,7 @@ const upsertVariantChannelPricing = async (req, res) => {
                 throw new BadRequest_1.BadRequest("variantId is required");
             if (entry.price === undefined || entry.price === null || entry.price === "")
                 throw new BadRequest_1.BadRequest("price is required");
-            // branchId can be an array of branch IDs, "all" (all branches + global), single branch ID, null (global), or undefined
+            // branchId can be an array of branch IDs, "all" / null / undefined / "global" (single global record where branch_id = null), or single branch ID
             const rawBranch = entry.branchId;
             let targetBranches;
             if (rawBranch === undefined || rawBranch === null || rawBranch === "" || rawBranch === "global") {
@@ -943,30 +1019,28 @@ const upsertVariantChannelPricing = async (req, res) => {
             }
             else {
                 const parsedBranches = parseArrayParam(rawBranch);
-                if (parsedBranches.includes("all")) {
-                    const allRestaurantBranches = await tx
-                        .select({ id: schema_1.branches.id })
-                        .from(schema_1.branches)
-                        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branches.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.branches.status, "active")));
-                    const branchIds = allRestaurantBranches.map((b) => b.id);
-                    targetBranches = [...branchIds, null];
+                if (parsedBranches.includes("all") || parsedBranches.length === 0) {
+                    targetBranches = [null];
                 }
                 else {
-                    targetBranches = parsedBranches.length > 0 ? parsedBranches : [null];
+                    targetBranches = parsedBranches;
                 }
             }
-            // serviceModule can be an array ("takeaway", "delivery"), single string, or "all"
+            // serviceModule can be an array ("takeaway", "delivery"), single string, or "all" / null / undefined (single global record where service_module = null)
             const rawModule = entry.serviceModule;
             let targetModules;
-            const parsedModules = parseArrayParam(rawModule);
-            if (!rawModule || rawModule === "all" || parsedModules.includes("all") || parsedModules.length === 0) {
-                targetModules = ["takeaway", "dine_in", "delivery"];
+            if (rawModule === undefined || rawModule === null || rawModule === "" || rawModule === "all") {
+                targetModules = [null];
             }
             else {
-                targetModules = parsedModules;
+                const parsedModules = parseArrayParam(rawModule);
+                if (parsedModules.includes("all") || parsedModules.length === 0) {
+                    targetModules = [null];
+                }
+                else {
+                    targetModules = parsedModules;
+                }
             }
-            if (targetModules.length === 0)
-                throw new BadRequest_1.BadRequest("serviceModule is required (e.g. takeaway, dine_in, delivery, all)");
             const priceVal = String(entry.price);
             const statusVal = entry.status === "inactive" ? "inactive" : "active";
             for (const targetBranchId of targetBranches) {
