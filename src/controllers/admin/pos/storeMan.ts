@@ -41,13 +41,16 @@ export const createStoreMan = async (req: Request, res: Response) => {
         throw new BadRequest("Invalid store selected: store not found or does not belong to your restaurant");
     }
 
+    const trimmedName = name.trim();
+    const trimmedPhone = phone.trim();
+
     // 2. Check phone uniqueness within the restaurant
     const [existingPhone] = await db
         .select({ id: storeMen.id })
         .from(storeMen)
         .where(
             and(
-                eq(storeMen.phone, phone.trim()),
+                eq(storeMen.phone, trimmedPhone),
                 eq(storeMen.restaurantId, restaurantId)
             )
         )
@@ -58,9 +61,6 @@ export const createStoreMan = async (req: Request, res: Response) => {
     }
 
     // 3. Check name uniqueness within the restaurant
-    const trimmedName = name.trim();
-    const trimmedPhone = phone.trim();
-
     const [existingName] = await db
         .select({ id: storeMen.id })
         .from(storeMen)
@@ -395,14 +395,17 @@ export const updateStoreMan = async (req: Request, res: Response) => {
         }
     }
 
+    const trimmedUpdatePhone = phone !== undefined ? phone.trim() : undefined;
+    const trimmedUpdateName = name !== undefined ? name.trim() : undefined;
+
     // Check phone uniqueness if phone is changing
-    if (phone && phone.trim() !== existing.phone) {
+    if (trimmedUpdatePhone && trimmedUpdatePhone !== existing.phone) {
         const [existingPhone] = await db
             .select({ id: storeMen.id })
             .from(storeMen)
             .where(
                 and(
-                    eq(storeMen.phone, phone.trim()),
+                    eq(storeMen.phone, trimmedUpdatePhone),
                     eq(storeMen.restaurantId, restaurantId),
                     ne(storeMen.id, id)
                 )
@@ -415,9 +418,6 @@ export const updateStoreMan = async (req: Request, res: Response) => {
     }
 
     // Check name uniqueness if name is changing
-    const trimmedUpdateName = name ? name.trim() : undefined;
-    const trimmedUpdatePhone = phone ? phone.trim() : undefined;
-
     if (trimmedUpdateName && trimmedUpdateName !== existing.name) {
         const [existingName] = await db
             .select({ id: storeMen.id })
