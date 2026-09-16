@@ -875,7 +875,7 @@ export const getFoodSelectData = async (req: Request, res: Response) => {
         .where(
             or(
                 eq(subcategories.restaurantId, restaurantId),
-                isNull(subcategories.restaurantId)
+                // isNull(subcategories.restaurantId)
             )
         );
 
