@@ -21,11 +21,13 @@ const normalizeStoreManInput = (obj: any) => {
 export const createStoreManSchema = z.preprocess(
     normalizeStoreManInput,
     z.object({
-        name: z.string({ required_error: "Name is required" }).min(1, "Name cannot be empty").max(255),
-        phone: z.string({ required_error: "Phone number is required" }).min(1, "Phone cannot be empty").max(50),
+        name: z.string({ required_error: "Name is required" }).trim().min(1, "Name cannot be empty").max(255),
+        phone: z.string({ required_error: "Phone number is required" }).trim().min(1, "Phone cannot be empty").max(50),
         password: z.string({ required_error: "Password is required" }).min(4, "Password must be at least 4 characters").max(255),
         store_id: z.string({ required_error: "store_id is required" }).min(1, "store_id cannot be empty"),
         storeId: z.string().optional(),
+        restaurant_id: z.string().optional(),
+        restaurantId: z.string().optional(),
         image: z.string().optional().nullable().or(z.literal("")),
         status: z.preprocess(preprocessBoolean, z.boolean().optional().default(true)),
     })
@@ -34,11 +36,13 @@ export const createStoreManSchema = z.preprocess(
 export const updateStoreManSchema = z.preprocess(
     normalizeStoreManInput,
     z.object({
-        name: z.string().min(1, "Name cannot be empty").max(255).optional(),
-        phone: z.string().min(1, "Phone cannot be empty").max(50).optional(),
+        name: z.string().trim().min(1, "Name cannot be empty").max(255).optional(),
+        phone: z.string().trim().min(1, "Phone cannot be empty").max(50).optional(),
         password: z.string().min(4, "Password must be at least 4 characters").max(255).optional().or(z.literal("")),
         store_id: z.string().min(1, "store_id cannot be empty").optional(),
         storeId: z.string().optional(),
+        restaurant_id: z.string().optional(),
+        restaurantId: z.string().optional(),
         image: z.string().optional().nullable().or(z.literal("")),
         status: z.preprocess(preprocessBoolean, z.boolean().optional()),
     })

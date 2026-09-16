@@ -32,14 +32,14 @@ const createStoreMan = async (req, res) => {
     if (!targetStore) {
         throw new Errors_1.BadRequest("Invalid store selected: store not found or does not belong to your restaurant");
     }
-    // 2. Check phone uniqueness
+    // 2. Check phone uniqueness within the restaurant
     const [existingPhone] = await connection_1.db
         .select({ id: schema_1.storeMen.id })
         .from(schema_1.storeMen)
-        .where((0, drizzle_orm_1.eq)(schema_1.storeMen.phone, phone))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.storeMen.phone, phone.trim()), (0, drizzle_orm_1.eq)(schema_1.storeMen.restaurantId, restaurantId)))
         .limit(1);
     if (existingPhone) {
-        throw new Errors_1.BadRequest("Phone number is already in use by another store manager");
+        throw new Errors_1.BadRequest("Phone number is already in use by another store manager in your restaurant");
     }
     // 3. Check name uniqueness within the restaurant
     const [existingName] = await connection_1.db
@@ -317,14 +317,14 @@ const updateStoreMan = async (req, res) => {
         }
     }
     // Check phone uniqueness if phone is changing
-    if (phone && phone !== existing.phone) {
+    if (phone && phone.trim() !== existing.phone) {
         const [existingPhone] = await connection_1.db
             .select({ id: schema_1.storeMen.id })
             .from(schema_1.storeMen)
-            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.storeMen.phone, phone), (0, drizzle_orm_1.ne)(schema_1.storeMen.id, id)))
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.storeMen.phone, phone.trim()), (0, drizzle_orm_1.eq)(schema_1.storeMen.restaurantId, restaurantId), (0, drizzle_orm_1.ne)(schema_1.storeMen.id, id)))
             .limit(1);
         if (existingPhone) {
-            throw new Errors_1.BadRequest("Phone number is already in use by another store manager");
+            throw new Errors_1.BadRequest("Phone number is already in use by another store manager in your restaurant");
         }
     }
     // Check name uniqueness if name is changing

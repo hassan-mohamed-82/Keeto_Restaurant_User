@@ -23,20 +23,24 @@ const normalizeStoreManInput = (obj) => {
     return obj;
 };
 exports.createStoreManSchema = zod_1.z.preprocess(normalizeStoreManInput, zod_1.z.object({
-    name: zod_1.z.string({ required_error: "Name is required" }).min(1, "Name cannot be empty").max(255),
-    phone: zod_1.z.string({ required_error: "Phone number is required" }).min(1, "Phone cannot be empty").max(50),
+    name: zod_1.z.string({ required_error: "Name is required" }).trim().min(1, "Name cannot be empty").max(255),
+    phone: zod_1.z.string({ required_error: "Phone number is required" }).trim().min(1, "Phone cannot be empty").max(50),
     password: zod_1.z.string({ required_error: "Password is required" }).min(4, "Password must be at least 4 characters").max(255),
     store_id: zod_1.z.string({ required_error: "store_id is required" }).min(1, "store_id cannot be empty"),
     storeId: zod_1.z.string().optional(),
+    restaurant_id: zod_1.z.string().optional(),
+    restaurantId: zod_1.z.string().optional(),
     image: zod_1.z.string().optional().nullable().or(zod_1.z.literal("")),
     status: zod_1.z.preprocess(preprocessBoolean, zod_1.z.boolean().optional().default(true)),
 }));
 exports.updateStoreManSchema = zod_1.z.preprocess(normalizeStoreManInput, zod_1.z.object({
-    name: zod_1.z.string().min(1, "Name cannot be empty").max(255).optional(),
-    phone: zod_1.z.string().min(1, "Phone cannot be empty").max(50).optional(),
+    name: zod_1.z.string().trim().min(1, "Name cannot be empty").max(255).optional(),
+    phone: zod_1.z.string().trim().min(1, "Phone cannot be empty").max(50).optional(),
     password: zod_1.z.string().min(4, "Password must be at least 4 characters").max(255).optional().or(zod_1.z.literal("")),
     store_id: zod_1.z.string().min(1, "store_id cannot be empty").optional(),
     storeId: zod_1.z.string().optional(),
+    restaurant_id: zod_1.z.string().optional(),
+    restaurantId: zod_1.z.string().optional(),
     image: zod_1.z.string().optional().nullable().or(zod_1.z.literal("")),
     status: zod_1.z.preprocess(preprocessBoolean, zod_1.z.boolean().optional()),
 }));

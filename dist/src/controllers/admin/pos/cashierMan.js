@@ -33,23 +33,23 @@ const createCashierMan = async (req, res) => {
     if (!targetBranch) {
         throw new Errors_1.BadRequest("Invalid branch selected: branch not found or does not belong to your restaurant");
     }
-    // 2. Check user_name uniqueness
+    // 2. Check user_name uniqueness within restaurant
     const [existingUserName] = await connection_1.db
         .select({ id: schema_1.cashierMen.id })
         .from(schema_1.cashierMen)
-        .where((0, drizzle_orm_1.eq)(schema_1.cashierMen.userName, user_name.trim()))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.cashierMen.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.cashierMen.userName, user_name.trim())))
         .limit(1);
     if (existingUserName) {
-        throw new Errors_1.BadRequest("User name is already in use by another cashier");
+        throw new Errors_1.BadRequest("User name is already in use in your restaurant");
     }
-    // 3. Check phone uniqueness
+    // 3. Check phone uniqueness within restaurant
     const [existingPhone] = await connection_1.db
         .select({ id: schema_1.cashierMen.id })
         .from(schema_1.cashierMen)
-        .where((0, drizzle_orm_1.eq)(schema_1.cashierMen.phone, phone.trim()))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.cashierMen.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.cashierMen.phone, phone.trim())))
         .limit(1);
     if (existingPhone) {
-        throw new Errors_1.BadRequest("Phone number is already in use by another cashier");
+        throw new Errors_1.BadRequest("Phone number is already in use in your restaurant");
     }
     // 4. Hash password with bcrypt
     const hashedPassword = await bcrypt_1.default.hash(password, 10);
@@ -371,10 +371,10 @@ const updateCashierMan = async (req, res) => {
         const [existingUserName] = await connection_1.db
             .select({ id: schema_1.cashierMen.id })
             .from(schema_1.cashierMen)
-            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.cashierMen.userName, user_name.trim()), (0, drizzle_orm_1.ne)(schema_1.cashierMen.id, id)))
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.cashierMen.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.cashierMen.userName, user_name.trim()), (0, drizzle_orm_1.ne)(schema_1.cashierMen.id, id)))
             .limit(1);
         if (existingUserName) {
-            throw new Errors_1.BadRequest("User name is already in use by another cashier");
+            throw new Errors_1.BadRequest("User name is already in use in your restaurant");
         }
     }
     // Check phone uniqueness if changed
@@ -382,10 +382,10 @@ const updateCashierMan = async (req, res) => {
         const [existingPhone] = await connection_1.db
             .select({ id: schema_1.cashierMen.id })
             .from(schema_1.cashierMen)
-            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.cashierMen.phone, phone.trim()), (0, drizzle_orm_1.ne)(schema_1.cashierMen.id, id)))
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.cashierMen.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.cashierMen.phone, phone.trim()), (0, drizzle_orm_1.ne)(schema_1.cashierMen.id, id)))
             .limit(1);
         if (existingPhone) {
-            throw new Errors_1.BadRequest("Phone number is already in use by another cashier");
+            throw new Errors_1.BadRequest("Phone number is already in use in your restaurant");
         }
     }
     const updateData = {};

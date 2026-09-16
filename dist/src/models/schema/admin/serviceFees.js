@@ -13,7 +13,6 @@ exports.serviceFees = (0, mysql_core_1.mysqlTable)("service_fees", {
     amount: (0, mysql_core_1.decimal)("amount", { precision: 10, scale: 2 }).notNull(),
     amountType: (0, mysql_core_1.mysqlEnum)("amount_type", ["percentage", "value"]).default("percentage").notNull(),
     modules: (0, mysql_core_1.json)("modules").$type().default(["all"]).notNull(),
-    type: (0, mysql_core_1.mysqlEnum)("type", ["web", "app", "all"]).default("all").notNull(),
     branchIds: (0, mysql_core_1.json)("branch_ids").$type().default([]).notNull(),
     status: (0, mysql_core_1.mysqlEnum)("status", ["active", "inactive"]).default("active").notNull(),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),

@@ -20,7 +20,10 @@ exports.storeMen = (0, mysql_core_1.mysqlTable)("store_men", {
     status: (0, mysql_core_1.boolean)("status").default(true).notNull(),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow().onUpdateNow(),
-});
+}, (table) => ({
+    restaurantPhoneIdx: (0, mysql_core_1.uniqueIndex)("uk_store_men_restaurant_phone").on(table.restaurantId, table.phone),
+    restaurantNameIdx: (0, mysql_core_1.uniqueIndex)("uk_store_men_restaurant_name").on(table.restaurantId, table.name),
+}));
 exports.storeMenRelations = (0, drizzle_orm_1.relations)(exports.storeMen, ({ one }) => ({
     restaurant: one(restaurants_1.restaurants, {
         fields: [exports.storeMen.restaurantId],

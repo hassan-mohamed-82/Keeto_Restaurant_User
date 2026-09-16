@@ -23,7 +23,6 @@ function formatServiceFeeItem(item, lang = "en") {
         name: localizedName,
         amount: item.amount,
         amountType: item.amountType,
-        type: item.type,
         modules: (0, localization_helper_1.parseJsonArray)(item.modules),
         status: item.status,
         createdAt: item.createdAt,
@@ -76,7 +75,6 @@ async function enrichServiceFeesWithBranches(items, restaurantId, lang = "en") {
             nameFr: item.nameFr,
             amount: item.amount,
             amountType: item.amountType,
-            type: item.type,
             modules: (0, localization_helper_1.parseJsonArray)(item.modules),
             branchIds: itemBranchIds,
             branches: itemBranches,
@@ -95,7 +93,7 @@ const createServiceFee = async (req, res) => {
         throw new Errors_1.BadRequest("Restaurant context is missing or unauthorized");
     }
     const lang = (0, localization_helper_1.extractLang)(req);
-    const { name, nameAr, nameFr, amount, amountType, amount_type, type, branchIds, modules, status } = req.body;
+    const { name, nameAr, nameFr, amount, amountType, amount_type, branchIds, modules, status } = req.body;
     const finalAmountType = amountType || amount_type || "percentage";
     const finalBranchIds = (0, localization_helper_1.parseJsonArray)(branchIds);
     const finalModules = (0, localization_helper_1.parseJsonArray)(modules).length > 0 ? (0, localization_helper_1.parseJsonArray)(modules) : ["all"];
@@ -108,7 +106,6 @@ const createServiceFee = async (req, res) => {
         nameFr: nameFr || null,
         amount: String(amount),
         amountType: finalAmountType,
-        type,
         branchIds: finalBranchIds,
         modules: finalModules,
         status: status || "active",
@@ -135,16 +132,13 @@ const getAllServiceFees = async (req, res) => {
     }
     const lang = (0, localization_helper_1.extractLang)(req);
     const params = { ...req.query, ...req.body };
-    const { status, type, search, all } = params;
+    const { status, search, all } = params;
     const page = Math.max(1, parseInt(params.page) || 1);
     const limit = Math.max(1, Math.min(100, parseInt(params.limit) || 10));
     const offset = (page - 1) * limit;
     const conditions = [(0, drizzle_orm_1.eq)(schema_1.serviceFees.restaurantId, restaurantId)];
     if (status && (status === "active" || status === "inactive")) {
         conditions.push((0, drizzle_orm_1.eq)(schema_1.serviceFees.status, status));
-    }
-    if (type && (type === "web" || type === "app" || type === "all")) {
-        conditions.push((0, drizzle_orm_1.eq)(schema_1.serviceFees.type, type));
     }
     if (search && typeof search === "string" && search.trim() !== "") {
         const term = `%${search.trim()}%`;
@@ -215,7 +209,6 @@ const getServiceFeeListOptions = async (req, res) => {
         data: {
             branches: localizedBranches,
             modules: serviceFees_1.SERVICE_FEE_MODULES,
-            types: serviceFees_1.SERVICE_FEE_TYPES,
             amountTypes: serviceFees_1.AMOUNT_TYPES,
         },
     });
@@ -264,7 +257,7 @@ const updateServiceFee = async (req, res) => {
     if (!existingItem) {
         throw new Errors_1.NotFound("Service fee not found");
     }
-    const { name, nameAr, nameFr, amount, amountType, amount_type, type, branchIds, modules, status } = req.body;
+    const { name, nameAr, nameFr, amount, amountType, amount_type, branchIds, modules, status } = req.body;
     const updateData = {};
     if (name !== undefined)
         updateData.name = name;
@@ -277,8 +270,6 @@ const updateServiceFee = async (req, res) => {
     const finalAmountType = amountType || amount_type;
     if (finalAmountType !== undefined)
         updateData.amountType = finalAmountType;
-    if (type !== undefined)
-        updateData.type = type;
     if (branchIds !== undefined)
         updateData.branchIds = (0, localization_helper_1.parseJsonArray)(branchIds);
     if (modules !== undefined)

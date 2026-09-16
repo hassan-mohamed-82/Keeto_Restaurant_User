@@ -37,12 +37,14 @@ export const ALLOWED_REPORT_PERMISSIONS = ["unactive", "financial", "all_reports
 export const createCashierManSchema = z.preprocess(
     normalizeBranchId,
     z.object({
-        name: z.string().max(255).optional(),
-        user_name: z.string({ required_error: "user_name is required" }).min(1, "user_name cannot be empty").max(255),
-        phone: z.string({ required_error: "Phone is required" }).min(1, "Phone cannot be empty").max(50),
+        name: z.string().trim().max(255).optional(),
+        user_name: z.string({ required_error: "user_name is required" }).trim().min(1, "user_name cannot be empty").max(255),
+        phone: z.string({ required_error: "Phone is required" }).trim().min(1, "Phone cannot be empty").max(50),
         password: z.string({ required_error: "Password is required" }).min(4, "Password must be at least 4 characters").max(255),
         branch_id: z.string({ required_error: "branch_id is required" }).min(1, "branch_id cannot be empty"),
         branchId: z.string().optional(),
+        restaurant_id: z.string().optional(),
+        restaurantId: z.string().optional(),
         image: z.string().optional().nullable().or(z.literal("")),
         roles: z.preprocess(preprocessArray, z.array(z.string()).optional().default([])),
         report_perimission: z.preprocess(
@@ -56,12 +58,14 @@ export const createCashierManSchema = z.preprocess(
 export const updateCashierManSchema = z.preprocess(
     normalizeBranchId,
     z.object({
-        name: z.string().max(255).optional(),
-        user_name: z.string().min(1, "user_name cannot be empty").max(255).optional(),
-        phone: z.string().min(1, "Phone cannot be empty").max(50).optional(),
+        name: z.string().trim().max(255).optional(),
+        user_name: z.string().trim().min(1, "user_name cannot be empty").max(255).optional(),
+        phone: z.string().trim().min(1, "Phone cannot be empty").max(50).optional(),
         password: z.string().min(4, "Password must be at least 4 characters").max(255).optional().or(z.literal("")),
         branch_id: z.string().min(1, "branch_id cannot be empty").optional(),
         branchId: z.string().optional(),
+        restaurant_id: z.string().optional(),
+        restaurantId: z.string().optional(),
         image: z.string().optional().nullable().or(z.literal("")),
         roles: z.preprocess(preprocessArray, z.array(z.string()).optional()),
         report_perimission: z.preprocess(

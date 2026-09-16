@@ -41,15 +41,20 @@ export const createStoreMan = async (req: Request, res: Response) => {
         throw new BadRequest("Invalid store selected: store not found or does not belong to your restaurant");
     }
 
-    // 2. Check phone uniqueness
+    // 2. Check phone uniqueness within the restaurant
     const [existingPhone] = await db
         .select({ id: storeMen.id })
         .from(storeMen)
-        .where(eq(storeMen.phone, phone))
+        .where(
+            and(
+                eq(storeMen.phone, phone.trim()),
+                eq(storeMen.restaurantId, restaurantId)
+            )
+        )
         .limit(1);
 
     if (existingPhone) {
-        throw new BadRequest("Phone number is already in use by another store manager");
+        throw new BadRequest("Phone number is already in use by another store manager in your restaurant");
     }
 
     // 3. Check name uniqueness within the restaurant
@@ -388,15 +393,21 @@ export const updateStoreMan = async (req: Request, res: Response) => {
     }
 
     // Check phone uniqueness if phone is changing
-    if (phone && phone !== existing.phone) {
+    if (phone && phone.trim() !== existing.phone) {
         const [existingPhone] = await db
             .select({ id: storeMen.id })
             .from(storeMen)
-            .where(and(eq(storeMen.phone, phone), ne(storeMen.id, id)))
+            .where(
+                and(
+                    eq(storeMen.phone, phone.trim()),
+                    eq(storeMen.restaurantId, restaurantId),
+                    ne(storeMen.id, id)
+                )
+            )
             .limit(1);
 
         if (existingPhone) {
-            throw new BadRequest("Phone number is already in use by another store manager");
+            throw new BadRequest("Phone number is already in use by another store manager in your restaurant");
         }
     }
 
