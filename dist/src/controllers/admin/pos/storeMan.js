@@ -42,10 +42,12 @@ const createStoreMan = async (req, res) => {
         throw new Errors_1.BadRequest("Phone number is already in use by another store manager in your restaurant");
     }
     // 3. Check name uniqueness within the restaurant
+    const trimmedName = name.trim();
+    const trimmedPhone = phone.trim();
     const [existingName] = await connection_1.db
         .select({ id: schema_1.storeMen.id })
         .from(schema_1.storeMen)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.storeMen.name, name), (0, drizzle_orm_1.eq)(schema_1.storeMen.restaurantId, restaurantId)))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.storeMen.name, trimmedName), (0, drizzle_orm_1.eq)(schema_1.storeMen.restaurantId, restaurantId)))
         .limit(1);
     if (existingName) {
         throw new Errors_1.BadRequest("A store manager with this name already exists in your restaurant");
@@ -67,8 +69,8 @@ const createStoreMan = async (req, res) => {
         id,
         restaurantId,
         storeId: targetStoreId,
-        name,
-        phone,
+        name: trimmedName,
+        phone: trimmedPhone,
         password: hashedPassword,
         image: savedImageUrl,
         status: status !== undefined ? Boolean(status) : true,
@@ -328,21 +330,23 @@ const updateStoreMan = async (req, res) => {
         }
     }
     // Check name uniqueness if name is changing
-    if (name && name !== existing.name) {
+    const trimmedUpdateName = name ? name.trim() : undefined;
+    const trimmedUpdatePhone = phone ? phone.trim() : undefined;
+    if (trimmedUpdateName && trimmedUpdateName !== existing.name) {
         const [existingName] = await connection_1.db
             .select({ id: schema_1.storeMen.id })
             .from(schema_1.storeMen)
-            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.storeMen.name, name), (0, drizzle_orm_1.eq)(schema_1.storeMen.restaurantId, restaurantId), (0, drizzle_orm_1.ne)(schema_1.storeMen.id, id)))
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.storeMen.name, trimmedUpdateName), (0, drizzle_orm_1.eq)(schema_1.storeMen.restaurantId, restaurantId), (0, drizzle_orm_1.ne)(schema_1.storeMen.id, id)))
             .limit(1);
         if (existingName) {
             throw new Errors_1.BadRequest("A store manager with this name already exists in your restaurant");
         }
     }
     const updateData = {};
-    if (name !== undefined)
-        updateData.name = name;
-    if (phone !== undefined)
-        updateData.phone = phone;
+    if (trimmedUpdateName !== undefined)
+        updateData.name = trimmedUpdateName;
+    if (trimmedUpdatePhone !== undefined)
+        updateData.phone = trimmedUpdatePhone;
     if (targetStoreId !== undefined)
         updateData.storeId = targetStoreId;
     if (status !== undefined)

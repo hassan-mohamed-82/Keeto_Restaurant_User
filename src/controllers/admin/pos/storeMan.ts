@@ -58,10 +58,13 @@ export const createStoreMan = async (req: Request, res: Response) => {
     }
 
     // 3. Check name uniqueness within the restaurant
+    const trimmedName = name.trim();
+    const trimmedPhone = phone.trim();
+
     const [existingName] = await db
         .select({ id: storeMen.id })
         .from(storeMen)
-        .where(and(eq(storeMen.name, name), eq(storeMen.restaurantId, restaurantId)))
+        .where(and(eq(storeMen.name, trimmedName), eq(storeMen.restaurantId, restaurantId)))
         .limit(1);
 
     if (existingName) {
@@ -86,8 +89,8 @@ export const createStoreMan = async (req: Request, res: Response) => {
         id,
         restaurantId,
         storeId: targetStoreId,
-        name,
-        phone,
+        name: trimmedName,
+        phone: trimmedPhone,
         password: hashedPassword,
         image: savedImageUrl,
         status: status !== undefined ? Boolean(status) : true,
@@ -412,13 +415,16 @@ export const updateStoreMan = async (req: Request, res: Response) => {
     }
 
     // Check name uniqueness if name is changing
-    if (name && name !== existing.name) {
+    const trimmedUpdateName = name ? name.trim() : undefined;
+    const trimmedUpdatePhone = phone ? phone.trim() : undefined;
+
+    if (trimmedUpdateName && trimmedUpdateName !== existing.name) {
         const [existingName] = await db
             .select({ id: storeMen.id })
             .from(storeMen)
             .where(
                 and(
-                    eq(storeMen.name, name),
+                    eq(storeMen.name, trimmedUpdateName),
                     eq(storeMen.restaurantId, restaurantId),
                     ne(storeMen.id, id)
                 )
@@ -431,8 +437,8 @@ export const updateStoreMan = async (req: Request, res: Response) => {
     }
 
     const updateData: Partial<typeof storeMen.$inferInsert> = {};
-    if (name !== undefined) updateData.name = name;
-    if (phone !== undefined) updateData.phone = phone;
+    if (trimmedUpdateName !== undefined) updateData.name = trimmedUpdateName;
+    if (trimmedUpdatePhone !== undefined) updateData.phone = trimmedUpdatePhone;
     if (targetStoreId !== undefined) updateData.storeId = targetStoreId;
     if (status !== undefined) updateData.status = Boolean(status);
 
