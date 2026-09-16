@@ -26,6 +26,7 @@ import {
 } from "../../types/pricing";
 import {
     pickBestOverride,
+    overrideRank,
     upsertFoodPricingOverride,
     upsertVariantPricingOverride,
 } from "../../helpers/pricing.overrides";
@@ -410,24 +411,25 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
                 categoryId: food.categoryid,
                 subcategoryId: food.subcategoryid,
                 mainBasePrice: food.price,
-                isOutOfStock: food.isOutOfStock,
-                points:food.points,
+                globalStatus: food.status,
+                globalIsOutOfStock: food.isOutOfStock,
+                points: food.points,
+                branchStatus: branchMenuItems.status,
+                branchStockType: branchMenuItems.stockType,
+                branchStockQty: branchMenuItems.stockQty,
                 branchOverridePrice: branchOnlyAlias.price,
+                branchOverrideStatus: branchOnlyAlias.status,
                 branchChannelPrice: branchModuleAlias.price,
+                branchChannelStatus: branchModuleAlias.status,
                 globalChannelPrice: moduleOnlyAlias.price,
+                globalChannelStatus: moduleOnlyAlias.status,
                 finalCalculatedPrice: sql<string>`
                     COALESCE(
-                        ${branchModuleAlias.price},
-                        ${branchOnlyAlias.price},
-                        ${moduleOnlyAlias.price},
+                        CASE WHEN ${branchModuleAlias.status} != 'inactive' THEN ${branchModuleAlias.price} ELSE NULL END,
+                        CASE WHEN ${branchOnlyAlias.status} != 'inactive' THEN ${branchOnlyAlias.price} ELSE NULL END,
+                        CASE WHEN ${moduleOnlyAlias.status} != 'inactive' THEN ${moduleOnlyAlias.price} ELSE NULL END,
                         ${food.price}
                     )
-                `,
-                isAvailable: sql<number>`
-                    CASE 
-                        WHEN ${branchMenuItems.status} IS NOT NULL THEN (CASE WHEN ${branchMenuItems.status} = 'active' THEN 1 ELSE 0 END)
-                        ELSE 1
-                    END
                 `,
             })
             .from(food)
@@ -443,8 +445,7 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
                 and(
                     eq(branchModuleAlias.foodId, food.id),
                     eq(branchModuleAlias.branchId, singleBranchId!),
-                    eq(branchModuleAlias.serviceModule, singleModule!),
-                    eq(branchModuleAlias.status, "active")
+                    eq(branchModuleAlias.serviceModule, singleModule!)
                 )
             )
             .leftJoin(
@@ -452,8 +453,7 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
                 and(
                     eq(branchOnlyAlias.foodId, food.id),
                     eq(branchOnlyAlias.branchId, singleBranchId!),
-                    isNull(branchOnlyAlias.serviceModule),
-                    eq(branchOnlyAlias.status, "active")
+                    isNull(branchOnlyAlias.serviceModule)
                 )
             )
             .leftJoin(
@@ -461,8 +461,7 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
                 and(
                     eq(moduleOnlyAlias.foodId, food.id),
                     isNull(moduleOnlyAlias.branchId),
-                    eq(moduleOnlyAlias.serviceModule, singleModule!),
-                    eq(moduleOnlyAlias.status, "active")
+                    eq(moduleOnlyAlias.serviceModule, singleModule!)
                 )
             )
             .where(and(...foodConditions));
@@ -485,19 +484,17 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
                     optionName: variationOptions.optionName,
                     optionNameAr: variationOptions.optionNameAr,
                     baseAdditionalPrice: variationOptions.additionalPrice,
+                    baseOptionStatus: variationOptions.status,
+                    branchModuleVarStatus: branchModuleVar.status,
+                    branchOnlyVarStatus: branchOnlyVar.status,
+                    moduleOnlyVarStatus: moduleOnlyVar.status,
                     finalOptionPrice: sql<string>`
                         COALESCE(
-                            ${branchModuleVar.price},
-                            ${branchOnlyVar.price},
-                            ${moduleOnlyVar.price},
+                            CASE WHEN ${branchModuleVar.status} != 'inactive' THEN ${branchModuleVar.price} ELSE NULL END,
+                            CASE WHEN ${branchOnlyVar.status} != 'inactive' THEN ${branchOnlyVar.price} ELSE NULL END,
+                            CASE WHEN ${moduleOnlyVar.status} != 'inactive' THEN ${moduleOnlyVar.price} ELSE NULL END,
                             ${variationOptions.additionalPrice}
                         )
-                    `,
-                    isOptionAvailable: sql<number>`
-                        CASE 
-                            WHEN ${variationOptions.status} = 0 THEN 0
-                            ELSE 1
-                        END
                     `,
                 })
                 .from(foodVariations)
@@ -510,8 +507,7 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
                     and(
                         eq(branchModuleVar.variantId, variationOptions.id),
                         eq(branchModuleVar.branchId, singleBranchId!),
-                        eq(branchModuleVar.serviceModule, singleModule!),
-                        eq(branchModuleVar.status, "active")
+                        eq(branchModuleVar.serviceModule, singleModule!)
                     )
                 )
                 .leftJoin(
@@ -519,8 +515,7 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
                     and(
                         eq(branchOnlyVar.variantId, variationOptions.id),
                         eq(branchOnlyVar.branchId, singleBranchId!),
-                        isNull(branchOnlyVar.serviceModule),
-                        eq(branchOnlyVar.status, "active")
+                        isNull(branchOnlyVar.serviceModule)
                     )
                 )
                 .leftJoin(
@@ -528,8 +523,7 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
                     and(
                         eq(moduleOnlyVar.variantId, variationOptions.id),
                         isNull(moduleOnlyVar.branchId),
-                        eq(moduleOnlyVar.serviceModule, singleModule!),
-                        eq(moduleOnlyVar.status, "active")
+                        eq(moduleOnlyVar.serviceModule, singleModule!)
                     )
                 )
                 .where(and(eq(foodVariations.status, true), inArray(foodVariations.foodId, foodIds)));
@@ -553,21 +547,66 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
                 };
                 variationsByFoodId[v.foodId].push(varGroup);
             }
+
+            let isOptionAvailable = Boolean(v.baseOptionStatus !== 0 && (v.baseOptionStatus as any) !== false);
+            if (v.moduleOnlyVarStatus) isOptionAvailable = v.moduleOnlyVarStatus !== "inactive";
+            if (v.branchOnlyVarStatus) isOptionAvailable = v.branchOnlyVarStatus !== "inactive";
+            if (v.branchModuleVarStatus) isOptionAvailable = v.branchModuleVarStatus !== "inactive";
+
             varGroup.options.push({
                 id: v.optionId,
                 name: v.optionName,
                 nameAr: v.optionNameAr,
                 price: v.finalOptionPrice,
-                isAvailable: Boolean(v.isOptionAvailable),
+                isAvailable: isOptionAvailable,
             });
         }
 
-        const finalMenu = menuItems.map((item) => ({
-            ...item,
-            isOutOfStock: Boolean(item.isOutOfStock),
-            isAvailable: Boolean(item.isAvailable),
-            variations: variationsByFoodId[item.id] || [],
-        }));
+        const finalMenu = menuItems.map((item) => {
+            // Out of stock calculation: branch override or global food
+            let isOutOfStock = Boolean(item.globalIsOutOfStock);
+            if (item.branchStockType !== null && item.branchStockType !== undefined) {
+                isOutOfStock = item.branchStockType === "limited" && (item.branchStockQty ?? 0) <= 0;
+            }
+
+            // Effective status hierarchy: branch+module -> branch -> module -> branchMenuItem -> global food
+            let effectiveStatus: "active" | "inactive" = (item.globalStatus as "active" | "inactive") || "active";
+            if (item.branchStatus) {
+                effectiveStatus = item.branchStatus as "active" | "inactive";
+            }
+            if (item.globalChannelStatus) {
+                effectiveStatus = item.globalChannelStatus as "active" | "inactive";
+            }
+            if (item.branchOverrideStatus) {
+                effectiveStatus = item.branchOverrideStatus as "active" | "inactive";
+            }
+            if (item.branchChannelStatus) {
+                effectiveStatus = item.branchChannelStatus as "active" | "inactive";
+            }
+
+            const isAvailable = effectiveStatus === "active";
+
+            return {
+                id: item.id,
+                name: item.name,
+                nameAr: item.nameAr,
+                nameFr: item.nameFr,
+                description: item.description,
+                image: item.image,
+                categoryId: item.categoryId,
+                subcategoryId: item.subcategoryId,
+                mainBasePrice: item.mainBasePrice,
+                points: item.points,
+                status: effectiveStatus,
+                isOutOfStock,
+                isAvailable,
+                branchOverridePrice: item.branchOverridePrice,
+                branchChannelPrice: item.branchChannelPrice,
+                globalChannelPrice: item.globalChannelPrice,
+                finalCalculatedPrice: item.finalCalculatedPrice,
+                variations: variationsByFoodId[item.id] || [],
+            };
+        });
 
         // ── Subcategory rollup ────────────────────────────────────────────────
         const uniqueSubcategoryIds = [
@@ -716,6 +755,8 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
                 foodId: branchMenuItems.foodId,
                 branchId: branchMenuItems.branchId,
                 status: branchMenuItems.status,
+                stockType: branchMenuItems.stockType,
+                stockQty: branchMenuItems.stockQty,
             })
             .from(branchMenuItems)
             .where(
@@ -777,6 +818,7 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
                 optionName: variationOptions.optionName,
                 optionNameAr: variationOptions.optionNameAr,
                 additionalPrice: variationOptions.additionalPrice,
+                status: variationOptions.status,
             })
             .from(variationOptions)
             .where(and(eq(variationOptions.status, true), inArray(variationOptions.variationId, varIds)))
@@ -824,10 +866,37 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
         const itemChannels = itemOverrides.filter((b) => b.serviceModule != null);
 
         const singleBranch = branchIds.length === 1 ? branchIds[0] : null;
-        const branchStatus = singleBranch
+        const singleModule = serviceModules.length === 1 ? serviceModules[0] : null;
+
+        const branchItem = singleBranch
             ? branchStatusRows.find((b) => b.foodId === f.id && b.branchId === singleBranch)
             : null;
-        const status = branchStatus?.status ?? f.globalStatus;
+
+        // 1. Calculate isOutOfStock
+        let isOutOfStock = Boolean(f.isOutOfStock);
+        if (branchItem && branchItem.stockType !== null && branchItem.stockType !== undefined) {
+            isOutOfStock = branchItem.stockType === "limited" && (branchItem.stockQty ?? 0) <= 0;
+        }
+
+        // 2. Calculate effective status
+        let effectiveStatus: "active" | "inactive" = (f.globalStatus as "active" | "inactive") || "active";
+        if (branchItem?.status) {
+            effectiveStatus = branchItem.status as "active" | "inactive";
+        }
+
+        const relevantOverrides = itemOverrides.filter((ov) => {
+            const matchBranch = !ov.branchId || (singleBranch && ov.branchId === singleBranch);
+            const matchModule = !ov.serviceModule || (singleModule && ov.serviceModule === singleModule);
+            return matchBranch && matchModule;
+        });
+
+        const sortedOverrides = [...relevantOverrides].sort((a, b) => overrideRank(b) - overrideRank(a));
+        if (sortedOverrides.length > 0 && sortedOverrides[0].status) {
+            effectiveStatus = sortedOverrides[0].status as "active" | "inactive";
+        }
+
+        // 3. Calculate isAvailable
+        const isAvailable = effectiveStatus === "active";
 
         const itemVariations = allVariations
             .filter((v) => v.foodId === f.id)
@@ -836,7 +905,24 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
                     .filter((o) => o.variationId === v.id)
                     .map((o) => {
                         const optOverrides = variantOverrideList.filter((vc) => vc.variantId === o.id);
-                        const winning = pickBestOverride(optOverrides);
+                        const relevantOptOverrides = optOverrides.filter((ov) => {
+                            const matchBranch = !ov.branchId || (singleBranch && ov.branchId === singleBranch);
+                            const matchModule = !ov.serviceModule || (singleModule && ov.serviceModule === singleModule);
+                            return matchBranch && matchModule;
+                        });
+
+                        const sortedOptOverrides = [...relevantOptOverrides].sort(
+                            (a, b) => overrideRank(b) - overrideRank(a)
+                        );
+                        const winning = pickBestOverride(relevantOptOverrides);
+
+                        let isOptAvailable = Boolean(o.status !== false && (o as any).status !== 0);
+                        if (sortedOptOverrides.length > 0 && sortedOptOverrides[0].status) {
+                            if (sortedOptOverrides[0].status === "inactive") {
+                                isOptAvailable = false;
+                            }
+                        }
+
                         return {
                             id: o.id,
                             name: o.optionName,
@@ -844,7 +930,7 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
                             baseAdditionalPrice: o.additionalPrice,
                             price: winning?.price || o.additionalPrice,
                             channelPricing: optOverrides.filter((ov) => ov.serviceModule != null),
-                            isAvailable: true,
+                            isAvailable: isOptAvailable,
                         };
                     });
                 return {
@@ -869,9 +955,9 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
             subcategoryId: f.subcategoryId,
             mainBasePrice: f.mainBasePrice,
             points: f.points,
-            status,
-            isOutOfStock: Boolean(f.isOutOfStock),
-            isAvailable: true,
+            status: effectiveStatus,
+            isOutOfStock,
+            isAvailable,
             branchOverrides: itemBranchOverrides,
             channelPricing: itemChannels,
             finalCalculatedPrice: winningFood?.price || f.mainBasePrice,
