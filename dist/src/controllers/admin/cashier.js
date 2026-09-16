@@ -33,15 +33,18 @@ const getCashiers = async (req, res) => {
     const allCashiers = await connection_1.db
         .select({
         cashier: schema_1.cashiers,
+        financialAccount: schema_1.FinancialAccounts,
         cashierManId: schema_1.cashierMen.id,
         cashierManName: schema_1.cashierMen.name,
         cashierManUserName: schema_1.cashierMen.userName,
     })
         .from(schema_1.cashiers)
         .where((0, drizzle_orm_1.eq)(schema_1.cashiers.restaurantid, restaurantId))
+        .innerJoin(schema_1.FinancialAccounts, (0, drizzle_orm_1.eq)(schema_1.cashiers.financialAccountId, schema_1.FinancialAccounts.id))
         .leftJoin(schema_1.cashierMen, (0, drizzle_orm_1.eq)(schema_1.cashiers.cashierManId, schema_1.cashierMen.id));
     const formatted = allCashiers.map((row) => ({
         ...row.cashier,
+        financialAccount: row.financialAccount,
         cashier_man: row.cashierManId
             ? {
                 id: row.cashierManId,
