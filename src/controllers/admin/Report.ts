@@ -105,6 +105,7 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
     let validOrdersForFinancials = 0; 
     
     // متغيرات الفلوس
+    let grossTotalAllOrders = 0; // ✅ مجموع كل الأوردرات بغض النظر عن الستاتوس
     let totalRevenue = 0; 
     let totalSubtotal = 0;
     let totalDeliveryFees = 0;
@@ -129,6 +130,9 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
         
         const status = order.status || "pending";
         const cancelReasonType = order.cancelReasonType;
+
+        // ✅ جمع مبلغ الأوردر ضمن الإجمالي الكلي بغض النظر عن أي ستاتوس
+        grossTotalAllOrders += parseFloat(order.totalAmount as string || "0");
 
         // 🛑 الفلتر السحري: هل اليوزر كنسل الطلب؟
         const isCancelledByUser = status === "cancelled" && cancelReasonType === "user";
@@ -298,6 +302,7 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
             },
 
             financials: {
+                grossTotalAllOrders: grossTotalAllOrders.toFixed(2), // ✅ مجموع كل الأوردرات سواء اتكنسلت أو لا
                 totalRevenue: totalRevenue.toFixed(2),
                 totalSubtotal: totalSubtotal.toFixed(2),
                 totalDeliveryFees: totalDeliveryFees.toFixed(2),
