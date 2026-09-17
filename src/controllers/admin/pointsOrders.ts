@@ -242,6 +242,8 @@ export const approveRedeemCode = async (req: Request, res: Response) => {
             createdAt: now,
         });
 
+
+        // start setting
         // D. حساب شيفت المطعم وتوقيت القاهرة
         const [settings] = await tx
             .select()
@@ -282,6 +284,26 @@ export const approveRedeemCode = async (req: Request, res: Response) => {
             .for("update");
 
         const createdDailyOrderNumber = (lastOrder?.dailyOrderNumber || 0) + 1;
+
+        //if there erro remove from setting and uncomment this 
+        // D. حساب بداية الشيفت اليومي بنفس الطريقة المستخدمة في الأوردرات العادية
+        // const startOfTodayQuery = await getRestaurantShiftStartTime(restaurantId);
+
+        // // E. حساب dailyOrderNumber باستخدام MAX الرقمي لتفادي الترتيب النصي الخاطئ
+        // const [maxResult] = await tx
+        //     .select({
+        //         maxDailyNumber: sql<number>`COALESCE(MAX(CAST(${orders.dailyOrderNumber} AS UNSIGNED)), 0)`
+        //     })
+        //     .from(orders)
+        //     .where(
+        //         and(
+        //             eq(orders.restaurantId, restaurantId),
+        //             gte(orders.createdAt, startOfTodayQuery)
+        //         )
+        //     );
+
+        // const createdDailyOrderNumber = Number(maxResult?.maxDailyNumber || 0) + 1;
+
 
         // F. إنشاء الطلب في جدول orders
         await tx.insert(orders).values({
