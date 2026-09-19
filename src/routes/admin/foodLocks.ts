@@ -10,12 +10,12 @@ import { hasPermission } from "../../middlewares/hasPermission";
 const router = Router();
 
 // جلب حالة قفل منتج أو مكون في جميع الفروع
-router.get("/availability", hasPermission("foods", "read"), catchAsync(getBranchAvailability));
+router.get("/availability", hasPermission("food", "read"), catchAsync(getBranchAvailability));
 
 // قفل منتج في فرع معين
-router.put("/:branchId/food/:foodId/lock", hasPermission("foods", "update"), catchAsync(toggleBranchFoodLock));
+router.put("/:branchId/food/:foodId/lock", hasPermission("food", "update"), catchAsync(toggleBranchFoodLock));
 
 // قفل ingredient لمنتج (سواء globally أو في فرع معين عبر تمرير branchId في الـ body)
-router.put("/food/:foodId/ingredient/:ingredientId/lock", hasPermission("foods", "update"), catchAsync(toggleIngredientLock));
+router.put("/food/:foodId/ingredient/:ingredientId/lock", hasPermission("food", "update"), catchAsync(toggleIngredientLock));
 
 export default router;

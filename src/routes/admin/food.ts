@@ -22,43 +22,43 @@ import {
 const router = Router();
 
 // ✅ Select data - يحتاج صلاحية read فقط
-router.get("/select", hasPermission("foods", "read"), catchAsync(getFoodSelectData));
+router.get("/select", hasPermission("food", "read"), catchAsync(getFoodSelectData));
 
 // ✅ Create food - يحتاج صلاحية create
-router.post("/", hasPermission("foods", "create"), catchAsync(createFood));
+router.post("/", hasPermission("food", "create"), catchAsync(createFood));
 
 // ✅ Get all foods - يحتاج صلاحية read
-router.get("/", hasPermission("foods", "read"), catchAsync(getAllFoods));
+router.get("/", hasPermission("food", "read"), catchAsync(getAllFoods));
 
 // ✅ Get out-of-stock foods - restaurant sees all OOS foods + unavailable branches; branch sees only its own OOS
-router.get("/out-of-stock", hasPermission("foods", "read"), catchAsync(getOutOfStockFoods));
+router.get("/out-of-stock", hasPermission("food", "read"), catchAsync(getOutOfStockFoods));
 
 // ✅ Get food by id - يحتاج صلاحية read
-router.get("/:id", hasPermission("foods", "read"), catchAsync(getFoodById));
+router.get("/:id", hasPermission("food", "read"), catchAsync(getFoodById));
 
 // ✅ Update food - يحتاج صلاحية update
-router.put("/:id", hasPermission("foods", "update"), catchAsync(updateFood));
+router.put("/:id", hasPermission("food", "update"), catchAsync(updateFood));
 
 // ✅ Delete food - يحتاج صلاحية delete
-router.delete("/:id", hasPermission("foods", "delete"), catchAsync(deleteFood));
+router.delete("/:id", hasPermission("food", "delete"), catchAsync(deleteFood));
 
 // ✅ Assign ingredients - يحتاج صلاحية update
-router.post("/assign-ingredients/:id", hasPermission("foods", "update"), catchAsync(assignIngredientsToFood));
+router.post("/assign-ingredients/:id", hasPermission("food", "update"), catchAsync(assignIngredientsToFood));
 
 // ✅ Get recipe - يحتاج صلاحية read
-router.get("/recipe/:id", hasPermission("foods", "read"), catchAsync(getFoodRecipe));
+router.get("/recipe/:id", hasPermission("food", "read"), catchAsync(getFoodRecipe));
 
 // ✅ Toggle variation status - يحتاج صلاحية update
-router.put("/variation/:id/status", hasPermission("foods", "update"), catchAsync(toggleVariationStatus));
+router.put("/variation/:id/status", hasPermission("food", "update"), catchAsync(toggleVariationStatus));
 
 // ✅ Toggle option status - يحتاج صلاحية update
-router.put("/option/:id/status", hasPermission("foods", "update"), catchAsync(toggleVariationOptionStatus));
+router.put("/option/:id/status", hasPermission("food", "update"), catchAsync(toggleVariationOptionStatus));
 
 // ✅ Change food status (global) - يحتاج صلاحية update
-router.put("/status/:id", hasPermission("foods", "update"), catchAsync(changeFoodStatus));
+router.put("/status/:id", hasPermission("food", "update"), catchAsync(changeFoodStatus));
 // ✅ Change food status for a specific branch
-router.put("/:id/branch/:branchId/status", hasPermission("foods", "update"), catchAsync(changeFoodStatus));
+router.put("/:id/branch/:branchId/status", hasPermission("food", "update"), catchAsync(changeFoodStatus));
 // ✅ Toggle food out-of-stock (global, with optional branchId for subcategory cascade)
-router.put("/:id/branch/:branchId/out-of-stock", hasPermission("foods", "update"), catchAsync(toggleFoodOutOfStock));
+router.put("/:id/branch/:branchId/out-of-stock", hasPermission("food", "update"), catchAsync(toggleFoodOutOfStock));
 
 export default router;

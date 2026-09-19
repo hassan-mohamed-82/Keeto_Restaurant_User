@@ -56,7 +56,6 @@ export type ModuleName =
     | "restaurants"
     | "order"
     | "favorites"
-    | "foods"
     | "branches"
     | "categories"
     | "coupons"
