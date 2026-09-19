@@ -8,7 +8,8 @@ import {
     users,
     userRestaurantPoints,
     userPointsTransactions,
-    restaurantSettings
+    restaurantSettings,
+    branches
 } from "../../models/schema";
 import { eq, and, gte, desc, or } from "drizzle-orm";
 import { BadRequest } from "../../Errors/BadRequest";
@@ -17,6 +18,7 @@ import { SuccessResponse } from "../../utils/response";
 import { v4 as uuidv4 } from "uuid";
 import { sendPushNotification } from "../../utils/notifications";
 import { checkFoodAvailabilityInBranch } from "../../helpers/food.helper";
+import { getNextDailyOrderNumber } from "../../helpers/getNextDailyOrderNumber";
 
 const getRestaurantId = (req: Request): string => {
     const id = req.user?.restaurantId || req.user?.id;
@@ -96,6 +98,24 @@ export const approveRedeemCode = async (req: Request, res: Response) => {
     if (!redeemRequestId) throw new BadRequest("redeemRequestId is required");
     if (!action || !["approve", "reject"].includes(action)) {
         throw new BadRequest("Valid action ('approve' or 'reject') is required");
+    }
+
+    if (targetBranchId) {
+        const [branch] = await db
+            .select({ id: branches.id })
+            .from(branches)
+            .where(
+                and(
+                    eq(branches.id, targetBranchId),
+                    eq(branches.restaurantId, restaurantId),
+                    eq(branches.status, "active")
+                )
+            )
+            .limit(1);
+
+        if (!branch) {
+            throw new BadRequest("Invalid or inactive branch selected.");
+        }
     }
 
     const now = new Date();
@@ -251,59 +271,41 @@ export const approveRedeemCode = async (req: Request, res: Response) => {
             .where(eq(restaurantSettings.restaurantId, restaurantId))
             .limit(1);
 
-        const resetTimeStr = (settings as any)?.resetDailyOrderNumberTime || "00:00";
-        const [resetHourRaw, resetMinuteRaw] = resetTimeStr.split(":").map(Number);
-        const resetHour = isNaN(resetHourRaw) ? 0 : resetHourRaw;
-        const resetMinute = isNaN(resetMinuteRaw) ? 0 : resetMinuteRaw;
+        // const resetTimeStr = (settings as any)?.resetDailyOrderNumberTime || "00:00";
+        // const [resetHourRaw, resetMinuteRaw] = resetTimeStr.split(":").map(Number);
+        // const resetHour = isNaN(resetHourRaw) ? 0 : resetHourRaw;
+        // const resetMinute = isNaN(resetMinuteRaw) ? 0 : resetMinuteRaw;
 
-        const egyptDateStr = now.toLocaleString("en-US", { timeZone: "Africa/Cairo" });
-        const nowLocal = new Date(egyptDateStr);
+        // const egyptDateStr = now.toLocaleString("en-US", { timeZone: "Africa/Cairo" });
+        // const nowLocal = new Date(egyptDateStr);
 
-        const startOfTodayLocal = new Date(nowLocal);
-        startOfTodayLocal.setHours(resetHour, resetMinute, 0, 0);
+        // const startOfTodayLocal = new Date(nowLocal);
+        // startOfTodayLocal.setHours(resetHour, resetMinute, 0, 0);
 
-        if (nowLocal < startOfTodayLocal) {
-            startOfTodayLocal.setDate(startOfTodayLocal.getDate() - 1);
-        }
+        // if (nowLocal < startOfTodayLocal) {
+        //     startOfTodayLocal.setDate(startOfTodayLocal.getDate() - 1);
+        // }
 
-        const diffMs = nowLocal.getTime() - startOfTodayLocal.getTime();
-        const startOfTodayQuery = new Date(now.getTime() - diffMs);
+        // const diffMs = nowLocal.getTime() - startOfTodayLocal.getTime();
+        // const startOfTodayQuery = new Date(now.getTime() - diffMs);
 
-        // E. حساب dailyOrderNumber
-        const [lastOrder] = await tx
-            .select({ dailyOrderNumber: orders.dailyOrderNumber })
-            .from(orders)
-            .where(
-                and(
-                    eq(orders.restaurantId, restaurantId),
-                    gte(orders.createdAt, startOfTodayQuery)
-                )
-            )
-            .orderBy(desc(orders.dailyOrderNumber))
-            .limit(1)
-            .for("update");
-
-        const createdDailyOrderNumber = (lastOrder?.dailyOrderNumber || 0) + 1;
-
-        //if there erro remove from setting and uncomment this 
-        // D. حساب بداية الشيفت اليومي بنفس الطريقة المستخدمة في الأوردرات العادية
-        // const startOfTodayQuery = await getRestaurantShiftStartTime(restaurantId);
-
-        // // E. حساب dailyOrderNumber باستخدام MAX الرقمي لتفادي الترتيب النصي الخاطئ
-        // const [maxResult] = await tx
-        //     .select({
-        //         maxDailyNumber: sql<number>`COALESCE(MAX(CAST(${orders.dailyOrderNumber} AS UNSIGNED)), 0)`
-        //     })
+        // // E. حساب dailyOrderNumber
+        // const [lastOrder] = await tx
+        //     .select({ dailyOrderNumber: orders.dailyOrderNumber })
         //     .from(orders)
         //     .where(
         //         and(
         //             eq(orders.restaurantId, restaurantId),
         //             gte(orders.createdAt, startOfTodayQuery)
         //         )
-        //     );
+        //     )
+        //     .orderBy(desc(orders.dailyOrderNumber))
+        //     .limit(1)
+        //     .for("update");
 
-        // const createdDailyOrderNumber = Number(maxResult?.maxDailyNumber || 0) + 1;
+        // const createdDailyOrderNumber = (lastOrder?.dailyOrderNumber || 0) + 1;
 
+        const createdDailyOrderNumber = await getNextDailyOrderNumber(tx, restaurantId, settings, now);
 
         // F. إنشاء الطلب في جدول orders
         await tx.insert(orders).values({
