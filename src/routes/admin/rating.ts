@@ -23,7 +23,7 @@ router.get("/stats", catchAsync(getMyRestaurantRatingStats));
 router.post("/requests", validate(createRatingRequestSchema, "body"), catchAsync(createRatingModerationRequest));
 router.get("/requests", validate(getRatingRequestsQuerySchema, "query"), catchAsync(getMyRatingModerationRequests));
 
-router.get("/customer-ratings", hasPermission("orders", "read", true), catchAsync(getCustomerRatingsInShift));
+router.get("/customer-ratings", hasPermission("order", "read", true), catchAsync(getCustomerRatingsInShift));
 
 export default router;
 

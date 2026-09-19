@@ -10,6 +10,7 @@ const response_1 = require("../../utils/response");
 const uuid_1 = require("uuid");
 const notifications_1 = require("../../utils/notifications");
 const food_helper_1 = require("../../helpers/food.helper");
+const getNextDailyOrderNumber_1 = require("../../helpers/getNextDailyOrderNumber");
 const getRestaurantId = (req) => {
     const id = req.user?.restaurantId || req.user?.id;
     if (!id)
@@ -75,6 +76,16 @@ const approveRedeemCode = async (req, res) => {
         throw new BadRequest_1.BadRequest("redeemRequestId is required");
     if (!action || !["approve", "reject"].includes(action)) {
         throw new BadRequest_1.BadRequest("Valid action ('approve' or 'reject') is required");
+    }
+    if (targetBranchId) {
+        const [branch] = await connection_1.db
+            .select({ id: schema_1.branches.id })
+            .from(schema_1.branches)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branches.id, targetBranchId), (0, drizzle_orm_1.eq)(schema_1.branches.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.branches.status, "active")))
+            .limit(1);
+        if (!branch) {
+            throw new BadRequest_1.BadRequest("Invalid or inactive branch selected.");
+        }
     }
     const now = new Date();
     // 1. جلب بيانات طلب الاستبدال
@@ -189,34 +200,41 @@ const approveRedeemCode = async (req, res) => {
             note: `Redeemed points for item: ${redeemReq.foodName}`,
             createdAt: now,
         });
+        // start setting
         // D. حساب شيفت المطعم وتوقيت القاهرة
         const [settings] = await tx
             .select()
             .from(schema_1.restaurantSettings)
             .where((0, drizzle_orm_1.eq)(schema_1.restaurantSettings.restaurantId, restaurantId))
             .limit(1);
-        const resetTimeStr = settings?.resetDailyOrderNumberTime || "00:00";
-        const [resetHourRaw, resetMinuteRaw] = resetTimeStr.split(":").map(Number);
-        const resetHour = isNaN(resetHourRaw) ? 0 : resetHourRaw;
-        const resetMinute = isNaN(resetMinuteRaw) ? 0 : resetMinuteRaw;
-        const egyptDateStr = now.toLocaleString("en-US", { timeZone: "Africa/Cairo" });
-        const nowLocal = new Date(egyptDateStr);
-        const startOfTodayLocal = new Date(nowLocal);
-        startOfTodayLocal.setHours(resetHour, resetMinute, 0, 0);
-        if (nowLocal < startOfTodayLocal) {
-            startOfTodayLocal.setDate(startOfTodayLocal.getDate() - 1);
-        }
-        const diffMs = nowLocal.getTime() - startOfTodayLocal.getTime();
-        const startOfTodayQuery = new Date(now.getTime() - diffMs);
-        // E. حساب dailyOrderNumber
-        const [lastOrder] = await tx
-            .select({ dailyOrderNumber: schema_1.orders.dailyOrderNumber })
-            .from(schema_1.orders)
-            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId), (0, drizzle_orm_1.gte)(schema_1.orders.createdAt, startOfTodayQuery)))
-            .orderBy((0, drizzle_orm_1.desc)(schema_1.orders.dailyOrderNumber))
-            .limit(1)
-            .for("update");
-        const createdDailyOrderNumber = (lastOrder?.dailyOrderNumber || 0) + 1;
+        // const resetTimeStr = (settings as any)?.resetDailyOrderNumberTime || "00:00";
+        // const [resetHourRaw, resetMinuteRaw] = resetTimeStr.split(":").map(Number);
+        // const resetHour = isNaN(resetHourRaw) ? 0 : resetHourRaw;
+        // const resetMinute = isNaN(resetMinuteRaw) ? 0 : resetMinuteRaw;
+        // const egyptDateStr = now.toLocaleString("en-US", { timeZone: "Africa/Cairo" });
+        // const nowLocal = new Date(egyptDateStr);
+        // const startOfTodayLocal = new Date(nowLocal);
+        // startOfTodayLocal.setHours(resetHour, resetMinute, 0, 0);
+        // if (nowLocal < startOfTodayLocal) {
+        //     startOfTodayLocal.setDate(startOfTodayLocal.getDate() - 1);
+        // }
+        // const diffMs = nowLocal.getTime() - startOfTodayLocal.getTime();
+        // const startOfTodayQuery = new Date(now.getTime() - diffMs);
+        // // E. حساب dailyOrderNumber
+        // const [lastOrder] = await tx
+        //     .select({ dailyOrderNumber: orders.dailyOrderNumber })
+        //     .from(orders)
+        //     .where(
+        //         and(
+        //             eq(orders.restaurantId, restaurantId),
+        //             gte(orders.createdAt, startOfTodayQuery)
+        //         )
+        //     )
+        //     .orderBy(desc(orders.dailyOrderNumber))
+        //     .limit(1)
+        //     .for("update");
+        // const createdDailyOrderNumber = (lastOrder?.dailyOrderNumber || 0) + 1;
+        const createdDailyOrderNumber = await (0, getNextDailyOrderNumber_1.getNextDailyOrderNumber)(tx, restaurantId, settings, now);
         // F. إنشاء الطلب في جدول orders
         await tx.insert(schema_1.orders).values({
             id: newOrderId,

@@ -13,5 +13,5 @@ router.get("/stats", (0, catchAsync_1.catchAsync)(rating_2.getMyRestaurantRating
 // ─── Moderation Requests Endpoints (طلب تعديل / حذف تقييم) ───
 router.post("/requests", (0, validation_1.validate)(rating_1.createRatingRequestSchema, "body"), (0, catchAsync_1.catchAsync)(rating_2.createRatingModerationRequest));
 router.get("/requests", (0, validation_1.validate)(rating_1.getRatingRequestsQuerySchema, "query"), (0, catchAsync_1.catchAsync)(rating_2.getMyRatingModerationRequests));
-router.get("/customer-ratings", (0, hasPermission_1.hasPermission)("orders", "read", true), (0, catchAsync_1.catchAsync)(customerRatings_1.getCustomerRatingsInShift));
+router.get("/customer-ratings", (0, hasPermission_1.hasPermission)("order", "read", true), (0, catchAsync_1.catchAsync)(customerRatings_1.getCustomerRatingsInShift));
 exports.default = router;

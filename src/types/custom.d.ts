@@ -54,7 +54,7 @@ export type ModuleName =
     | "users"
     | "admins"
     | "restaurants"
-    | "orders"
+    | "order"
     | "favorites"
     | "foods"
     | "branches"

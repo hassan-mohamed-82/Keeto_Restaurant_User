@@ -107,7 +107,7 @@ const hasPermission = (module, action, checkBranch = false) => {
                 const hasRequiredPermission = allPermissions.some(permission => {
                     if (permission.module !== module)
                         return false;
-                    return permission.actions.some(a => a.action === action);
+                    return permission.actions.some(a => ((typeof a === "string" ? a : a?.action) || "").toLowerCase() === action.toLowerCase());
                 });
                 if (!hasRequiredPermission) {
                     throw new forbiddenError_1.ForbiddenError(`You don't have permission to ${action} ${module}`);
@@ -195,7 +195,7 @@ const hasAnyPermission = (permissions, checkBranch = false) => {
                     return allPermissions.some(permission => {
                         if (permission.module !== module)
                             return false;
-                        return permission.actions.some(a => a.action === action);
+                        return permission.actions.some(a => ((typeof a === "string" ? a : a?.action) || "").toLowerCase() === action.toLowerCase());
                     });
                 });
                 if (!hasAnyRequiredPermission) {
@@ -281,7 +281,7 @@ const hasAllPermissions = (permissions, checkBranch = false) => {
                     return allPermissions.some(permission => {
                         if (permission.module !== module)
                             return false;
-                        return permission.actions.some(a => a.action === action);
+                        return permission.actions.some(a => ((typeof a === "string" ? a : a?.action) || "").toLowerCase() === action.toLowerCase());
                     });
                 });
                 if (!hasAllRequiredPermissions) {
@@ -334,7 +334,7 @@ const checkUserPermission = async (userId, module, action) => {
     return allPermissions.some(permission => {
         if (permission.module !== module)
             return false;
-        return permission.actions.some(a => a.action === action);
+        return permission.actions.some(a => ((typeof a === "string" ? a : a?.action) || "").toLowerCase() === action.toLowerCase());
     });
 };
 exports.checkUserPermission = checkUserPermission;
