@@ -104,11 +104,32 @@ export const buildOrderDateConditions = async (
     let startDate: Date;
     let endDate: Date | undefined;
 
-    // 0. إذا لم يكن للمستخدم صلاحية filter، يُرفض أي طلب بفلتر تاريخ
+    // 0. إذا لم يكن للمستخدم صلاحية filter، يُسمح فقط بتاريخ اليوم الحالي / الشيفت الحالي، وأي تاريخ آخر يُرفض بـ 403
     if (!hasFilterPermission && (rawStartDate || rawEndDate)) {
-        throw new ForbiddenError(
-            "You don't have permission to filter orders by date. Only current shift orders are available."
-        );
+        const todayCairoStr = dayjs().tz(TIMEZONE).format("YYYY-MM-DD");
+        const shiftStart = await getRestaurantShiftStartTime(restaurantId);
+        const shiftStartDayStr = dayjs(shiftStart).tz(TIMEZONE).format("YYYY-MM-DD");
+
+        const parseToCairoDay = (val?: string): string | null => {
+            if (!val) return null;
+            if (/^\d{4}-\d{2}-\d{2}$/.test(val)) {
+                return val;
+            }
+            const d = dayjs(val);
+            return d.isValid() ? d.tz(TIMEZONE).format("YYYY-MM-DD") : null;
+        };
+
+        const startDayStr = parseToCairoDay(rawStartDate);
+        const endDayStr = parseToCairoDay(rawEndDate);
+
+        const isStartValid = !startDayStr || startDayStr === todayCairoStr || startDayStr === shiftStartDayStr;
+        const isEndValid = !endDayStr || endDayStr === todayCairoStr || endDayStr === shiftStartDayStr;
+
+        if (!isStartValid || !isEndValid) {
+            throw new ForbiddenError(
+                "You don't have permission to filter orders by date. Only current date/shift orders are available."
+            );
+        }
     }
 
     // 1. معالجة تاريخ البداية
