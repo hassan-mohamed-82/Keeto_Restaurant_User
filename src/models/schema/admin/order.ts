@@ -86,6 +86,12 @@ export const orders = mysqlTable("orders", {
 
     deliveryManId: char("delivery_man_id", { length: 36 })
         .references(() => deliveryMen.id),
+
+    // تحصيل الكاش من مندوب التوصيل وتوريده لخزينة المطعم
+    isCashCollected: boolean("is_cash_collected").default(false),
+    cashCollectedAt: timestamp("cash_collected_at"),
+    cashCollectedBy: char("cash_collected_by", { length: 36 }),
+
     dailyOrderNumber: int("daily_order_number").default(1),
 
     rating: int("rating"),
