@@ -1,6 +1,6 @@
 import cron from "node-cron";
 import { db } from "../models/connection";
-import { orders, orderDelayAlertGroups, branches, orderItems } from "../models/schema";
+import { orders, orderDelayAlertGroups, branches, orderItems, restaurants } from "../models/schema";
 import { eq, and, inArray, or, isNull } from "drizzle-orm";
 import { sendEmail } from "../utils/sendEmails";
 
@@ -8,6 +8,7 @@ import { sendEmail } from "../utils/sendEmails";
  * Generate a responsive, professional HTML template for order delay notifications.
  */
 function buildDelayAlertEmailHtml(params: {
+    restaurantName?: string;
     dailyOrderNumber?: number | null;
     branchName: string;
     statusAr: string;
@@ -136,7 +137,7 @@ function buildDelayAlertEmailHtml(params: {
     <div class="container">
         <div class="header">
             <h1>⚠️ تنبيه عاجل: تأخير في تسليم الطلب</h1>
-            <p>فرع: ${params.branchName} | مجموعة: ${params.groupName}</p>
+            <p>${params.restaurantName ? `مطعم: ${params.restaurantName} | ` : ""}فرع: ${params.branchName} | مجموعة: ${params.groupName}</p>
         </div>
         <div class="content">
             
@@ -147,6 +148,16 @@ function buildDelayAlertEmailHtml(params: {
 
             <div class="section-title">📌 التفاصيل الأساسية للطلب</div>
             <table class="details-table">
+                ${params.restaurantName ? `
+                <tr>
+                    <th>المطعم</th>
+                    <td><strong style="color: #c53030; font-size: 15px;">${params.restaurantName}</strong></td>
+                </tr>
+                ` : ""}
+                <tr>
+                    <th>الفرع</th>
+                    <td><strong>${params.branchName}</strong></td>
+                </tr>
                 <tr>
                     <th>رقم الطلب اليومي</th>
                     <td><strong style="font-size: 16px; color: #2d3748;">#${params.dailyOrderNumber || "-"}</strong></td>
@@ -257,8 +268,11 @@ export function initOrderDelayAlertCron() {
                     paymentMethod: orders.paymentMethod,
                     shippingAddress: orders.shippingAddress,
                     note: orders.note,
+                    restaurantName: restaurants.name,
+                    restaurantNameAr: restaurants.nameAr,
                 })
                 .from(orders)
+                .leftJoin(restaurants, eq(orders.restaurantId, restaurants.id))
                 .where(
                     and(
                         or(eq(orders.isDelayEmailSent, false), isNull(orders.isDelayEmailSent)),
@@ -438,7 +452,11 @@ export function initOrderDelayAlertCron() {
                     .where(eq(orderItems.orderId, order.id));
                 const itemsCount = orderItemsList.length;
 
+                // Prepare restaurant name
+                const restaurantName = order.restaurantNameAr || order.restaurantName || "";
+
                 const emailHtml = buildDelayAlertEmailHtml({
+                    restaurantName,
                     dailyOrderNumber: order.dailyOrderNumber,
                     branchName,
                     statusAr,
@@ -456,7 +474,8 @@ export function initOrderDelayAlertCron() {
                     itemsCount,
                 });
 
-                const subject = `⚠️ تنبيه تأخير: الطلب #${order.dailyOrderNumber} تجاوز ${elapsedMinutes} دقيقة!`;
+                const restPrefix = restaurantName ? `[${restaurantName}] ` : "";
+                const subject = `⚠️ تنبيه تأخير: ${restPrefix}الطلب #${order.dailyOrderNumber} تجاوز ${elapsedMinutes} دقيقة!`;
 
                 // Send email to all recipients
                 const sendPromises = Array.from(recipientEmails).map((to) =>
@@ -478,7 +497,7 @@ export function initOrderDelayAlertCron() {
                     .where(eq(orders.id, order.id));
 
                 console.log(
-                    `📧 [Delay Alert] Sent once for Order #${order.dailyOrderNumber} (Delay: ${elapsedMinutes}m) to: ${Array.from(recipientEmails).join(", ")}`
+                    `📧 [Delay Alert] Sent once for Order #${order.dailyOrderNumber} (${restaurantName ? `${restaurantName} - ` : ""}Delay: ${elapsedMinutes}m) to: ${Array.from(recipientEmails).join(", ")}`
                 );
             }
         } catch (error) {
