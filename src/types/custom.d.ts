@@ -11,6 +11,7 @@ export interface AppUser {
     _id?: string; // MongoDB fallback
     name?: string;
     role: Role;
+    isGuest?: boolean;
 
     // restaurant system
     type?: "owner" | "subadmin" | "branch_manager" | "staff" | "cashier";
@@ -29,6 +30,7 @@ export interface TokenPayload {
     type?: string;
     restaurantId?: string;
     branchId?: string;
+    isGuest?: boolean;
 }
 
 // =======================

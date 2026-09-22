@@ -13,7 +13,7 @@ import { zones } from "../admin/zone"
 export const addresses = mysqlTable("addresses", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
     userId: char("user_id", { length: 36 }).references(() => users.id).notNull(),
-    zoneId: char("zone_id", { length: 36 }).references(() => zones.id).notNull(),
+    zoneId: char("zone_id", { length: 36 }).references(() => zones.id),
     type: mysqlEnum("type", ["home", "work", "other"]).default("home"),
     title: varchar("title", { length: 255 }).notNull(),
     lat: varchar("lat", { length: 255 }).notNull(),
@@ -24,6 +24,7 @@ export const addresses = mysqlTable("addresses", {
     apartment: varchar("apartment", { length: 50 }),
     landmark: varchar("landmark", { length: 500 }),
     location: varchar("location", { length: 255 }),
+    fulladdress: varchar("fulladdress", { length: 500 }),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
 });

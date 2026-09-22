@@ -14,6 +14,7 @@ import { initOrderNotificationCron } from './services/orderNotificationCron';
 import { initOrderDelayAlertCron } from './services/orderDelayAlertCron';
 import './config/redis';
 import { initNotificationCleanupCron } from "./services/initNotificationCleanupCron";
+// import { initAbandonedCartCron } from "./services/abandonedCartCron";
 
 dotenv.config();
 
@@ -23,6 +24,7 @@ connectDB();
 initOrderNotificationCron();
 initOrderDelayAlertCron();
 initNotificationCleanupCron();
+// initAbandonedCartCron();
 
 const httpServer: http.Server = http.createServer(app);
 

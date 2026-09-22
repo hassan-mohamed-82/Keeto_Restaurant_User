@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from "uuid";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors/NotFound";
-import { generateUserToken } from "../../utils/jwt";
+import { generateUserToken, generateGuestToken } from "../../utils/jwt";
 import { sendEmail } from "../../utils/sendEmails";
 import { getVerifyEmailPage } from "../../utils/verifyEmailPages";
 import { countries, cities, zones } from "../../models/schema";
@@ -332,3 +332,46 @@ export const resetPassword = async (req: Request, res: Response) => {
 };
 
 
+// ===================================
+// 7. Guest Session (Shadow User)
+// ===================================
+export const initGuestSession = async (req: Request, res: Response) => {
+    const { restaurantId } = req.body;
+
+    const guestId = uuidv4();
+
+    // Create shadow user row — minimal data, no email/password
+    await db.insert(users).values({
+        id: guestId,
+        name: "Guest",
+        isGuest: true,
+        authProvider: "guest",
+        isVerified: false,
+        status: "active",
+        isDeleted: false,
+    } as any);
+
+    // Optionally link guest to restaurant
+    if (restaurantId) {
+        const [restaurantExists] = await db
+            .select({ id: restaurant_users.restaurantId })
+            .from(restaurant_users)
+            .where(eq(restaurant_users.restaurantId, restaurantId))
+            .limit(1);
+
+        if (restaurantExists) {
+            await db.insert(restaurant_users).ignore().values({ restaurantId, userId: guestId });
+        }
+    }
+
+    const guestToken = generateGuestToken({ id: guestId, restaurantId: restaurantId || null });
+
+    return SuccessResponse(res, {
+        message: "Guest session initialized successfully.",
+        data: {
+            guestToken,
+            guestId,
+            expiresIn: "30d",
+        },
+    }, 201);
+};

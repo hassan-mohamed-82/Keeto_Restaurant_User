@@ -28,6 +28,8 @@ export const users = mysqlTable("users", {
     
     isVerified: boolean("is_verified").default(false),
     isDeleted: boolean("is_deleted").default(false),
+    isGuest: boolean("is_guest").default(false).notNull(),
+    authProvider: mysqlEnum("auth_provider", ["guest", "email", "google", "facebook", "apple", "phone_otp"]).default("email"),
     status: mysqlEnum("status", ["active", "blocked"]).default("active"),
     totalOrders: int("total_orders").default(0),
     createdAt: timestamp("created_at").defaultNow(),
