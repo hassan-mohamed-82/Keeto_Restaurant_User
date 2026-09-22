@@ -14,6 +14,7 @@ import {
 import { sql, relations } from "drizzle-orm";
 import { addons, categories, restaurants, subcategories } from "../../schema";
 import { noteGroups } from "./noteGroup";
+import { discounts } from "./Discount";
 export const food = mysqlTable("food", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
 
@@ -49,6 +50,8 @@ export const food = mysqlTable("food", {
 
     group_note_id: char("group_note_id", { length: 36 })
         .references(() => noteGroups.id, { onDelete: "set null" }),
+    discountId: char("discount_id", { length: 36 })
+        .references(() => discounts.id, { onDelete: "set null" }),
 
     startTime: varchar("start_time", { length: 255 }).notNull(),
     endTime: varchar("end_time", { length: 255 }).notNull(),
