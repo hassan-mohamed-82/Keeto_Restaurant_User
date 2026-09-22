@@ -73,4 +73,5 @@ export * from "./schema/admin/captainOrder";
 export * from "./schema/admin/cashierMan";
 export * from "./schema/admin/hall";
 export * from "./schema/admin/hallTable";
+export * from "./schema/admin/restaurantPaymentCredentials";
 

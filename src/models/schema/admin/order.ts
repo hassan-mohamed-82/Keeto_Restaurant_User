@@ -137,6 +137,10 @@ export const orders = mysqlTable("orders", {
 
     isDelayEmailSent: boolean("is_delay_email_sent").default(false),
 
+    paymentStatus: mysqlEnum("payment_status", ["pending_payment", "paid", "payment_failed"]).default("pending_payment"),
+    paymobOrderId: varchar("paymob_order_id", { length: 100 }),
+    paymobTransactionId: varchar("paymob_transaction_id", { length: 100 }),
+
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
     createdAt: timestamp("created_at").defaultNow(),
 });
