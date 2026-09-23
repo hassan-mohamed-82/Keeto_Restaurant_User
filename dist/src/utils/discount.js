@@ -8,27 +8,57 @@ const getAvailableDiscounts = async (restaurantId) => {
     const now = new Date();
     // Fetch restaurant specific discounts
     const restDiscounts = await connection_1.db.select({
-        discount: schema_1.discounts,
-        foodId: schema_1.discountFoods.foodId
+        discount: {
+            id: schema_1.discountGroups.id,
+            discountId: schema_1.discounts.id,
+            name: schema_1.discounts.name,
+            discountType: schema_1.discountGroups.discountType,
+            discountValue: schema_1.discountGroups.discountValue,
+            maxDiscount: schema_1.discountGroups.maxDiscount,
+            minOrderAmount: schema_1.discounts.minOrderAmount,
+            usageLimit: schema_1.discounts.usageLimit,
+            usedCount: schema_1.discounts.usedCount,
+            startDate: schema_1.discounts.startDate,
+            endDate: schema_1.discounts.endDate,
+            isActive: schema_1.discounts.isActive,
+            isGlobal: schema_1.discounts.isGlobal,
+        },
+        foodId: schema_1.food.id
     })
         .from(schema_1.discounts)
         .innerJoin(schema_1.discountRestaurants, (0, drizzle_orm_1.eq)(schema_1.discounts.id, schema_1.discountRestaurants.discountId))
-        .leftJoin(schema_1.discountFoods, (0, drizzle_orm_1.eq)(schema_1.discounts.id, schema_1.discountFoods.discountId))
+        .innerJoin(schema_1.discountGroups, (0, drizzle_orm_1.eq)(schema_1.discounts.id, schema_1.discountGroups.discountId))
+        .leftJoin(schema_1.food, (0, drizzle_orm_1.eq)(schema_1.food.discountId, schema_1.discountGroups.id))
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.discountRestaurants.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.discounts.isActive, true), (0, drizzle_orm_1.eq)(schema_1.discounts.isGlobal, false)));
     // Fetch global discounts
     const globalDiscountsRows = await connection_1.db.select({
-        discount: schema_1.discounts,
-        foodId: schema_1.discountFoods.foodId
+        discount: {
+            id: schema_1.discountGroups.id,
+            discountId: schema_1.discounts.id,
+            name: schema_1.discounts.name,
+            discountType: schema_1.discountGroups.discountType,
+            discountValue: schema_1.discountGroups.discountValue,
+            maxDiscount: schema_1.discountGroups.maxDiscount,
+            minOrderAmount: schema_1.discounts.minOrderAmount,
+            usageLimit: schema_1.discounts.usageLimit,
+            usedCount: schema_1.discounts.usedCount,
+            startDate: schema_1.discounts.startDate,
+            endDate: schema_1.discounts.endDate,
+            isActive: schema_1.discounts.isActive,
+            isGlobal: schema_1.discounts.isGlobal,
+        },
+        foodId: schema_1.food.id
     })
         .from(schema_1.discounts)
-        .leftJoin(schema_1.discountFoods, (0, drizzle_orm_1.eq)(schema_1.discounts.id, schema_1.discountFoods.discountId))
+        .innerJoin(schema_1.discountGroups, (0, drizzle_orm_1.eq)(schema_1.discounts.id, schema_1.discountGroups.discountId))
+        .leftJoin(schema_1.food, (0, drizzle_orm_1.eq)(schema_1.food.discountId, schema_1.discountGroups.id))
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.discounts.isGlobal, true), (0, drizzle_orm_1.eq)(schema_1.discounts.isActive, true)));
     const allDiscounts = [...restDiscounts, ...globalDiscountsRows].filter(d => {
         if (d.discount.startDate && new Date(d.discount.startDate) > now)
             return false;
         if (d.discount.endDate && new Date(d.discount.endDate) < now)
             return false;
-        if (d.discount.usageLimit && d.discount.usedCount >= d.discount.usageLimit)
+        if (d.discount.usageLimit && (d.discount.usedCount ?? 0) >= d.discount.usageLimit)
             return false;
         return true;
     });

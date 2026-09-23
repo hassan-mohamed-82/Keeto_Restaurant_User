@@ -70,6 +70,10 @@ exports.orders = (0, mysql_core_1.mysqlTable)("orders", {
     note: (0, mysql_core_1.text)("note"),
     deliveryManId: (0, mysql_core_1.char)("delivery_man_id", { length: 36 })
         .references(() => delivery_man_1.deliveryMen.id),
+    // تحصيل الكاش من مندوب التوصيل وتوريده لخزينة المطعم
+    isCashCollected: (0, mysql_core_1.boolean)("is_cash_collected").default(false),
+    cashCollectedAt: (0, mysql_core_1.timestamp)("cash_collected_at"),
+    cashCollectedBy: (0, mysql_core_1.char)("cash_collected_by", { length: 36 }),
     dailyOrderNumber: (0, mysql_core_1.int)("daily_order_number").default(1),
     rating: (0, mysql_core_1.int)("rating"),
     ratingComment: (0, mysql_core_1.text)("rating_comment"),
@@ -78,6 +82,9 @@ exports.orders = (0, mysql_core_1.mysqlTable)("orders", {
     // 🟢 3. حفظ لقطة ثابته لبيانات الفرع وقت الأوردر (Branch Snapshot)
     branchSnapshot: (0, mysql_core_1.json)("branch_snapshot").$type(),
     isDelayEmailSent: (0, mysql_core_1.boolean)("is_delay_email_sent").default(false),
+    paymentStatus: (0, mysql_core_1.mysqlEnum)("payment_status", ["pending_payment", "paid", "payment_failed"]).default("pending_payment"),
+    paymobOrderId: (0, mysql_core_1.varchar)("paymob_order_id", { length: 100 }),
+    paymobTransactionId: (0, mysql_core_1.varchar)("paymob_transaction_id", { length: 100 }),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow().onUpdateNow(),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
 });

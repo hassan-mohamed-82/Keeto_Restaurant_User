@@ -109,6 +109,7 @@ const getRestaurantOrders = async (req, res) => {
         customerName: schema_1.users.name,
         customerPhone: schema_1.users.phone,
         alternatePhone: schema_1.users.alternatePhone,
+        isGuest: schema_1.users.isGuest,
         rating: schema_1.orders.rating,
         ratingComment: schema_1.orders.ratingComment,
         orderType: schema_1.orders.orderType,
@@ -308,6 +309,7 @@ const getOrdersByStatus = async (req, res, status) => {
         customerName: schema_1.users.name,
         customerPhone: schema_1.users.phone,
         alternatePhone: schema_1.users.alternatePhone,
+        isGuest: schema_1.users.isGuest,
         rating: schema_1.orders.rating,
         ratingComment: schema_1.orders.ratingComment,
         orderType: schema_1.orders.orderType,
@@ -495,6 +497,7 @@ const getRestaurantOrderById = async (req, res) => {
             phone: schema_1.users.phone,
             alternatePhone: schema_1.users.alternatePhone,
             email: schema_1.users.email,
+            isGuest: schema_1.users.isGuest,
         },
         branch: {
             id: schema_1.branches.id,

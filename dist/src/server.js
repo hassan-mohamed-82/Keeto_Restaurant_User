@@ -19,6 +19,7 @@ const orderNotificationCron_1 = require("./services/orderNotificationCron");
 const orderDelayAlertCron_1 = require("./services/orderDelayAlertCron");
 require("./config/redis");
 const initNotificationCleanupCron_1 = require("./services/initNotificationCleanupCron");
+// import { initAbandonedCartCron } from "./services/abandonedCartCron";
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 app.set("trust proxy", true);
@@ -26,6 +27,7 @@ app.set("trust proxy", true);
 (0, orderNotificationCron_1.initOrderNotificationCron)();
 (0, orderDelayAlertCron_1.initOrderDelayAlertCron)();
 (0, initNotificationCleanupCron_1.initNotificationCleanupCron)();
+// initAbandonedCartCron();
 const httpServer = http_1.default.createServer(app);
 const io = new socket_io_1.Server(httpServer, {
     cors: {

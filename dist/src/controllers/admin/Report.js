@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getDashboardReports = exports.getMyInvoices = exports.downloadSavedInvoicePDF = exports.getMyRestaurantReport = void 0;
+exports.getDashboardReports = exports.getMyInvoices = exports.downloadSavedInvoicePDF = exports.getOrdersByPaymentMethod = exports.getMyRestaurantReport = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm"); // 👈 تمت إضافة inArray
@@ -307,6 +307,136 @@ const getMyRestaurantReport = async (req, res) => {
     });
 };
 exports.getMyRestaurantReport = getMyRestaurantReport;
+const getOrdersByPaymentMethod = async (req, res) => {
+    if (!req.user)
+        throw new Errors_1.UnauthorizedError("Unauthenticated");
+    const restaurantId = req.user.restaurantId || req.user.id;
+    if (!restaurantId)
+        throw new BadRequest_1.BadRequest("Restaurant ID not found");
+    const { startDate, endDate, branchId, paymentMethodId, paymentMethodName, paymentMethod } = req.query;
+    const pMethod = (paymentMethodId || paymentMethod);
+    const pName = paymentMethodName;
+    // معرفة هل أرسل المستخدم فلتر وسيلة الدفع أم لا
+    const hasPaymentFilter = Boolean(pMethod || pName);
+    const conditions = [(0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId)];
+    // 1. الفلترة حسب التاريخ
+    if (startDate)
+        conditions.push((0, drizzle_orm_1.gte)(schema_1.orders.createdAt, new Date(startDate)));
+    if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        conditions.push((0, drizzle_orm_1.lte)(schema_1.orders.createdAt, end));
+    }
+    // 2. الفلترة حسب الفرع
+    if (branchId)
+        conditions.push((0, drizzle_orm_1.eq)(schema_1.orders.branchId, branchId));
+    if (req.user.branchId)
+        conditions.push((0, drizzle_orm_1.eq)(schema_1.orders.branchId, req.user.branchId));
+    // 3. الفلترة حسب طريقة الدفع (إن وجدت)
+    if (pMethod) {
+        conditions.push((0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.orders.paymentMethod, pMethod), (0, drizzle_orm_1.like)(schema_1.paymentMethods.name, `%${pMethod}%`)));
+    }
+    else if (pName) {
+        conditions.push((0, drizzle_orm_1.like)(schema_1.paymentMethods.name, `%${pName}%`));
+    }
+    // ==========================================
+    // جلب الأوردرات مع بيانات المستخدم
+    // ==========================================
+    const orderList = await connection_1.db
+        .select({
+        orderId: schema_1.orders.id,
+        orderNumber: schema_1.orders.orderNumber,
+        status: schema_1.orders.status,
+        orderSource: schema_1.orders.orderSource,
+        orderType: schema_1.orders.orderType,
+        // 👇 بيانات المستخدم مع معالجة الـ NULLs والـ Guests
+        userId: schema_1.orders.userId,
+        userName: (0, drizzle_orm_1.sql) `COALESCE(${schema_1.users.name}, 'Guest')`,
+        userPhone: (0, drizzle_orm_1.sql) `COALESCE(${schema_1.users.phone}, 'N/A')`,
+        userEmail: (0, drizzle_orm_1.sql) `COALESCE(${schema_1.users.email}, 'N/A')`,
+        paymentMethodId: schema_1.orders.paymentMethod,
+        paymentMethodName: schema_1.paymentMethods.name,
+        subtotal: schema_1.orders.subtotal,
+        deliveryFee: schema_1.orders.deliveryFee,
+        serviceFee: schema_1.orders.serviceFee,
+        appCommission: schema_1.orders.appCommission,
+        totalAmount: schema_1.orders.totalAmount,
+        branchId: schema_1.orders.branchId,
+        branchName: schema_1.branches.name,
+        createdAt: schema_1.orders.createdAt,
+        cancelReasonType: (0, drizzle_orm_1.sql) `COALESCE(${schema_1.orders.cancelReasonType}, ${schema_1.selectReasons.type})`,
+    })
+        .from(schema_1.orders)
+        .leftJoin(schema_1.users, (0, drizzle_orm_1.eq)(schema_1.orders.userId, schema_1.users.id))
+        .leftJoin(schema_1.branches, (0, drizzle_orm_1.eq)(schema_1.orders.branchId, schema_1.branches.id))
+        .leftJoin(schema_1.selectReasons, (0, drizzle_orm_1.eq)(schema_1.orders.cancelReasonId, schema_1.selectReasons.id))
+        .leftJoin(schema_1.paymentMethods, (0, drizzle_orm_1.eq)(schema_1.orders.paymentMethod, schema_1.paymentMethods.id))
+        .where((0, drizzle_orm_1.and)(...conditions))
+        .orderBy((0, drizzle_orm_1.desc)(schema_1.orders.createdAt));
+    // ==========================================
+    // حساب الـ Summary
+    // ==========================================
+    const paymentSummary = {
+        cash_on_delivery: { count: 0, totalAmount: 0 },
+        visa: { count: 0, totalAmount: 0 },
+        wallet: { count: 0, totalAmount: 0 },
+    };
+    let totalFilteredOrders = 0;
+    let totalFilteredAmount = 0;
+    for (const order of orderList) {
+        totalFilteredOrders++;
+        const amount = parseFloat(order.totalAmount || "0");
+        totalFilteredAmount += amount;
+        const name = (order.paymentMethodName || "").toLowerCase();
+        const isCash = name.includes("cash") || name.includes("استلام");
+        const isWallet = name.includes("wallet") || name.includes("محفظ");
+        const standardKey = isCash
+            ? "cash_on_delivery"
+            : isWallet
+                ? "wallet"
+                : "visa";
+        if (paymentSummary[standardKey]) {
+            paymentSummary[standardKey].count++;
+            paymentSummary[standardKey].totalAmount += amount;
+        }
+    }
+    // تجهيز قائمة الطلبات: تُرجع البيانات فقط إذا تم إرسال طريقة الدفع في الـ Query
+    const formattedOrders = hasPaymentFilter
+        ? orderList.map(o => ({
+            ...o,
+            subtotal: parseFloat(o.subtotal || "0").toFixed(2),
+            deliveryFee: parseFloat(o.deliveryFee || "0").toFixed(2),
+            serviceFee: parseFloat(o.serviceFee || "0").toFixed(2),
+            appCommission: parseFloat(o.appCommission || "0").toFixed(2),
+            totalAmount: parseFloat(o.totalAmount || "0").toFixed(2),
+        }))
+        : [];
+    return (0, response_1.SuccessResponse)(res, {
+        message: "Payment method orders retrieved successfully",
+        data: {
+            summary: {
+                totalOrders: totalFilteredOrders,
+                totalAmount: totalFilteredAmount.toFixed(2),
+                paymentSummary: {
+                    cash_on_delivery: {
+                        count: paymentSummary.cash_on_delivery.count,
+                        totalAmount: paymentSummary.cash_on_delivery.totalAmount.toFixed(2),
+                    },
+                    visa: {
+                        count: paymentSummary.visa.count,
+                        totalAmount: paymentSummary.visa.totalAmount.toFixed(2),
+                    },
+                    wallet: {
+                        count: paymentSummary.wallet.count,
+                        totalAmount: paymentSummary.wallet.totalAmount.toFixed(2),
+                    },
+                },
+            },
+            orders: formattedOrders, // ستكون [] فارغة إذا لم يتم إرسال وسيلة الدفع
+        },
+    });
+};
+exports.getOrdersByPaymentMethod = getOrdersByPaymentMethod;
 const downloadSavedInvoicePDF = async (req, res) => {
     if (!req.user)
         throw new Errors_1.UnauthorizedError("Unauthenticated");

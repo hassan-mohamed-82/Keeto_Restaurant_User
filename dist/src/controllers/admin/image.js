@@ -81,8 +81,6 @@ const getAllImages = async (req, res) => {
         discountName: schema_1.discounts.name,
         discountNameAr: schema_1.discounts.nameAr,
         discountNameFr: schema_1.discounts.nameFr,
-        discountType: schema_1.discounts.discountType,
-        discountValue: schema_1.discounts.discountValue,
         createdAt: schema_1.images.createdAt,
         updatedAt: schema_1.images.updatedAt,
     })
@@ -126,8 +124,6 @@ const getImageById = async (req, res) => {
         discountName: schema_1.discounts.name,
         discountNameAr: schema_1.discounts.nameAr,
         discountNameFr: schema_1.discounts.nameFr,
-        discountType: schema_1.discounts.discountType,
-        discountValue: schema_1.discounts.discountValue,
         createdAt: schema_1.images.createdAt,
         updatedAt: schema_1.images.updatedAt,
     })

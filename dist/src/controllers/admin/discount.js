@@ -10,147 +10,228 @@ const NotFound_1 = require("../../Errors/NotFound");
 const uuid_1 = require("uuid");
 const handleImages_1 = require("../../utils/handleImages");
 // ==========================================
-// 1. Create Discount (With Switch Logic)
+// 1. Create Discount (with Groups)
 // ==========================================
 const createDiscount = async (req, res) => {
-    const restaurantId = req.user?.restaurantId || req.user?.id;
+    const authenticatedRestaurantId = req.user?.restaurantId || req.user?.id;
+    const restaurantId = req.body.restaurantId || authenticatedRestaurantId;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Unauthorized");
-    const { name, nameAr, nameFr, discountType, discountValue, maxDiscount, minOrderAmount, usageLimit, startDate, endDate, isActive, foodIds, logo } = req.body;
+    const { name, nameAr, nameFr, foodGroups, startDate, endDate, isActive, minOrderAmount, usageLimit, logo } = req.body;
     if (!name)
         throw new BadRequest_1.BadRequest("Discount name is required");
-    if (!discountType)
-        throw new BadRequest_1.BadRequest("Discount type is required (percentage | fixed_amount)");
-    if (discountValue === undefined || discountValue === null)
-        throw new BadRequest_1.BadRequest("Discount value is required");
-    const shouldBeActive = isActive !== undefined ? isActive : true;
-    const discountId = (0, uuid_1.v4)();
-    let FinalLogo = logo;
-    if (logo && logo.startsWith("data:image")) {
-        FinalLogo = await (0, handleImages_1.saveBase64Image)(logo, req, "discounts");
+    if (!Array.isArray(foodGroups) || foodGroups.length === 0) {
+        throw new BadRequest_1.BadRequest("foodGroups must contain at least one group");
     }
-    // 💡 منطق الـ Switch: إذا كان الخصم الجديد نشطاً، نقوم بإطفاء كل الخصومات النشطة حالياً للمطعم
-    if (shouldBeActive) {
-        // أ) جلب الـ IDs الخاصة بخصومات هذا المطعم فقط
-        const myDiscounts = await connection_1.db
-            .select({ id: schema_1.discounts.id })
-            .from(schema_1.discounts)
-            .innerJoin(schema_1.discountRestaurants, (0, drizzle_orm_1.eq)(schema_1.discounts.id, schema_1.discountRestaurants.discountId))
-            .where((0, drizzle_orm_1.eq)(schema_1.discountRestaurants.restaurantId, restaurantId));
-        const myDiscountIds = myDiscounts.map(d => d.id);
-        // ب) إطفاء الخصومات السابقة إن وجدت
-        if (myDiscountIds.length > 0) {
-            await connection_1.db
-                .update(schema_1.discounts)
-                .set({ isActive: false, updatedAt: new Date() })
-                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.discounts.id, myDiscountIds), (0, drizzle_orm_1.eq)(schema_1.discounts.isActive, true)));
+    const assignedFoodIds = new Set();
+    const groups = foodGroups.map((group) => {
+        if (!group || !group.discountType) {
+            throw new BadRequest_1.BadRequest("Each food group requires discountType");
         }
-    }
-    // 1. إدخال العرض الجديد في الجدول الرئيسي
-    await connection_1.db.insert(schema_1.discounts).values({
-        id: discountId,
-        name,
-        nameAr: nameAr || null,
-        nameFr: nameFr || null,
-        discountType,
-        discountValue: discountValue.toString(),
-        maxDiscount: maxDiscount ? maxDiscount.toString() : null,
-        minOrderAmount: minOrderAmount ? minOrderAmount.toString() : "0.00",
-        usageLimit: usageLimit || null,
-        startDate: startDate ? new Date(startDate) : null,
-        endDate: endDate ? new Date(endDate) : null,
-        isActive: shouldBeActive,
-        isGlobal: false,
-        logo: FinalLogo || null
+        const value = Number(group.discountValue);
+        if (!Number.isFinite(value) || value < 0) {
+            throw new BadRequest_1.BadRequest("Each food group requires a valid discountValue");
+        }
+        const discountType = group.discountType === "fixed" ? "fixed_amount" : group.discountType;
+        if (!["percentage", "fixed_amount"].includes(discountType)) {
+            throw new BadRequest_1.BadRequest("discountType must be percentage or fixed_amount");
+        }
+        if (!Array.isArray(group.foodIds) || group.foodIds.length === 0) {
+            throw new BadRequest_1.BadRequest("Each food group must contain foodIds");
+        }
+        const foodIds = [...new Set(group.foodIds.filter((foodId) => typeof foodId === "string" && foodId.length > 0))];
+        if (foodIds.length !== group.foodIds.length) {
+            throw new BadRequest_1.BadRequest("foodIds must contain unique non-empty strings");
+        }
+        for (const foodId of foodIds) {
+            if (assignedFoodIds.has(foodId)) {
+                throw new BadRequest_1.BadRequest(`Food ${foodId} cannot belong to more than one discount group`);
+            }
+            assignedFoodIds.add(foodId);
+        }
+        return {
+            discountType,
+            discountValue: value,
+            maxDiscount: group.maxDiscount,
+            foodIds,
+        };
     });
-    // 2. ربطه بالمطعم الحالي
-    await connection_1.db.insert(schema_1.discountRestaurants).values({
-        id: (0, uuid_1.v4)(),
-        discountId: discountId,
-        restaurantId: restaurantId
-    });
-    // 3. إضافة المنتجات المحددة (إن وجدت)
-    if (foodIds && Array.isArray(foodIds) && foodIds.length > 0) {
-        const foodValues = foodIds.map((foodId) => ({
-            id: (0, uuid_1.v4)(),
-            discountId: discountId,
-            foodId: foodId
-        }));
-        await connection_1.db.insert(schema_1.discountFoods).values(foodValues);
+    const shouldBeActive = isActive !== undefined ? isActive : true;
+    const start = startDate ? new Date(startDate) : null;
+    const end = endDate ? new Date(endDate) : null;
+    if ((start && Number.isNaN(start.getTime())) || (end && Number.isNaN(end.getTime()))) {
+        throw new BadRequest_1.BadRequest("Invalid discount dates");
     }
-    return (0, response_1.SuccessResponse)(res, { message: "Discount created successfully. Other active discounts turned off.", data: { id: discountId } }, 201);
+    if (start && end && start > end)
+        throw new BadRequest_1.BadRequest("startDate must be before endDate");
+    const existingFoods = await connection_1.db.select({ id: schema_1.food.id })
+        .from(schema_1.food)
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId), (0, drizzle_orm_1.inArray)(schema_1.food.id, [...assignedFoodIds])));
+    if (existingFoods.length !== assignedFoodIds.size) {
+        throw new BadRequest_1.BadRequest("One or more foodIds do not belong to this restaurant");
+    }
+    const discountId = await connection_1.db.transaction(async (tx) => {
+        // إيقاف أي خصم نشط تاني لنفس المطعم لو ده هيتفعل
+        if (shouldBeActive) {
+            const existing = await tx.select({ id: schema_1.discounts.id })
+                .from(schema_1.discounts)
+                .innerJoin(schema_1.discountRestaurants, (0, drizzle_orm_1.eq)(schema_1.discounts.id, schema_1.discountRestaurants.discountId))
+                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.discountRestaurants.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.discounts.isActive, true)));
+            if (existing.length > 0) {
+                await tx.update(schema_1.discounts).set({ isActive: false, updatedAt: new Date() })
+                    .where((0, drizzle_orm_1.inArray)(schema_1.discounts.id, existing.map(item => item.id)));
+            }
+        }
+        let campaignLogo = logo || null;
+        if (campaignLogo?.startsWith("data:image")) {
+            campaignLogo = await (0, handleImages_1.saveBase64Image)(campaignLogo, req, "discounts");
+        }
+        // 1. إنشاء الخصم الأساسي (صف واحد بس)
+        const newDiscountId = (0, uuid_1.v4)();
+        await tx.insert(schema_1.discounts).values({
+            id: newDiscountId,
+            name,
+            nameAr: nameAr || null,
+            nameFr: nameFr || null,
+            minOrderAmount: minOrderAmount ? String(minOrderAmount) : "0.00",
+            usageLimit: usageLimit || null,
+            startDate: start,
+            endDate: end,
+            isActive: shouldBeActive,
+            isGlobal: false,
+            logo: campaignLogo,
+        });
+        await tx.insert(schema_1.discountRestaurants).values({ id: (0, uuid_1.v4)(), discountId: newDiscountId, restaurantId });
+        // 2. إنشاء كل الخصومات الفرعية (groups) تحت نفس الخصم الأساسي
+        for (const group of groups) {
+            const groupId = (0, uuid_1.v4)();
+            await tx.insert(schema_1.discountGroups).values({
+                id: groupId,
+                discountId: newDiscountId,
+                discountType: group.discountType,
+                discountValue: String(group.discountValue),
+                maxDiscount: group.maxDiscount === undefined || group.maxDiscount === null ? null : String(Number(group.maxDiscount)),
+            });
+            if (group.foodIds.length > 0) {
+                await tx.update(schema_1.food).set({ discountId: groupId }).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId), (0, drizzle_orm_1.inArray)(schema_1.food.id, group.foodIds)));
+            }
+        }
+        return newDiscountId;
+    });
+    return (0, response_1.SuccessResponse)(res, {
+        message: "Discount created successfully",
+        data: { restaurantId, discountId },
+    }, 201);
 };
 exports.createDiscount = createDiscount;
 // ==========================================
-// 2. Get All Discounts (This restaurant's discounts + Global discounts)
+// 2. Get All Discounts (with their Groups)
 // ==========================================
 const getAllDiscounts = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Unauthorized");
-    const rawData = await connection_1.db
-        .selectDistinct({ discounts: schema_1.discounts })
+    const rawDiscounts = await connection_1.db
+        .selectDistinct({ discount: schema_1.discounts })
         .from(schema_1.discounts)
         .leftJoin(schema_1.discountRestaurants, (0, drizzle_orm_1.eq)(schema_1.discounts.id, schema_1.discountRestaurants.discountId))
         .where((0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.discounts.isGlobal, true), (0, drizzle_orm_1.eq)(schema_1.discountRestaurants.restaurantId, restaurantId)));
-    const allDiscounts = rawData.map(row => row.discounts);
-    const enrichedDiscounts = await Promise.all(allDiscounts.map(async (discount) => {
-        const foodsData = await connection_1.db.select({
-            id: schema_1.food.id,
-            name: schema_1.food.name,
-            nameAr: schema_1.food.nameAr,
-            nameFr: schema_1.food.nameFr
-        })
-            .from(schema_1.discountFoods)
-            .innerJoin(schema_1.food, (0, drizzle_orm_1.eq)(schema_1.discountFoods.foodId, schema_1.food.id))
-            .where((0, drizzle_orm_1.eq)(schema_1.discountFoods.discountId, discount.id));
+    const data = await Promise.all(rawDiscounts.map(async ({ discount }) => {
+        const groups = await connection_1.db.select().from(schema_1.discountGroups).where((0, drizzle_orm_1.eq)(schema_1.discountGroups.discountId, discount.id));
+        const enrichedGroups = await Promise.all(groups.map(async (group) => {
+            const foodsData = await connection_1.db.select({
+                id: schema_1.food.id,
+                name: schema_1.food.name,
+                nameAr: schema_1.food.nameAr,
+                nameFr: schema_1.food.nameFr,
+            }).from(schema_1.food).where((0, drizzle_orm_1.eq)(schema_1.food.discountId, group.id));
+            return {
+                id: group.id,
+                discountType: group.discountType,
+                discountValue: group.discountValue,
+                maxDiscount: group.maxDiscount,
+                foodIds: foodsData.map(f => f.id),
+                foods: foodsData,
+            };
+        }));
         return {
-            ...discount,
-            foodIds: foodsData.map(f => f.id),
-            foods: foodsData
+            id: discount.id,
+            name: discount.name,
+            nameAr: discount.nameAr,
+            nameFr: discount.nameFr,
+            isActive: discount.isActive,
+            isGlobal: discount.isGlobal,
+            startDate: discount.startDate,
+            endDate: discount.endDate,
+            minOrderAmount: discount.minOrderAmount,
+            usageLimit: discount.usageLimit,
+            logo: discount.logo,
+            createdAt: discount.createdAt,
+            updatedAt: discount.updatedAt,
+            groups: enrichedGroups,
         };
     }));
-    return (0, response_1.SuccessResponse)(res, { message: "Get all discounts success", data: enrichedDiscounts });
+    return (0, response_1.SuccessResponse)(res, { message: "Get all discounts success", data });
 };
 exports.getAllDiscounts = getAllDiscounts;
 // ==========================================
-// 3. Get Discount by ID
+// 3. Get Discount by ID (with its Groups)
 // ==========================================
 const getDiscountById = async (req, res) => {
-    const { id } = req.params;
+    const { id } = req.params; // discountId
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Unauthorized");
-    const [rawData] = await connection_1.db
-        .selectDistinct({ discounts: schema_1.discounts })
+    const [rawDiscount] = await connection_1.db
+        .selectDistinct({ discount: schema_1.discounts })
         .from(schema_1.discounts)
         .leftJoin(schema_1.discountRestaurants, (0, drizzle_orm_1.eq)(schema_1.discounts.id, schema_1.discountRestaurants.discountId))
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.discounts.id, id), (0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.discounts.isGlobal, true), (0, drizzle_orm_1.eq)(schema_1.discountRestaurants.restaurantId, restaurantId))))
         .limit(1);
-    if (!rawData)
+    if (!rawDiscount)
         throw new NotFound_1.NotFound("Discount not found");
-    const foodsData = await connection_1.db.select({
-        id: schema_1.food.id,
-        name: schema_1.food.name,
-        nameAr: schema_1.food.nameAr,
-        nameFr: schema_1.food.nameFr
-    })
-        .from(schema_1.discountFoods)
-        .innerJoin(schema_1.food, (0, drizzle_orm_1.eq)(schema_1.discountFoods.foodId, schema_1.food.id))
-        .where((0, drizzle_orm_1.eq)(schema_1.discountFoods.discountId, rawData.discounts.id));
-    const result = {
-        ...rawData.discounts,
-        foodIds: foodsData.map(f => f.id),
-        foods: foodsData
+    const groups = await connection_1.db.select().from(schema_1.discountGroups).where((0, drizzle_orm_1.eq)(schema_1.discountGroups.discountId, id));
+    const enrichedGroups = await Promise.all(groups.map(async (group) => {
+        const foodsData = await connection_1.db.select({
+            id: schema_1.food.id,
+            name: schema_1.food.name,
+            nameAr: schema_1.food.nameAr,
+            nameFr: schema_1.food.nameFr,
+        }).from(schema_1.food).where((0, drizzle_orm_1.eq)(schema_1.food.discountId, group.id));
+        return {
+            id: group.id,
+            discountType: group.discountType,
+            discountValue: group.discountValue,
+            maxDiscount: group.maxDiscount,
+            foodIds: foodsData.map(f => f.id),
+            foods: foodsData,
+        };
+    }));
+    const discount = rawDiscount.discount;
+    const data = {
+        id: discount.id,
+        name: discount.name,
+        nameAr: discount.nameAr,
+        nameFr: discount.nameFr,
+        isActive: discount.isActive,
+        isGlobal: discount.isGlobal,
+        startDate: discount.startDate,
+        endDate: discount.endDate,
+        minOrderAmount: discount.minOrderAmount,
+        usageLimit: discount.usageLimit,
+        logo: discount.logo,
+        createdAt: discount.createdAt,
+        updatedAt: discount.updatedAt,
+        groups: enrichedGroups,
     };
-    return (0, response_1.SuccessResponse)(res, { message: "Get discount success", data: result });
+    return (0, response_1.SuccessResponse)(res, { message: "Get discount success", data });
 };
 exports.getDiscountById = getDiscountById;
 // ==========================================
-// 4. Update Discount 
+// 4. Update Discount (+ Groups)
 // ==========================================
 const updateDiscount = async (req, res) => {
-    const { id } = req.params;
+    const { id } = req.params; // discountId
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Unauthorized");
@@ -162,12 +243,13 @@ const updateDiscount = async (req, res) => {
         .limit(1);
     if (!existing)
         throw new NotFound_1.NotFound("Discount not found or cannot be modified");
-    const { name, nameAr, nameFr, discountType, discountValue, maxDiscount, minOrderAmount, usageLimit, startDate, endDate, isActive, foodIds, logo } = req.body;
+    const { name, nameAr, nameFr, minOrderAmount, usageLimit, startDate, endDate, isActive, logo, foodGroups, // ✅ لو عايز تحدّث الخصومات الفرعية في نفس الطلب
+     } = req.body;
     let FinalLogo = logo;
     if (logo && logo.startsWith("data:image")) {
         FinalLogo = await (0, handleImages_1.saveBase64Image)(logo, req, "discounts");
     }
-    // 💡 أيضاً في التحديث: إذا قام بتحويل الحالة إلى active، نطفئ باقي الخصومات
+    // لو هيتفعل، اطفي باقي خصومات المطعم
     if (isActive === true && !existing.discounts.isActive) {
         const myDiscounts = await connection_1.db
             .select({ id: schema_1.discounts.id })
@@ -189,12 +271,6 @@ const updateDiscount = async (req, res) => {
         updateData.nameAr = nameAr;
     if (nameFr !== undefined)
         updateData.nameFr = nameFr;
-    if (discountType !== undefined)
-        updateData.discountType = discountType;
-    if (discountValue !== undefined)
-        updateData.discountValue = discountValue.toString();
-    if (maxDiscount !== undefined)
-        updateData.maxDiscount = maxDiscount ? maxDiscount.toString() : null;
     if (minOrderAmount !== undefined)
         updateData.minOrderAmount = minOrderAmount.toString();
     if (usageLimit !== undefined)
@@ -208,15 +284,27 @@ const updateDiscount = async (req, res) => {
     if (logo !== undefined)
         updateData.logo = FinalLogo;
     await connection_1.db.update(schema_1.discounts).set(updateData).where((0, drizzle_orm_1.eq)(schema_1.discounts.id, id));
-    if (foodIds !== undefined) {
-        await connection_1.db.delete(schema_1.discountFoods).where((0, drizzle_orm_1.eq)(schema_1.discountFoods.discountId, id));
-        if (Array.isArray(foodIds) && foodIds.length > 0) {
-            const foodValues = foodIds.map((foodId) => ({
-                id: (0, uuid_1.v4)(),
+    // ✅ تحديث الخصومات الفرعية: لو الفرونت بعت foodGroups جديدة، امسح القديمة واعمل جديدة
+    if (Array.isArray(foodGroups)) {
+        const oldGroups = await connection_1.db.select({ id: schema_1.discountGroups.id }).from(schema_1.discountGroups).where((0, drizzle_orm_1.eq)(schema_1.discountGroups.discountId, id));
+        const oldGroupIds = oldGroups.map(g => g.id);
+        if (oldGroupIds.length > 0) {
+            await connection_1.db.update(schema_1.food).set({ discountId: null }).where((0, drizzle_orm_1.inArray)(schema_1.food.discountId, oldGroupIds));
+            await connection_1.db.delete(schema_1.discountGroups).where((0, drizzle_orm_1.inArray)(schema_1.discountGroups.id, oldGroupIds));
+        }
+        for (const group of foodGroups) {
+            const discountType = group.discountType === "fixed" ? "fixed_amount" : group.discountType;
+            const groupId = (0, uuid_1.v4)();
+            await connection_1.db.insert(schema_1.discountGroups).values({
+                id: groupId,
                 discountId: id,
-                foodId: foodId
-            }));
-            await connection_1.db.insert(schema_1.discountFoods).values(foodValues);
+                discountType,
+                discountValue: String(group.discountValue),
+                maxDiscount: group.maxDiscount === undefined || group.maxDiscount === null ? null : String(Number(group.maxDiscount)),
+            });
+            if (Array.isArray(group.foodIds) && group.foodIds.length > 0) {
+                await connection_1.db.update(schema_1.food).set({ discountId: groupId }).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId), (0, drizzle_orm_1.inArray)(schema_1.food.id, group.foodIds)));
+            }
         }
     }
     return (0, response_1.SuccessResponse)(res, { message: "Discount updated successfully" });
@@ -226,7 +314,7 @@ exports.updateDiscount = updateDiscount;
 // 5. Delete Discount
 // ==========================================
 const deleteDiscount = async (req, res) => {
-    const { id } = req.params;
+    const { id } = req.params; // discountId
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Unauthorized");
@@ -238,19 +326,25 @@ const deleteDiscount = async (req, res) => {
         .limit(1);
     if (!existing)
         throw new NotFound_1.NotFound("Discount not found or cannot be deleted");
+    // discountGroups هتتمسح تلقائي بالـ ON DELETE CASCADE، لكن food.discountId
+    // مش cascade (set null بس)، فلازم نفك ربط الأطعمة يدوي الأول
+    const groupsToDelete = await connection_1.db.select({ id: schema_1.discountGroups.id }).from(schema_1.discountGroups).where((0, drizzle_orm_1.eq)(schema_1.discountGroups.discountId, id));
+    const groupIds = groupsToDelete.map(g => g.id);
+    if (groupIds.length > 0) {
+        await connection_1.db.update(schema_1.food).set({ discountId: null }).where((0, drizzle_orm_1.inArray)(schema_1.food.discountId, groupIds));
+    }
     await connection_1.db.delete(schema_1.discounts).where((0, drizzle_orm_1.eq)(schema_1.discounts.id, id));
     return (0, response_1.SuccessResponse)(res, { message: "Discount deleted successfully" });
 };
 exports.deleteDiscount = deleteDiscount;
 // ==========================================
-// 6. Toggle Discount Status (With Switch Logic)
+// 6. Toggle Discount Status
 // ==========================================
 const toggleDiscountStatus = async (req, res) => {
-    const { id } = req.params;
+    const { id } = req.params; // discountId
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Unauthorized");
-    // 1. جلب الخصم الحالي للتأكد من ملكيته للمطعم
     const [rawData] = await connection_1.db
         .select()
         .from(schema_1.discounts)
@@ -260,24 +354,18 @@ const toggleDiscountStatus = async (req, res) => {
     if (!rawData)
         throw new NotFound_1.NotFound("Discount not found or cannot be modified");
     const existingDiscount = rawData.discounts;
-    // 💡 التحويل الصريح لـ Boolean (لأن MySQL أحياناً بترجع 1 أو 0)
     const currentStatus = existingDiscount.isActive === true || existingDiscount.isActive === 1;
     const nextStatus = !currentStatus;
-    // 2. استخدام Transaction لضمان تنفيذ العمليتين معاً بدون تداخل
     await connection_1.db.transaction(async (tx) => {
-        // 💡 إذا كان صاحب المطعم يفتح الـ Switch (يحول الحالة لـ true)
         if (nextStatus === true) {
-            // أ) جلب الخصومات التابعة للمطعم (النشطة فقط)
             const activeDiscounts = await tx
                 .select({ id: schema_1.discounts.id })
                 .from(schema_1.discounts)
                 .innerJoin(schema_1.discountRestaurants, (0, drizzle_orm_1.eq)(schema_1.discounts.id, schema_1.discountRestaurants.discountId))
                 .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.discountRestaurants.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.discounts.isActive, true)));
-            // ب) استخراج الـ IDs (مع استبعاد الخصم الحالي عشان منقفلوش ونرجع نفتحه في نفس اللحظة)
             const activeIdsToDeactivate = activeDiscounts
                 .map(d => d.id)
                 .filter(dId => dId !== id);
-            // ج) إيقاف أي خصم نشط آخر
             if (activeIdsToDeactivate.length > 0) {
                 await tx
                     .update(schema_1.discounts)
@@ -285,7 +373,6 @@ const toggleDiscountStatus = async (req, res) => {
                     .where((0, drizzle_orm_1.inArray)(schema_1.discounts.id, activeIdsToDeactivate));
             }
         }
-        // د) تحديث الخصم الحالي للحالة الجديدة
         await tx
             .update(schema_1.discounts)
             .set({ isActive: nextStatus })

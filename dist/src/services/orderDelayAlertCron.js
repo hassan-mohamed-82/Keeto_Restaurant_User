@@ -125,7 +125,7 @@ function buildDelayAlertEmailHtml(params) {
     <div class="container">
         <div class="header">
             <h1>⚠️ تنبيه عاجل: تأخير في تسليم الطلب</h1>
-            <p>فرع: ${params.branchName} | مجموعة: ${params.groupName}</p>
+            <p>${params.restaurantName ? `مطعم: ${params.restaurantName} | ` : ""}فرع: ${params.branchName} | مجموعة: ${params.groupName}</p>
         </div>
         <div class="content">
             
@@ -136,6 +136,16 @@ function buildDelayAlertEmailHtml(params) {
 
             <div class="section-title">📌 التفاصيل الأساسية للطلب</div>
             <table class="details-table">
+                ${params.restaurantName ? `
+                <tr>
+                    <th>المطعم</th>
+                    <td><strong style="color: #c53030; font-size: 15px;">${params.restaurantName}</strong></td>
+                </tr>
+                ` : ""}
+                <tr>
+                    <th>الفرع</th>
+                    <td><strong>${params.branchName}</strong></td>
+                </tr>
                 <tr>
                     <th>رقم الطلب اليومي</th>
                     <td><strong style="font-size: 16px; color: #2d3748;">#${params.dailyOrderNumber || "-"}</strong></td>
@@ -243,8 +253,11 @@ function initOrderDelayAlertCron() {
                 paymentMethod: schema_1.orders.paymentMethod,
                 shippingAddress: schema_1.orders.shippingAddress,
                 note: schema_1.orders.note,
+                restaurantName: schema_1.restaurants.name,
+                restaurantNameAr: schema_1.restaurants.nameAr,
             })
                 .from(schema_1.orders)
+                .leftJoin(schema_1.restaurants, (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, schema_1.restaurants.id))
                 .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.orders.isDelayEmailSent, false), (0, drizzle_orm_1.isNull)(schema_1.orders.isDelayEmailSent)), (0, drizzle_orm_1.inArray)(schema_1.orders.status, ["pending", "accepted", "preparing", "out_for_delivery"])));
             if (!activeOrders || activeOrders.length === 0) {
                 return;
@@ -393,7 +406,10 @@ function initOrderDelayAlertCron() {
                     .from(schema_1.orderItems)
                     .where((0, drizzle_orm_1.eq)(schema_1.orderItems.orderId, order.id));
                 const itemsCount = orderItemsList.length;
+                // Prepare restaurant name
+                const restaurantName = order.restaurantNameAr || order.restaurantName || "";
                 const emailHtml = buildDelayAlertEmailHtml({
+                    restaurantName,
                     dailyOrderNumber: order.dailyOrderNumber,
                     branchName,
                     statusAr,
@@ -410,7 +426,8 @@ function initOrderDelayAlertCron() {
                     orderNote: order.note || "",
                     itemsCount,
                 });
-                const subject = `⚠️ تنبيه تأخير: الطلب #${order.dailyOrderNumber} تجاوز ${elapsedMinutes} دقيقة!`;
+                const restPrefix = restaurantName ? `[${restaurantName}] ` : "";
+                const subject = `⚠️ تنبيه تأخير: ${restPrefix}الطلب #${order.dailyOrderNumber} تجاوز ${elapsedMinutes} دقيقة!`;
                 // Send email to all recipients
                 const sendPromises = Array.from(recipientEmails).map((to) => (0, sendEmails_1.sendEmail)({
                     to,
@@ -425,7 +442,7 @@ function initOrderDelayAlertCron() {
                     .update(schema_1.orders)
                     .set({ isDelayEmailSent: true })
                     .where((0, drizzle_orm_1.eq)(schema_1.orders.id, order.id));
-                console.log(`📧 [Delay Alert] Sent once for Order #${order.dailyOrderNumber} (Delay: ${elapsedMinutes}m) to: ${Array.from(recipientEmails).join(", ")}`);
+                console.log(`📧 [Delay Alert] Sent once for Order #${order.dailyOrderNumber} (${restaurantName ? `${restaurantName} - ` : ""}Delay: ${elapsedMinutes}m) to: ${Array.from(recipientEmails).join(", ")}`);
             }
         }
         catch (error) {

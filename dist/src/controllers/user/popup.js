@@ -35,8 +35,6 @@ const getActivePopups = async (req, res) => {
         discountId: schema_1.popup.discountId,
         discountName: schema_1.discounts.name,
         discountNameAr: schema_1.discounts.nameAr,
-        discountType: schema_1.discounts.discountType,
-        discountValue: schema_1.discounts.discountValue,
         startDate: schema_1.popup.startDate,
         endDate: schema_1.popup.endDate,
     })
@@ -77,8 +75,6 @@ const getPopupById = async (req, res) => {
         discountId: schema_1.popup.discountId,
         discountName: schema_1.discounts.name,
         discountNameAr: schema_1.discounts.nameAr,
-        discountType: schema_1.discounts.discountType,
-        discountValue: schema_1.discounts.discountValue,
         startDate: schema_1.popup.startDate,
         endDate: schema_1.popup.endDate,
     })

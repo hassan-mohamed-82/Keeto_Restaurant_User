@@ -53,16 +53,21 @@ const verifyFacebookToken = async (req, res) => {
                 email,
                 facebookId,
                 googleId: null,
+                appleId: null,
                 phone: null,
                 alternatePhone: null,
                 photo: null,
                 fcmToken: null,
                 password: null,
                 isVerified: true,
+                isProfileComplete: false,
                 status: "active",
                 isDeleted: false,
+                deletedAt: null,
                 createdAt: new Date(),
                 totalOrders: 0,
+                isGuest: false,
+                authProvider: "facebook",
             };
         }
         else {
