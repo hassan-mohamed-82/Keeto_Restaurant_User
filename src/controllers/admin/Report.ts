@@ -15,7 +15,7 @@ import {
     zones,
     restaurantRatings,
 } from "../../models/schema";
-import { eq, and, desc, gte, lte, sql, inArray } from "drizzle-orm"; // 👈 تمت إضافة inArray
+import { eq, and, desc, gte, lte, sql, inArray , like, or} from "drizzle-orm"; // 👈 تمت إضافة inArray
 import { SuccessResponse } from "../../utils/response";
 import { UnauthorizedError } from "../../Errors";
 import { BadRequest } from "../../Errors/BadRequest";
@@ -362,6 +362,152 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
         },
     });
 };
+
+
+export const getOrdersByPaymentMethod = async (req: Request | any, res: Response) => {
+    if (!req.user) throw new UnauthorizedError("Unauthenticated");
+
+    const restaurantId = req.user.restaurantId || req.user.id;
+    if (!restaurantId) throw new BadRequest("Restaurant ID not found");
+
+    const { 
+        startDate, 
+        endDate, 
+        branchId, 
+        paymentMethodId, 
+        paymentMethodName, 
+        paymentMethod 
+    } = req.query;
+
+    const pMethod = (paymentMethodId || paymentMethod) as string;
+    const pName = paymentMethodName as string;
+
+    if (!pMethod && !pName) {
+        throw new BadRequest("Payment method ID or name is required in query params");
+    }
+
+    const conditions: any[] = [eq(orders.restaurantId, restaurantId)];
+
+    if (startDate) conditions.push(gte(orders.createdAt, new Date(startDate as string)));
+    if (endDate) {
+        const end = new Date(endDate as string);
+        end.setHours(23, 59, 59, 999);
+        conditions.push(lte(orders.createdAt, end));
+    }
+
+    if (branchId) conditions.push(eq(orders.branchId, branchId as string));
+    if (req.user.branchId) conditions.push(eq(orders.branchId, req.user.branchId));
+
+    if (pMethod) {
+        conditions.push(
+            or(
+                eq(orders.paymentMethod, pMethod),
+                like(paymentMethods.name, `%${pMethod}%`)
+            )
+        );
+    } else if (pName) {
+        conditions.push(like(paymentMethods.name, `%${pName}%`));
+    }
+
+    // ==========================================
+    // جلب الأوردرات مع بيانات المستخدم
+    // ==========================================
+    const orderList = await db
+        .select({
+            orderId: orders.id,
+            orderNumber: orders.orderNumber,
+            status: orders.status,
+            orderSource: orders.orderSource,
+            orderType: orders.orderType,
+            
+            // 👇 تفاصيل المستخدم
+            userId: orders.userId,
+            userName: users.name,
+            userPhone: users.phone,
+            userEmail: users.email,
+
+            paymentMethodId: orders.paymentMethod, 
+            paymentMethodName: paymentMethods.name, 
+            
+            subtotal: orders.subtotal,
+            deliveryFee: orders.deliveryFee,
+            serviceFee: orders.serviceFee,
+            appCommission: orders.appCommission,
+            totalAmount: orders.totalAmount,
+            branchId: orders.branchId,
+            branchName: branches.name,
+            createdAt: orders.createdAt,
+            cancelReasonType: sql<string | null>`COALESCE(${orders.cancelReasonType}, ${selectReasons.type})`,
+        })
+        .from(orders)
+        .leftJoin(users, eq(orders.userId, users.id)) // 👈 إضافة الربط مع جدول اليوزرز
+        .leftJoin(branches, eq(orders.branchId, branches.id))
+        .leftJoin(selectReasons, eq(orders.cancelReasonId, selectReasons.id))
+        .leftJoin(paymentMethods, eq(orders.paymentMethod, paymentMethods.id))
+        .where(and(...conditions))
+        .orderBy(desc(orders.createdAt));
+
+    // باقي الكود للـ summary والإرجاع كما هو...
+    const paymentSummary: Record<string, { count: number; totalAmount: number }> = {
+        cash_on_delivery: { count: 0, totalAmount: 0 },
+        visa: { count: 0, totalAmount: 0 },
+        wallet: { count: 0, totalAmount: 0 },
+    };
+
+    let totalFilteredOrders = 0;
+    let totalFilteredAmount = 0;
+
+    for (const order of orderList) {
+        totalFilteredOrders++;
+        const amount = parseFloat(order.totalAmount as string || "0");
+        totalFilteredAmount += amount;
+
+        const name = (order.paymentMethodName || "").toLowerCase();
+        const isCash = name.includes("cash") || name.includes("استلام");
+        const isWallet = name.includes("wallet") || name.includes("محفظ");
+
+        const standardKey = isCash ? "cash_on_delivery" : isWallet ? "wallet" : "visa";
+
+        if (paymentSummary[standardKey]) {
+            paymentSummary[standardKey].count++;
+            paymentSummary[standardKey].totalAmount += amount;
+        }
+    }
+
+    return SuccessResponse(res, {
+        message: "Payment method orders retrieved successfully",
+        data: {
+            summary: {
+                totalOrders: totalFilteredOrders,
+                totalAmount: totalFilteredAmount.toFixed(2),
+                paymentSummary: {
+                    cash_on_delivery: {
+                        count: paymentSummary.cash_on_delivery.count,
+                        totalAmount: paymentSummary.cash_on_delivery.totalAmount.toFixed(2),
+                    },
+                    visa: {
+                        count: paymentSummary.visa.count,
+                        totalAmount: paymentSummary.visa.totalAmount.toFixed(2),
+                    },
+                    wallet: {
+                        count: paymentSummary.wallet.count,
+                        totalAmount: paymentSummary.wallet.totalAmount.toFixed(2),
+                    },
+                },
+            },
+            orders: orderList.map(o => ({
+                ...o,
+                subtotal: parseFloat(o.subtotal as string || "0").toFixed(2),
+                deliveryFee: parseFloat(o.deliveryFee as string || "0").toFixed(2),
+                serviceFee: parseFloat(o.serviceFee as string || "0").toFixed(2),
+                appCommission: parseFloat(o.appCommission as string || "0").toFixed(2),
+                totalAmount: parseFloat(o.totalAmount as string || "0").toFixed(2),
+            })),
+        },
+    });
+};
+
+
 export const downloadSavedInvoicePDF = async (req: Request | any, res: Response) => {
     if (!req.user) throw new UnauthorizedError("Unauthenticated");
     

@@ -1,12 +1,14 @@
 import { Router } from "express";
 import { catchAsync } from "../../utils/catchAsync";
-import { getMyRestaurantReport,downloadSavedInvoicePDF,getMyInvoices, getDashboardReports } from "../../controllers/admin/Report";
+import { getMyRestaurantReport,downloadSavedInvoicePDF,getMyInvoices, getDashboardReports, getOrdersByPaymentMethod} from "../../controllers/admin/Report";
 
 const router = Router();
 
 // تقرير المطعم الخاص بيّا (للأدمن بتاع المطعم)
 // GET /report/my-restaurant?startDate=2026-01-01&endDate=2026-05-19&branchId=xxx
 router.get("/my-restaurant", catchAsync(getMyRestaurantReport));
+
+router.get("/payment-method", catchAsync(getOrdersByPaymentMethod));
 
 // تحميل كشف حساب المطعم كـ PDF
 //GET /report/my-restaurant/invoice?startDate=2026-01-01&endDate=2026-05-19
