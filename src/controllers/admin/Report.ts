@@ -363,7 +363,6 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
     });
 };
 
-
 export const getOrdersByPaymentMethod = async (req: Request | any, res: Response) => {
     if (!req.user) throw new UnauthorizedError("Unauthenticated");
 
@@ -382,12 +381,12 @@ export const getOrdersByPaymentMethod = async (req: Request | any, res: Response
     const pMethod = (paymentMethodId || paymentMethod) as string;
     const pName = paymentMethodName as string;
 
-    if (!pMethod && !pName) {
-        throw new BadRequest("Payment method ID or name is required in query params");
-    }
+    // معرفة هل أرسل المستخدم فلتر وسيلة الدفع أم لا
+    const hasPaymentFilter = Boolean(pMethod || pName);
 
     const conditions: any[] = [eq(orders.restaurantId, restaurantId)];
 
+    // 1. الفلترة حسب التاريخ
     if (startDate) conditions.push(gte(orders.createdAt, new Date(startDate as string)));
     if (endDate) {
         const end = new Date(endDate as string);
@@ -395,9 +394,11 @@ export const getOrdersByPaymentMethod = async (req: Request | any, res: Response
         conditions.push(lte(orders.createdAt, end));
     }
 
+    // 2. الفلترة حسب الفرع
     if (branchId) conditions.push(eq(orders.branchId, branchId as string));
     if (req.user.branchId) conditions.push(eq(orders.branchId, req.user.branchId));
 
+    // 3. الفلترة حسب طريقة الدفع (إن وجدت)
     if (pMethod) {
         conditions.push(
             or(
@@ -420,11 +421,11 @@ export const getOrdersByPaymentMethod = async (req: Request | any, res: Response
             orderSource: orders.orderSource,
             orderType: orders.orderType,
             
-            // 👇 تفاصيل المستخدم
+            // 👇 بيانات المستخدم مع معالجة الـ NULLs والـ Guests
             userId: orders.userId,
-            userName: users.name,
-            userPhone: users.phone,
-            userEmail: users.email,
+            userName: sql<string>`COALESCE(${users.name}, 'Guest')`,
+            userPhone: sql<string>`COALESCE(${users.phone}, 'N/A')`,
+            userEmail: sql<string>`COALESCE(${users.email}, 'N/A')`,
 
             paymentMethodId: orders.paymentMethod, 
             paymentMethodName: paymentMethods.name, 
@@ -440,14 +441,16 @@ export const getOrdersByPaymentMethod = async (req: Request | any, res: Response
             cancelReasonType: sql<string | null>`COALESCE(${orders.cancelReasonType}, ${selectReasons.type})`,
         })
         .from(orders)
-        .leftJoin(users, eq(orders.userId, users.id)) // 👈 إضافة الربط مع جدول اليوزرز
+        .leftJoin(users, eq(orders.userId, users.id))
         .leftJoin(branches, eq(orders.branchId, branches.id))
         .leftJoin(selectReasons, eq(orders.cancelReasonId, selectReasons.id))
         .leftJoin(paymentMethods, eq(orders.paymentMethod, paymentMethods.id))
         .where(and(...conditions))
         .orderBy(desc(orders.createdAt));
 
-    // باقي الكود للـ summary والإرجاع كما هو...
+    // ==========================================
+    // حساب الـ Summary
+    // ==========================================
     const paymentSummary: Record<string, { count: number; totalAmount: number }> = {
         cash_on_delivery: { count: 0, totalAmount: 0 },
         visa: { count: 0, totalAmount: 0 },
@@ -466,13 +469,29 @@ export const getOrdersByPaymentMethod = async (req: Request | any, res: Response
         const isCash = name.includes("cash") || name.includes("استلام");
         const isWallet = name.includes("wallet") || name.includes("محفظ");
 
-        const standardKey = isCash ? "cash_on_delivery" : isWallet ? "wallet" : "visa";
+        const standardKey = isCash 
+            ? "cash_on_delivery" 
+            : isWallet 
+            ? "wallet" 
+            : "visa";
 
         if (paymentSummary[standardKey]) {
             paymentSummary[standardKey].count++;
             paymentSummary[standardKey].totalAmount += amount;
         }
     }
+
+    // تجهيز قائمة الطلبات: تُرجع البيانات فقط إذا تم إرسال طريقة الدفع في الـ Query
+    const formattedOrders = hasPaymentFilter 
+        ? orderList.map(o => ({
+            ...o,
+            subtotal: parseFloat(o.subtotal as string || "0").toFixed(2),
+            deliveryFee: parseFloat(o.deliveryFee as string || "0").toFixed(2),
+            serviceFee: parseFloat(o.serviceFee as string || "0").toFixed(2),
+            appCommission: parseFloat(o.appCommission as string || "0").toFixed(2),
+            totalAmount: parseFloat(o.totalAmount as string || "0").toFixed(2),
+        }))
+        : [];
 
     return SuccessResponse(res, {
         message: "Payment method orders retrieved successfully",
@@ -495,18 +514,10 @@ export const getOrdersByPaymentMethod = async (req: Request | any, res: Response
                     },
                 },
             },
-            orders: orderList.map(o => ({
-                ...o,
-                subtotal: parseFloat(o.subtotal as string || "0").toFixed(2),
-                deliveryFee: parseFloat(o.deliveryFee as string || "0").toFixed(2),
-                serviceFee: parseFloat(o.serviceFee as string || "0").toFixed(2),
-                appCommission: parseFloat(o.appCommission as string || "0").toFixed(2),
-                totalAmount: parseFloat(o.totalAmount as string || "0").toFixed(2),
-            })),
+            orders: formattedOrders, // ستكون [] فارغة إذا لم يتم إرسال وسيلة الدفع
         },
     });
 };
-
 
 export const downloadSavedInvoicePDF = async (req: Request | any, res: Response) => {
     if (!req.user) throw new UnauthorizedError("Unauthenticated");
