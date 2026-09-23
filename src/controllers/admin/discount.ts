@@ -140,7 +140,7 @@ export const createDiscount = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 2. Get All Discounts (This restaurant's discounts + Global discounts)
+// 2. Get All Discounts — grouped by campaign name
 // ==========================================
 export const getAllDiscounts = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
@@ -152,41 +152,72 @@ export const getAllDiscounts = async (req: Request, res: Response) => {
         .leftJoin(discountRestaurants, eq(discounts.id, discountRestaurants.discountId))
         .where(
             or(
-                eq(discounts.isGlobal, true), 
-                eq(discountRestaurants.restaurantId, restaurantId) 
+                eq(discounts.isGlobal, true),
+                eq(discountRestaurants.restaurantId, restaurantId)
             )
         );
 
     const allDiscounts = rawData.map(row => row.discounts);
 
-    const enrichedDiscounts = await Promise.all(allDiscounts.map(async (discount) => {
+    // Enrich each discount row with its foods
+    const enrichedRows = await Promise.all(allDiscounts.map(async (discount) => {
         const foodsData = await db.select({
-                id: food.id,
-                name: food.name,
-                nameAr: food.nameAr,
-                nameFr: food.nameFr
-            })
+            id: food.id,
+            name: food.name,
+            nameAr: food.nameAr,
+            nameFr: food.nameFr,
+        })
             .from(food)
             .where(eq(food.discountId, discount.id));
-            
-        return {
-            ...discount,
-            foodIds: foodsData.map(f => f.id),
-            foods: foodsData
-        };
+
+        return { discount, foods: foodsData };
     }));
 
-    return SuccessResponse(res, { message: "Get all discounts success", data: enrichedDiscounts });
+    // Group rows that share the same campaign name into one campaign object
+    const campaignMap = new Map<string, any>();
+    for (const { discount, foods } of enrichedRows) {
+        const campaignKey = discount.name; // rows with the same name belong to the same campaign
+        if (!campaignMap.has(campaignKey)) {
+            campaignMap.set(campaignKey, {
+                name: discount.name,
+                nameAr: discount.nameAr,
+                nameFr: discount.nameFr,
+                isActive: discount.isActive,
+                isGlobal: discount.isGlobal,
+                startDate: discount.startDate,
+                endDate: discount.endDate,
+                minOrderAmount: discount.minOrderAmount,
+                usageLimit: discount.usageLimit,
+                logo: discount.logo,
+                createdAt: discount.createdAt,
+                updatedAt: discount.updatedAt,
+                groups: [],
+            });
+        }
+        campaignMap.get(campaignKey).groups.push({
+            id: discount.id,
+            discountType: discount.discountType,
+            discountValue: discount.discountValue,
+            maxDiscount: discount.maxDiscount,
+            foodIds: foods.map(f => f.id),
+            foods,
+        });
+    }
+
+    const data = Array.from(campaignMap.values());
+
+    return SuccessResponse(res, { message: "Get all discounts success", data });
 };
 
 // ==========================================
-// 3. Get Discount by ID
+// 3. Get Discount by ID — returns full campaign group
 // ==========================================
 export const getDiscountById = async (req: Request, res: Response) => {
     const { id } = req.params;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Unauthorized");
 
+    // 1. جلب الـ discount row المطلوب أولاً للحصول على اسم الحملة
     const [rawData] = await db
         .selectDistinct({ discounts: discounts })
         .from(discounts)
@@ -204,22 +235,62 @@ export const getDiscountById = async (req: Request, res: Response) => {
 
     if (!rawData) throw new NotFound("Discount not found");
 
-    const foodsData = await db.select({
+    const campaignName = rawData.discounts.name;
+
+    // 2. جلب جميع الـ discount rows التي تنتمي لنفس الحملة (نفس الاسم)
+    const siblingRows = await db
+        .selectDistinct({ discounts: discounts })
+        .from(discounts)
+        .leftJoin(discountRestaurants, eq(discounts.id, discountRestaurants.discountId))
+        .where(
+            and(
+                eq(discounts.name, campaignName),
+                or(
+                    eq(discounts.isGlobal, true),
+                    eq(discountRestaurants.restaurantId, restaurantId)
+                )
+            )
+        );
+
+    // 3. إثراء كل row بأكلاتها
+    const groups = await Promise.all(siblingRows.map(async (row) => {
+        const foodsData = await db.select({
             id: food.id,
             name: food.name,
             nameAr: food.nameAr,
-            nameFr: food.nameFr
+            nameFr: food.nameFr,
         })
             .from(food)
-            .where(eq(food.discountId, rawData.discounts.id));
+            .where(eq(food.discountId, row.discounts.id));
 
-    const result = {
-        ...rawData.discounts,
-        foodIds: foodsData.map(f => f.id),
-        foods: foodsData
+        return {
+            id: row.discounts.id,
+            discountType: row.discounts.discountType,
+            discountValue: row.discounts.discountValue,
+            maxDiscount: row.discounts.maxDiscount,
+            foodIds: foodsData.map(f => f.id),
+            foods: foodsData,
+        };
+    }));
+
+    // 4. تجميع الحملة
+    const campaign = {
+        name: rawData.discounts.name,
+        nameAr: rawData.discounts.nameAr,
+        nameFr: rawData.discounts.nameFr,
+        isActive: rawData.discounts.isActive,
+        isGlobal: rawData.discounts.isGlobal,
+        startDate: rawData.discounts.startDate,
+        endDate: rawData.discounts.endDate,
+        minOrderAmount: rawData.discounts.minOrderAmount,
+        usageLimit: rawData.discounts.usageLimit,
+        logo: rawData.discounts.logo,
+        createdAt: rawData.discounts.createdAt,
+        updatedAt: rawData.discounts.updatedAt,
+        groups,
     };
 
-    return SuccessResponse(res, { message: "Get discount success", data: result });
+    return SuccessResponse(res, { message: "Get discount success", data: campaign });
 };
 
 // ==========================================
