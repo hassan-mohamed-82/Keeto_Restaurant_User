@@ -9,88 +9,71 @@ import {
     int,
     boolean,
     text,
+    longtext,
     time
 } from "drizzle-orm/mysql-core";
-import { sql, relations } from "drizzle-orm";
-import { addons, categories, restaurants, subcategories } from "../../schema";
+import { relations, sql } from "drizzle-orm";
+import { addons, categories, foodVariations, restaurants, subcategories } from "../../schema";
 import { noteGroups } from "./noteGroup";
-import { discounts } from "./Discount";
+import { discountGroups } from "./Discount";
+
 export const food = mysqlTable("food", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
-
     name: varchar("name", { length: 255 }).notNull(),
-    nameAr: varchar("name_ar", { length: 255 }),
-    nameFr: varchar("name_fr", { length: 255 }),
-
+    nameAr: varchar("name_ar", { length: 255 }).notNull().default(''),
+    nameFr: varchar("name_fr", { length: 255 }).notNull().default(''),
     description: text("description").notNull(),
-    descriptionAr: text("description_ar"),
-    descriptionFr: text("description_fr"),
-
+    descriptionAr: text("description_ar").notNull().default(''),
+    descriptionFr: text("description_fr").notNull().default(''),
     image: varchar("image", { length: 500 }).notNull(),
 
+    // 👇 هنا التعديل: إضافة { onDelete: "cascade" } لحل مشكلة الحذف
     restaurantid: char("restaurantid", { length: 36 })
-        .references(() => restaurants.id)
+        .references(() => restaurants.id, { onDelete: "cascade" })
         .notNull(),
 
-    categoryid: char("categoryid", { length: 36 })
-        .references(() => categories.id)
-        .notNull(),
-
-    subcategoryid: char("subcategoryid", { length: 36 })
-        .references(() => subcategories.id),
-
+    categoryid: char("categoryid", { length: 36 }).references(() => categories.id).notNull(),
+    subcategoryid: char("subcategoryid", { length: 36 }).references(() => subcategories.id).notNull(),
     foodtype: mysqlEnum("foodtype", ["veg", "non-veg"]).default("veg"),
-
     Nutrition: text("nutrition"),
     allergen_ingredients: text("allergen_ingredients"),
-
     is_Halal: boolean("is_Halal").default(false),
-
     addonsId: json("addons_ids").$type<string[]>().default([]),
-
     group_note_id: char("group_note_id", { length: 36 })
         .references(() => noteGroups.id, { onDelete: "set null" }),
     discountId: char("discount_id", { length: 36 })
-        .references(() => discounts.id, { onDelete: "set null" }),
-
+        .references(() => discountGroups.id, { onDelete: "set null" }),
     startTime: varchar("start_time", { length: 255 }).notNull(),
     endTime: varchar("end_time", { length: 255 }).notNull(),
 
     search_tags: varchar("search_tags", { length: 255 }),
 
     price: decimal("price", { precision: 10, scale: 2 }).notNull(),
-
-    discount_type: mysqlEnum("discount_type", ["percentage", "amount"])
-        .default("percentage"),
-
+    discount_type: mysqlEnum("discount_type", ["percentage", "amount"]).default("percentage"),
     discount_value: decimal("discount_value", { precision: 10, scale: 2 }),
-
     offer_price: decimal("offer_price", { precision: 10, scale: 2 }),
     offer_days: json("offer_days").$type<string[]>(),
     offer_start: time("offer_start"),
     offer_end: time("offer_end"),
-
     Maximum_Purchase: int("Maximum_Purchase"),
-    points: int("points").default(0),
 
-    stock_type: mysqlEnum("stock_type", ["limited", "unlimited", "daily"])
-        .default("unlimited"),
+    stock_type: mysqlEnum("stock_type", ["limited", "unlimited", "daily"]).default("unlimited"),
 
     isOutOfStock: boolean("is_out_of_stock").default(false),
 
-    status: mysqlEnum("status", ["active", "inactive"])
-        .default("active"),
+    status: mysqlEnum("status", ["active", "inactive"]).default("active"),
+    points: int("points").default(0),
     deletedAt: timestamp("deleted_at"),
-
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
 });
 
-export const foodRelations = relations(food, ({ one }) => ({
+export const foodRelations = relations(food, ({ one, many }) => ({
     restaurant: one(restaurants, {
         fields: [food.restaurantid],
         references: [restaurants.id],
     }),
+    variations: many(foodVariations),
     noteGroup: one(noteGroups, {
         fields: [food.group_note_id],
         references: [noteGroups.id],

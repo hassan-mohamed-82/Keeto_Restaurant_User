@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { discounts, discountRestaurants, food } from "../../models/schema";
+import { discounts, discountGroups, discountRestaurants, food } from "../../models/schema";
 import { eq, and, or, inArray } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
@@ -9,7 +9,7 @@ import { v4 as uuidv4 } from "uuid";
 import { saveBase64Image } from "../../utils/handleImages";
 
 // ==========================================
-// 1. Create Discount Groups
+// 1. Create Discount (with Groups)
 // ==========================================
 export const createDiscount = async (req: Request, res: Response) => {
     const authenticatedRestaurantId = req.user?.restaurantId || req.user?.id;
@@ -84,7 +84,8 @@ export const createDiscount = async (req: Request, res: Response) => {
         throw new BadRequest("One or more foodIds do not belong to this restaurant");
     }
 
-    const discountIds = await db.transaction(async (tx) => {
+    const discountId = await db.transaction(async (tx) => {
+        // إيقاف أي خصم نشط تاني لنفس المطعم لو ده هيتفعل
         if (shouldBeActive) {
             const existing = await tx.select({ id: discounts.id })
                 .from(discounts)
@@ -96,58 +97,65 @@ export const createDiscount = async (req: Request, res: Response) => {
             }
         }
 
-        const ids: string[] = [];
-        for (const group of groups) {
-            let campaignLogo = logo || null;
-            if (campaignLogo?.startsWith("data:image")) {
-                campaignLogo = await saveBase64Image(campaignLogo, req, "discounts");
-            }
+        let campaignLogo = logo || null;
+        if (campaignLogo?.startsWith("data:image")) {
+            campaignLogo = await saveBase64Image(campaignLogo, req, "discounts");
+        }
 
-            const discountId = uuidv4();
-            await tx.insert(discounts).values({
-                id: discountId,
-                name,
-                nameAr: nameAr || null,
-                nameFr: nameFr || null,
+        // 1. إنشاء الخصم الأساسي (صف واحد بس)
+        const newDiscountId = uuidv4();
+        await tx.insert(discounts).values({
+            id: newDiscountId,
+            name,
+            nameAr: nameAr || null,
+            nameFr: nameFr || null,
+            minOrderAmount: minOrderAmount ? String(minOrderAmount) : "0.00",
+            usageLimit: usageLimit || null,
+            startDate: start,
+            endDate: end,
+            isActive: shouldBeActive,
+            isGlobal: false,
+            logo: campaignLogo,
+        });
+        await tx.insert(discountRestaurants).values({ id: uuidv4(), discountId: newDiscountId, restaurantId });
+
+        // 2. إنشاء كل الخصومات الفرعية (groups) تحت نفس الخصم الأساسي
+        for (const group of groups) {
+            const groupId = uuidv4();
+            await tx.insert(discountGroups).values({
+                id: groupId,
+                discountId: newDiscountId,
                 discountType: group.discountType as "percentage" | "fixed_amount",
                 discountValue: String(group.discountValue),
                 maxDiscount: group.maxDiscount === undefined || group.maxDiscount === null ? null : String(Number(group.maxDiscount)),
-                minOrderAmount: minOrderAmount ? String(minOrderAmount) : "0.00",
-                usageLimit: usageLimit || null,
-                startDate: start,
-                endDate: end,
-                isActive: shouldBeActive,
-                isGlobal: false,
-                logo: campaignLogo,
             });
-            await tx.insert(discountRestaurants).values({ id: uuidv4(), discountId, restaurantId });
 
             if (group.foodIds.length > 0) {
-                await tx.update(food).set({ discountId }).where(and(
+                await tx.update(food).set({ discountId: groupId }).where(and(
                     eq(food.restaurantid, restaurantId),
                     inArray(food.id, group.foodIds),
                 ));
             }
-            ids.push(discountId);
         }
-        return ids;
+
+        return newDiscountId;
     });
 
     return SuccessResponse(res, {
-        message: "Discount groups created successfully",
-        data: { restaurantId, discountIds },
+        message: "Discount created successfully",
+        data: { restaurantId, discountId },
     }, 201);
 };
 
 // ==========================================
-// 2. Get All Discounts — grouped by campaign name
+// 2. Get All Discounts (with their Groups)
 // ==========================================
 export const getAllDiscounts = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Unauthorized");
 
-    const rawData = await db
-        .selectDistinct({ discounts: discounts })
+    const rawDiscounts = await db
+        .selectDistinct({ discount: discounts })
         .from(discounts)
         .leftJoin(discountRestaurants, eq(discounts.id, discountRestaurants.discountId))
         .where(
@@ -157,69 +165,58 @@ export const getAllDiscounts = async (req: Request, res: Response) => {
             )
         );
 
-    const allDiscounts = rawData.map(row => row.discounts);
+    const data = await Promise.all(rawDiscounts.map(async ({ discount }) => {
+        const groups = await db.select().from(discountGroups).where(eq(discountGroups.discountId, discount.id));
 
-    // Enrich each discount row with its foods
-    const enrichedRows = await Promise.all(allDiscounts.map(async (discount) => {
-        const foodsData = await db.select({
-            id: food.id,
-            name: food.name,
-            nameAr: food.nameAr,
-            nameFr: food.nameFr,
-        })
-            .from(food)
-            .where(eq(food.discountId, discount.id));
+        const enrichedGroups = await Promise.all(groups.map(async (group) => {
+            const foodsData = await db.select({
+                id: food.id,
+                name: food.name,
+                nameAr: food.nameAr,
+                nameFr: food.nameFr,
+            }).from(food).where(eq(food.discountId, group.id));
 
-        return { discount, foods: foodsData };
-    }));
+            return {
+                id: group.id,
+                discountType: group.discountType,
+                discountValue: group.discountValue,
+                maxDiscount: group.maxDiscount,
+                foodIds: foodsData.map(f => f.id),
+                foods: foodsData,
+            };
+        }));
 
-    // Group rows that share the same campaign name into one campaign object
-    const campaignMap = new Map<string, any>();
-    for (const { discount, foods } of enrichedRows) {
-        const campaignKey = discount.name; // rows with the same name belong to the same campaign
-        if (!campaignMap.has(campaignKey)) {
-            campaignMap.set(campaignKey, {
-                name: discount.name,
-                nameAr: discount.nameAr,
-                nameFr: discount.nameFr,
-                isActive: discount.isActive,
-                isGlobal: discount.isGlobal,
-                startDate: discount.startDate,
-                endDate: discount.endDate,
-                minOrderAmount: discount.minOrderAmount,
-                usageLimit: discount.usageLimit,
-                logo: discount.logo,
-                createdAt: discount.createdAt,
-                updatedAt: discount.updatedAt,
-                groups: [],
-            });
-        }
-        campaignMap.get(campaignKey).groups.push({
+        return {
             id: discount.id,
-            discountType: discount.discountType,
-            discountValue: discount.discountValue,
-            maxDiscount: discount.maxDiscount,
-            foodIds: foods.map(f => f.id),
-            foods,
-        });
-    }
-
-    const data = Array.from(campaignMap.values());
+            name: discount.name,
+            nameAr: discount.nameAr,
+            nameFr: discount.nameFr,
+            isActive: discount.isActive,
+            isGlobal: discount.isGlobal,
+            startDate: discount.startDate,
+            endDate: discount.endDate,
+            minOrderAmount: discount.minOrderAmount,
+            usageLimit: discount.usageLimit,
+            logo: discount.logo,
+            createdAt: discount.createdAt,
+            updatedAt: discount.updatedAt,
+            groups: enrichedGroups,
+        };
+    }));
 
     return SuccessResponse(res, { message: "Get all discounts success", data });
 };
 
 // ==========================================
-// 3. Get Discount by ID — returns full campaign group
+// 3. Get Discount by ID (with its Groups)
 // ==========================================
 export const getDiscountById = async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const { id } = req.params; // discountId
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Unauthorized");
 
-    // 1. جلب الـ discount row المطلوب أولاً للحصول على اسم الحملة
-    const [rawData] = await db
-        .selectDistinct({ discounts: discounts })
+    const [rawDiscount] = await db
+        .selectDistinct({ discount: discounts })
         .from(discounts)
         .leftJoin(discountRestaurants, eq(discounts.id, discountRestaurants.discountId))
         .where(
@@ -233,71 +230,54 @@ export const getDiscountById = async (req: Request, res: Response) => {
         )
         .limit(1);
 
-    if (!rawData) throw new NotFound("Discount not found");
+    if (!rawDiscount) throw new NotFound("Discount not found");
 
-    const campaignName = rawData.discounts.name;
+    const groups = await db.select().from(discountGroups).where(eq(discountGroups.discountId, id));
 
-    // 2. جلب جميع الـ discount rows التي تنتمي لنفس الحملة (نفس الاسم)
-    const siblingRows = await db
-        .selectDistinct({ discounts: discounts })
-        .from(discounts)
-        .leftJoin(discountRestaurants, eq(discounts.id, discountRestaurants.discountId))
-        .where(
-            and(
-                eq(discounts.name, campaignName),
-                or(
-                    eq(discounts.isGlobal, true),
-                    eq(discountRestaurants.restaurantId, restaurantId)
-                )
-            )
-        );
-
-    // 3. إثراء كل row بأكلاتها
-    const groups = await Promise.all(siblingRows.map(async (row) => {
+    const enrichedGroups = await Promise.all(groups.map(async (group) => {
         const foodsData = await db.select({
             id: food.id,
             name: food.name,
             nameAr: food.nameAr,
             nameFr: food.nameFr,
-        })
-            .from(food)
-            .where(eq(food.discountId, row.discounts.id));
+        }).from(food).where(eq(food.discountId, group.id));
 
         return {
-            id: row.discounts.id,
-            discountType: row.discounts.discountType,
-            discountValue: row.discounts.discountValue,
-            maxDiscount: row.discounts.maxDiscount,
+            id: group.id,
+            discountType: group.discountType,
+            discountValue: group.discountValue,
+            maxDiscount: group.maxDiscount,
             foodIds: foodsData.map(f => f.id),
             foods: foodsData,
         };
     }));
 
-    // 4. تجميع الحملة
-    const campaign = {
-        name: rawData.discounts.name,
-        nameAr: rawData.discounts.nameAr,
-        nameFr: rawData.discounts.nameFr,
-        isActive: rawData.discounts.isActive,
-        isGlobal: rawData.discounts.isGlobal,
-        startDate: rawData.discounts.startDate,
-        endDate: rawData.discounts.endDate,
-        minOrderAmount: rawData.discounts.minOrderAmount,
-        usageLimit: rawData.discounts.usageLimit,
-        logo: rawData.discounts.logo,
-        createdAt: rawData.discounts.createdAt,
-        updatedAt: rawData.discounts.updatedAt,
-        groups,
+    const discount = rawDiscount.discount;
+    const data = {
+        id: discount.id,
+        name: discount.name,
+        nameAr: discount.nameAr,
+        nameFr: discount.nameFr,
+        isActive: discount.isActive,
+        isGlobal: discount.isGlobal,
+        startDate: discount.startDate,
+        endDate: discount.endDate,
+        minOrderAmount: discount.minOrderAmount,
+        usageLimit: discount.usageLimit,
+        logo: discount.logo,
+        createdAt: discount.createdAt,
+        updatedAt: discount.updatedAt,
+        groups: enrichedGroups,
     };
 
-    return SuccessResponse(res, { message: "Get discount success", data: campaign });
+    return SuccessResponse(res, { message: "Get discount success", data });
 };
 
 // ==========================================
-// 4. Update Discount 
+// 4. Update Discount (+ Groups)
 // ==========================================
 export const updateDiscount = async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const { id } = req.params; // discountId
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Unauthorized");
 
@@ -309,7 +289,7 @@ export const updateDiscount = async (req: Request, res: Response) => {
             and(
                 eq(discounts.id, id),
                 eq(discountRestaurants.restaurantId, restaurantId),
-                eq(discounts.isGlobal, false) 
+                eq(discounts.isGlobal, false)
             )
         )
         .limit(1);
@@ -318,9 +298,8 @@ export const updateDiscount = async (req: Request, res: Response) => {
 
     const {
         name, nameAr, nameFr,
-        discountType, discountValue,
-        maxDiscount, minOrderAmount,
-        usageLimit, startDate, endDate, isActive, foodIds, logo
+        minOrderAmount, usageLimit, startDate, endDate, isActive, logo,
+        foodGroups, // ✅ لو عايز تحدّث الخصومات الفرعية في نفس الطلب
     } = req.body;
 
     let FinalLogo = logo;
@@ -328,7 +307,7 @@ export const updateDiscount = async (req: Request, res: Response) => {
         FinalLogo = await saveBase64Image(logo, req, "discounts");
     }
 
-    // 💡 أيضاً في التحديث: إذا قام بتحويل الحالة إلى active، نطفئ باقي الخصومات
+    // لو هيتفعل، اطفي باقي خصومات المطعم
     if (isActive === true && !existing.discounts.isActive) {
         const myDiscounts = await db
             .select({ id: discounts.id })
@@ -347,13 +326,9 @@ export const updateDiscount = async (req: Request, res: Response) => {
     }
 
     const updateData: any = { updatedAt: new Date() };
-
     if (name !== undefined) updateData.name = name;
     if (nameAr !== undefined) updateData.nameAr = nameAr;
     if (nameFr !== undefined) updateData.nameFr = nameFr;
-    if (discountType !== undefined) updateData.discountType = discountType;
-    if (discountValue !== undefined) updateData.discountValue = discountValue.toString();
-    if (maxDiscount !== undefined) updateData.maxDiscount = maxDiscount ? maxDiscount.toString() : null;
     if (minOrderAmount !== undefined) updateData.minOrderAmount = minOrderAmount.toString();
     if (usageLimit !== undefined) updateData.usageLimit = usageLimit;
     if (startDate !== undefined) updateData.startDate = startDate ? new Date(startDate) : null;
@@ -363,13 +338,33 @@ export const updateDiscount = async (req: Request, res: Response) => {
 
     await db.update(discounts).set(updateData).where(eq(discounts.id, id));
 
-    if (foodIds !== undefined) {
-        await db.update(food).set({ discountId: null }).where(eq(food.discountId, id));
-        if (Array.isArray(foodIds) && foodIds.length > 0) {
-            await db.update(food).set({ discountId: id }).where(and(
-                eq(food.restaurantid, restaurantId),
-                inArray(food.id, foodIds),
-            ));
+    // ✅ تحديث الخصومات الفرعية: لو الفرونت بعت foodGroups جديدة، امسح القديمة واعمل جديدة
+    if (Array.isArray(foodGroups)) {
+        const oldGroups = await db.select({ id: discountGroups.id }).from(discountGroups).where(eq(discountGroups.discountId, id));
+        const oldGroupIds = oldGroups.map(g => g.id);
+
+        if (oldGroupIds.length > 0) {
+            await db.update(food).set({ discountId: null }).where(inArray(food.discountId, oldGroupIds));
+            await db.delete(discountGroups).where(inArray(discountGroups.id, oldGroupIds));
+        }
+
+        for (const group of foodGroups) {
+            const discountType = group.discountType === "fixed" ? "fixed_amount" : group.discountType;
+            const groupId = uuidv4();
+            await db.insert(discountGroups).values({
+                id: groupId,
+                discountId: id,
+                discountType,
+                discountValue: String(group.discountValue),
+                maxDiscount: group.maxDiscount === undefined || group.maxDiscount === null ? null : String(Number(group.maxDiscount)),
+            });
+
+            if (Array.isArray(group.foodIds) && group.foodIds.length > 0) {
+                await db.update(food).set({ discountId: groupId }).where(and(
+                    eq(food.restaurantid, restaurantId),
+                    inArray(food.id, group.foodIds),
+                ));
+            }
         }
     }
 
@@ -380,7 +375,7 @@ export const updateDiscount = async (req: Request, res: Response) => {
 // 5. Delete Discount
 // ==========================================
 export const deleteDiscount = async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const { id } = req.params; // discountId
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Unauthorized");
 
@@ -392,12 +387,20 @@ export const deleteDiscount = async (req: Request, res: Response) => {
             and(
                 eq(discounts.id, id),
                 eq(discountRestaurants.restaurantId, restaurantId),
-                eq(discounts.isGlobal, false) 
+                eq(discounts.isGlobal, false)
             )
         )
         .limit(1);
 
     if (!existing) throw new NotFound("Discount not found or cannot be deleted");
+
+    // discountGroups هتتمسح تلقائي بالـ ON DELETE CASCADE، لكن food.discountId
+    // مش cascade (set null بس)، فلازم نفك ربط الأطعمة يدوي الأول
+    const groupsToDelete = await db.select({ id: discountGroups.id }).from(discountGroups).where(eq(discountGroups.discountId, id));
+    const groupIds = groupsToDelete.map(g => g.id);
+    if (groupIds.length > 0) {
+        await db.update(food).set({ discountId: null }).where(inArray(food.discountId, groupIds));
+    }
 
     await db.delete(discounts).where(eq(discounts.id, id));
 
@@ -405,14 +408,13 @@ export const deleteDiscount = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 6. Toggle Discount Status (With Switch Logic)
+// 6. Toggle Discount Status
 // ==========================================
 export const toggleDiscountStatus = async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const { id } = req.params; // discountId
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Unauthorized");
 
-    // 1. جلب الخصم الحالي للتأكد من ملكيته للمطعم
     const [rawData] = await db
         .select()
         .from(discounts)
@@ -421,24 +423,19 @@ export const toggleDiscountStatus = async (req: Request, res: Response) => {
             and(
                 eq(discounts.id, id),
                 eq(discountRestaurants.restaurantId, restaurantId),
-                eq(discounts.isGlobal, false) 
+                eq(discounts.isGlobal, false)
             )
         )
         .limit(1);
 
     if (!rawData) throw new NotFound("Discount not found or cannot be modified");
     const existingDiscount = rawData.discounts;
-    
-    // 💡 التحويل الصريح لـ Boolean (لأن MySQL أحياناً بترجع 1 أو 0)
+
     const currentStatus = existingDiscount.isActive === true || existingDiscount.isActive === 1 as any;
     const nextStatus = !currentStatus;
 
-    // 2. استخدام Transaction لضمان تنفيذ العمليتين معاً بدون تداخل
     await db.transaction(async (tx) => {
-        
-        // 💡 إذا كان صاحب المطعم يفتح الـ Switch (يحول الحالة لـ true)
         if (nextStatus === true) {
-            // أ) جلب الخصومات التابعة للمطعم (النشطة فقط)
             const activeDiscounts = await tx
                 .select({ id: discounts.id })
                 .from(discounts)
@@ -450,12 +447,10 @@ export const toggleDiscountStatus = async (req: Request, res: Response) => {
                     )
                 );
 
-            // ب) استخراج الـ IDs (مع استبعاد الخصم الحالي عشان منقفلوش ونرجع نفتحه في نفس اللحظة)
             const activeIdsToDeactivate = activeDiscounts
                 .map(d => d.id)
                 .filter(dId => dId !== id);
 
-            // ج) إيقاف أي خصم نشط آخر
             if (activeIdsToDeactivate.length > 0) {
                 await tx
                     .update(discounts)
@@ -464,7 +459,6 @@ export const toggleDiscountStatus = async (req: Request, res: Response) => {
             }
         }
 
-        // د) تحديث الخصم الحالي للحالة الجديدة
         await tx
             .update(discounts)
             .set({ isActive: nextStatus })
@@ -476,4 +470,3 @@ export const toggleDiscountStatus = async (req: Request, res: Response) => {
         data: { isActive: nextStatus }
     });
 };
-
