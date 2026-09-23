@@ -1,5 +1,5 @@
 import { db } from "../models/connection";
-import { discounts, discountRestaurants, discountFoods } from "../models/schema";
+import { discounts, discountGroups, discountRestaurants, food } from "../models/schema";
 import { eq, and } from "drizzle-orm";
 
 export const getAvailableDiscounts = async (restaurantId: string) => {
@@ -7,12 +7,27 @@ export const getAvailableDiscounts = async (restaurantId: string) => {
     
     // Fetch restaurant specific discounts
     const restDiscounts = await db.select({
-        discount: discounts,
-        foodId: discountFoods.foodId
+        discount: {
+            id: discountGroups.id,
+            discountId: discounts.id,
+            name: discounts.name,
+            discountType: discountGroups.discountType,
+            discountValue: discountGroups.discountValue,
+            maxDiscount: discountGroups.maxDiscount,
+            minOrderAmount: discounts.minOrderAmount,
+            usageLimit: discounts.usageLimit,
+            usedCount: discounts.usedCount,
+            startDate: discounts.startDate,
+            endDate: discounts.endDate,
+            isActive: discounts.isActive,
+            isGlobal: discounts.isGlobal,
+        },
+        foodId: food.id
     })
     .from(discounts)
     .innerJoin(discountRestaurants, eq(discounts.id, discountRestaurants.discountId))
-    .leftJoin(discountFoods, eq(discounts.id, discountFoods.discountId))
+    .innerJoin(discountGroups, eq(discounts.id, discountGroups.discountId))
+    .leftJoin(food, eq(food.discountId, discountGroups.id))
     .where(
         and(
             eq(discountRestaurants.restaurantId, restaurantId),
@@ -23,11 +38,26 @@ export const getAvailableDiscounts = async (restaurantId: string) => {
 
     // Fetch global discounts
     const globalDiscountsRows = await db.select({
-        discount: discounts,
-        foodId: discountFoods.foodId
+        discount: {
+            id: discountGroups.id,
+            discountId: discounts.id,
+            name: discounts.name,
+            discountType: discountGroups.discountType,
+            discountValue: discountGroups.discountValue,
+            maxDiscount: discountGroups.maxDiscount,
+            minOrderAmount: discounts.minOrderAmount,
+            usageLimit: discounts.usageLimit,
+            usedCount: discounts.usedCount,
+            startDate: discounts.startDate,
+            endDate: discounts.endDate,
+            isActive: discounts.isActive,
+            isGlobal: discounts.isGlobal,
+        },
+        foodId: food.id
     })
     .from(discounts)
-    .leftJoin(discountFoods, eq(discounts.id, discountFoods.discountId))
+    .innerJoin(discountGroups, eq(discounts.id, discountGroups.discountId))
+    .leftJoin(food, eq(food.discountId, discountGroups.id))
     .where(
         and(
             eq(discounts.isGlobal, true),
@@ -38,7 +68,7 @@ export const getAvailableDiscounts = async (restaurantId: string) => {
     const allDiscounts = [...restDiscounts, ...globalDiscountsRows].filter(d => {
         if (d.discount.startDate && new Date(d.discount.startDate) > now) return false;
         if (d.discount.endDate && new Date(d.discount.endDate) < now) return false;
-        if (d.discount.usageLimit && d.discount.usedCount! >= d.discount.usageLimit) return false;
+        if (d.discount.usageLimit && (d.discount.usedCount ?? 0) >= d.discount.usageLimit) return false;
         return true;
     });
 

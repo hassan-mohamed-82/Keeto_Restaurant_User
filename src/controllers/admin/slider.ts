@@ -98,8 +98,6 @@ export const getAllImages = async (req: Request, res: Response) => {
             discountName: discounts.name,
             discountNameAr: discounts.nameAr,
             discountNameFr: discounts.nameFr,
-            discountType: discounts.discountType,
-            discountValue: discounts.discountValue,
             createdAt: sliders.createdAt,
             updatedAt: sliders.updatedAt,
         })
@@ -145,8 +143,6 @@ export const getImageById = async (req: Request, res: Response) => {
             discountName: discounts.name,
             discountNameAr: discounts.nameAr,
             discountNameFr: discounts.nameFr,
-            discountType: discounts.discountType,
-            discountValue: discounts.discountValue,
             createdAt: sliders.createdAt,
             updatedAt: sliders.updatedAt,
         })

@@ -35,8 +35,6 @@ export const getActivePopups = async (req: Request, res: Response) => {
             discountId: popup.discountId,
             discountName: discounts.name,
             discountNameAr: discounts.nameAr,
-            discountType: discounts.discountType,
-            discountValue: discounts.discountValue,
             startDate: popup.startDate,
             endDate: popup.endDate,
         })
@@ -85,8 +83,6 @@ export const getPopupById = async (req: Request, res: Response) => {
             discountId: popup.discountId,
             discountName: discounts.name,
             discountNameAr: discounts.nameAr,
-            discountType: discounts.discountType,
-            discountValue: discounts.discountValue,
             startDate: popup.startDate,
             endDate: popup.endDate,
         })

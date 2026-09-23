@@ -6,7 +6,7 @@ import {
     restaurantZoneDeliveryFees, zoneDeliveryFees, restaurantSettings,
     restaurantSchedules, cartItems, users, addresses, branches,
     userWallets, userWalletTransactions, paymentMethods,
-    coupons, couponUsages, couponRestaurants, discounts, discountRestaurants, discountFoods,
+    coupons, couponUsages, couponRestaurants, discounts, discountRestaurants,
     selectReasons,
     orders,
     restaurants,

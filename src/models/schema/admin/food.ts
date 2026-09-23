@@ -33,7 +33,7 @@ export const food = mysqlTable("food", {
         .notNull(),
 
     categoryid: char("categoryid", { length: 36 }).references(() => categories.id).notNull(),
-    subcategoryid: char("subcategoryid", { length: 36 }).references(() => subcategories.id).notNull(),
+    subcategoryid: char("subcategoryid", { length: 36 }).references(() => subcategories.id),
     foodtype: mysqlEnum("foodtype", ["veg", "non-veg"]).default("veg"),
     Nutrition: text("nutrition"),
     allergen_ingredients: text("allergen_ingredients"),
