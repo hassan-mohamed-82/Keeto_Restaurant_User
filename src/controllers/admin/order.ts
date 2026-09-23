@@ -128,6 +128,7 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
             customerName: users.name,
             customerPhone: users.phone,
             alternatePhone: users.alternatePhone,
+            isGuest: users.isGuest,
             rating: orders.rating,
             ratingComment: orders.ratingComment,
             orderType: orders.orderType,
@@ -354,6 +355,7 @@ export const getOrdersByStatus = async (
             customerName: users.name,
             customerPhone: users.phone,
             alternatePhone: users.alternatePhone,
+            isGuest: users.isGuest,
             rating: orders.rating,
             ratingComment: orders.ratingComment,
             orderType: orders.orderType,
@@ -539,6 +541,7 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             phone: users.phone,
             alternatePhone: users.alternatePhone,
             email: users.email,
+            isGuest: users.isGuest,
         },
         branch: {
             id: branches.id,

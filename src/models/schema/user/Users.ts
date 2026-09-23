@@ -1,8 +1,5 @@
 import { mysqlTable, varchar, text, timestamp, char, boolean, longtext, mysqlEnum, int } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
-import { countries } from "../admin/country";
-import { cities } from "../admin/city";
-import { zones } from "../admin/zone";
 
 export const users = mysqlTable("users", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
@@ -13,24 +10,26 @@ export const users = mysqlTable("users", {
     email: varchar("email", { length: 255 }).unique(), 
     
     // ⚠️ التعديل هنا: شيلنا notNull() عشان فيس بوك مش بيرجع رقم التليفون
-    phone: varchar("phone", { length: 20 }), 
+    phone: varchar("phone", { length: 20 }),
     alternatePhone: varchar("alternate_phone", { length: 20 }), 
     
     fcmToken: text("fcm_token"),
     
     // ⚠️ التعديل هنا: شيلنا notNull() لأن تسجيل الفيس بوك ملوش باسورد
     password: varchar("password", { length: 255 }), 
-    
+    // أضف هذا السطر في تعريف جدول users في ملف schema.ts
+    appleId: varchar("apple_id", { length: 255 }),
     // ✅ الحقل الجديد الخاص بالفيس بوك
     facebookId: varchar("facebook_id", { length: 255 }).unique(),
 
     googleId: varchar("google_id", { length: 255 }).unique(),
-    
     isVerified: boolean("is_verified").default(false),
+    isProfileComplete: boolean("is_profile_complete").default(false),
+    status: mysqlEnum("status", ["active", "blocked"]).default("active"),
     isDeleted: boolean("is_deleted").default(false),
+    deletedAt: timestamp("deleted_at"),
     isGuest: boolean("is_guest").default(false).notNull(),
     authProvider: mysqlEnum("auth_provider", ["guest", "email", "google", "facebook", "apple", "phone_otp"]).default("email"),
-    status: mysqlEnum("status", ["active", "blocked"]).default("active"),
     totalOrders: int("total_orders").default(0),
     createdAt: timestamp("created_at").defaultNow(),
 });
