@@ -24,12 +24,10 @@ export const discounts = mysqlTable("discounts", {
     nameAr: varchar("name_ar", { length: 255 }),
     nameFr: varchar("name_fr", { length: 255 }),
 
-     discountType: mysqlEnum("discount_type", ["percentage", "fixed_amount"])
-        .notNull()
+    discountType: mysqlEnum("discount_type", ["percentage", "fixed_amount"])
         .default("percentage"),
 
-    discountValue: decimal("discount_value", { precision: 10, scale: 2 }).notNull(),
-
+    discountValue: decimal("discount_value", { precision: 10, scale: 2 }),
     maxDiscount: decimal("max_discount", { precision: 10, scale: 2 }),
 
     minOrderAmount: decimal("min_order_amount", { precision: 10, scale: 2 }).default("0.00"),
@@ -58,7 +56,6 @@ export const discountGroups = mysqlTable("discount_groups", {
         .references(() => discounts.id, { onDelete: "cascade" })
         .notNull(),
 
-    // percentage | fixed_amount
     discountType: mysqlEnum("discount_type", ["percentage", "fixed_amount"])
         .notNull()
         .default("percentage"),
