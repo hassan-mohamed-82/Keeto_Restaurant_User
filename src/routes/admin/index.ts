@@ -60,6 +60,7 @@ import CaptainOrderRouter from "./pos/captainOrders";
 import CashierManRouter from "./pos/cashierMen";
 import HallRouter from "./pos/halls";
 import HallTableRouter from "./pos/hallTables";
+import PrinterRouter from "./printer";
 const router = Router();
 
 router.use("/auth", authRouter);
@@ -108,7 +109,7 @@ router.use("/free-delivery", FreeDeliveryOfferRouter);
 router.use("/pricing", PricingRouter);
 router.use("/shifts", ShiftsRouter);
 router.use("/order-delay-alerts", OrderDelayAlertRouter);
-
+router.use("/printers", PrinterRouter);
 
 
 
