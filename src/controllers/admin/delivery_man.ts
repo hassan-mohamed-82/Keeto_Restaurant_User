@@ -196,6 +196,7 @@ export const getPendingOrders = async (req: Request, res: Response) => {
         .select({
             id: orders.id,
             orderNumber: orders.orderNumber,
+            dailyOrderNumber: orders.dailyOrderNumber,
             status: orders.status,
             orderType: orders.orderType,
             totalAmount: orders.totalAmount,
@@ -361,6 +362,7 @@ export const getDeliveryMenWithOrders = async (req: Request, res: Response) => {
         .select({
             id: orders.id,
             orderNumber: orders.orderNumber,
+            dailyOrderNumber: orders.dailyOrderNumber,
             status: orders.status,
             orderType: orders.orderType,
             totalAmount: orders.totalAmount,
@@ -507,6 +509,7 @@ export const getDeliveryOrders = async (req: Request, res: Response) => {
         .select({
             id: orders.id,
             orderNumber: orders.orderNumber,
+            dailyOrderNumber: orders.dailyOrderNumber,
             status: orders.status,
             orderType: orders.orderType,
             totalAmount: orders.totalAmount,
@@ -786,6 +789,7 @@ export const getDeliveryCashOrders = async (req: Request, res: Response) => {
         .select({
             id: orders.id,
             orderNumber: orders.orderNumber,
+            dailyOrderNumber: orders.dailyOrderNumber,
             status: orders.status,
             orderType: orders.orderType,
             totalAmount: orders.totalAmount,
@@ -938,6 +942,7 @@ export const collectDeliveryCash = async (req: Request, res: Response) => {
         .select({
             id: orders.id,
             orderNumber: orders.orderNumber,
+            dailyOrderNumber: orders.dailyOrderNumber,
             status: orders.status,
             totalAmount: orders.totalAmount,
             paymentMethod: orders.paymentMethod,
