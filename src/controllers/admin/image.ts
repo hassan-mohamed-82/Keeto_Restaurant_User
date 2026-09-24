@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { images, subcategories, food, discounts } from "../../models/schema";
-import { eq, and } from "drizzle-orm";
+import { images, subcategories, food, discounts, branches } from "../../models/schema";
+import { eq, and, isNull, or } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { NotFound } from "../../Errors/NotFound";
 import { BadRequest } from "../../Errors/BadRequest";
@@ -19,12 +19,29 @@ export const createImage = async (req: Request, res: Response) => {
         categoryId,
         foodId,
         productId,
-        discountId
+        discountId,
+        branchId
     } = req.body;
+    
     const restaurantId = req.user?.restaurantId || req.user?.id;
 
     if (!restaurantId) {
         throw new BadRequest("Restaurant context is missing or unauthorized");
+    }
+
+    const resolvedBranchId = branchId || null;
+
+    // 💡 تصحيح: التحقق فقط في حال تم إرسال branchId حقيقي
+    if (resolvedBranchId) {
+        const [branch] = await db
+            .select({ id: branches.id })
+            .from(branches)
+            .where(and(eq(branches.id, resolvedBranchId), eq(branches.restaurantId, restaurantId)))
+            .limit(1);
+
+        if (!branch) {
+            throw new NotFound("Branch not found or does not belong to this restaurant");
+        }
     }
 
     const resolvedFoodId = foodId || productId || null;
@@ -43,6 +60,7 @@ export const createImage = async (req: Request, res: Response) => {
     await db.insert(images).values({
         id,
         restaurantid: restaurantId,
+        branchId: resolvedBranchId,
         img: result,
         periorty: Number(periorty) || 0,
         linkType: (linkType as any) || "link",
@@ -56,6 +74,7 @@ export const createImage = async (req: Request, res: Response) => {
         message: "Image banner created successfully",
         data: {
             id,
+            branchId: resolvedBranchId,
             img: result,
             periorty: Number(periorty) || 0,
             linkType,
@@ -75,10 +94,28 @@ export const getAllImages = async (req: Request, res: Response) => {
         throw new BadRequest("Restaurant context is missing or unauthorized");
     }
 
+    const { branchId } = req.query;
+
+    const conditions = [eq(images.restaurantid, restaurantId)];
+
+    // 💡 التصفية بالفرع المحجوز أو الصور العامة التي لا تتبع فرع محدد (NULL)
+    if (branchId && typeof branchId === "string" && branchId.trim() !== "") {
+        conditions.push(
+            or(
+                eq(images.branchId, branchId.trim()),
+                isNull(images.branchId)
+            )!
+        );
+    }
+
     const imageList = await db
         .select({
             id: images.id,
             restaurantid: images.restaurantid,
+            branchId: images.branchId,
+            branchName: branches.name,
+            branchNameAr: branches.nameAr,
+            branchNameFr: branches.nameFr,
             img: images.img,
             periorty: images.periorty,
             linkType: images.linkType,
@@ -102,10 +139,11 @@ export const getAllImages = async (req: Request, res: Response) => {
             updatedAt: images.updatedAt,
         })
         .from(images)
+        .leftJoin(branches, eq(images.branchId, branches.id))
         .leftJoin(subcategories, eq(images.subcategoryId, subcategories.id))
         .leftJoin(food, eq(images.foodId, food.id))
         .leftJoin(discounts, eq(images.discountId, discounts.id))
-        .where(eq(images.restaurantid, restaurantId));
+        .where(and(...conditions));
 
     return SuccessResponse(res, {
         message: "Images fetched successfully",
@@ -124,6 +162,10 @@ export const getImageById = async (req: Request, res: Response) => {
         .select({
             id: images.id,
             restaurantid: images.restaurantid,
+            branchId: images.branchId,
+            branchName: branches.name,
+            branchNameAr: branches.nameAr,
+            branchNameFr: branches.nameFr,
             img: images.img,
             periorty: images.periorty,
             linkType: images.linkType,
@@ -147,6 +189,7 @@ export const getImageById = async (req: Request, res: Response) => {
             updatedAt: images.updatedAt,
         })
         .from(images)
+        .leftJoin(branches, eq(images.branchId, branches.id))
         .leftJoin(subcategories, eq(images.subcategoryId, subcategories.id))
         .leftJoin(food, eq(images.foodId, food.id))
         .leftJoin(discounts, eq(images.discountId, discounts.id))
@@ -193,8 +236,10 @@ export const updateImage = async (req: Request, res: Response) => {
         categoryId,
         foodId,
         productId,
-        discountId
+        discountId,
+        branchId,
     } = req.body;
+    
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) {
         throw new BadRequest("Restaurant context is missing or unauthorized");
@@ -206,6 +251,20 @@ export const updateImage = async (req: Request, res: Response) => {
     }
     if (existing.restaurantid !== restaurantId) {
         throw new BadRequest("You are not authorized to update this image");
+    }
+
+    // 💡 تصحيح: الحفاظ على الفرع القديم إن لم يُرسل جديد
+    const resolvedBranchId = branchId !== undefined ? branchId : existing.branchId;
+    if (branchId) {
+        const [branch] = await db
+            .select({ id: branches.id })
+            .from(branches)
+            .where(and(eq(branches.id, branchId), eq(branches.restaurantId, restaurantId)))
+            .limit(1);
+
+        if (!branch) {
+            throw new NotFound("Branch not found or does not belong to this restaurant");
+        }
     }
 
     const effectiveLinkType = linkType !== undefined ? linkType : existing.linkType;
@@ -222,6 +281,10 @@ export const updateImage = async (req: Request, res: Response) => {
     );
 
     const updateData: any = { updatedAt: new Date() };
+
+    if (branchId !== undefined) {
+        updateData.branchId = resolvedBranchId;
+    }
 
     if (img) {
         const updatedUrl = await handleImageUpdate(req, existing.img, img, "images");

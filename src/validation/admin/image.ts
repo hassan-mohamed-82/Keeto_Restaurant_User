@@ -3,6 +3,9 @@ import { LINK_TYPES } from "../../types/constant";
 
 const normalizeImagePayload = (obj: any) => {
     if (obj && typeof obj === "object") {
+        if (obj.branch_id !== undefined && obj.branchId === undefined) {
+            obj.branchId = obj.branch_id;
+        }
         if (obj.link_type !== undefined && obj.linkType === undefined) {
             obj.linkType = obj.link_type;
         }
@@ -50,6 +53,7 @@ const normalizeImagePayload = (obj: any) => {
 export const createImageSchema = z.preprocess(
     normalizeImagePayload,
     z.object({
+        branchId: z.preprocess((val) => (val === "" ? null : val), z.string().optional().nullable()),
         img: z.string({ required_error: "Image is required" }).min(1, "Image is required"),
         periorty: z.preprocess((val) => {
             if (val === undefined || val === null || val === "") return 0;
@@ -95,6 +99,7 @@ export const createImageSchema = z.preprocess(
 export const updateImageSchema = z.preprocess(
     normalizeImagePayload,
     z.object({
+        branchId: z.preprocess((val) => (val === "" ? null : val), z.string().optional().nullable()),
         img: z.string().optional(),
         periorty: z.preprocess((val) => {
             if (val === undefined || val === null || val === "") return undefined;

@@ -9,6 +9,7 @@ import {
     boolean,
 } from "drizzle-orm/mysql-core";
 import { restaurants } from "./restaurants";
+import { branches } from "./branches";
 import { subcategories } from "./subcategory";
 import { food } from "./food";
 import { discounts } from "./Discount";
@@ -19,6 +20,7 @@ export const images = mysqlTable("images", {
     restaurantid: char("restaurantid", { length: 36 })
         .references(() => restaurants.id)
         .notNull(),
+    branchId: char("branch_id", { length: 36 }).references(() => branches.id, { onDelete: "set null" }),
     img: varchar("img", { length: 500 }).notNull(),
     periorty: int("periorty").default(0),
     linkType: mysqlEnum("link_type", ["link", "subcategory", "product", "discount"]).default("link"),
