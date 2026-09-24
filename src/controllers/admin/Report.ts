@@ -968,6 +968,7 @@ export const getVisaReport = async (req: Request | any, res: Response) => {
         .select({
             orderId: orders.id,
             orderNumber: orders.orderNumber,
+            dailyOrderNumber: orders.dailyOrderNumber,
             status: orders.status,
             paymentStatus: orders.paymentStatus,
             paymobOrderId: orders.paymobOrderId,
