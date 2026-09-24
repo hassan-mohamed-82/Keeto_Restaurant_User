@@ -928,7 +928,7 @@ export const getVisaReport = async (req: Request | any, res: Response) => {
         eq(orders.restaurantId, restaurantId),
         or(
             eq(orders.paymentMethod, "visa"),
-            sql`${orders.paymobOrderId} IS NOT NULL`,
+            sql`${orders.paymentOrderId} IS NOT NULL`,
             sql`(${paymentMethods.name} IS NOT NULL 
                 AND LOWER(${paymentMethods.name}) NOT LIKE '%cash%' 
                 AND ${paymentMethods.nameAr} NOT LIKE '%استلام%' 
@@ -971,8 +971,8 @@ export const getVisaReport = async (req: Request | any, res: Response) => {
             dailyOrderNumber: orders.dailyOrderNumber,
             status: orders.status,
             paymentStatus: orders.paymentStatus,
-            paymobOrderId: orders.paymobOrderId,
-            paymobTransactionId: orders.paymobTransactionId,
+            paymentOrderId: orders.paymentOrderId,
+            paymentTransactionId: orders.paymentTransactionId,
             orderSource: orders.orderSource,
             orderType: orders.orderType,
 
