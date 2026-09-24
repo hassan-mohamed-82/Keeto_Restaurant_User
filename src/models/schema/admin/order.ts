@@ -3,7 +3,7 @@ import { sql, relations } from "drizzle-orm";
 import { restaurants } from "./restaurants";
 import { food } from "./food";
 import { users } from "../user/Users";
-import { branches, coupons, discounts } from "../../schema";
+import { branches, coupons, discounts, offers } from "../../schema";
 import { addresses } from "../user/address";
 import { selectReasons } from "./selectReasons";
 import { deliveryMen } from "./delivery_man";
@@ -91,13 +91,13 @@ export const orders = mysqlTable("orders", {
     isCashCollected: boolean("is_cash_collected").default(false),
     cashCollectedAt: timestamp("cash_collected_at"),
     cashCollectedBy: char("cash_collected_by", { length: 36 }),
-
+    
     dailyOrderNumber: int("daily_order_number").default(1),
 
     rating: int("rating"),
     ratingComment: text("rating_comment"),
 
-      // 🟢 2. حفظ لقطة ثابته من بيانات العنوان وقت الأوردر (Address Snapshot)
+    // 🟢 2. حفظ لقطة ثابته من بيانات العنوان وقت الأوردر (Address Snapshot)
     shippingAddress: json("shipping_address").$type<{
         title?: string;
         street?: string;
@@ -137,9 +137,14 @@ export const orders = mysqlTable("orders", {
 
     isDelayEmailSent: boolean("is_delay_email_sent").default(false),
 
+    offerId: char("offer_id", { length: 36 })
+        .references(() => offers.id, { onDelete: "set null" }),
+
+    // Unified payment gateway columns (supports both Kashier and Paymob)
+    paymentGateway: mysqlEnum("payment_gateway", ["kashier", "paymob"]),
+    paymentOrderId: varchar("payment_order_id", { length: 150 }),        // Kashier sessionId / Paymob orderId
+    paymentTransactionId: varchar("payment_transaction_id", { length: 150 }), // Kashier transactionId / Paymob transactionId
     paymentStatus: mysqlEnum("payment_status", ["pending_payment", "paid", "payment_failed"]).default("pending_payment"),
-    paymobOrderId: varchar("paymob_order_id", { length: 100 }),
-    paymobTransactionId: varchar("paymob_transaction_id", { length: 100 }),
 
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
     createdAt: timestamp("created_at").defaultNow(),
