@@ -14,15 +14,17 @@ import {
     addresses,
     zones,
     restaurantRatings,
+    restaurantSettings,
+    restaurantPaymentCredentials,
 } from "../../models/schema";
-import { eq, and, desc, gte, lte, sql, inArray , like, or} from "drizzle-orm"; // 👈 تمت إضافة inArray
-import { SuccessResponse } from "../../utils/response";
+import { eq, and, desc, gte, lte, sql, inArray, like, or, ne } from "drizzle-orm";
 import { UnauthorizedError } from "../../Errors";
 import { BadRequest } from "../../Errors/BadRequest";
 import PDFDocument from "pdfkit";
 import path from "path";
 import fs from "fs";
 import { invoices } from "../../models/schema/admin/invoices";
+import { SuccessResponse } from "../../utils/response";
 
 type OrderStatus = "pending" | "accepted" | "preparing" | "out_for_delivery" | "delivered" | "cancelled" | "rejected" | "refund";
 
@@ -868,3 +870,216 @@ export const getDashboardReports = async (req: Request | any, res: Response) => 
         }
     });
 };
+
+export const getVisaReport = async (req: Request | any, res: Response) => {
+    if (!req.user) throw new UnauthorizedError("Unauthenticated");
+
+    const restaurantId = req.user.restaurantId || req.user.id;
+    if (!restaurantId) throw new BadRequest("Restaurant ID not found");
+
+    const { 
+        startDate, 
+        endDate, 
+        branchId, 
+        status, 
+        paymentStatus,
+        payment_status,
+        type,
+        orderNumber
+    } = req.query;
+
+    const rawStatus = (status || paymentStatus || payment_status || type || "") as string;
+    const normalizedStatus = rawStatus.trim().toLowerCase();
+
+    const isSuccessFilter = ["success", "succes", "paid"].includes(normalizedStatus);
+    const isFailedFilter = ["failed", "faild", "payment_failed"].includes(normalizedStatus);
+
+    // 🔍 معرفة نوع بوابة الدفع للمطعم (SYSTEM أم CUSTOM) وتحديد الاسم
+    const [restaurantSetting] = await db
+        .select({
+            paymentGatewayType: restaurantSettings.paymentGatewayType,
+        })
+        .from(restaurantSettings)
+        .where(eq(restaurantSettings.restaurantId, restaurantId))
+        .limit(1);
+
+    const [customCred] = await db
+        .select({
+            id: restaurantPaymentCredentials.id,
+            title: restaurantPaymentCredentials.title,
+            provider: restaurantPaymentCredentials.provider,
+        })
+        .from(restaurantPaymentCredentials)
+        .where(
+            and(
+                eq(restaurantPaymentCredentials.restaurantId, restaurantId),
+                eq(restaurantPaymentCredentials.isActive, true)
+            )
+        )
+        .limit(1);
+
+    const gatewayType: "SYSTEM" | "CUSTOM" = restaurantSetting?.paymentGatewayType === "CUSTOM" ? "CUSTOM" : "SYSTEM";
+    const gatewayName = gatewayType === "CUSTOM" 
+        ? (customCred?.title || customCred?.provider || "Custom Visa") 
+        : "kashier";
+
+    // الشرط الأساسي: أوردرات الفيزا / الدفع الإلكتروني لهذا المطعم
+    const conditions: any[] = [
+        eq(orders.restaurantId, restaurantId),
+        or(
+            eq(orders.paymentMethod, "visa"),
+            sql`${orders.paymobOrderId} IS NOT NULL`,
+            sql`(${paymentMethods.name} IS NOT NULL 
+                AND LOWER(${paymentMethods.name}) NOT LIKE '%cash%' 
+                AND ${paymentMethods.nameAr} NOT LIKE '%استلام%' 
+                AND LOWER(${paymentMethods.name}) NOT LIKE '%wallet%' 
+                AND ${paymentMethods.nameAr} NOT LIKE '%محفظ%')`
+        )
+    ];
+
+    // الفلترة حسب التاريخ
+    if (startDate) conditions.push(gte(orders.createdAt, new Date(startDate as string)));
+    if (endDate) {
+        const end = new Date(endDate as string);
+        end.setHours(23, 59, 59, 999);
+        conditions.push(lte(orders.createdAt, end));
+    }
+
+    // الفلترة حسب الفرع
+    if (branchId) conditions.push(eq(orders.branchId, branchId as string));
+    if (req.user.branchId) conditions.push(eq(orders.branchId, req.user.branchId));
+
+    // الفلترة برقم الطلب
+    if (orderNumber) conditions.push(like(orders.orderNumber, `%${(orderNumber as string).trim()}%`));
+
+    // الفلترة بحالة الفيزا (نجاح / فشل) إذا تم تمريرها بالـ Query، وإلا افتراضياً يرجع الكل
+    if (isSuccessFilter) {
+        conditions.push(eq(orders.paymentStatus, "paid"));
+    } else if (isFailedFilter) {
+        conditions.push(
+            or(
+                eq(orders.paymentStatus, "payment_failed"),
+                and(ne(orders.paymentStatus, "paid"), eq(orders.status, "cancelled"))
+            )
+        );
+    }
+
+    const orderList = await db
+        .select({
+            orderId: orders.id,
+            orderNumber: orders.orderNumber,
+            status: orders.status,
+            paymentStatus: orders.paymentStatus,
+            paymobOrderId: orders.paymobOrderId,
+            paymobTransactionId: orders.paymobTransactionId,
+            orderSource: orders.orderSource,
+            orderType: orders.orderType,
+
+            // بيانات العميل
+            userId: orders.userId,
+            userName: sql<string>`COALESCE(${users.name}, 'Guest')`,
+            userPhone: sql<string>`COALESCE(${users.phone}, 'N/A')`,
+            userEmail: sql<string>`COALESCE(${users.email}, 'N/A')`,
+
+            // وسيلة الدفع
+            paymentMethodId: orders.paymentMethod,
+            paymentMethodName: sql<string>`COALESCE(${paymentMethods.name}, 'Visa / Card')`,
+            paymentMethodNameAr: sql<string>`COALESCE(${paymentMethods.nameAr}, 'فيزا / بطاقة')`,
+
+            // المبالغ المالية
+            subtotal: orders.subtotal,
+            deliveryFee: orders.deliveryFee,
+            serviceFee: orders.serviceFee,
+            appCommission: orders.appCommission,
+            discountAmount: orders.discountAmount,
+            totalAmount: orders.totalAmount,
+
+            // بيانات الفرع
+            branchId: orders.branchId,
+            branchName: branches.name,
+            branchNameAr: branches.nameAr,
+            branchNameFr: branches.nameFr,
+
+            createdAt: orders.createdAt,
+            updatedAt: orders.updatedAt,
+            cancelReason: orders.cancelReason,
+            cancelReasonType: sql<string | null>`COALESCE(${orders.cancelReasonType}, ${selectReasons.type})`,
+        })
+        .from(orders)
+        .leftJoin(users, eq(orders.userId, users.id))
+        .leftJoin(branches, eq(orders.branchId, branches.id))
+        .leftJoin(selectReasons, eq(orders.cancelReasonId, selectReasons.id))
+        .leftJoin(paymentMethods, eq(orders.paymentMethod, paymentMethods.id))
+        .where(and(...conditions))
+        .orderBy(desc(orders.createdAt));
+
+    let totalOrdersCount = 0;
+    let totalOrdersAmount = 0;
+    let successCount = 0;
+    let successAmount = 0;
+    let failedCount = 0;
+    let failedAmount = 0;
+
+    const formattedOrders = orderList.map(order => {
+        const amount = parseFloat(order.totalAmount as string || "0");
+        totalOrdersCount++;
+        totalOrdersAmount += amount;
+
+        const isPaid = order.paymentStatus === "paid";
+        const isFailed = order.paymentStatus === "payment_failed" || (order.paymentStatus !== "paid" && order.status === "cancelled");
+
+        const visaStatus = isPaid ? "success" : (isFailed ? "failed" : "pending");
+
+        if (isPaid) {
+            successCount++;
+            successAmount += amount;
+        } else if (isFailed) {
+            failedCount++;
+            failedAmount += amount;
+        }
+
+        return {
+            ...order,
+            visaStatus,
+            gatewayType,
+            gatewayName,
+            subtotal: parseFloat(order.subtotal as string || "0").toFixed(2),
+            deliveryFee: parseFloat(order.deliveryFee as string || "0").toFixed(2),
+            serviceFee: parseFloat(order.serviceFee as string || "0").toFixed(2),
+            appCommission: parseFloat(order.appCommission as string || "0").toFixed(2),
+            discountAmount: parseFloat(order.discountAmount as string || "0").toFixed(2),
+            totalAmount: amount.toFixed(2),
+        };
+    });
+
+    return SuccessResponse(res, {
+        message: "Visa report retrieved successfully",
+        data: {
+            gateway: {
+                type: gatewayType,
+                name: gatewayName,
+            },
+            filter: {
+                status: isSuccessFilter ? "success" : (isFailedFilter ? "failed" : "all"),
+                startDate: startDate || null,
+                endDate: endDate || null,
+                branchId: branchId || req.user.branchId || null,
+            },
+            summary: {
+                totalOrders: totalOrdersCount,
+                totalAmount: totalOrdersAmount.toFixed(2),
+                success: {
+                    count: successCount,
+                    totalAmount: successAmount.toFixed(2),
+                },
+                failed: {
+                    count: failedCount,
+                    totalAmount: failedAmount.toFixed(2),
+                },
+            },
+            orders: formattedOrders,
+        }
+    });
+};
+
+export const reportVisa = getVisaReport;

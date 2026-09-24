@@ -1,6 +1,15 @@
 import { Router } from "express";
 import { catchAsync } from "../../utils/catchAsync";
-import { getMyRestaurantReport,downloadSavedInvoicePDF,getMyInvoices, getDashboardReports, getOrdersByPaymentMethod} from "../../controllers/admin/Report";
+import { 
+    getMyRestaurantReport,
+    downloadSavedInvoicePDF,
+    getMyInvoices, 
+    getDashboardReports, 
+    getOrdersByPaymentMethod,
+    getVisaReport
+} from "../../controllers/admin/Report";
+import { validate } from "../../middlewares/validation";
+import { reportVisaQuerySchema } from "../../validation/admin/report";
 
 const router = Router();
 
@@ -9,6 +18,10 @@ const router = Router();
 router.get("/my-restaurant", catchAsync(getMyRestaurantReport));
 
 router.get("/payment-method", catchAsync(getOrdersByPaymentMethod));
+
+// تقرير الفيزا (جميع طلبات الفيزا نجاح وفشل افتراضياً، مع إمكانية الفلترة بـ success أو failed)
+// GET /report/visa?status=success|failed&startDate=...&endDate=...&branchId=...
+router.get("/visa", validate(reportVisaQuerySchema, "query"), catchAsync(getVisaReport));
 
 // تحميل كشف حساب المطعم كـ PDF
 //GET /report/my-restaurant/invoice?startDate=2026-01-01&endDate=2026-05-19
