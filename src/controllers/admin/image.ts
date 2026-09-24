@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { images, subcategories, food, discounts, branches } from "../../models/schema";
+import { images, subcategories, food, discounts , branches } from "../../models/schema";
 import { eq, and, isNull, or } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { NotFound } from "../../Errors/NotFound";
@@ -8,6 +8,22 @@ import { BadRequest } from "../../Errors/BadRequest";
 import { v4 as uuidv4 } from "uuid";
 import { saveBase64Image, handleImageUpdate } from "../../utils/handleImages";
 import { validateTargetEntity } from "./popup";
+
+export const getAllActiveBranches = async (req: Request, res: Response) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId) {
+        throw new BadRequest("Restaurant context is missing or unauthorized");
+    }
+    const [branch] = await db.select({
+        id: branches.id,
+        name: branches.name,
+        nameAr: branches.nameAr,
+        nameFr: branches.nameFr,
+    })
+    .from(branches)
+    .where(and(eq(branches.restaurantId, restaurantId), eq(branches.status, "active")))
+    return SuccessResponse(res, { data: branch , message: "Branches fetched successfully"}, 200);
+}
 
 export const createImage = async (req: Request, res: Response) => {
     const {
