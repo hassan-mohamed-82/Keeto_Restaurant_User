@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.images = void 0;
 const mysql_core_1 = require("drizzle-orm/mysql-core");
 const restaurants_1 = require("./restaurants");
+const branches_1 = require("./branches");
 const subcategory_1 = require("./subcategory");
 const food_1 = require("./food");
 const Discount_1 = require("./Discount");
@@ -12,6 +13,7 @@ exports.images = (0, mysql_core_1.mysqlTable)("images", {
     restaurantid: (0, mysql_core_1.char)("restaurantid", { length: 36 })
         .references(() => restaurants_1.restaurants.id)
         .notNull(),
+    branchId: (0, mysql_core_1.char)("branch_id", { length: 36 }).references(() => branches_1.branches.id, { onDelete: "set null" }),
     img: (0, mysql_core_1.varchar)("img", { length: 500 }).notNull(),
     periorty: (0, mysql_core_1.int)("periorty").default(0),
     linkType: (0, mysql_core_1.mysqlEnum)("link_type", ["link", "subcategory", "product", "discount"]).default("link"),

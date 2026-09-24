@@ -3,17 +3,17 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getDashboardReports = exports.getMyInvoices = exports.downloadSavedInvoicePDF = exports.getOrdersByPaymentMethod = exports.getMyRestaurantReport = void 0;
+exports.reportVisa = exports.getVisaReport = exports.getDashboardReports = exports.getMyInvoices = exports.downloadSavedInvoicePDF = exports.getOrdersByPaymentMethod = exports.getMyRestaurantReport = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
-const drizzle_orm_1 = require("drizzle-orm"); // 👈 تمت إضافة inArray
-const response_1 = require("../../utils/response");
+const drizzle_orm_1 = require("drizzle-orm");
 const Errors_1 = require("../../Errors");
 const BadRequest_1 = require("../../Errors/BadRequest");
 const pdfkit_1 = __importDefault(require("pdfkit"));
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 const invoices_1 = require("../../models/schema/admin/invoices");
+const response_1 = require("../../utils/response");
 const getMyRestaurantReport = async (req, res) => {
     if (!req.user)
         throw new Errors_1.UnauthorizedError("Unauthenticated");
@@ -749,3 +749,176 @@ const getDashboardReports = async (req, res) => {
     });
 };
 exports.getDashboardReports = getDashboardReports;
+const getVisaReport = async (req, res) => {
+    if (!req.user)
+        throw new Errors_1.UnauthorizedError("Unauthenticated");
+    const restaurantId = req.user.restaurantId || req.user.id;
+    if (!restaurantId)
+        throw new BadRequest_1.BadRequest("Restaurant ID not found");
+    const { startDate, endDate, branchId, status, paymentStatus, payment_status, type, orderNumber } = req.query;
+    const rawStatus = (status || paymentStatus || payment_status || type || "");
+    const normalizedStatus = rawStatus.trim().toLowerCase();
+    const isSuccessFilter = ["success", "succes", "paid"].includes(normalizedStatus);
+    const isFailedFilter = ["failed", "faild", "payment_failed"].includes(normalizedStatus);
+    // 🔍 معرفة نوع بوابة الدفع للمطعم (SYSTEM أم CUSTOM) وتحديد الاسم
+    const [restaurantSetting] = await connection_1.db
+        .select({
+        paymentGatewayType: schema_1.restaurantSettings.paymentGatewayType,
+    })
+        .from(schema_1.restaurantSettings)
+        .where((0, drizzle_orm_1.eq)(schema_1.restaurantSettings.restaurantId, restaurantId))
+        .limit(1);
+    const [customCred] = await connection_1.db
+        .select({
+        id: schema_1.restaurantPaymentCredentials.id,
+        title: schema_1.restaurantPaymentCredentials.title,
+        provider: schema_1.restaurantPaymentCredentials.provider,
+    })
+        .from(schema_1.restaurantPaymentCredentials)
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.restaurantPaymentCredentials.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.restaurantPaymentCredentials.isActive, true)))
+        .limit(1);
+    const gatewayType = restaurantSetting?.paymentGatewayType === "CUSTOM" ? "CUSTOM" : "SYSTEM";
+    const gatewayName = gatewayType === "CUSTOM"
+        ? (customCred?.title || customCred?.provider || "Custom Visa")
+        : "kashier";
+    // الشرط الأساسي: أوردرات الفيزا / الدفع الإلكتروني لهذا المطعم
+    const conditions = [
+        (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId),
+        (0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.orders.paymentMethod, "visa"), (0, drizzle_orm_1.sql) `${schema_1.orders.paymentOrderId} IS NOT NULL`, (0, drizzle_orm_1.sql) `(${schema_1.paymentMethods.name} IS NOT NULL 
+                AND LOWER(${schema_1.paymentMethods.name}) NOT LIKE '%cash%' 
+                AND ${schema_1.paymentMethods.nameAr} NOT LIKE '%استلام%' 
+                AND LOWER(${schema_1.paymentMethods.name}) NOT LIKE '%wallet%' 
+                AND ${schema_1.paymentMethods.nameAr} NOT LIKE '%محفظ%')`)
+    ];
+    // الفلترة حسب التاريخ
+    if (startDate)
+        conditions.push((0, drizzle_orm_1.gte)(schema_1.orders.createdAt, new Date(startDate)));
+    if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        conditions.push((0, drizzle_orm_1.lte)(schema_1.orders.createdAt, end));
+    }
+    // الفلترة حسب الفرع
+    if (branchId)
+        conditions.push((0, drizzle_orm_1.eq)(schema_1.orders.branchId, branchId));
+    if (req.user.branchId)
+        conditions.push((0, drizzle_orm_1.eq)(schema_1.orders.branchId, req.user.branchId));
+    // الفلترة برقم الطلب
+    if (orderNumber)
+        conditions.push((0, drizzle_orm_1.like)(schema_1.orders.orderNumber, `%${orderNumber.trim()}%`));
+    // الفلترة بحالة الفيزا (نجاح / فشل) إذا تم تمريرها بالـ Query، وإلا افتراضياً يرجع الكل
+    if (isSuccessFilter) {
+        conditions.push((0, drizzle_orm_1.eq)(schema_1.orders.paymentStatus, "paid"));
+    }
+    else if (isFailedFilter) {
+        conditions.push((0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.orders.paymentStatus, "payment_failed"), (0, drizzle_orm_1.and)((0, drizzle_orm_1.ne)(schema_1.orders.paymentStatus, "paid"), (0, drizzle_orm_1.eq)(schema_1.orders.status, "cancelled"))));
+    }
+    const orderList = await connection_1.db
+        .select({
+        orderId: schema_1.orders.id,
+        orderNumber: schema_1.orders.orderNumber,
+        dailyOrderNumber: schema_1.orders.dailyOrderNumber,
+        status: schema_1.orders.status,
+        paymentStatus: schema_1.orders.paymentStatus,
+        paymentOrderId: schema_1.orders.paymentOrderId,
+        paymentTransactionId: schema_1.orders.paymentTransactionId,
+        orderSource: schema_1.orders.orderSource,
+        orderType: schema_1.orders.orderType,
+        // بيانات العميل
+        userId: schema_1.orders.userId,
+        userName: (0, drizzle_orm_1.sql) `COALESCE(${schema_1.users.name}, 'Guest')`,
+        userPhone: (0, drizzle_orm_1.sql) `COALESCE(${schema_1.users.phone}, 'N/A')`,
+        userEmail: (0, drizzle_orm_1.sql) `COALESCE(${schema_1.users.email}, 'N/A')`,
+        // وسيلة الدفع
+        paymentMethodId: schema_1.orders.paymentMethod,
+        paymentMethodName: (0, drizzle_orm_1.sql) `COALESCE(${schema_1.paymentMethods.name}, 'Visa / Card')`,
+        paymentMethodNameAr: (0, drizzle_orm_1.sql) `COALESCE(${schema_1.paymentMethods.nameAr}, 'فيزا / بطاقة')`,
+        // المبالغ المالية
+        subtotal: schema_1.orders.subtotal,
+        deliveryFee: schema_1.orders.deliveryFee,
+        serviceFee: schema_1.orders.serviceFee,
+        appCommission: schema_1.orders.appCommission,
+        discountAmount: schema_1.orders.discountAmount,
+        totalAmount: schema_1.orders.totalAmount,
+        // بيانات الفرع
+        branchId: schema_1.orders.branchId,
+        branchName: schema_1.branches.name,
+        branchNameAr: schema_1.branches.nameAr,
+        branchNameFr: schema_1.branches.nameFr,
+        createdAt: schema_1.orders.createdAt,
+        updatedAt: schema_1.orders.updatedAt,
+        cancelReason: schema_1.orders.cancelReason,
+        cancelReasonType: (0, drizzle_orm_1.sql) `COALESCE(${schema_1.orders.cancelReasonType}, ${schema_1.selectReasons.type})`,
+    })
+        .from(schema_1.orders)
+        .leftJoin(schema_1.users, (0, drizzle_orm_1.eq)(schema_1.orders.userId, schema_1.users.id))
+        .leftJoin(schema_1.branches, (0, drizzle_orm_1.eq)(schema_1.orders.branchId, schema_1.branches.id))
+        .leftJoin(schema_1.selectReasons, (0, drizzle_orm_1.eq)(schema_1.orders.cancelReasonId, schema_1.selectReasons.id))
+        .leftJoin(schema_1.paymentMethods, (0, drizzle_orm_1.eq)(schema_1.orders.paymentMethod, schema_1.paymentMethods.id))
+        .where((0, drizzle_orm_1.and)(...conditions))
+        .orderBy((0, drizzle_orm_1.desc)(schema_1.orders.createdAt));
+    let totalOrdersCount = 0;
+    let totalOrdersAmount = 0;
+    let successCount = 0;
+    let successAmount = 0;
+    let failedCount = 0;
+    let failedAmount = 0;
+    const formattedOrders = orderList.map(order => {
+        const amount = parseFloat(order.totalAmount || "0");
+        totalOrdersCount++;
+        totalOrdersAmount += amount;
+        const isPaid = order.paymentStatus === "paid";
+        const isFailed = order.paymentStatus === "payment_failed" || (order.paymentStatus !== "paid" && order.status === "cancelled");
+        const visaStatus = isPaid ? "success" : (isFailed ? "failed" : "pending");
+        if (isPaid) {
+            successCount++;
+            successAmount += amount;
+        }
+        else if (isFailed) {
+            failedCount++;
+            failedAmount += amount;
+        }
+        return {
+            ...order,
+            visaStatus,
+            gatewayType,
+            gatewayName,
+            subtotal: parseFloat(order.subtotal || "0").toFixed(2),
+            deliveryFee: parseFloat(order.deliveryFee || "0").toFixed(2),
+            serviceFee: parseFloat(order.serviceFee || "0").toFixed(2),
+            appCommission: parseFloat(order.appCommission || "0").toFixed(2),
+            discountAmount: parseFloat(order.discountAmount || "0").toFixed(2),
+            totalAmount: amount.toFixed(2),
+        };
+    });
+    return (0, response_1.SuccessResponse)(res, {
+        message: "Visa report retrieved successfully",
+        data: {
+            gateway: {
+                type: gatewayType,
+                name: gatewayName,
+            },
+            filter: {
+                status: isSuccessFilter ? "success" : (isFailedFilter ? "failed" : "all"),
+                startDate: startDate || null,
+                endDate: endDate || null,
+                branchId: branchId || req.user.branchId || null,
+            },
+            summary: {
+                totalOrders: totalOrdersCount,
+                totalAmount: totalOrdersAmount.toFixed(2),
+                success: {
+                    count: successCount,
+                    totalAmount: successAmount.toFixed(2),
+                },
+                failed: {
+                    count: failedCount,
+                    totalAmount: failedAmount.toFixed(2),
+                },
+            },
+            orders: formattedOrders,
+        }
+    });
+};
+exports.getVisaReport = getVisaReport;
+exports.reportVisa = exports.getVisaReport;

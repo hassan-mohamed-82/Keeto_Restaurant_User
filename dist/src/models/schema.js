@@ -88,3 +88,4 @@ __exportStar(require("./schema/admin/cashierMan"), exports);
 __exportStar(require("./schema/admin/hall"), exports);
 __exportStar(require("./schema/admin/hallTable"), exports);
 __exportStar(require("./schema/admin/restaurantPaymentCredentials"), exports);
+__exportStar(require("./schema/admin/printer"), exports);

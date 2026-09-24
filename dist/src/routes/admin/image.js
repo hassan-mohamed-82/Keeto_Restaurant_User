@@ -6,6 +6,7 @@ const catchAsync_1 = require("../../utils/catchAsync");
 const validation_1 = require("../../middlewares/validation");
 const image_2 = require("../../validation/admin/image");
 const router = (0, express_1.Router)();
+router.get("/select-branch", (0, catchAsync_1.catchAsync)(image_1.getAllActiveBranches));
 router.post("/", (0, validation_1.validate)(image_2.createImageSchema), (0, catchAsync_1.catchAsync)(image_1.createImage));
 router.get("/", (0, catchAsync_1.catchAsync)(image_1.getAllImages));
 router.get("/:id", (0, catchAsync_1.catchAsync)(image_1.getImageById));

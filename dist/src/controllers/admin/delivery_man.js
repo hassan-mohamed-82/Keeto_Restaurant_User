@@ -164,6 +164,7 @@ const getPendingOrders = async (req, res) => {
         .select({
         id: schema_1.orders.id,
         orderNumber: schema_1.orders.orderNumber,
+        dailyOrderNumber: schema_1.orders.dailyOrderNumber,
         status: schema_1.orders.status,
         orderType: schema_1.orders.orderType,
         totalAmount: schema_1.orders.totalAmount,
@@ -285,6 +286,7 @@ const getDeliveryMenWithOrders = async (req, res) => {
         .select({
         id: schema_1.orders.id,
         orderNumber: schema_1.orders.orderNumber,
+        dailyOrderNumber: schema_1.orders.dailyOrderNumber,
         status: schema_1.orders.status,
         orderType: schema_1.orders.orderType,
         totalAmount: schema_1.orders.totalAmount,
@@ -399,6 +401,7 @@ const getDeliveryOrders = async (req, res) => {
         .select({
         id: schema_1.orders.id,
         orderNumber: schema_1.orders.orderNumber,
+        dailyOrderNumber: schema_1.orders.dailyOrderNumber,
         status: schema_1.orders.status,
         orderType: schema_1.orders.orderType,
         totalAmount: schema_1.orders.totalAmount,
@@ -637,6 +640,7 @@ const getDeliveryCashOrders = async (req, res) => {
         .select({
         id: schema_1.orders.id,
         orderNumber: schema_1.orders.orderNumber,
+        dailyOrderNumber: schema_1.orders.dailyOrderNumber,
         status: schema_1.orders.status,
         orderType: schema_1.orders.orderType,
         totalAmount: schema_1.orders.totalAmount,
@@ -764,6 +768,7 @@ const collectDeliveryCash = async (req, res) => {
         .select({
         id: schema_1.orders.id,
         orderNumber: schema_1.orders.orderNumber,
+        dailyOrderNumber: schema_1.orders.dailyOrderNumber,
         status: schema_1.orders.status,
         totalAmount: schema_1.orders.totalAmount,
         paymentMethod: schema_1.orders.paymentMethod,

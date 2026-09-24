@@ -61,6 +61,7 @@ const captainOrders_1 = __importDefault(require("./pos/captainOrders"));
 const cashierMen_1 = __importDefault(require("./pos/cashierMen"));
 const halls_1 = __importDefault(require("./pos/halls"));
 const hallTables_1 = __importDefault(require("./pos/hallTables"));
+const printer_1 = __importDefault(require("./printer"));
 const router = (0, express_1.Router)();
 router.use("/auth", auth_1.default);
 // ضفنا الـ Underscore هنا 👇
@@ -106,6 +107,7 @@ router.use("/free-delivery", freeDeliveryOffer_1.default);
 router.use("/pricing", pricing_1.default);
 router.use("/shifts", shifts_1.default);
 router.use("/order-delay-alerts", orderDelayAlert_1.default);
+router.use("/printers", printer_1.default);
 // POS Routes
 router.use("/pos/shifts", shifts_1.default);
 router.use("/service-fees", serviceFees_1.default);

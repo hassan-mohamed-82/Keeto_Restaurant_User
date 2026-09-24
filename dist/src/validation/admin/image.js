@@ -5,6 +5,9 @@ const zod_1 = require("zod");
 const constant_1 = require("../../types/constant");
 const normalizeImagePayload = (obj) => {
     if (obj && typeof obj === "object") {
+        if (obj.branch_id !== undefined && obj.branchId === undefined) {
+            obj.branchId = obj.branch_id;
+        }
         if (obj.link_type !== undefined && obj.linkType === undefined) {
             obj.linkType = obj.link_type;
         }
@@ -51,6 +54,7 @@ const normalizeImagePayload = (obj) => {
     return obj;
 };
 exports.createImageSchema = zod_1.z.preprocess(normalizeImagePayload, zod_1.z.object({
+    branchId: zod_1.z.preprocess((val) => (val === "" ? null : val), zod_1.z.string().optional().nullable()),
     img: zod_1.z.string({ required_error: "Image is required" }).min(1, "Image is required"),
     periorty: zod_1.z.preprocess((val) => {
         if (val === undefined || val === null || val === "")
@@ -95,6 +99,7 @@ exports.createImageSchema = zod_1.z.preprocess(normalizeImagePayload, zod_1.z.ob
     }
 }));
 exports.updateImageSchema = zod_1.z.preprocess(normalizeImagePayload, zod_1.z.object({
+    branchId: zod_1.z.preprocess((val) => (val === "" ? null : val), zod_1.z.string().optional().nullable()),
     img: zod_1.z.string().optional(),
     periorty: zod_1.z.preprocess((val) => {
         if (val === undefined || val === null || val === "")
