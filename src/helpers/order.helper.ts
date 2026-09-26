@@ -4,7 +4,7 @@ import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 import { db } from "../models/connection";
 import { orders, restaurantSettings, restaurantSchedules } from "../models/schema";
-import { eq, gte, lte } from "drizzle-orm";
+import { eq, gte, lte, sql } from "drizzle-orm";
 import { BadRequest } from "../Errors/BadRequest";
 import { ForbiddenError } from "../Errors/forbiddenError";
 
@@ -12,6 +12,25 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 
 const TIMEZONE = "Africa/Cairo";
+
+// ==========================================
+// Helper: استبعاد طلبات الفيزا غير المدفوعة من أي كويري
+// ==========================================
+/**
+ * يرجع شرط SQL جاهز يُضاف لأي conditions array.
+ * يُخفي طلبات الفيزا التي لم يتم تأكيد الدفع فيها بعد
+ * (paymentStatus = pending_payment أو payment_failed).
+ * الطلب يظهر فقط لما paymentStatus = 'paid'،
+ * أما طلبات الكاش والمحفظة فلا تتأثر.
+ *
+ * @example
+ * const conditions = [
+ *   eq(orders.restaurantId, restaurantId),
+ *   excludeUnpaidVisaOrders(),
+ * ];
+ */
+export const excludeUnpaidVisaOrders = () =>
+    sql`NOT (${orders.paymentMethod} = 'visa' AND ${orders.paymentStatus} IN ('pending_payment', 'payment_failed'))`;
 
 // ==========================================
 // 1. Helper: حساب تاريخ بداية الشيفت الحالي للمطعم

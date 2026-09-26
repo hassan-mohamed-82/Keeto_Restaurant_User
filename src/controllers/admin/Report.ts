@@ -25,6 +25,7 @@ import path from "path";
 import fs from "fs";
 import { invoices } from "../../models/schema/admin/invoices";
 import { SuccessResponse } from "../../utils/response";
+import { excludeUnpaidVisaOrders } from "../../helpers/order.helper";
 
 type OrderStatus = "pending" | "accepted" | "preparing" | "out_for_delivery" | "delivered" | "cancelled" | "rejected" | "refund";
 
@@ -36,7 +37,11 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
 
     const { startDate, endDate, branchId } = req.query;
 
-    const conditions: any[] = [eq(orders.restaurantId, restaurantId)];
+    const conditions: any[] = [
+        eq(orders.restaurantId, restaurantId),
+        // ✅ إخفاء طلبات الفيزا المعلقة أو الفاشلة من التقارير — تُحسب فقط لما paymentStatus = 'paid'
+        excludeUnpaidVisaOrders(),
+    ];
 
     if (startDate) conditions.push(gte(orders.createdAt, new Date(startDate as string)));
     if (endDate) {
@@ -386,7 +391,11 @@ export const getOrdersByPaymentMethod = async (req: Request | any, res: Response
     // معرفة هل أرسل المستخدم فلتر وسيلة الدفع أم لا
     const hasPaymentFilter = Boolean(pMethod || pName);
 
-    const conditions: any[] = [eq(orders.restaurantId, restaurantId)];
+    const conditions: any[] = [
+        eq(orders.restaurantId, restaurantId),
+        // ✅ إخفاء طلبات الفيزا المعلقة أو الفاشلة من تقارير الدفع — تُحسب فقط لما paymentStatus = 'paid'
+        excludeUnpaidVisaOrders(),
+    ];
 
     // 1. الفلترة حسب التاريخ
     if (startDate) conditions.push(gte(orders.createdAt, new Date(startDate as string)));

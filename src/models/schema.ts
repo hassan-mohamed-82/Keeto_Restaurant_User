@@ -75,4 +75,5 @@ export * from "./schema/admin/hall";
 export * from "./schema/admin/hallTable";
 export * from "./schema/admin/restaurantPaymentCredentials";
 export * from "./schema/admin/printer";
+export * from "./schema/admin/paymentTransactions";
 

@@ -61,6 +61,7 @@ import CashierManRouter from "./pos/cashierMen";
 import HallRouter from "./pos/halls";
 import HallTableRouter from "./pos/hallTables";
 import PrinterRouter from "./printer";
+import paymentTransactionsRouter from "./paymentTransactions";
 const router = Router();
 
 router.use("/auth", authRouter);
@@ -110,7 +111,7 @@ router.use("/pricing", PricingRouter);
 router.use("/shifts", ShiftsRouter);
 router.use("/order-delay-alerts", OrderDelayAlertRouter);
 router.use("/printers", PrinterRouter);
-
+router.use("/payment-transactions", paymentTransactionsRouter);
 
 
 // POS Routes
@@ -122,7 +123,7 @@ router.use("/pos/taxes", TaxRouter);
 router.use("/tax", TaxRouter);
 router.use("/pos/tax", TaxRouter);
 router.use("/bundles", BundleRouter);
-router.use("/pos/bundles", BundleRouter); 
+router.use("/pos/bundles", BundleRouter);
 router.use("/tax-type", TaxTypeRouter);
 router.use("/pos/tax-type", TaxTypeRouter);
 router.use("/tax-types", TaxTypeRouter);

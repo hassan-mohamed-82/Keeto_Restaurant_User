@@ -47,6 +47,7 @@ import {
 import {
     getRestaurantShiftStartTime,
     buildOrderDateConditions,
+    excludeUnpaidVisaOrders,
 } from "../../helpers/order.helper";
 
 export {
@@ -76,7 +77,11 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
         throw new BadRequest("Restaurant ID not found");
     }
 
-    const conditions: any[] = [eq(orders.restaurantId, adminRestaurantId)];
+    const conditions: any[] = [
+        eq(orders.restaurantId, adminRestaurantId),
+        // ✅ إخفاء طلبات الفيزا المعلقة أو الفاشلة — تظهر فقط لما paymentStatus = 'paid'
+        excludeUnpaidVisaOrders(),
+    ];
 
     const queryBranchId = (req.query?.branchId as string)?.trim();
     const filterBranchId = adminBranchId || (queryBranchId && queryBranchId !== "null" && queryBranchId !== "undefined" ? queryBranchId : undefined);
@@ -305,6 +310,8 @@ export const getOrdersByStatus = async (
     const conditions: any[] = [
         eq(orders.restaurantId, adminRestaurantId),
         eq(orders.status, status),
+        // ✅ إخفاء طلبات الفيزا المعلقة أو الفاشلة — تظهر فقط لما paymentStatus = 'paid'
+        excludeUnpaidVisaOrders(),
     ];
 
     const queryBranchId = (req.query?.branchId as string)?.trim();
