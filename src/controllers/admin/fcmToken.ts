@@ -1,33 +1,53 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { restaurants, restrauntadmin } from "../../models/schema";
-import { eq } from "drizzle-orm";
+import { restrauntadmin } from "../../models/schema";
+import { and, eq , ne } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { UnauthorizedError } from "../../Errors";
 import { BadRequest } from "../../Errors/BadRequest";
 
 // ==========================================
-// Update FCM Token for Admin
+// 6. Update Admin FCM Token (Single Device Ownership)
 // ==========================================
-export const updateFcmToken = async (req: Request | any, res: Response) => {
+export const updateAdminFcmToken = async (req: Request | any, res: Response) => {
     if (!req.user) throw new UnauthorizedError("Unauthenticated");
     const { fcmToken } = req.body;
 
     const tokenToSave = fcmToken && String(fcmToken).trim() !== "" ? String(fcmToken).trim() : null;
 
-    // 1. تحديث الـ Token في جدول الأدمن (restrauntadmin) لجميع الأنواع
-    if (req.user.id) {
-        await db.update(restrauntadmin)
-            .set({ fcmToken: tokenToSave })
-            .where(eq(restrauntadmin.id, req.user.id));
+    if (tokenToSave) {
+        // تفريغ هذا التوكن من أي حساب أدمن آخر فوراً لمنع وصول إشعارات المطاعم الأخرى لنفس الجهاز
+        await db
+            .update(restrauntadmin)
+            .set({ fcmToken: null })
+            .where(and(
+                eq(restrauntadmin.fcmToken, tokenToSave),
+                ne(restrauntadmin.id, req.user.id)
+            ));
     }
 
-    // 2. إذا كان صاحب المطعم (owner)، نحدث أيضاً جدول المطعم (restaurants)
-    // if (req.user.type === "owner" && req.user.restaurantId) {
-    //     await db.update(restaurants)
-    //         .set({ fcmToken: tokenToSave })
-    //         .where(eq(restaurants.id, req.user.restaurantId));
-    // }
+    await db
+        .update(restrauntadmin)
+        .set({ fcmToken: tokenToSave })
+        .where(eq(restrauntadmin.id, req.user.id));
 
-    return SuccessResponse(res, { message: tokenToSave ? "FCM token updated successfully" : "FCM token removed successfully" });
+    return SuccessResponse(res, {
+        message: tokenToSave ? "FCM token updated successfully" : "FCM token removed successfully"
+    });
+};
+
+// ==========================================
+// 7. Remove Admin FCM Token
+// ==========================================
+export const removeAdminFcmToken = async (req: Request | any, res: Response) => {
+    if (!req.user) throw new UnauthorizedError("Unauthenticated");
+
+    await db
+        .update(restrauntadmin)
+        .set({ fcmToken: null })
+        .where(eq(restrauntadmin.id, req.user.id));
+
+    return SuccessResponse(res, {
+        message: "FCM token removed successfully"
+    });
 };

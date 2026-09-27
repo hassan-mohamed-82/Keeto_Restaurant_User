@@ -11,6 +11,7 @@ export const userFcmTokens = mysqlTable("user_fcm_tokens", {
     restaurantId: char("restaurant_id", { length: 36 })
         .references(() => restaurants.id, { onDelete: "cascade" }),
     fcmToken: text("fcm_token").notNull(),
+    firebaseProject: mysqlEnum("firebase_project", ["primary", "secondary"]).default("primary"),
     deviceType: mysqlEnum("device_type", ["web", "android", "ios"]).default("web"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow()

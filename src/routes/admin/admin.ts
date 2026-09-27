@@ -3,7 +3,7 @@ import { hasPermission } from "../../middlewares/hasPermission";
 import {
     createStaff, deleteStaff, getAllStaff, getStaffById, updateStaff, getAllRoles
 } from "../../controllers/admin/restrauntadmin";
-import { updateFcmToken } from "../../controllers/admin/fcmToken";
+import { updateAdminFcmToken , removeAdminFcmToken } from "../../controllers/admin/fcmToken";
 import { catchAsync } from "../../utils/catchAsync";
 
 const router = Router();
@@ -18,7 +18,8 @@ router.post("/", hasPermission("admins", "create"), catchAsync(createStaff));
 router.get("/", hasPermission("admins", "read"), catchAsync(getAllStaff));
 
 // ✅ Update FCM token - لا يحتاج صلاحيات (كل واحد يقدر يحدث token بتاعه)
-router.put("/fcm-token", catchAsync(updateFcmToken));
+router.put("/fcm-token", catchAsync(updateAdminFcmToken));
+router.delete("/fcm-token" , catchAsync(removeAdminFcmToken))
 
 router.get("/:id", hasPermission("admins", "read"), catchAsync(getStaffById));
 
