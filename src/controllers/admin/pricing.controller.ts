@@ -569,19 +569,16 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
                 isOutOfStock = item.branchStockType === "limited" && (item.branchStockQty ?? 0) <= 0;
             }
 
-            // Effective status hierarchy: branch+module -> branch -> module -> branchMenuItem -> global food
+            // Effective status of the product in the branch
             let effectiveStatus: "active" | "inactive" = (item.globalStatus as "active" | "inactive") || "active";
             if (item.branchStatus) {
                 effectiveStatus = item.branchStatus as "active" | "inactive";
             }
-            if (item.globalChannelStatus) {
-                effectiveStatus = item.globalChannelStatus as "active" | "inactive";
-            }
-            if (item.branchOverrideStatus) {
-                effectiveStatus = item.branchOverrideStatus as "active" | "inactive";
-            }
-            if (item.branchChannelStatus) {
-                effectiveStatus = item.branchChannelStatus as "active" | "inactive";
+            // Channel-specific deactivation (if single module is requested and deactivated for food)
+            if (effectiveStatus === "active") {
+                if (item.globalChannelStatus === "inactive" || item.branchChannelStatus === "inactive") {
+                    effectiveStatus = "inactive";
+                }
             }
 
             const isAvailable = effectiveStatus === "active";
@@ -597,6 +594,8 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
                 subcategoryId: item.subcategoryId,
                 mainBasePrice: item.mainBasePrice,
                 points: item.points,
+                branchStatus: (item.branchStatus as "active" | "inactive") || null,
+                branchPriceStatus: (item.branchOverrideStatus as "active" | "inactive") || null,
                 status: effectiveStatus,
                 isOutOfStock,
                 isAvailable,
@@ -872,27 +871,30 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
             ? branchStatusRows.find((b) => b.foodId === f.id && b.branchId === singleBranch)
             : null;
 
+        const singleBranchPriceOverride = singleBranch
+            ? itemBranchOverrides.find((ov) => ov.branchId === singleBranch)
+            : null;
+
         // 1. Calculate isOutOfStock
         let isOutOfStock = Boolean(f.isOutOfStock);
         if (branchItem && branchItem.stockType !== null && branchItem.stockType !== undefined) {
             isOutOfStock = branchItem.stockType === "limited" && (branchItem.stockQty ?? 0) <= 0;
         }
 
-        // 2. Calculate effective status
+        // 2. Calculate effective status of the product in the branch
         let effectiveStatus: "active" | "inactive" = (f.globalStatus as "active" | "inactive") || "active";
         if (branchItem?.status) {
             effectiveStatus = branchItem.status as "active" | "inactive";
         }
 
-        const relevantOverrides = itemOverrides.filter((ov) => {
-            const matchBranch = !ov.branchId || (singleBranch && ov.branchId === singleBranch);
-            const matchModule = !ov.serviceModule || (singleModule && ov.serviceModule === singleModule);
-            return matchBranch && matchModule;
-        });
-
-        const sortedOverrides = [...relevantOverrides].sort((a, b) => overrideRank(b) - overrideRank(a));
-        if (sortedOverrides.length > 0 && sortedOverrides[0].status) {
-            effectiveStatus = sortedOverrides[0].status as "active" | "inactive";
+        // Channel-specific deactivation (if single module is requested and deactivated for this food)
+        if (effectiveStatus === "active" && singleModule) {
+            const channelOverride = itemChannels.find(
+                (ov) => ov.serviceModule === singleModule && (!ov.branchId || (singleBranch && ov.branchId === singleBranch))
+            );
+            if (channelOverride && channelOverride.status === "inactive") {
+                effectiveStatus = "inactive";
+            }
         }
 
         // 3. Calculate isAvailable
@@ -955,6 +957,8 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
             subcategoryId: f.subcategoryId,
             mainBasePrice: f.mainBasePrice,
             points: f.points,
+            branchStatus: branchItem?.status || null,
+            branchPriceStatus: singleBranchPriceOverride?.status || null,
             status: effectiveStatus,
             isOutOfStock,
             isAvailable,
