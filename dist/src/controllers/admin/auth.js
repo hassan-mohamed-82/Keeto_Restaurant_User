@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.login = login;
+exports.logout = logout;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const role_restaurant_1 = require("../../models/schema/admin/role_restaurant");
@@ -92,14 +93,22 @@ async function login(req, res) {
             .from(schema_1.restaurantSchedules)
             .where((0, drizzle_orm_1.eq)(schema_1.restaurantSchedules.restaurantId, user.restaurantId));
     }
-    // 5.6 تحديث الـ FCM Token في جدول الأدمن والمطعم في حال تم إرساله عند تسجيل الدخول
+    // 5.6 تحديث الـ FCM Token في جدول الأدمن مع تفريغه من أي حسابات أخرى (Single Device Ownership)
     let currentFcmToken = user.fcmToken;
     if (fcmToken !== undefined) {
         const tokenToSave = fcmToken && String(fcmToken).trim() !== "" ? String(fcmToken).trim() : null;
+        if (tokenToSave) {
+            // تفريغ هذا التوكن من أي حساب أدمن آخر فوراً لمنع وصول إشعارات المطاعم الأخرى لنفس الجهاز
+            await connection_1.db
+                .update(schema_1.restrauntadmin)
+                .set({ fcmToken: null })
+                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.restrauntadmin.fcmToken, tokenToSave), (0, drizzle_orm_1.ne)(schema_1.restrauntadmin.id, user.id)));
+        }
         await connection_1.db
             .update(schema_1.restrauntadmin)
             .set({ fcmToken: tokenToSave })
             .where((0, drizzle_orm_1.eq)(schema_1.restrauntadmin.id, user.id));
+        currentFcmToken = tokenToSave;
     }
     // 6. تجهيز الـ Token Payload الديناميكي
     const tokenPayload = {
@@ -183,4 +192,20 @@ async function login(req, res) {
         },
         schedules
     }, 200);
+}
+// ==========================================
+// 8. Admin Logout & Invalidate Device FCM Token
+// ==========================================
+async function logout(req, res) {
+    if (!req.user?.id) {
+        throw new Errors_1.UnauthorizedError("Unauthenticated");
+    }
+    // إزالة الـ FCM Token الخاص بالجهاز عند تسجيل الخروج لمنع استلام أي إشعارات بعد الخروج
+    await connection_1.db
+        .update(schema_1.restrauntadmin)
+        .set({ fcmToken: null })
+        .where((0, drizzle_orm_1.eq)(schema_1.restrauntadmin.id, req.user.id));
+    return (0, response_1.SuccessResponse)(res, {
+        message: "Logged out successfully and FCM token dissociated",
+    });
 }

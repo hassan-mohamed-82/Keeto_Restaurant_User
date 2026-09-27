@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.buildOrderDateConditions = exports.getRestaurantShiftStartTime = void 0;
+exports.buildOrderDateConditions = exports.getRestaurantShiftStartTime = exports.excludeUnpaidVisaOrders = void 0;
 const dayjs_1 = __importDefault(require("dayjs"));
 const utc_1 = __importDefault(require("dayjs/plugin/utc"));
 const timezone_1 = __importDefault(require("dayjs/plugin/timezone"));
@@ -15,6 +15,24 @@ const forbiddenError_1 = require("../Errors/forbiddenError");
 dayjs_1.default.extend(utc_1.default);
 dayjs_1.default.extend(timezone_1.default);
 const TIMEZONE = "Africa/Cairo";
+// ==========================================
+// Helper: استبعاد طلبات الفيزا غير المدفوعة من أي كويري
+// ==========================================
+/**
+ * يرجع شرط SQL جاهز يُضاف لأي conditions array.
+ * يُخفي طلبات الفيزا التي لم يتم تأكيد الدفع فيها بعد
+ * (paymentStatus = pending_payment أو payment_failed).
+ * الطلب يظهر فقط لما paymentStatus = 'paid'،
+ * أما طلبات الكاش والمحفظة فلا تتأثر.
+ *
+ * @example
+ * const conditions = [
+ *   eq(orders.restaurantId, restaurantId),
+ *   excludeUnpaidVisaOrders(),
+ * ];
+ */
+const excludeUnpaidVisaOrders = () => (0, drizzle_orm_1.sql) `NOT (${schema_1.orders.paymentMethod} = 'visa' AND ${schema_1.orders.paymentStatus} IN ('pending_payment', 'payment_failed'))`;
+exports.excludeUnpaidVisaOrders = excludeUnpaidVisaOrders;
 // ==========================================
 // 1. Helper: حساب تاريخ بداية الشيفت الحالي للمطعم
 // ==========================================

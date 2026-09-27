@@ -2,6 +2,11 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const auth_1 = require("../../controllers/admin/auth");
+const authenticated_1 = require("../../middlewares/authenticated");
+const catchAsync_1 = require("../../utils/catchAsync");
+const validation_1 = require("../../middlewares/validation");
+const auth_2 = require("../../validation/admin/auth");
 const router = (0, express_1.Router)();
-router.post("/login", auth_1.login);
+router.post("/login", (0, validation_1.validate)(auth_2.loginSchema), (0, catchAsync_1.catchAsync)(auth_1.login));
+router.post("/logout", authenticated_1.authenticated, (0, catchAsync_1.catchAsync)(auth_1.logout));
 exports.default = router;

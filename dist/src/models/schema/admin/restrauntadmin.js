@@ -9,6 +9,7 @@ const role_restaurant_1 = require("./role_restaurant");
 exports.restrauntadmin = (0, mysql_core_1.mysqlTable)("restrauntadmins", {
     id: (0, mysql_core_1.char)("id", { length: 36 }).primaryKey().default((0, drizzle_orm_1.sql) `(uuid())`),
     fcmToken: (0, mysql_core_1.text)("fcm_token"),
+    firebaseProject: (0, mysql_core_1.mysqlEnum)("firebase_project", ["primary", "secondary"]).default("primary"),
     // الموظف ده تبع أنهي مطعم؟ (إجباري للكل)
     restaurantId: (0, mysql_core_1.char)("restaurant_id", { length: 36 })
         .references(() => restaurants_1.restaurants.id, { onDelete: "cascade" })

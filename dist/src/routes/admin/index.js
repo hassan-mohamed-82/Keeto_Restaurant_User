@@ -62,6 +62,7 @@ const cashierMen_1 = __importDefault(require("./pos/cashierMen"));
 const halls_1 = __importDefault(require("./pos/halls"));
 const hallTables_1 = __importDefault(require("./pos/hallTables"));
 const printer_1 = __importDefault(require("./printer"));
+const paymentTransactions_1 = __importDefault(require("./paymentTransactions"));
 const router = (0, express_1.Router)();
 router.use("/auth", auth_1.default);
 // ضفنا الـ Underscore هنا 👇
@@ -108,6 +109,7 @@ router.use("/pricing", pricing_1.default);
 router.use("/shifts", shifts_1.default);
 router.use("/order-delay-alerts", orderDelayAlert_1.default);
 router.use("/printers", printer_1.default);
+router.use("/payment-transactions", paymentTransactions_1.default);
 // POS Routes
 router.use("/pos/shifts", shifts_1.default);
 router.use("/service-fees", serviceFees_1.default);

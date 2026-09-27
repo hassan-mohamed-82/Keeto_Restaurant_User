@@ -440,19 +440,16 @@ const getMenuWithDynamicPricing = async (req, res) => {
             if (item.branchStockType !== null && item.branchStockType !== undefined) {
                 isOutOfStock = item.branchStockType === "limited" && (item.branchStockQty ?? 0) <= 0;
             }
-            // Effective status hierarchy: branch+module -> branch -> module -> branchMenuItem -> global food
+            // Effective status of the product in the branch
             let effectiveStatus = item.globalStatus || "active";
             if (item.branchStatus) {
                 effectiveStatus = item.branchStatus;
             }
-            if (item.globalChannelStatus) {
-                effectiveStatus = item.globalChannelStatus;
-            }
-            if (item.branchOverrideStatus) {
-                effectiveStatus = item.branchOverrideStatus;
-            }
-            if (item.branchChannelStatus) {
-                effectiveStatus = item.branchChannelStatus;
+            // Channel-specific deactivation (if single module is requested and deactivated for food)
+            if (effectiveStatus === "active") {
+                if (item.globalChannelStatus === "inactive" || item.branchChannelStatus === "inactive") {
+                    effectiveStatus = "inactive";
+                }
             }
             const isAvailable = effectiveStatus === "active";
             return {
@@ -466,6 +463,8 @@ const getMenuWithDynamicPricing = async (req, res) => {
                 subcategoryId: item.subcategoryId,
                 mainBasePrice: item.mainBasePrice,
                 points: item.points,
+                branchStatus: item.branchStatus || null,
+                branchPriceStatus: item.branchOverrideStatus || null,
                 status: effectiveStatus,
                 isOutOfStock,
                 isAvailable,
@@ -695,24 +694,25 @@ const getMenuWithDynamicPricing = async (req, res) => {
         const branchItem = singleBranch
             ? branchStatusRows.find((b) => b.foodId === f.id && b.branchId === singleBranch)
             : null;
+        const singleBranchPriceOverride = singleBranch
+            ? itemBranchOverrides.find((ov) => ov.branchId === singleBranch)
+            : null;
         // 1. Calculate isOutOfStock
         let isOutOfStock = Boolean(f.isOutOfStock);
         if (branchItem && branchItem.stockType !== null && branchItem.stockType !== undefined) {
             isOutOfStock = branchItem.stockType === "limited" && (branchItem.stockQty ?? 0) <= 0;
         }
-        // 2. Calculate effective status
+        // 2. Calculate effective status of the product in the branch
         let effectiveStatus = f.globalStatus || "active";
         if (branchItem?.status) {
             effectiveStatus = branchItem.status;
         }
-        const relevantOverrides = itemOverrides.filter((ov) => {
-            const matchBranch = !ov.branchId || (singleBranch && ov.branchId === singleBranch);
-            const matchModule = !ov.serviceModule || (singleModule && ov.serviceModule === singleModule);
-            return matchBranch && matchModule;
-        });
-        const sortedOverrides = [...relevantOverrides].sort((a, b) => (0, pricing_overrides_1.overrideRank)(b) - (0, pricing_overrides_1.overrideRank)(a));
-        if (sortedOverrides.length > 0 && sortedOverrides[0].status) {
-            effectiveStatus = sortedOverrides[0].status;
+        // Channel-specific deactivation (if single module is requested and deactivated for this food)
+        if (effectiveStatus === "active" && singleModule) {
+            const channelOverride = itemChannels.find((ov) => ov.serviceModule === singleModule && (!ov.branchId || (singleBranch && ov.branchId === singleBranch)));
+            if (channelOverride && channelOverride.status === "inactive") {
+                effectiveStatus = "inactive";
+            }
         }
         // 3. Calculate isAvailable
         const isAvailable = effectiveStatus === "active";
@@ -766,6 +766,8 @@ const getMenuWithDynamicPricing = async (req, res) => {
             subcategoryId: f.subcategoryId,
             mainBasePrice: f.mainBasePrice,
             points: f.points,
+            branchStatus: branchItem?.status || null,
+            branchPriceStatus: singleBranchPriceOverride?.status || null,
             status: effectiveStatus,
             isOutOfStock,
             isAvailable,

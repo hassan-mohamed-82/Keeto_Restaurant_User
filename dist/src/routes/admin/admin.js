@@ -13,7 +13,8 @@ router.post("/", (0, hasPermission_1.hasPermission)("admins", "create"), (0, cat
 // ✅ Get all staff - يحتاج صلاحية read
 router.get("/", (0, hasPermission_1.hasPermission)("admins", "read"), (0, catchAsync_1.catchAsync)(restrauntadmin_1.getAllStaff));
 // ✅ Update FCM token - لا يحتاج صلاحيات (كل واحد يقدر يحدث token بتاعه)
-router.put("/fcm-token", (0, catchAsync_1.catchAsync)(fcmToken_1.updateFcmToken));
+router.put("/fcm-token", (0, catchAsync_1.catchAsync)(fcmToken_1.updateAdminFcmToken));
+router.delete("/fcm-token", (0, catchAsync_1.catchAsync)(fcmToken_1.removeAdminFcmToken));
 router.get("/:id", (0, hasPermission_1.hasPermission)("admins", "read"), (0, catchAsync_1.catchAsync)(restrauntadmin_1.getStaffById));
 // ✅ Update staff - يحتاج صلاحية update
 router.put("/:id", (0, hasPermission_1.hasPermission)("admins", "update"), (0, catchAsync_1.catchAsync)(restrauntadmin_1.updateStaff));

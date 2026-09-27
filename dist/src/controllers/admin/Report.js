@@ -14,6 +14,7 @@ const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 const invoices_1 = require("../../models/schema/admin/invoices");
 const response_1 = require("../../utils/response");
+const order_helper_1 = require("../../helpers/order.helper");
 const getMyRestaurantReport = async (req, res) => {
     if (!req.user)
         throw new Errors_1.UnauthorizedError("Unauthenticated");
@@ -21,7 +22,11 @@ const getMyRestaurantReport = async (req, res) => {
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID not found");
     const { startDate, endDate, branchId } = req.query;
-    const conditions = [(0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId)];
+    const conditions = [
+        (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId),
+        // ✅ إخفاء طلبات الفيزا المعلقة أو الفاشلة من التقارير — تُحسب فقط لما paymentStatus = 'paid'
+        (0, order_helper_1.excludeUnpaidVisaOrders)(),
+    ];
     if (startDate)
         conditions.push((0, drizzle_orm_1.gte)(schema_1.orders.createdAt, new Date(startDate)));
     if (endDate) {
@@ -318,7 +323,11 @@ const getOrdersByPaymentMethod = async (req, res) => {
     const pName = paymentMethodName;
     // معرفة هل أرسل المستخدم فلتر وسيلة الدفع أم لا
     const hasPaymentFilter = Boolean(pMethod || pName);
-    const conditions = [(0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId)];
+    const conditions = [
+        (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId),
+        // ✅ إخفاء طلبات الفيزا المعلقة أو الفاشلة من تقارير الدفع — تُحسب فقط لما paymentStatus = 'paid'
+        (0, order_helper_1.excludeUnpaidVisaOrders)(),
+    ];
     // 1. الفلترة حسب التاريخ
     if (startDate)
         conditions.push((0, drizzle_orm_1.gte)(schema_1.orders.createdAt, new Date(startDate)));

@@ -13,6 +13,7 @@ exports.userFcmTokens = (0, mysql_core_1.mysqlTable)("user_fcm_tokens", {
     restaurantId: (0, mysql_core_1.char)("restaurant_id", { length: 36 })
         .references(() => restaurants_1.restaurants.id, { onDelete: "cascade" }),
     fcmToken: (0, mysql_core_1.text)("fcm_token").notNull(),
+    firebaseProject: (0, mysql_core_1.mysqlEnum)("firebase_project", ["primary", "secondary"]).default("primary"),
     deviceType: (0, mysql_core_1.mysqlEnum)("device_type", ["web", "android", "ios"]).default("web"),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow().onUpdateNow()

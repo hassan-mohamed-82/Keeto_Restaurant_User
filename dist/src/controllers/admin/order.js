@@ -73,7 +73,11 @@ const getRestaurantOrders = async (req, res) => {
     if (!adminRestaurantId) {
         throw new BadRequest_1.BadRequest("Restaurant ID not found");
     }
-    const conditions = [(0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, adminRestaurantId)];
+    const conditions = [
+        (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, adminRestaurantId),
+        // ✅ إخفاء طلبات الفيزا المعلقة أو الفاشلة — تظهر فقط لما paymentStatus = 'paid'
+        (0, order_helper_1.excludeUnpaidVisaOrders)(),
+    ];
     const queryBranchId = req.query?.branchId?.trim();
     const filterBranchId = adminBranchId || (queryBranchId && queryBranchId !== "null" && queryBranchId !== "undefined" ? queryBranchId : undefined);
     if (filterBranchId) {
@@ -276,6 +280,8 @@ const getOrdersByStatus = async (req, res, status) => {
     const conditions = [
         (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, adminRestaurantId),
         (0, drizzle_orm_1.eq)(schema_1.orders.status, status),
+        // ✅ إخفاء طلبات الفيزا المعلقة أو الفاشلة — تظهر فقط لما paymentStatus = 'paid'
+        (0, order_helper_1.excludeUnpaidVisaOrders)(),
     ];
     const queryBranchId = req.query?.branchId?.trim();
     const filterBranchId = adminBranchId || (queryBranchId && queryBranchId !== "null" && queryBranchId !== "undefined" ? queryBranchId : undefined);

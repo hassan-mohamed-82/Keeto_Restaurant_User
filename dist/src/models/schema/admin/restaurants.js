@@ -9,6 +9,7 @@ const city_1 = require("./city");
 exports.restaurants = (0, mysql_core_1.mysqlTable)("restaurants", {
     id: (0, mysql_core_1.char)("id", { length: 36 }).primaryKey().default((0, drizzle_orm_1.sql) `(UUID())`),
     fcmToken: (0, mysql_core_1.text)("fcm_token"),
+    firebaseProject: (0, mysql_core_1.mysqlEnum)("firebase_project", ["primary", "secondary"]).default("primary"),
     name: (0, mysql_core_1.varchar)("name", { length: 255 }).notNull(),
     nameAr: (0, mysql_core_1.varchar)("name_ar", { length: 255 }),
     nameFr: (0, mysql_core_1.varchar)("name_fr", { length: 255 }),
