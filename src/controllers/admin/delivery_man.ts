@@ -289,7 +289,7 @@ export const assignOrdersToDeliveryMan = async (req: Request, res: Response) => 
     // 3. تحديث الطلبات بـ deliveryManId
     await db
         .update(orders)
-        .set({ deliveryManId })
+        .set({ deliveryManId , status:"out_for_delivery" })
         .where(
             and(
                 inArray(orders.id, orderIds),
