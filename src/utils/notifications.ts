@@ -24,8 +24,17 @@ const OTHER_PROJECT: Record<FirebaseProjectKey, FirebaseProjectKey> = {
  * Firebase Project A is sent through Project B's Messaging instance.
  */
 function looksLikeWrongProjectOrDeadToken(err: any): boolean {
-    const code = err?.code || err?.errorInfo?.code;
-    return code === "messaging/registration-token-not-registered" || code === "messaging/invalid-argument";
+    const code: string = err?.code || err?.errorInfo?.code || "";
+    const msg: string = String(err?.message || err?.errorInfo?.message || "").toLowerCase();
+
+    return (
+        code === "messaging/mismatched-credential" ||   // SENDER_ID_MISMATCH: التوكن من بروجكت تاني
+        code === "messaging/registration-token-not-registered" ||
+        code === "messaging/invalid-registration-token" ||
+        code === "messaging/invalid-argument" ||
+        msg.includes("senderid mismatch") ||
+        msg.includes("sender_id_mismatch")
+    );
 }
 
 /**
