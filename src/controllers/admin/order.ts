@@ -1580,7 +1580,22 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
                 if (v.optionId) {
                     const [optDb] = await db.select().from(variationOptions).where(eq(variationOptions.id, v.optionId)).limit(1);
                     if (optDb) {
-                        const name = optDb.optionName || "Extra";
+                        const resolvedArabicName =
+                            (typeof optDb.optionNameAr === "string" && optDb.optionNameAr.trim()) ? optDb.optionNameAr :
+                            (typeof v.optionNameAr === "string" && v.optionNameAr.trim()) ? v.optionNameAr :
+                            (typeof v.valueAr === "string" && v.valueAr.trim()) ? v.valueAr :
+                            (typeof v.option?.optionNameAr === "string" && v.option.optionNameAr.trim()) ? v.option.optionNameAr :
+                            "";
+
+                        const resolvedEnglishName =
+                            optDb.optionName ||
+                            v.optionName ||
+                            v.value ||
+                            v.option?.optionName ||
+                            v.option?.value ||
+                            "Extra";
+
+                        const name = resolvedArabicName || resolvedEnglishName;
                         const price = parseFloat((optDb as any).price || optDb.additionalPrice || "0");
                         varDetails.push({ name, price });
                         totalCalculatedVarPrice += price;
