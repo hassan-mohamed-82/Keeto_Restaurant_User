@@ -38,7 +38,9 @@ const getCustomerRatingsInShift = async (req, res) => {
     })
         .from(schema_1.orders)
         .leftJoin(schema_1.users, (0, drizzle_orm_1.eq)(schema_1.orders.userId, schema_1.users.id))
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId), (0, drizzle_orm_1.isNotNull)(schema_1.orders.rating), ...dateConditions))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId), (0, drizzle_orm_1.isNotNull)(schema_1.orders.rating), 
+    // ✅ إخفاء طلبات الفيزا المعلقة أو الفاشلة
+    (0, order_helper_1.excludeUnpaidVisaOrders)(), ...dateConditions))
         .orderBy((0, drizzle_orm_1.desc)(schema_1.orders.createdAt));
     // إحضار آخر طلبات تعديل/حذف مرتبطة بهذه الأوردرات
     const orderIds = ratedOrders.map(o => o.orderId);

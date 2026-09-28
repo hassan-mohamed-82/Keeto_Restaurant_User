@@ -8,6 +8,7 @@ const response_1 = require("../../utils/response");
 const BadRequest_1 = require("../../Errors/BadRequest");
 const Errors_1 = require("../../Errors");
 const handleImages_1 = require("../../utils/handleImages");
+const order_helper_1 = require("../../helpers/order.helper");
 // =======================================================
 // 1. Get Restaurant Users (Supports ?status=active/blocked)
 // =======================================================
@@ -234,7 +235,9 @@ const getRestaurantUserStats = async (req, res) => {
     if (!userRecord)
         throw new Errors_1.NotFound("User not found");
     // ─── 2. Run parallel queries ─────────────────────────────────────────────
-    const baseCondition = (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orders.userId, userId), (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId));
+    const baseCondition = (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orders.userId, userId), (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId), 
+    // ✅ إخفاء طلبات الفيزا المعلقة أو الفاشلة
+    (0, order_helper_1.excludeUnpaidVisaOrders)());
     const [pointsRows, aggregateRows, recentOrderRows, topItemRows] = await Promise.all([
         // Points for this restaurant
         connection_1.db.select({ points: schema_1.userRestaurantPoints.points })

@@ -1425,7 +1425,18 @@ const generateOrderInvoicePDF = async (req, res) => {
                 if (v.optionId) {
                     const [optDb] = await connection_1.db.select().from(schema_1.variationOptions).where((0, drizzle_orm_1.eq)(schema_1.variationOptions.id, v.optionId)).limit(1);
                     if (optDb) {
-                        const name = optDb.optionName || "Extra";
+                        const resolvedArabicName = (typeof optDb.optionNameAr === "string" && optDb.optionNameAr.trim()) ? optDb.optionNameAr :
+                            (typeof v.optionNameAr === "string" && v.optionNameAr.trim()) ? v.optionNameAr :
+                                (typeof v.valueAr === "string" && v.valueAr.trim()) ? v.valueAr :
+                                    (typeof v.option?.optionNameAr === "string" && v.option.optionNameAr.trim()) ? v.option.optionNameAr :
+                                        "";
+                        const resolvedEnglishName = optDb.optionName ||
+                            v.optionName ||
+                            v.value ||
+                            v.option?.optionName ||
+                            v.option?.value ||
+                            "Extra";
+                        const name = resolvedArabicName || resolvedEnglishName;
                         const price = parseFloat(optDb.price || optDb.additionalPrice || "0");
                         varDetails.push({ name, price });
                         totalCalculatedVarPrice += price;
@@ -1607,7 +1618,9 @@ const getallnumbersoforders = async (req, res) => {
         throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
     // بناء الـ Query الأساسي
     const conditions = [
-        (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, adminRestaurantId)
+        (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, adminRestaurantId),
+        // ✅ إخفاء طلبات الفيزا المعلقة أو الفاشلة — تظهر فقط لما paymentStatus = 'paid'
+        (0, order_helper_1.excludeUnpaidVisaOrders)(),
     ];
     const queryBranchId = req.query?.branchId?.trim();
     const filterBranchId = adminBranchId || (queryBranchId && queryBranchId !== "null" && queryBranchId !== "undefined" ? queryBranchId : undefined);

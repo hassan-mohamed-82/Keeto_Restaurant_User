@@ -86,9 +86,10 @@ exports.orders = (0, mysql_core_1.mysqlTable)("orders", {
         .references(() => schema_1.offers.id, { onDelete: "set null" }),
     // Unified payment gateway columns (supports both Kashier and Paymob)
     paymentGateway: (0, mysql_core_1.mysqlEnum)("payment_gateway", ["kashier", "paymob"]),
-    paymentOrderId: (0, mysql_core_1.varchar)("payment_order_id", { length: 150 }), // Kashier sessionId / Paymob orderId
-    paymentTransactionId: (0, mysql_core_1.varchar)("payment_transaction_id", { length: 150 }), // Kashier transactionId / Paymob transactionId
-    paymentStatus: (0, mysql_core_1.mysqlEnum)("payment_status", ["pending_payment", "paid", "payment_failed"]).default("pending_payment"),
+    paymentOrderId: (0, mysql_core_1.varchar)("payment_order_id", { length: 150 }), // رقم البوابة: Kashier orderId / Paymob order.id
+    paymentTransactionId: (0, mysql_core_1.varchar)("payment_transaction_id", { length: 150 }), // رقم العملية: Kashier transactionId / Paymob id
+    paymentStatus: (0, mysql_core_1.mysqlEnum)("payment_status", ["pending_payment", "paid", "payment_failed"]),
+    paymentFailureReason: (0, mysql_core_1.text)("payment_failure_reason"), // سبب آخر فشل لسرعة العرض في تفاصيل الأوردر
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow().onUpdateNow(),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
 });

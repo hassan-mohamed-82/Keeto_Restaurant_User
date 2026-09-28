@@ -44,7 +44,7 @@ exports.restaurantSettings = (0, mysql_core_1.mysqlTable)("restaurant_settings",
     // نوع حساب بوابات الدفع (حساب المنصة ولا حساب خاص بالمطعم)
     paymentGatewayType: (0, mysql_core_1.mysqlEnum)("payment_gateway_type", ["SYSTEM", "CUSTOM"]).default("SYSTEM"),
     // تمكين/تعطيل دفع الفيزا أونلاين للمطعم
-    enableOnlinePayment: (0, mysql_core_1.boolean)("enable_online_payment").default(true),
+    enableOnlinePayment: (0, mysql_core_1.boolean)("enable_online_payment").default(false),
 });
 // 2. جدول مواعيد العمل (يدعم الفترات المتعددة)
 exports.restaurantSchedules = (0, mysql_core_1.mysqlTable)("restaurant_schedules", {

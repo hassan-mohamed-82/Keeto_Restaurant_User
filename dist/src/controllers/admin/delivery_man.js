@@ -12,6 +12,7 @@ const BadRequest_1 = require("../../Errors/BadRequest");
 const NotFound_1 = require("../../Errors/NotFound");
 const uuid_1 = require("uuid");
 const bcrypt_1 = __importDefault(require("bcrypt"));
+const order_helper_1 = require("../../helpers/order.helper");
 const createDeliveryMan = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
@@ -156,7 +157,9 @@ const getPendingOrders = async (req, res) => {
         throw new BadRequest_1.BadRequest("Restaurant ID missing");
     const { branchId } = req.query;
     const assignableStatuses = ["pending", "accepted", "preparing"];
-    let conditions = (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId), (0, drizzle_orm_1.inArray)(schema_1.orders.status, [...assignableStatuses]));
+    let conditions = (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.orders.orderType, "delivery"), (0, drizzle_orm_1.inArray)(schema_1.orders.status, [...assignableStatuses]), 
+    // ✅ إخفاء طلبات الفيزا المعلقة أو الفاشلة
+    (0, order_helper_1.excludeUnpaidVisaOrders)());
     if (branchId) {
         conditions = (0, drizzle_orm_1.and)(conditions, (0, drizzle_orm_1.eq)(schema_1.orders.branchId, branchId));
     }
@@ -220,7 +223,7 @@ const assignOrdersToDeliveryMan = async (req, res) => {
     const eligibleOrders = await connection_1.db
         .select({ id: schema_1.orders.id, orderNumber: schema_1.orders.orderNumber, status: schema_1.orders.status })
         .from(schema_1.orders)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.orders.id, orderIds), (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId), (0, drizzle_orm_1.inArray)(schema_1.orders.status, [...assignableStatuses])));
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.orders.id, orderIds), (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.orders.orderType, "delivery"), (0, drizzle_orm_1.inArray)(schema_1.orders.status, [...assignableStatuses])));
     if (eligibleOrders.length !== orderIds.length) {
         const foundIds = new Set(eligibleOrders.map(o => o.id));
         const invalidIds = orderIds.filter(id => !foundIds.has(id));
@@ -229,7 +232,7 @@ const assignOrdersToDeliveryMan = async (req, res) => {
     // 3. تحديث الطلبات بـ deliveryManId
     await connection_1.db
         .update(schema_1.orders)
-        .set({ deliveryManId })
+        .set({ deliveryManId, status: "out_for_delivery" })
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.orders.id, orderIds), (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId)));
     return (0, response_1.SuccessResponse)(res, {
         message: `Successfully assigned ${eligibleOrders.length} order(s) to ${existingDeliveryMan.name}`,
@@ -304,7 +307,9 @@ const getDeliveryMenWithOrders = async (req, res) => {
     })
         .from(schema_1.orders)
         .leftJoin(schema_1.users, (0, drizzle_orm_1.eq)(schema_1.orders.userId, schema_1.users.id))
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.orders.deliveryManId, deliveryMenIds), (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId), (0, drizzle_orm_1.inArray)(schema_1.orders.status, [...activeStatuses])))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.orders.deliveryManId, deliveryMenIds), (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.orders.orderType, "delivery"), (0, drizzle_orm_1.inArray)(schema_1.orders.status, [...activeStatuses]), 
+    // ✅ إخفاء طلبات الفيزا المعلقة أو الفاشلة
+    (0, order_helper_1.excludeUnpaidVisaOrders)()))
         .orderBy(schema_1.orders.createdAt);
     // 3. تجميع الطلبات حسب deliveryManId
     const ordersMap = new Map();
@@ -363,7 +368,10 @@ const getDeliveryOrders = async (req, res) => {
     }
     const conditions = [
         (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId),
+        (0, drizzle_orm_1.eq)(schema_1.orders.orderType, "delivery"),
         (0, drizzle_orm_1.inArray)(schema_1.orders.status, targetStatuses),
+        // ✅ إخفاء طلبات الفيزا المعلقة أو الفاشلة
+        (0, order_helper_1.excludeUnpaidVisaOrders)(),
     ];
     if (branchId) {
         conditions.push((0, drizzle_orm_1.eq)(schema_1.orders.branchId, branchId));
@@ -597,6 +605,9 @@ const getDeliveryCashOrders = async (req, res) => {
     const conditions = [
         (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId),
         (0, drizzle_orm_1.eq)(schema_1.orders.status, "delivered"), // الكاش يحصل فقط عند تسليم الأوردر
+        (0, drizzle_orm_1.eq)(schema_1.orders.orderType, "delivery"),
+        // ✅ إخفاء طلبات الفيزا المعلقة أو الفاشلة
+        (0, order_helper_1.excludeUnpaidVisaOrders)(),
     ];
     if (isCashCollected === "true") {
         conditions.push((0, drizzle_orm_1.eq)(schema_1.orders.isCashCollected, true));
@@ -770,6 +781,7 @@ const collectDeliveryCash = async (req, res) => {
         orderNumber: schema_1.orders.orderNumber,
         dailyOrderNumber: schema_1.orders.dailyOrderNumber,
         status: schema_1.orders.status,
+        orderType: schema_1.orders.orderType,
         totalAmount: schema_1.orders.totalAmount,
         paymentMethod: schema_1.orders.paymentMethod,
         paymentMethodName: schema_1.paymentMethods.name,
@@ -779,7 +791,7 @@ const collectDeliveryCash = async (req, res) => {
     })
         .from(schema_1.orders)
         .leftJoin(schema_1.paymentMethods, (0, drizzle_orm_1.eq)(schema_1.orders.paymentMethod, schema_1.paymentMethods.id))
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.orders.id, orderIds), (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId)));
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.orders.id, orderIds), (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.orders.orderType, "delivery")));
     if (eligibleOrders.length !== orderIds.length) {
         const foundIds = new Set(eligibleOrders.map(o => o.id));
         const missingIds = orderIds.filter(id => !foundIds.has(id));
@@ -809,6 +821,9 @@ const collectDeliveryCash = async (req, res) => {
         }
         if (ord.isCashCollected) {
             throw new BadRequest_1.BadRequest(`Order #${ord.orderNumber} has already been marked as cash collected`);
+        }
+        if (ord.orderType !== "delivery") {
+            throw new BadRequest_1.BadRequest(`Order #${ord.orderNumber} is not a delivery order`);
         }
     }
     // 4. حساب المبلغ المحصل في هذه المعاملة

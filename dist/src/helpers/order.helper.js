@@ -24,6 +24,10 @@ const TIMEZONE = "Africa/Cairo";
  * (paymentStatus = pending_payment أو payment_failed).
  * الطلب يظهر فقط لما paymentStatus = 'paid'،
  * أما طلبات الكاش والمحفظة فلا تتأثر.
+ * طلبات بدون payment_method (NULL) لا تتأثر وتظهر دائماً.
+ *
+ * ⚠️ payment_method يخزّن UUID وليس اسم الطريقة —
+ *    لذا نستخدم subquery لجلب ID الفيزا من جدول payment_methods.
  *
  * @example
  * const conditions = [
@@ -31,7 +35,14 @@ const TIMEZONE = "Africa/Cairo";
  *   excludeUnpaidVisaOrders(),
  * ];
  */
-const excludeUnpaidVisaOrders = () => (0, drizzle_orm_1.sql) `NOT (${schema_1.orders.paymentMethod} = 'visa' AND ${schema_1.orders.paymentStatus} IN ('pending_payment', 'payment_failed'))`;
+const excludeUnpaidVisaOrders = () => (0, drizzle_orm_1.sql) `(
+        ${schema_1.orders.paymentMethod} IS NULL
+        OR ${schema_1.orders.paymentMethod} NOT IN (
+            SELECT id FROM payment_methods
+            WHERE LOWER(name) LIKE '%visa%'
+        )
+        OR ${schema_1.orders.paymentStatus} NOT IN ('pending_payment', 'payment_failed')
+    )`;
 exports.excludeUnpaidVisaOrders = excludeUnpaidVisaOrders;
 // ==========================================
 // 1. Helper: حساب تاريخ بداية الشيفت الحالي للمطعم
