@@ -183,6 +183,7 @@ export const getPendingOrders = async (req: Request, res: Response) => {
 
     let conditions = and(
         eq(orders.restaurantId, restaurantId),
+        eq(orders.orderType, "delivery"),
         inArray(orders.status, [...assignableStatuses]),
         // ✅ إخفاء طلبات الفيزا المعلقة أو الفاشلة
         excludeUnpaidVisaOrders()
@@ -274,6 +275,7 @@ export const assignOrdersToDeliveryMan = async (req: Request, res: Response) => 
             and(
                 inArray(orders.id, orderIds),
                 eq(orders.restaurantId, restaurantId),
+                eq(orders.orderType, "delivery"),
                 inArray(orders.status, [...assignableStatuses])
             )
         );
@@ -387,6 +389,7 @@ export const getDeliveryMenWithOrders = async (req: Request, res: Response) => {
             and(
                 inArray(orders.deliveryManId, deliveryMenIds),
                 eq(orders.restaurantId, restaurantId),
+                eq(orders.orderType, "delivery"),
                 inArray(orders.status, [...activeStatuses]),
                 // ✅ إخفاء طلبات الفيزا المعلقة أو الفاشلة
                 excludeUnpaidVisaOrders()
@@ -465,6 +468,7 @@ export const getDeliveryOrders = async (req: Request, res: Response) => {
 
     const conditions: any[] = [
         eq(orders.restaurantId, restaurantId),
+        eq(orders.orderType, "delivery"),
         inArray(orders.status, targetStatuses),
         // ✅ إخفاء طلبات الفيزا المعلقة أو الفاشلة
         excludeUnpaidVisaOrders(),
@@ -742,6 +746,7 @@ export const getDeliveryCashOrders = async (req: Request, res: Response) => {
     const conditions: any[] = [
         eq(orders.restaurantId, restaurantId),
         eq(orders.status, "delivered"), // الكاش يحصل فقط عند تسليم الأوردر
+        eq(orders.orderType, "delivery"),
         // ✅ إخفاء طلبات الفيزا المعلقة أو الفاشلة
         excludeUnpaidVisaOrders(),
     ];
@@ -953,6 +958,7 @@ export const collectDeliveryCash = async (req: Request, res: Response) => {
             orderNumber: orders.orderNumber,
             dailyOrderNumber: orders.dailyOrderNumber,
             status: orders.status,
+            orderType: orders.orderType,
             totalAmount: orders.totalAmount,
             paymentMethod: orders.paymentMethod,
             paymentMethodName: paymentMethods.name,
@@ -965,7 +971,8 @@ export const collectDeliveryCash = async (req: Request, res: Response) => {
         .where(
             and(
                 inArray(orders.id, orderIds),
-                eq(orders.restaurantId, restaurantId)
+                eq(orders.restaurantId, restaurantId),
+                eq(orders.orderType, "delivery")
             )
         );
 
@@ -1002,6 +1009,9 @@ export const collectDeliveryCash = async (req: Request, res: Response) => {
         }
         if (ord.isCashCollected) {
             throw new BadRequest(`Order #${ord.orderNumber} has already been marked as cash collected`);
+        }
+        if(ord.orderType !== "delivery") {
+            throw new BadRequest(`Order #${ord.orderNumber} is not a delivery order`);
         }
     }
 
