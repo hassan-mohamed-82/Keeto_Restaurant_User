@@ -6,6 +6,7 @@ import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors";
 import { handleImageUpdate } from "../../utils/handleImages";
+import { excludeUnpaidVisaOrders } from "../../helpers/order.helper";
 
 // =======================================================
 // 1. Get Restaurant Users (Supports ?status=active/blocked)
@@ -305,7 +306,9 @@ export const getRestaurantUserStats = async (req: Request, res: Response) => {
     // ─── 2. Run parallel queries ─────────────────────────────────────────────
     const baseCondition = and(
         eq(orders.userId, userId),
-        eq(orders.restaurantId, restaurantId)
+        eq(orders.restaurantId, restaurantId),
+        // ✅ إخفاء طلبات الفيزا المعلقة أو الفاشلة
+        excludeUnpaidVisaOrders()
     );
 
     const [pointsRows, aggregateRows, recentOrderRows, topItemRows] = await Promise.all([

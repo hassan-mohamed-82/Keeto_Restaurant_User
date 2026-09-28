@@ -91,7 +91,7 @@ export const orders = mysqlTable("orders", {
     isCashCollected: boolean("is_cash_collected").default(false),
     cashCollectedAt: timestamp("cash_collected_at"),
     cashCollectedBy: char("cash_collected_by", { length: 36 }),
-    
+
     dailyOrderNumber: int("daily_order_number").default(1),
 
     rating: int("rating"),
@@ -142,9 +142,10 @@ export const orders = mysqlTable("orders", {
 
     // Unified payment gateway columns (supports both Kashier and Paymob)
     paymentGateway: mysqlEnum("payment_gateway", ["kashier", "paymob"]),
-    paymentOrderId: varchar("payment_order_id", { length: 150 }),        // Kashier sessionId / Paymob orderId
-    paymentTransactionId: varchar("payment_transaction_id", { length: 150 }), // Kashier transactionId / Paymob transactionId
-    paymentStatus: mysqlEnum("payment_status", ["pending_payment", "paid", "payment_failed"]).default("pending_payment"),
+    paymentOrderId: varchar("payment_order_id", { length: 150 }),        // رقم البوابة: Kashier orderId / Paymob order.id
+    paymentTransactionId: varchar("payment_transaction_id", { length: 150 }), // رقم العملية: Kashier transactionId / Paymob id
+    paymentStatus: mysqlEnum("payment_status", ["pending_payment", "paid", "payment_failed"]),
+    paymentFailureReason: text("payment_failure_reason"), // سبب آخر فشل لسرعة العرض في تفاصيل الأوردر
 
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
     createdAt: timestamp("created_at").defaultNow(),

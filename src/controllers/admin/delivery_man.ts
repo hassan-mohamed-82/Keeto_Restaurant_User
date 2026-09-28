@@ -7,6 +7,7 @@ import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors/NotFound";
 import { v4 as uuidv4 } from "uuid";
 import bcrypt from "bcrypt";
+import { excludeUnpaidVisaOrders } from "../../helpers/order.helper";
 
 export const createDeliveryMan = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
@@ -182,7 +183,9 @@ export const getPendingOrders = async (req: Request, res: Response) => {
 
     let conditions = and(
         eq(orders.restaurantId, restaurantId),
-        inArray(orders.status, [...assignableStatuses])
+        inArray(orders.status, [...assignableStatuses]),
+        // ✅ إخفاء طلبات الفيزا المعلقة أو الفاشلة
+        excludeUnpaidVisaOrders()
     );
 
     if (branchId) {
@@ -384,7 +387,9 @@ export const getDeliveryMenWithOrders = async (req: Request, res: Response) => {
             and(
                 inArray(orders.deliveryManId, deliveryMenIds),
                 eq(orders.restaurantId, restaurantId),
-                inArray(orders.status, [...activeStatuses])
+                inArray(orders.status, [...activeStatuses]),
+                // ✅ إخفاء طلبات الفيزا المعلقة أو الفاشلة
+                excludeUnpaidVisaOrders()
             )
         )
         .orderBy(orders.createdAt);
@@ -461,6 +466,8 @@ export const getDeliveryOrders = async (req: Request, res: Response) => {
     const conditions: any[] = [
         eq(orders.restaurantId, restaurantId),
         inArray(orders.status, targetStatuses),
+        // ✅ إخفاء طلبات الفيزا المعلقة أو الفاشلة
+        excludeUnpaidVisaOrders(),
     ];
 
     if (branchId) {
@@ -735,6 +742,8 @@ export const getDeliveryCashOrders = async (req: Request, res: Response) => {
     const conditions: any[] = [
         eq(orders.restaurantId, restaurantId),
         eq(orders.status, "delivered"), // الكاش يحصل فقط عند تسليم الأوردر
+        // ✅ إخفاء طلبات الفيزا المعلقة أو الفاشلة
+        excludeUnpaidVisaOrders(),
     ];
 
     if (isCashCollected === "true") {

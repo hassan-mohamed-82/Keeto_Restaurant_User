@@ -4,7 +4,7 @@ import { orders, users, ratingRequests } from "../../models/schema";
 import { eq, and, isNotNull, desc, inArray } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
-import { buildOrderDateConditions } from "../../helpers/order.helper";
+import { buildOrderDateConditions, excludeUnpaidVisaOrders } from "../../helpers/order.helper";
 
 // ==========================================
 // GET /orders/customer-ratings
@@ -42,6 +42,8 @@ export const getCustomerRatingsInShift = async (req: Request, res: Response) => 
             and(
                 eq(orders.restaurantId, restaurantId),
                 isNotNull(orders.rating),
+                // ✅ إخفاء طلبات الفيزا المعلقة أو الفاشلة
+                excludeUnpaidVisaOrders(),
                 ...dateConditions
             )
         )

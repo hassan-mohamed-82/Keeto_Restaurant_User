@@ -1781,7 +1781,9 @@ export const getallnumbersoforders = async (req: Request, res: Response) => {
 
     // بناء الـ Query الأساسي
     const conditions: any[] = [
-        eq(orders.restaurantId, adminRestaurantId)
+        eq(orders.restaurantId, adminRestaurantId),
+        // ✅ إخفاء طلبات الفيزا المعلقة أو الفاشلة — تظهر فقط لما paymentStatus = 'paid'
+        excludeUnpaidVisaOrders(),
     ];
 
     const queryBranchId = (req.query?.branchId as string)?.trim();

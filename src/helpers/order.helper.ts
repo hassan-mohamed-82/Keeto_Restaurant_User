@@ -3,7 +3,7 @@ import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 import { db } from "../models/connection";
-import { orders, restaurantSettings, restaurantSchedules } from "../models/schema";
+import { orders, restaurantSettings, restaurantSchedules, paymentMethods } from "../models/schema";
 import { eq, gte, lte, sql } from "drizzle-orm";
 import { BadRequest } from "../Errors/BadRequest";
 import { ForbiddenError } from "../Errors/forbiddenError";
@@ -22,6 +22,10 @@ const TIMEZONE = "Africa/Cairo";
  * (paymentStatus = pending_payment أو payment_failed).
  * الطلب يظهر فقط لما paymentStatus = 'paid'،
  * أما طلبات الكاش والمحفظة فلا تتأثر.
+ * طلبات بدون payment_method (NULL) لا تتأثر وتظهر دائماً.
+ *
+ * ⚠️ payment_method يخزّن UUID وليس اسم الطريقة —
+ *    لذا نستخدم subquery لجلب ID الفيزا من جدول payment_methods.
  *
  * @example
  * const conditions = [
@@ -30,7 +34,14 @@ const TIMEZONE = "Africa/Cairo";
  * ];
  */
 export const excludeUnpaidVisaOrders = () =>
-    sql`NOT (${orders.paymentMethod} = 'visa' AND ${orders.paymentStatus} IN ('pending_payment', 'payment_failed'))`;
+    sql`(
+        ${orders.paymentMethod} IS NULL
+        OR ${orders.paymentMethod} NOT IN (
+            SELECT id FROM payment_methods
+            WHERE LOWER(name) LIKE '%visa%'
+        )
+        OR ${orders.paymentStatus} NOT IN ('pending_payment', 'payment_failed')
+    )`;
 
 // ==========================================
 // 1. Helper: حساب تاريخ بداية الشيفت الحالي للمطعم
