@@ -62,7 +62,7 @@ export const restaurantSettings = mysqlTable("restaurant_settings", {
   // نوع حساب بوابات الدفع (حساب المنصة ولا حساب خاص بالمطعم)
   paymentGatewayType: mysqlEnum("payment_gateway_type", ["SYSTEM", "CUSTOM"]).default("SYSTEM"),
   // تمكين/تعطيل دفع الفيزا أونلاين للمطعم
-  enableOnlinePayment: boolean("enable_online_payment").default(true),
+  enableOnlinePayment: boolean("enable_online_payment").default(false),
 
 });
 
