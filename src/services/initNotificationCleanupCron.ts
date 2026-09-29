@@ -1,7 +1,7 @@
 import cron from "node-cron";
 import { db } from "../models/connection";
 import { notifications } from "../models/schema";
-import { eq, and, lte, inArray } from "drizzle-orm";
+import { lte, inArray, and, eq } from "drizzle-orm";
 
 // دالة مساعدة لعمل تريث (Delay) بين الدفعات لتخفيف الضغط على MySQL
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -12,22 +12,23 @@ export function initNotificationCleanupCron() {
     // يشتغل يومياً الساعة 3:00 فجراً
     cron.schedule("0 3 * * *", async () => {
         try {
-            const thirtyDaysAgo = new Date();
-            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            // حساب تاريخ الوقت المنقضي منذ 24 ساعة (يوم واحد)
+            const oneDayAgo = new Date();
+            oneDayAgo.setDate(oneDayAgo.getDate() - 1);
 
             const BATCH_SIZE = 1000; // حجم الدفعة الواحدة
             let totalDeleted = 0;
             let hasMore = true;
 
             while (hasMore) {
-                // 1. جلب المعرفات (IDs) للدفعة الحالية فقط
+                // 1. جلب المعرفات (IDs) للإشعارات التي مر عليها يوم أو أكثر
                 const idsToDelete = await db
                     .select({ id: notifications.id })
                     .from(notifications)
                     .where(
                         and(
                             eq(notifications.isRead, true),
-                            lte(notifications.createdAt, thirtyDaysAgo)
+                            lte(notifications.createdAt, oneDayAgo)
                         )
                     )
                     .limit(BATCH_SIZE);
@@ -56,7 +57,7 @@ export function initNotificationCleanupCron() {
                 }
             }
 
-            console.log(`✅ Old read notifications cleaned up: ${totalDeleted} records removed.`);
+            console.log(`✅ Old notifications (older than 1 day) cleaned up: ${totalDeleted} records removed.`);
         } catch (error) {
             console.error("❌ Error running chunked notification cleanup:", error);
         }
