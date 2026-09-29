@@ -43,9 +43,12 @@ export async function login(req: Request, res: Response) {
 
     // 4. التحقق من حالة المطعم وجلب اسمه
     let restaurantName: string | null = null;
+    let restaurantNameAr: string | null = null;
+    let restaurantNameFr: string | null = null;
+    let restaurantLogo: string | null = null;
     if (user.restaurantId) {
         const [restaurant] = await db
-            .select({ status: restaurants.status, name: restaurants.name })
+            .select({ status: restaurants.status, name: restaurants.name , nameAr: restaurants.nameAr, nameFr: restaurants.nameFr , logo: restaurants.logo })
             .from(restaurants)
             .where(eq(restaurants.id, user.restaurantId))
             .limit(1);
@@ -55,6 +58,9 @@ export async function login(req: Request, res: Response) {
                 throw new UnauthorizedError("The restaurant business is currently suspended.");
             }
             restaurantName = restaurant.name as string;
+            restaurantNameAr = restaurant.nameAr as string | null;
+            restaurantNameFr = restaurant.nameFr as string | null;
+            restaurantLogo = restaurant.logo as string | null;
         }
     }
 
@@ -130,6 +136,9 @@ export async function login(req: Request, res: Response) {
         restaurantId: user.restaurantId,
         name: user.name,
         restaurantName,
+        restaurantNameAr,
+        restaurantNameFr,
+        restaurantLogo,
         branchId: user.branchId,
         branchName,
         branchNameAr,
