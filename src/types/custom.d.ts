@@ -101,6 +101,7 @@ export type ModuleName =
     | "city"
     | "country"
     | "delivery_man"
+    | "delivery_man_accounts"
     | "socialmedia";
 
 export interface PermissionAction {

@@ -25,22 +25,22 @@ import {
 const router = Router();
 
 // ✅ Get assignable orders (pending / accepted / preparing)
-router.get("/pending-orders", hasPermission("delivery_man", "read"), catchAsync(getPendingOrders));
+router.get("/pending-orders", hasPermission("delivery_man_accounts", "read"), catchAsync(getPendingOrders));
 
 // ✅ Assign orders to a delivery man
-router.post("/assign-orders", hasPermission("delivery_man", "update"), validate(assignOrdersSchema), catchAsync(assignOrdersToDeliveryMan));
+router.post("/assign-orders", hasPermission("delivery_man_accounts", "update"), validate(assignOrdersSchema), catchAsync(assignOrdersToDeliveryMan));
 
 // ✅ Get all delivery men with their assigned orders + totals
-router.get("/assigned-orders", hasPermission("delivery_man", "read"), catchAsync(getDeliveryMenWithOrders));
+router.get("/assigned-orders", hasPermission("delivery_man_accounts", "read"), catchAsync(getDeliveryMenWithOrders));
 
 // ✅ Get delivery orders (out_for_delivery / delivered) with cash-on-hand & financial stats
-router.get("/delivery-orders", hasPermission("delivery_man", "read"), validate(getDeliveryOrdersQuerySchema, "query"), catchAsync(getDeliveryOrders));
+router.get("/delivery-orders", hasPermission("delivery_man_accounts", "read"), validate(getDeliveryOrdersQuerySchema, "query"), catchAsync(getDeliveryOrders));
 
 // ✅ Get cash delivery orders for cash settlement (filter by deliveryManId, view uncollected vs collected)
-router.get("/collect-cash", hasPermission("delivery_man", "read"), validate(getDeliveryCashOrdersQuerySchema, "query"), catchAsync(getDeliveryCashOrders));
+router.get("/collect-cash", hasPermission("delivery_man_accounts", "read"), validate(getDeliveryCashOrdersQuerySchema, "query"), catchAsync(getDeliveryCashOrders));
 
 // ✅ Collect delivery cash from delivery man (mark orders as cash collected by admin)
-router.post("/collect-cash", hasPermission("delivery_man", "update"), validate(collectDeliveryCashSchema, "body"), catchAsync(collectDeliveryCash));
+router.post("/collect-cash", hasPermission("delivery_man_accounts", "update"), validate(collectDeliveryCashSchema, "body"), catchAsync(collectDeliveryCash));
 
 // ✅ Create delivery man
 router.post("/", hasPermission("delivery_man", "create"), catchAsync(createDeliveryMan));
