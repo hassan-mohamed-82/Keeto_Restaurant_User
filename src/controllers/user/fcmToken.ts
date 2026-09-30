@@ -1,13 +1,13 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { users, userFcmTokens } from "../../models/schema";
+import { users, userFcmTokens, restaurants } from "../../models/schema";
 import { eq, and } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { UnauthorizedError } from "../../Errors";
 import { v4 as uuidv4 } from "uuid";
 
 // ==========================================
-// Update FCM Token for User (Per Restaurant / Multi-Tenant Support)
+// Update FCM Token for User 
 // ==========================================
 export const updateFcmToken = async (req: Request | any, res: Response) => {
     if (!req.user) throw new UnauthorizedError("Unauthenticated");
@@ -15,6 +15,7 @@ export const updateFcmToken = async (req: Request | any, res: Response) => {
     const { fcmToken, restaurantId, deviceType } = req.body;
 
     const tokenToSave = fcmToken && String(fcmToken).trim() !== "" ? String(fcmToken).trim() : null;
+    const devType = deviceType || "web";
 
     // 1. Update fallback token in main users table
     await db.update(users)
@@ -24,6 +25,20 @@ export const updateFcmToken = async (req: Request | any, res: Response) => {
     // 2. Manage user_fcm_tokens table
     if (restaurantId) {
         if (tokenToSave) {
+            const [restaurant] = await db
+                .select({
+                    ios: restaurants.iosFirebaseProject,
+                    android: restaurants.androidFirebaseProject,
+                })
+                .from(restaurants)
+                .where(eq(restaurants.id, restaurantId))
+                .limit(1);
+
+            let projectToSave = "primary";
+            if (restaurant) {
+                projectToSave = devType === "ios" ? (restaurant.ios || "primary") : (restaurant.android || "primary");
+            }
+
             const [existing] = await db
                 .select()
                 .from(userFcmTokens)
@@ -37,7 +52,8 @@ export const updateFcmToken = async (req: Request | any, res: Response) => {
                 await db.update(userFcmTokens)
                     .set({
                         fcmToken: tokenToSave,
-                        deviceType: deviceType || existing.deviceType || "android",
+                        deviceType: devType,
+                        firebaseProject: projectToSave,
                         updatedAt: new Date()
                     })
                     .where(eq(userFcmTokens.id, existing.id));
@@ -47,7 +63,8 @@ export const updateFcmToken = async (req: Request | any, res: Response) => {
                     userId,
                     restaurantId,
                     fcmToken: tokenToSave,
-                    deviceType: deviceType || "web"
+                    deviceType: devType,
+                    firebaseProject: projectToSave
                 });
             }
         } else {

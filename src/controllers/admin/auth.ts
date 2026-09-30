@@ -10,7 +10,9 @@ import bcrypt from "bcrypt";
 import { generateRestaurantAdminToken } from "../../utils/jwt";
 
 export async function login(req: Request, res: Response) {
-    const { email, password , fcmToken } = req.body;
+    const { email, password, fcmToken, deviceType } = req.body;
+    const devType = deviceType || "web";
+
     if (!email || !password) {
         throw new BadRequest("Email and password are required");
     }
@@ -21,8 +23,10 @@ export async function login(req: Request, res: Response) {
     const [user] = await db
         .select()
         .from(restrauntadmin)
-        .where(and(eq(restrauntadmin.email, email.trim().toLowerCase()),
-        inArray(restrauntadmin.type, ["owner", "subadmin", "branch_manager", "staff"])))
+        .where(and(
+            eq(restrauntadmin.email, email.trim().toLowerCase()),
+            inArray(restrauntadmin.type, ["owner", "subadmin", "branch_manager", "staff"])
+        ))
         .limit(1);
 
     // إذا لم يتم العثور على الحساب
@@ -41,14 +45,25 @@ export async function login(req: Request, res: Response) {
         throw new UnauthorizedError("Your account is deactivated. Please contact support.");
     }
 
-    // 4. التحقق من حالة المطعم وجلب اسمه
+    // 4. التحقق من حالة المطعم وجلب اسمه ومشاريع الفايربيز (iOS / Android)
     let restaurantName: string | null = null;
     let restaurantNameAr: string | null = null;
     let restaurantNameFr: string | null = null;
     let restaurantLogo: string | null = null;
+    let iosFirebaseProject: string = "primary";
+    let androidFirebaseProject: string = "primary";
+
     if (user.restaurantId) {
         const [restaurant] = await db
-            .select({ status: restaurants.status, name: restaurants.name , nameAr: restaurants.nameAr, nameFr: restaurants.nameFr , logo: restaurants.logo })
+            .select({
+                status: restaurants.status,
+                name: restaurants.name,
+                nameAr: restaurants.nameAr,
+                nameFr: restaurants.nameFr,
+                logo: restaurants.logo,
+                iosFirebaseProject: restaurants.iosFirebaseProject,
+                androidFirebaseProject: restaurants.androidFirebaseProject,
+            })
             .from(restaurants)
             .where(eq(restaurants.id, user.restaurantId))
             .limit(1);
@@ -61,6 +76,8 @@ export async function login(req: Request, res: Response) {
             restaurantNameAr = restaurant.nameAr as string | null;
             restaurantNameFr = restaurant.nameFr as string | null;
             restaurantLogo = restaurant.logo as string | null;
+            iosFirebaseProject = (restaurant.iosFirebaseProject as string) || "primary";
+            androidFirebaseProject = (restaurant.androidFirebaseProject as string) || "primary";
         }
     }
 
@@ -107,15 +124,21 @@ export async function login(req: Request, res: Response) {
             .where(eq(restaurantSchedules.restaurantId, user.restaurantId));
     }
 
-    // 5.6 تحديث الـ FCM Token في جدول الأدمن مع تفريغه من أي حسابات أخرى (Single Device Ownership)
+    // 5.6 تحديث الـ FCM Token ومباشرة ربطه بمشروع الفايربيز المناسب (Single Device Ownership)
     let currentFcmToken = user.fcmToken;
+    let assignedProject = "primary";
+
     if (fcmToken !== undefined) {
         const tokenToSave = fcmToken && String(fcmToken).trim() !== "" ? String(fcmToken).trim() : null;
+
         if (tokenToSave) {
+            // تحديد المشروع المناسب للم جهاز الحالي
+            assignedProject = devType === "ios" ? iosFirebaseProject : androidFirebaseProject;
+
             // تفريغ هذا التوكن من أي حساب أدمن آخر فوراً لمنع وصول إشعارات المطاعم الأخرى لنفس الجهاز
             await db
                 .update(restrauntadmin)
-                .set({ fcmToken: null })
+                .set({ fcmToken: null, firebaseProject: "primary" })
                 .where(and(
                     eq(restrauntadmin.fcmToken, tokenToSave),
                     ne(restrauntadmin.id, user.id)
@@ -124,7 +147,11 @@ export async function login(req: Request, res: Response) {
 
         await db
             .update(restrauntadmin)
-            .set({ fcmToken: tokenToSave })
+            .set({
+                fcmToken: tokenToSave,
+                deviceType: devType,
+                firebaseProject: assignedProject
+            })
             .where(eq(restrauntadmin.id, user.id));
 
         currentFcmToken = tokenToSave;
@@ -149,9 +176,6 @@ export async function login(req: Request, res: Response) {
     const token = generateRestaurantAdminToken(tokenPayload);
 
     // 7. صياغة الاستجابة الموحدة لتناسب الـ Frontend
-
-    // Owner → empty array signals "all permissions granted"
-    // Others → merge role permissions + custom permissions, deduped by module
     let resolvedPermissions: any[];
 
     if (user.type === "owner") {
@@ -215,12 +239,12 @@ export async function login(req: Request, res: Response) {
             branchName,
             branchNameAr,
             branchNameFr,
-            fcmToken: currentFcmToken
+            fcmToken: currentFcmToken,
+            firebaseProject: assignedProject
         },
         schedules
     }, 200);
 }
-
 // ==========================================
 // 8. Admin Logout & Invalidate Device FCM Token
 // ==========================================
