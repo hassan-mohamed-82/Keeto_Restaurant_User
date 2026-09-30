@@ -2,24 +2,22 @@ import { Request, Response } from "express";
 import { db } from "../../models/connection";
 import { branches, restaurants, restrauntadmin, restaurantSchedules } from "../../models/schema";
 import { role_restaurant } from "../../models/schema/admin/role_restaurant";
-import { eq, inArray, and, ne } from "drizzle-orm";
+import { eq, inArray, and } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { UnauthorizedError } from "../../Errors";
 import bcrypt from "bcrypt";
 import { generateRestaurantAdminToken } from "../../utils/jwt";
+import { registerAdminToken, removeAdminToken, parseDeviceType } from "../../utils/adminTokens";
 
 export async function login(req: Request, res: Response) {
     const { email, password, fcmToken, deviceType } = req.body;
-    const devType = deviceType || "web";
 
     if (!email || !password) {
         throw new BadRequest("Email and password are required");
     }
 
-    // ====================================================
-    // 1. البحث في جدول الحسابات الموحد (restrauntadmin)
-    // ====================================================
+    // 1. البحث في جدول الحسابات الموحد
     const [user] = await db
         .select()
         .from(restrauntadmin)
@@ -29,29 +27,26 @@ export async function login(req: Request, res: Response) {
         ))
         .limit(1);
 
-    // إذا لم يتم العثور على الحساب
     if (!user) {
         throw new UnauthorizedError("Invalid Credentials");
     }
 
-    // 2. التحقق من صحة كلمة المرور
+    // 2. كلمة المرور
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
         throw new UnauthorizedError("Invalid Credentials");
     }
 
-    // 3. التحقق من حالة حساب المستخدم نفسه
+    // 3. حالة الحساب
     if (user.status === "inactive") {
         throw new UnauthorizedError("Your account is deactivated. Please contact support.");
     }
 
-    // 4. التحقق من حالة المطعم وجلب اسمه ومشاريع الفايربيز (iOS / Android)
+    // 4. حالة المطعم واسمه
     let restaurantName: string | null = null;
     let restaurantNameAr: string | null = null;
     let restaurantNameFr: string | null = null;
     let restaurantLogo: string | null = null;
-    let iosFirebaseProject: string = "primary";
-    let androidFirebaseProject: string = "primary";
 
     if (user.restaurantId) {
         const [restaurant] = await db
@@ -61,8 +56,6 @@ export async function login(req: Request, res: Response) {
                 nameAr: restaurants.nameAr,
                 nameFr: restaurants.nameFr,
                 logo: restaurants.logo,
-                iosFirebaseProject: restaurants.iosFirebaseProject,
-                androidFirebaseProject: restaurants.androidFirebaseProject,
             })
             .from(restaurants)
             .where(eq(restaurants.id, user.restaurantId))
@@ -76,23 +69,17 @@ export async function login(req: Request, res: Response) {
             restaurantNameAr = restaurant.nameAr as string | null;
             restaurantNameFr = restaurant.nameFr as string | null;
             restaurantLogo = restaurant.logo as string | null;
-            iosFirebaseProject = (restaurant.iosFirebaseProject as string) || "primary";
-            androidFirebaseProject = (restaurant.androidFirebaseProject as string) || "primary";
         }
     }
 
-    // 🌐 4.5 جلب أسماء الفرع باللغات المختلفة
+    // 4.5 أسماء الفرع
     let branchName: string | null = null;
     let branchNameAr: string | null = null;
     let branchNameFr: string | null = null;
 
     if (user.branchId) {
         const [branch] = await db
-            .select({
-                name: branches.name,
-                nameAr: branches.nameAr,
-                nameFr: branches.nameFr,
-            })
+            .select({ name: branches.name, nameAr: branches.nameAr, nameFr: branches.nameFr })
             .from(branches)
             .where(eq(branches.id, user.branchId))
             .limit(1);
@@ -104,7 +91,7 @@ export async function login(req: Request, res: Response) {
         }
     }
 
-    // 5. جلب الـ Role إذا كان المستخدم موظفاً وله دور محدد
+    // 5. الـ Role
     let role = null;
     if (user.roleId) {
         const [roleResult] = await db
@@ -115,7 +102,7 @@ export async function login(req: Request, res: Response) {
         role = roleResult ?? null;
     }
 
-    // 5.5 جلب جدول مواعيد المطعم (Restaurant Schedules)
+    // 5.5 مواعيد المطعم
     let schedules: any[] = [];
     if (user.restaurantId) {
         schedules = await db
@@ -124,40 +111,20 @@ export async function login(req: Request, res: Response) {
             .where(eq(restaurantSchedules.restaurantId, user.restaurantId));
     }
 
-    // 5.6 تحديث الـ FCM Token ومباشرة ربطه بمشروع الفايربيز المناسب (Single Device Ownership)
-    let currentFcmToken = user.fcmToken;
-    let assignedProject = "primary";
+    // 5.6 تسجيل توكن الجهاز (الأدمن يقدر يفتح من iOS وAndroid معاً)
+    const tokenToSave = fcmToken && String(fcmToken).trim() !== "" ? String(fcmToken).trim() : null;
 
-    if (fcmToken !== undefined) {
-        const tokenToSave = fcmToken && String(fcmToken).trim() !== "" ? String(fcmToken).trim() : null;
-
-        if (tokenToSave) {
-            // تحديد المشروع المناسب للم جهاز الحالي
-            assignedProject = devType === "ios" ? iosFirebaseProject : androidFirebaseProject;
-
-            // تفريغ هذا التوكن من أي حساب أدمن آخر فوراً لمنع وصول إشعارات المطاعم الأخرى لنفس الجهاز
-            await db
-                .update(restrauntadmin)
-                .set({ fcmToken: null, firebaseProject: "primary" })
-                .where(and(
-                    eq(restrauntadmin.fcmToken, tokenToSave),
-                    ne(restrauntadmin.id, user.id)
-                ));
+    if (tokenToSave) {
+        const devType = parseDeviceType(deviceType);
+        if (!devType) {
+            throw new BadRequest("deviceType (android | ios | web) is required with fcmToken");
         }
-
-        await db
-            .update(restrauntadmin)
-            .set({
-                fcmToken: tokenToSave,
-                deviceType: devType,
-                firebaseProject: assignedProject
-            })
-            .where(eq(restrauntadmin.id, user.id));
-
-        currentFcmToken = tokenToSave;
+        await registerAdminToken(user.id, tokenToSave, devType);
     }
 
-    // 6. تجهيز الـ Token Payload الديناميكي
+    const currentFcmToken = tokenToSave;
+
+    // 6. Token Payload
     const tokenPayload = {
         id: user.id,
         restaurantId: user.restaurantId,
@@ -170,12 +137,12 @@ export async function login(req: Request, res: Response) {
         branchName,
         branchNameAr,
         branchNameFr,
-        type: user.type, // "owner" | "branch_manager" | "staff"
+        type: user.type,
     };
 
     const token = generateRestaurantAdminToken(tokenPayload);
 
-    // 7. صياغة الاستجابة الموحدة لتناسب الـ Frontend
+    // 7. الصلاحيات
     let resolvedPermissions: any[];
 
     if (user.type === "owner") {
@@ -195,12 +162,11 @@ export async function login(req: Request, res: Response) {
             return [];
         };
 
-        let effectivePermissions: any[] = [
+        const effectivePermissions: any[] = [
             ...(role && (role as any).permissions ? parsePerms((role as any).permissions) : []),
             ...(user.permissions ? parsePerms(user.permissions) : [])
         ];
 
-        // Deduplicate: merge actions for the same module
         const mergedPermissionsMap = new Map<string, Set<string>>();
         for (const perm of effectivePermissions) {
             if (!perm?.module) continue;
@@ -239,25 +205,21 @@ export async function login(req: Request, res: Response) {
             branchName,
             branchNameAr,
             branchNameFr,
-            fcmToken: currentFcmToken,
-            firebaseProject: assignedProject
+            fcmToken: currentFcmToken
         },
         schedules
     }, 200);
 }
+
 // ==========================================
-// 8. Admin Logout & Invalidate Device FCM Token
+// Admin Logout: يمسح توكن الجهاز ده بس (لو deviceType اتبعت)
 // ==========================================
 export async function logout(req: Request | any, res: Response) {
     if (!req.user?.id) {
         throw new UnauthorizedError("Unauthenticated");
     }
 
-    // إزالة الـ FCM Token الخاص بالجهاز عند تسجيل الخروج لمنع استلام أي إشعارات بعد الخروج
-    await db
-        .update(restrauntadmin)
-        .set({ fcmToken: null })
-        .where(eq(restrauntadmin.id, req.user.id));
+    await removeAdminToken(req.user.id, parseDeviceType(req.body?.deviceType));
 
     return SuccessResponse(res, {
         message: "Logged out successfully and FCM token dissociated",

@@ -108,6 +108,9 @@ const PROJECTS: Record<string, string> = {
   secondary: "FIREBASE2",
 };
 
+// المشروع اللي فيه تطبيقات الأدمن (Android + iOS)
+export const ADMIN_PROJECT = "primary";
+
 export type FirebaseProjectKey = string;
 
 function getApp(key: string): admin.app.App {

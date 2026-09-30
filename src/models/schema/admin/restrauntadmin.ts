@@ -8,34 +8,29 @@ import { role_restaurant } from "./role_restaurant";
 export const restrauntadmin = mysqlTable("restrauntadmins", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(uuid())`),
 
+    // توكن الأدمن (جهاز واحد) - كله على ADMIN_PROJECT
     fcmToken: text("fcm_token"),
-    deviceType: mysqlEnum("device_type", ["web", "android", "ios"]).default("android"),
-    firebaseProject: varchar("firebase_project", { length: 50 }).default("primary"),
 
-    // الموظف ده تبع أنهي مطعم؟ (إجباري للكل)
     restaurantId: char("restaurant_id", { length: 36 })
         .references(() => restaurants.id, { onDelete: "cascade" })
         .notNull(),
 
     // تبع أنهي فرع؟ 
     // لو الـ type هو owner أو subadmin عام للمطعم -> بيبقا null (يشوف كل الفروع)
-    // لو الـ type هو branch_manager أو staff -> لازم يتربط بفرع محدد
+    // لو الـ type هو branch_manager أو staff -> لازم يتربط بفرع محدد    
     branchId: char("branch_id", { length: 36 }).references(() => branches.id, { onDelete: "set null" }),
-
+    
     name: varchar("name", { length: 255 }).notNull(),
     email: varchar("email", { length: 255 }).notNull().unique(),
     password: varchar("password", { length: 255 }).notNull(),
     phoneNumber: varchar("phone_number", { length: 255 }).notNull(),
 
-    // هيكل الأدوار واضح ومحدد
     type: mysqlEnum("type", ["owner", "subadmin", "branch_manager", "staff", "cashier"])
         .notNull()
         .default("branch_manager"),
 
-    // نظام الصلاحيات المفضل (عبر الـ Role)
     roleId: char("role_id", { length: 36 }).references(() => role_restaurant.id, { onDelete: "set null" }),
 
-    // اختياري: لو حابة تدي صلاحيات استثنائية مخصصة للشخص ده برضه بره الرول العامة بتاعته
     permissions: json("permissions").$type<Permission[]>().default([]),
 
     status: mysqlEnum("status", ["active", "inactive"]).default("active"),

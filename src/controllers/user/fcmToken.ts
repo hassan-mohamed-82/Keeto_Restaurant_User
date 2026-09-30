@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
 import { users, userFcmTokens, restaurants } from "../../models/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, ne } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { UnauthorizedError } from "../../Errors";
 import { v4 as uuidv4 } from "uuid";
@@ -15,47 +15,42 @@ export const updateFcmToken = async (req: Request | any, res: Response) => {
     const { fcmToken, restaurantId, deviceType } = req.body;
 
     const tokenToSave = fcmToken && String(fcmToken).trim() !== "" ? String(fcmToken).trim() : null;
-    const devType = deviceType || "web";
+    const devType: "web" | "android" | "ios" =
+        deviceType === "ios" || deviceType === "android" ? deviceType : "web";
 
-    // 1. Update fallback token in main users table
-    await db.update(users)
-        .set({ fcmToken: tokenToSave })
-        .where(eq(users.id, userId));
+    // fallback القديم
+    await db.update(users).set({ fcmToken: tokenToSave }).where(eq(users.id, userId));
 
-    // 2. Manage user_fcm_tokens table
     if (restaurantId) {
         if (tokenToSave) {
-            const [restaurant] = await db
-                .select({
-                    ios: restaurants.iosFirebaseProject,
-                    android: restaurants.androidFirebaseProject,
-                })
-                .from(restaurants)
-                .where(eq(restaurants.id, restaurantId))
-                .limit(1);
-
             let projectToSave = "primary";
-            if (restaurant) {
-                projectToSave = devType === "ios" ? (restaurant.ios || "primary") : (restaurant.android || "primary");
+            if (devType !== "web") {
+                const [restaurant] = await db
+                    .select({ ios: restaurants.iosFirebaseProject, android: restaurants.androidFirebaseProject })
+                    .from(restaurants)
+                    .where(eq(restaurants.id, restaurantId))
+                    .limit(1);
+                if (restaurant) {
+                    projectToSave = (devType === "ios" ? restaurant.ios : restaurant.android) || "primary";
+                }
             }
 
-            const [existing] = await db
-                .select()
-                .from(userFcmTokens)
-                .where(and(
-                    eq(userFcmTokens.userId, userId),
-                    eq(userFcmTokens.restaurantId, restaurantId)
-                ))
-                .limit(1);
+            // نفس التوكن عند يوزر تاني؟ امسحه
+            await db.delete(userFcmTokens).where(and(
+                eq(userFcmTokens.fcmToken, tokenToSave),
+                ne(userFcmTokens.userId, userId)
+            ));
+
+            // الصف بيتحدد بـ (يوزر + مطعم + نوع الجهاز)
+            const [existing] = await db.select().from(userFcmTokens).where(and(
+                eq(userFcmTokens.userId, userId),
+                eq(userFcmTokens.restaurantId, restaurantId),
+                eq(userFcmTokens.deviceType, devType)
+            )).limit(1);
 
             if (existing) {
                 await db.update(userFcmTokens)
-                    .set({
-                        fcmToken: tokenToSave,
-                        deviceType: devType,
-                        firebaseProject: projectToSave,
-                        updatedAt: new Date()
-                    })
+                    .set({ fcmToken: tokenToSave, firebaseProject: projectToSave, updatedAt: new Date() })
                     .where(eq(userFcmTokens.id, existing.id));
             } else {
                 await db.insert(userFcmTokens).values({
@@ -68,16 +63,18 @@ export const updateFcmToken = async (req: Request | any, res: Response) => {
                 });
             }
         } else {
-            await db.delete(userFcmTokens)
-                .where(and(
-                    eq(userFcmTokens.userId, userId),
-                    eq(userFcmTokens.restaurantId, restaurantId)
-                ));
+            // logout: امسح توكن الجهاز ده بس
+            await db.delete(userFcmTokens).where(and(
+                eq(userFcmTokens.userId, userId),
+                eq(userFcmTokens.restaurantId, restaurantId),
+                eq(userFcmTokens.deviceType, devType)
+            ));
         }
     } else if (!tokenToSave) {
-        await db.delete(userFcmTokens)
-            .where(eq(userFcmTokens.userId, userId));
+        await db.delete(userFcmTokens).where(eq(userFcmTokens.userId, userId));
     }
 
-    return SuccessResponse(res, { message: tokenToSave ? "FCM token updated successfully" : "FCM token removed successfully" });
+    return SuccessResponse(res, {
+        message: tokenToSave ? "FCM token updated successfully" : "FCM token removed successfully"
+    });
 };
