@@ -33,7 +33,8 @@ export const orders = mysqlTable("orders", {
         "online_order_web",
         "online_order_app",
         "food_aggregator",
-        "my_keeto"
+        "my_keeto",
+        "pos"
     ]).notNull(),
 
     paymentMethod: char("payment_method", { length: 36 }),
