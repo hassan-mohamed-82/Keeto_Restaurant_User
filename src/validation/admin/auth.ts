@@ -8,6 +8,7 @@ export const loginSchema = z.object({
         .string({ required_error: "Password is required" })
         .min(1, "Password cannot be empty"),
     fcmToken: z.string().optional().nullable(),
+    deviceType: z.enum(["android", "ios", "web"]).optional().nullable().default("web"),
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;

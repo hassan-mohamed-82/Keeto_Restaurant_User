@@ -115,10 +115,7 @@ export async function login(req: Request, res: Response) {
     const tokenToSave = fcmToken && String(fcmToken).trim() !== "" ? String(fcmToken).trim() : null;
 
     if (tokenToSave) {
-        const devType = parseDeviceType(deviceType);
-        if (!devType) {
-            throw new BadRequest("deviceType (android | ios | web) is required with fcmToken");
-        }
+        const devType = parseDeviceType(deviceType) || "web";
         await registerAdminToken(user.id, tokenToSave, devType);
     }
 
