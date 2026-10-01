@@ -29,7 +29,8 @@ exports.orders = (0, mysql_core_1.mysqlTable)("orders", {
         "online_order_web",
         "online_order_app",
         "food_aggregator",
-        "my_keeto"
+        "my_keeto",
+        "pos"
     ]).notNull(),
     paymentMethod: (0, mysql_core_1.char)("payment_method", { length: 36 }),
     orderType: (0, mysql_core_1.mysqlEnum)("order_type", ["delivery", "takeaway", "dine_in"]).default("delivery"),
@@ -56,7 +57,8 @@ exports.orders = (0, mysql_core_1.mysqlTable)("orders", {
         "out_for_delivery",
         "delivered",
         "cancelled",
-        "refund"
+        "refund",
+        "failed"
     ]).default("pending"),
     // Duration (in minutes) the restaurant expects to prepare the order
     durationOrderPreparing: (0, mysql_core_1.int)("duration_order_preparing").default(30),
@@ -85,6 +87,7 @@ exports.orders = (0, mysql_core_1.mysqlTable)("orders", {
     offerId: (0, mysql_core_1.char)("offer_id", { length: 36 })
         .references(() => schema_1.offers.id, { onDelete: "set null" }),
     // Unified payment gateway columns (supports both Kashier and Paymob)
+    paymentGatewayType: (0, mysql_core_1.mysqlEnum)("payment_gateway_type", ["SYSTEM", "CUSTOM"]),
     paymentGateway: (0, mysql_core_1.mysqlEnum)("payment_gateway", ["kashier", "paymob"]),
     paymentOrderId: (0, mysql_core_1.varchar)("payment_order_id", { length: 150 }), // رقم البوابة: Kashier orderId / Paymob order.id
     paymentTransactionId: (0, mysql_core_1.varchar)("payment_transaction_id", { length: 150 }), // رقم العملية: Kashier transactionId / Paymob id

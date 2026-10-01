@@ -33,7 +33,7 @@ import { calculateDistance, isLocationInZone } from "../../utils/geo";
 import { applyPriorityDiscount, getAvailableDiscounts } from "../../utils/discount";
 import { validateUserNotBlocked } from "../../utils/userBlockCheck";
 import { calculateCurrentStatus } from "./restaurantFeatures";
-import { handleCancelledOrder, mapOrderSourceToPlatformType } from "../../services/restaurantWalletService";
+import { chargePendingServiceFee, handleCancelledOrder, mapOrderSourceToPlatformType } from "../../services/restaurantWalletService";
 
 // 👇 1. دالة تظبيط الوقت لتوقيت مصر عشان نص الإشعار
 const formatToEgyptTime = (date: Date) => {
@@ -724,6 +724,8 @@ export const checkout = async (req: Request | any, res: Response) => {
             durationOrderPreparing: defaultPreparingDuration,
             createdAt: now
         });
+
+        await chargePendingServiceFee(orderId, tx);
 
         await tx.insert(orderItems).values(itemsToInsert.map(i => ({ ...i, orderId })));
         await tx.delete(cartItems).where(eq(cartItems.userId, userId));

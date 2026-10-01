@@ -15,17 +15,18 @@ function initNotificationCleanupCron() {
     // يشتغل يومياً الساعة 3:00 فجراً
     node_cron_1.default.schedule("0 3 * * *", async () => {
         try {
-            const thirtyDaysAgo = new Date();
-            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            // حساب تاريخ الوقت المنقضي منذ 24 ساعة (يوم واحد)
+            const oneDayAgo = new Date();
+            oneDayAgo.setDate(oneDayAgo.getDate() - 1);
             const BATCH_SIZE = 1000; // حجم الدفعة الواحدة
             let totalDeleted = 0;
             let hasMore = true;
             while (hasMore) {
-                // 1. جلب المعرفات (IDs) للدفعة الحالية فقط
+                // 1. جلب المعرفات (IDs) للإشعارات التي مر عليها يوم أو أكثر
                 const idsToDelete = await connection_1.db
                     .select({ id: schema_1.notifications.id })
                     .from(schema_1.notifications)
-                    .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.notifications.isRead, true), (0, drizzle_orm_1.lte)(schema_1.notifications.createdAt, thirtyDaysAgo)))
+                    .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.notifications.isRead, true), (0, drizzle_orm_1.lte)(schema_1.notifications.createdAt, oneDayAgo)))
                     .limit(BATCH_SIZE);
                 // إذا لم يتبق أي إشعارات تنطبق عليها الشروط، ننهي الـ Loop
                 if (idsToDelete.length === 0) {
@@ -47,7 +48,7 @@ function initNotificationCleanupCron() {
                     await sleep(100);
                 }
             }
-            console.log(`✅ Old read notifications cleaned up: ${totalDeleted} records removed.`);
+            console.log(`✅ Old notifications (older than 1 day) cleaned up: ${totalDeleted} records removed.`);
         }
         catch (error) {
             console.error("❌ Error running chunked notification cleanup:", error);

@@ -8,17 +8,17 @@ const validation_1 = require("../../middlewares/validation");
 const delivery_man_2 = require("../../validation/admin/delivery_man");
 const router = (0, express_1.Router)();
 // ✅ Get assignable orders (pending / accepted / preparing)
-router.get("/pending-orders", (0, hasPermission_1.hasPermission)("delivery_man", "read"), (0, catchAsync_1.catchAsync)(delivery_man_1.getPendingOrders));
+router.get("/pending-orders", (0, hasPermission_1.hasPermission)("delivery_man_accounts", "read"), (0, catchAsync_1.catchAsync)(delivery_man_1.getPendingOrders));
 // ✅ Assign orders to a delivery man
-router.post("/assign-orders", (0, hasPermission_1.hasPermission)("delivery_man", "update"), (0, validation_1.validate)(delivery_man_2.assignOrdersSchema), (0, catchAsync_1.catchAsync)(delivery_man_1.assignOrdersToDeliveryMan));
+router.post("/assign-orders", (0, hasPermission_1.hasPermission)("delivery_man_accounts", "update"), (0, validation_1.validate)(delivery_man_2.assignOrdersSchema), (0, catchAsync_1.catchAsync)(delivery_man_1.assignOrdersToDeliveryMan));
 // ✅ Get all delivery men with their assigned orders + totals
-router.get("/assigned-orders", (0, hasPermission_1.hasPermission)("delivery_man", "read"), (0, catchAsync_1.catchAsync)(delivery_man_1.getDeliveryMenWithOrders));
+router.get("/assigned-orders", (0, hasPermission_1.hasPermission)("delivery_man_accounts", "read"), (0, catchAsync_1.catchAsync)(delivery_man_1.getDeliveryMenWithOrders));
 // ✅ Get delivery orders (out_for_delivery / delivered) with cash-on-hand & financial stats
-router.get("/delivery-orders", (0, hasPermission_1.hasPermission)("delivery_man", "read"), (0, validation_1.validate)(delivery_man_2.getDeliveryOrdersQuerySchema, "query"), (0, catchAsync_1.catchAsync)(delivery_man_1.getDeliveryOrders));
+router.get("/delivery-orders", (0, hasPermission_1.hasPermission)("delivery_man_accounts", "read"), (0, validation_1.validate)(delivery_man_2.getDeliveryOrdersQuerySchema, "query"), (0, catchAsync_1.catchAsync)(delivery_man_1.getDeliveryOrders));
 // ✅ Get cash delivery orders for cash settlement (filter by deliveryManId, view uncollected vs collected)
-router.get("/collect-cash", (0, hasPermission_1.hasPermission)("delivery_man", "read"), (0, validation_1.validate)(delivery_man_2.getDeliveryCashOrdersQuerySchema, "query"), (0, catchAsync_1.catchAsync)(delivery_man_1.getDeliveryCashOrders));
+router.get("/collect-cash", (0, hasPermission_1.hasPermission)("delivery_man_accounts", "read"), (0, validation_1.validate)(delivery_man_2.getDeliveryCashOrdersQuerySchema, "query"), (0, catchAsync_1.catchAsync)(delivery_man_1.getDeliveryCashOrders));
 // ✅ Collect delivery cash from delivery man (mark orders as cash collected by admin)
-router.post("/collect-cash", (0, hasPermission_1.hasPermission)("delivery_man", "update"), (0, validation_1.validate)(delivery_man_2.collectDeliveryCashSchema, "body"), (0, catchAsync_1.catchAsync)(delivery_man_1.collectDeliveryCash));
+router.post("/collect-cash", (0, hasPermission_1.hasPermission)("delivery_man_accounts", "update"), (0, validation_1.validate)(delivery_man_2.collectDeliveryCashSchema, "body"), (0, catchAsync_1.catchAsync)(delivery_man_1.collectDeliveryCash));
 // ✅ Create delivery man
 router.post("/", (0, hasPermission_1.hasPermission)("delivery_man", "create"), (0, catchAsync_1.catchAsync)(delivery_man_1.createDeliveryMan));
 // ✅ Get all delivery men - يحتاج صلاحية read

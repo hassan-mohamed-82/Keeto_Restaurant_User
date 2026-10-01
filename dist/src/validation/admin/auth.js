@@ -10,4 +10,5 @@ exports.loginSchema = zod_1.z.object({
         .string({ required_error: "Password is required" })
         .min(1, "Password cannot be empty"),
     fcmToken: zod_1.z.string().optional().nullable(),
+    deviceType: zod_1.z.enum(["android", "ios", "web"]).optional().nullable().default("web"),
 });

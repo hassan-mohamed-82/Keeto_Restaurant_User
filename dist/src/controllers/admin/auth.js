@@ -14,37 +14,44 @@ const BadRequest_1 = require("../../Errors/BadRequest");
 const Errors_1 = require("../../Errors");
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const jwt_1 = require("../../utils/jwt");
+const adminTokens_1 = require("../../utils/adminTokens");
 async function login(req, res) {
-    const { email, password, fcmToken } = req.body;
+    const { email, password, fcmToken, deviceType } = req.body;
     if (!email || !password) {
         throw new BadRequest_1.BadRequest("Email and password are required");
     }
-    // ====================================================
-    // 1. البحث في جدول الحسابات الموحد (restrauntadmin)
-    // ====================================================
+    // 1. البحث في جدول الحسابات الموحد
     const [user] = await connection_1.db
         .select()
         .from(schema_1.restrauntadmin)
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.restrauntadmin.email, email.trim().toLowerCase()), (0, drizzle_orm_1.inArray)(schema_1.restrauntadmin.type, ["owner", "subadmin", "branch_manager", "staff"])))
         .limit(1);
-    // إذا لم يتم العثور على الحساب
     if (!user) {
         throw new Errors_1.UnauthorizedError("Invalid Credentials");
     }
-    // 2. التحقق من صحة كلمة المرور
+    // 2. كلمة المرور
     const isPasswordValid = await bcrypt_1.default.compare(password, user.password);
     if (!isPasswordValid) {
         throw new Errors_1.UnauthorizedError("Invalid Credentials");
     }
-    // 3. التحقق من حالة حساب المستخدم نفسه
+    // 3. حالة الحساب
     if (user.status === "inactive") {
         throw new Errors_1.UnauthorizedError("Your account is deactivated. Please contact support.");
     }
-    // 4. التحقق من حالة المطعم وجلب اسمه
+    // 4. حالة المطعم واسمه
     let restaurantName = null;
+    let restaurantNameAr = null;
+    let restaurantNameFr = null;
+    let restaurantLogo = null;
     if (user.restaurantId) {
         const [restaurant] = await connection_1.db
-            .select({ status: schema_1.restaurants.status, name: schema_1.restaurants.name })
+            .select({
+            status: schema_1.restaurants.status,
+            name: schema_1.restaurants.name,
+            nameAr: schema_1.restaurants.nameAr,
+            nameFr: schema_1.restaurants.nameFr,
+            logo: schema_1.restaurants.logo,
+        })
             .from(schema_1.restaurants)
             .where((0, drizzle_orm_1.eq)(schema_1.restaurants.id, user.restaurantId))
             .limit(1);
@@ -53,19 +60,18 @@ async function login(req, res) {
                 throw new Errors_1.UnauthorizedError("The restaurant business is currently suspended.");
             }
             restaurantName = restaurant.name;
+            restaurantNameAr = restaurant.nameAr;
+            restaurantNameFr = restaurant.nameFr;
+            restaurantLogo = restaurant.logo;
         }
     }
-    // 🌐 4.5 جلب أسماء الفرع باللغات المختلفة
+    // 4.5 أسماء الفرع
     let branchName = null;
     let branchNameAr = null;
     let branchNameFr = null;
     if (user.branchId) {
         const [branch] = await connection_1.db
-            .select({
-            name: schema_1.branches.name,
-            nameAr: schema_1.branches.nameAr,
-            nameFr: schema_1.branches.nameFr,
-        })
+            .select({ name: schema_1.branches.name, nameAr: schema_1.branches.nameAr, nameFr: schema_1.branches.nameFr })
             .from(schema_1.branches)
             .where((0, drizzle_orm_1.eq)(schema_1.branches.id, user.branchId))
             .limit(1);
@@ -75,7 +81,7 @@ async function login(req, res) {
             branchNameFr = branch.nameFr;
         }
     }
-    // 5. جلب الـ Role إذا كان المستخدم موظفاً وله دور محدد
+    // 5. الـ Role
     let role = null;
     if (user.roleId) {
         const [roleResult] = await connection_1.db
@@ -85,7 +91,7 @@ async function login(req, res) {
             .limit(1);
         role = roleResult ?? null;
     }
-    // 5.5 جلب جدول مواعيد المطعم (Restaurant Schedules)
+    // 5.5 مواعيد المطعم
     let schedules = [];
     if (user.restaurantId) {
         schedules = await connection_1.db
@@ -93,39 +99,30 @@ async function login(req, res) {
             .from(schema_1.restaurantSchedules)
             .where((0, drizzle_orm_1.eq)(schema_1.restaurantSchedules.restaurantId, user.restaurantId));
     }
-    // 5.6 تحديث الـ FCM Token في جدول الأدمن مع تفريغه من أي حسابات أخرى (Single Device Ownership)
-    let currentFcmToken = user.fcmToken;
-    if (fcmToken !== undefined) {
-        const tokenToSave = fcmToken && String(fcmToken).trim() !== "" ? String(fcmToken).trim() : null;
-        if (tokenToSave) {
-            // تفريغ هذا التوكن من أي حساب أدمن آخر فوراً لمنع وصول إشعارات المطاعم الأخرى لنفس الجهاز
-            await connection_1.db
-                .update(schema_1.restrauntadmin)
-                .set({ fcmToken: null })
-                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.restrauntadmin.fcmToken, tokenToSave), (0, drizzle_orm_1.ne)(schema_1.restrauntadmin.id, user.id)));
-        }
-        await connection_1.db
-            .update(schema_1.restrauntadmin)
-            .set({ fcmToken: tokenToSave })
-            .where((0, drizzle_orm_1.eq)(schema_1.restrauntadmin.id, user.id));
-        currentFcmToken = tokenToSave;
+    // 5.6 تسجيل توكن الجهاز (الأدمن يقدر يفتح من iOS وAndroid معاً)
+    const tokenToSave = fcmToken && String(fcmToken).trim() !== "" ? String(fcmToken).trim() : null;
+    if (tokenToSave) {
+        const devType = (0, adminTokens_1.parseDeviceType)(deviceType) || "web";
+        await (0, adminTokens_1.registerAdminToken)(user.id, tokenToSave, devType);
     }
-    // 6. تجهيز الـ Token Payload الديناميكي
+    const currentFcmToken = tokenToSave;
+    // 6. Token Payload
     const tokenPayload = {
         id: user.id,
         restaurantId: user.restaurantId,
         name: user.name,
         restaurantName,
+        restaurantNameAr,
+        restaurantNameFr,
+        restaurantLogo,
         branchId: user.branchId,
         branchName,
         branchNameAr,
         branchNameFr,
-        type: user.type, // "owner" | "branch_manager" | "staff"
+        type: user.type,
     };
     const token = (0, jwt_1.generateRestaurantAdminToken)(tokenPayload);
-    // 7. صياغة الاستجابة الموحدة لتناسب الـ Frontend
-    // Owner → empty array signals "all permissions granted"
-    // Others → merge role permissions + custom permissions, deduped by module
+    // 7. الصلاحيات
     let resolvedPermissions;
     if (user.type === "owner") {
         resolvedPermissions = [];
@@ -147,11 +144,10 @@ async function login(req, res) {
             }
             return [];
         };
-        let effectivePermissions = [
+        const effectivePermissions = [
             ...(role && role.permissions ? parsePerms(role.permissions) : []),
             ...(user.permissions ? parsePerms(user.permissions) : [])
         ];
-        // Deduplicate: merge actions for the same module
         const mergedPermissionsMap = new Map();
         for (const perm of effectivePermissions) {
             if (!perm?.module)
@@ -184,6 +180,9 @@ async function login(req, res) {
             type: user.type,
             restaurantId: user.restaurantId,
             restaurantName,
+            restaurantNameAr,
+            restaurantNameFr,
+            restaurantLogo,
             branchId: user.branchId,
             branchName,
             branchNameAr,
@@ -194,17 +193,13 @@ async function login(req, res) {
     }, 200);
 }
 // ==========================================
-// 8. Admin Logout & Invalidate Device FCM Token
+// Admin Logout: يمسح توكن الجهاز ده بس (لو deviceType اتبعت)
 // ==========================================
 async function logout(req, res) {
     if (!req.user?.id) {
         throw new Errors_1.UnauthorizedError("Unauthenticated");
     }
-    // إزالة الـ FCM Token الخاص بالجهاز عند تسجيل الخروج لمنع استلام أي إشعارات بعد الخروج
-    await connection_1.db
-        .update(schema_1.restrauntadmin)
-        .set({ fcmToken: null })
-        .where((0, drizzle_orm_1.eq)(schema_1.restrauntadmin.id, req.user.id));
+    await (0, adminTokens_1.removeAdminToken)(req.user.id, (0, adminTokens_1.parseDeviceType)(req.body?.deviceType));
     return (0, response_1.SuccessResponse)(res, {
         message: "Logged out successfully and FCM token dissociated",
     });

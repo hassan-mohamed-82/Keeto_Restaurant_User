@@ -60,6 +60,7 @@ Object.defineProperty(exports, "haversineKm", { enumerable: true, get: function 
 const order_helper_1 = require("../../helpers/order.helper");
 Object.defineProperty(exports, "getRestaurantShiftStartTime", { enumerable: true, get: function () { return order_helper_1.getRestaurantShiftStartTime; } });
 Object.defineProperty(exports, "buildOrderDateConditions", { enumerable: true, get: function () { return order_helper_1.buildOrderDateConditions; } });
+const restaurantWalletService_1 = require("../../services/restaurantWalletService");
 // ==========================================
 // 3. API Endpoints
 // ==========================================
@@ -1081,61 +1082,12 @@ const updateOrderStatus = async (req, res) => {
                     });
                 }
             }
-            // ==========================================
-            // 💰 3. التسوية العكسية لمحفظة المطعم (Restaurant Wallet Reversal)
-            // ==========================================
-            let isCashPayment = false;
-            if (existingOrder.paymentMethod) {
-                const [payment] = await tx.select().from(schema_1.paymentMethods).where((0, drizzle_orm_1.eq)(schema_1.paymentMethods.id, existingOrder.paymentMethod)).limit(1);
-                const pmName = (payment?.name || "").toLowerCase();
-                isCashPayment = pmName.includes("cash") || pmName.includes("استلام");
-            }
-            const appCommission = parseFloat(existingOrder.appCommission || "0");
-            const serviceFee = parseFloat(existingOrder.serviceFee || "0");
-            const totalAmount = parseFloat(existingOrder.totalAmount || "0");
-            const subtotal = parseFloat(existingOrder.subtotal || "0");
-            const deliveryFee = parseFloat(existingOrder.deliveryFee || "0");
-            const appDues = appCommission + serviceFee;
-            const restaurantEarning = subtotal + deliveryFee - appCommission;
-            let [restWallet] = await tx.select().from(schema_1.restaurantWallets)
-                .where((0, drizzle_orm_1.eq)(schema_1.restaurantWallets.restaurantId, existingOrder.restaurantId)).limit(1);
-            if (!restWallet) {
-                await tx.insert(schema_1.restaurantWallets).values({ id: (0, uuid_1.v4)(), restaurantId: existingOrder.restaurantId });
-                [restWallet] = await tx.select().from(schema_1.restaurantWallets)
-                    .where((0, drizzle_orm_1.eq)(schema_1.restaurantWallets.restaurantId, existingOrder.restaurantId)).limit(1);
-            }
-            let currentBalance = parseFloat(restWallet.balance || "0");
-            let currentCollectedCash = parseFloat(restWallet.collectedCash || "0");
-            let currentTotalEarning = parseFloat(restWallet.totalEarning || "0");
-            if (isCashPayment) {
-                currentBalance += appDues;
-                currentCollectedCash -= totalAmount;
-            }
-            else {
-                currentBalance -= restaurantEarning;
-            }
-            currentTotalEarning -= restaurantEarning;
-            const balanceAfterPenalty = currentBalance - appDues;
-            await tx.update(schema_1.restaurantWallets)
-                .set({
-                balance: balanceAfterPenalty.toFixed(2),
-                collectedCash: currentCollectedCash.toFixed(2),
-                totalEarning: currentTotalEarning.toFixed(2),
-                updatedAt: new Date()
-            })
-                .where((0, drizzle_orm_1.eq)(schema_1.restaurantWallets.restaurantId, existingOrder.restaurantId));
-            await tx.insert(schema_1.restaurantWalletTransactions).values({
-                id: (0, uuid_1.v4)(),
-                restaurantId: existingOrder.restaurantId,
-                type: "order_payment",
-                amount: `-${appDues.toFixed(2)}`,
-                balanceBefore: currentBalance.toFixed(2),
-                balanceAfter: balanceAfterPenalty.toFixed(2),
-                method: existingOrder.paymentMethod,
-                reference: existingOrder.orderNumber,
-                note: `Order Reversal & Penalty: Cancelled by restaurant. Commission deducted: ${appDues}`,
-                createdAt: new Date()
-            });
+        }
+        if (status === "delivered") {
+            await (0, restaurantWalletService_1.settleDeliveredOrder)(orderId, tx);
+        }
+        else if (status === "cancelled") {
+            await (0, restaurantWalletService_1.handleCancelledOrder)({ orderId, cancelReasonType: "restaurant", tx });
         }
         // ==========================================
         // ⭐ LOYALTY POINTS: إضافة نقاط المطعم عند التوصيل (DELIVERED)
