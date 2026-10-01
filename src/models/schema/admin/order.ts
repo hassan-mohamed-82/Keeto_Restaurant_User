@@ -143,6 +143,7 @@ export const orders = mysqlTable("orders", {
         .references(() => offers.id, { onDelete: "set null" }),
 
     // Unified payment gateway columns (supports both Kashier and Paymob)
+    paymentGatewayType: mysqlEnum("payment_gateway_type", ["SYSTEM", "CUSTOM"]),
     paymentGateway: mysqlEnum("payment_gateway", ["kashier", "paymob"]),
     paymentOrderId: varchar("payment_order_id", { length: 150 }),        // رقم البوابة: Kashier orderId / Paymob order.id
     paymentTransactionId: varchar("payment_transaction_id", { length: 150 }), // رقم العملية: Kashier transactionId / Paymob id
