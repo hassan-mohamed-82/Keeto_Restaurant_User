@@ -1066,7 +1066,7 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
 // ==========================================
 export const updateOrderStatus = async (req: Request, res: Response) => {
     const { orderId } = req.params;
-    const { status, cancelReasonId, customReason } = req.body;
+    const { status, cancelReasonId, customReason, deliveryManId } = req.body;
 
     const adminRestaurantId = req.user?.restaurantId || req.user?.id;
     const adminBranchId = req.user?.branchId;
@@ -1078,6 +1078,26 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
 
     if (existingOrder.restaurantId !== adminRestaurantId) throw new BadRequest("Unauthorized");
     if (adminBranchId && existingOrder.branchId !== adminBranchId) throw new BadRequest("Unauthorized");
+
+    let finalDeliveryManId: string | null = null;
+    if (deliveryManId) {
+        const [deliveryMan] = await db
+            .select()
+            .from(deliveryMen)
+            .where(
+                and(
+                    eq(deliveryMen.id, deliveryManId),
+                    eq(deliveryMen.restaurantId, adminRestaurantId),
+                    eq(deliveryMen.isDeleted, false)
+                )
+            )
+            .limit(1);
+
+        if (!deliveryMan) {
+            throw new NotFound("Delivery man not found or does not belong to your restaurant");
+        }
+        finalDeliveryManId = deliveryMan.id;
+    }
 
     const currentStatus = existingOrder.status as string;
 
@@ -1129,14 +1149,20 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
 
     await db.transaction(async (tx) => {
         // 1. تحديث حالة الطلب
+        const orderUpdatePayload: any = {
+            status: status,
+            cancelReasonId: status === "cancelled" ? finalReasonId : null,
+            cancelReason: status === "cancelled" ? finalReasonText : null,
+            cancelReasonType: status === "cancelled" ? "restaurant" : null,
+            updatedAt: new Date()
+        };
+
+        if (finalDeliveryManId) {
+            orderUpdatePayload.deliveryManId = finalDeliveryManId;
+        }
+
         await tx.update(orders)
-            .set({
-                status: status,
-                cancelReasonId: status === "cancelled" ? finalReasonId : null,
-                cancelReason: status === "cancelled" ? finalReasonText : null,
-                cancelReasonType: status === "cancelled" ? "restaurant" : null,
-                updatedAt: new Date()
-            })
+            .set(orderUpdatePayload)
             .where(eq(orders.id, orderId));
 
         // ==========================================
@@ -1299,6 +1325,33 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
             type: "ORDER_STATUS_UPDATE"
         }
     });
+
+    // ==========================================
+    // 5. إرسال إشعار لمندوب التوصيل (Delivery Man)
+    // ==========================================
+    const orderType = existingOrder.orderType || (existingOrder as any).type;
+    const targetDeliveryManId = finalDeliveryManId || existingOrder.deliveryManId;
+
+    if (orderType === "delivery" && targetDeliveryManId && (status === "out_for_delivery" || finalDeliveryManId)) {
+        await sendPushNotification({
+            recipientType: "delivery_man",
+            recipientId: targetDeliveryManId,
+            branchId: existingOrder.branchId || null,
+            title: status === "out_for_delivery" ? "طلب خارج للتوصيل" : "طلب جديد مُسند إليك",
+            body: status === "out_for_delivery"
+                ? `الطلب رقم #${existingOrder.dailyOrderNumber || existingOrder.orderNumber} أصبح خارجاً للتوصيل ومُسند إليك.`
+                : `تم إسناد الطلب رقم #${existingOrder.dailyOrderNumber || existingOrder.orderNumber} إليك.`,
+            data: {
+                restaurantId: existingOrder.restaurantId,
+                branchId: existingOrder.branchId || null,
+                orderId: existingOrder.id,
+                orderNumber: existingOrder.orderNumber,
+                dailyOrderNumber: existingOrder.dailyOrderNumber,
+                status: status,
+                type: status === "out_for_delivery" ? "ORDER_OUT_FOR_DELIVERY" : "ORDER_ASSIGNED",
+            },
+        });
+    }
 
     return SuccessResponse(res, { message: `Order status successfully updated to ${status}` });
 };
@@ -1849,6 +1902,24 @@ export const assignDelivery = async (req: Request, res: Response) => {
     await db.update(orders)
         .set({ deliveryManId, updatedAt: new Date() })
         .where(eq(orders.id, orderId));
+
+    // 4. إرسال إشعار لمندوب التوصيل
+    await sendPushNotification({
+        recipientType: "delivery_man",
+        recipientId: deliveryManId,
+        branchId: existingOrder.branchId || null,
+        title: "طلب جديد مُسند إليك",
+        body: `تم إسناد الطلب رقم #${existingOrder.dailyOrderNumber || existingOrder.orderNumber} إليك.`,
+        data: {
+            restaurantId: existingOrder.restaurantId,
+            branchId: existingOrder.branchId || null,
+            orderId: existingOrder.id,
+            orderNumber: existingOrder.orderNumber,
+            dailyOrderNumber: existingOrder.dailyOrderNumber,
+            status: existingOrder.status,
+            type: "ORDER_ASSIGNED",
+        },
+    });
 
     return SuccessResponse(res, { message: "Delivery man successfully assigned to order" });
 };

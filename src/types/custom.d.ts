@@ -1,7 +1,7 @@
 // =======================
 // Role System (Updated)
 // =======================
-export type Role = "user" | "admin" | "owner";
+export type Role = "user" | "admin" | "owner" | "delivery_man";
 
 // =======================
 // App User (Request.user)
@@ -14,7 +14,7 @@ export interface AppUser {
     isGuest?: boolean;
 
     // restaurant system
-    type?: "owner" | "subadmin" | "branch_manager" | "staff" | "cashier";
+    type?: "owner" | "subadmin" | "branch_manager" | "staff" | "cashier" | "delivery_man";
 
     restaurantId?: string | null;
     branchId?: string | null;

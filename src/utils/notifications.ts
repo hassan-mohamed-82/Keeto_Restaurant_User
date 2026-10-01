@@ -480,7 +480,7 @@ import { eq, and, or, sql } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 
 export const sendPushNotification = async (params: {
-    recipientType: "user" | "restaurant" | "superadmin";
+    recipientType: "user" | "restaurant" | "superadmin" | "delivery_man";
     recipientId: string;
     branchId?: string | null;
     title: string;

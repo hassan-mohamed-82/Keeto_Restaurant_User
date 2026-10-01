@@ -87,6 +87,30 @@ export const generateGuestToken = (data: {
 };
 
 // =======================
+// Generate Delivery Man Token
+// =======================
+export const generateDeliveryManToken = (data: {
+    id: string;
+    name: string;
+    restaurantId: string;
+    branchId?: string | null;
+    phone?: string;
+}): string => {
+    return jwt.sign(
+        {
+            id: data.id,
+            name: data.name,
+            role: "delivery_man",
+            type: "delivery_man",
+            restaurantId: data.restaurantId,
+            branchId: data.branchId || null,
+        },
+        JWT_SECRET,
+        { expiresIn: "30d" }
+    );
+};
+
+// =======================
 // Verify Token
 // =======================
 export const verifyToken = (token: string): TokenPayload => {

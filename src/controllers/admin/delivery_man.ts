@@ -8,6 +8,7 @@ import { NotFound } from "../../Errors/NotFound";
 import { v4 as uuidv4 } from "uuid";
 import bcrypt from "bcrypt";
 import { excludeUnpaidVisaOrders } from "../../helpers/order.helper";
+import { sendPushNotification } from "../../utils/notifications";
 
 export const createDeliveryMan = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
@@ -298,6 +299,20 @@ export const assignOrdersToDeliveryMan = async (req: Request, res: Response) => 
                 eq(orders.restaurantId, restaurantId)
             )
         );
+
+    // 4. إرسال إشعار لمندوب التوصيل
+    await sendPushNotification({
+        recipientType: "delivery_man",
+        recipientId: deliveryManId,
+        title: "طلبات جديدة خارجة للتوصيل",
+        body: `تم إسناد ${eligibleOrders.length} طلب إليك وهي الآن خارجة للتوصيل.`,
+        data: {
+            restaurantId,
+            orderIds,
+            status: "out_for_delivery",
+            type: "ORDER_OUT_FOR_DELIVERY",
+        },
+    });
 
     return SuccessResponse(res, {
         message: `Successfully assigned ${eligibleOrders.length} order(s) to ${existingDeliveryMan.name}`,
