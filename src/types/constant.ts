@@ -47,6 +47,7 @@ export const MODULES = [
     "city",
     "country",
     "delivery_man",
+    "delivery_man_accounts",
     "socialmedia",
 ] as const;
 
