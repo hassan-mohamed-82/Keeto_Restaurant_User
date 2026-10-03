@@ -1195,8 +1195,10 @@ export const upsertProductChannelPricing = async (req: Request, res: Response) =
             }
 
             const priceVal = String(entry.price);
-            const statusVal: "active" | "inactive" = entry.status === "inactive" ? "inactive" : "active";
-
+            const statusVal: "active" | "inactive" =
+                entry.branchPriceStatus === "inactive" || entry.status === "inactive"
+                    ? "inactive"
+                    : "active";
             for (const targetBranchId of targetBranches) {
                 for (const module of targetModules) {
                     await upsertFoodPricingOverride(tx, {

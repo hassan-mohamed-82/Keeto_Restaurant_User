@@ -53,6 +53,7 @@ export interface BatchProductChannelPriceInput {
     serviceModule: ServiceModule | ServiceModule[] | "all" | string | string[];
     price: number | string;
     status?: "active" | "inactive";
+    branchPriceStatus?: "active" | "inactive";
 }
 
 export interface BatchVariantChannelPriceInput {
