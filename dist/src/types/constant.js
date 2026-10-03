@@ -50,6 +50,7 @@ exports.MODULES = [
     "city",
     "country",
     "delivery_man",
+    "delivery_man_accounts",
     "socialmedia",
 ];
 exports.ACTION_NAMES = ["View", "Add", "Edit", "Delete", "Status", "filter"];

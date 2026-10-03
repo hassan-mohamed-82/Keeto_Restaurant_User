@@ -46,6 +46,7 @@ const TOKEN_EXPIRY = {
     user: '30d',
     admin: '7d',
     owner: '7d',
+    delivery_man: '30d',
 };
 const generateToken = (data) => {
     const payload = {

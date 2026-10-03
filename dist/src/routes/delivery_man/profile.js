@@ -1,0 +1,10 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const profile_1 = require("../../controllers/delivery_man/profile");
+const validation_1 = require("../../middlewares/validation");
+const profile_2 = require("../../validation/delivery_man/profile");
+const router = (0, express_1.Router)();
+router.get("/", profile_1.getMyProfile);
+router.put("/", (0, validation_1.validate)(profile_2.deliveryManUpdateProfileSchema), profile_1.updateMyProfile);
+exports.default = router;

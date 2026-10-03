@@ -13,6 +13,7 @@ const NotFound_1 = require("../../Errors/NotFound");
 const uuid_1 = require("uuid");
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const order_helper_1 = require("../../helpers/order.helper");
+const notifications_1 = require("../../utils/notifications");
 const createDeliveryMan = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
@@ -234,6 +235,19 @@ const assignOrdersToDeliveryMan = async (req, res) => {
         .update(schema_1.orders)
         .set({ deliveryManId, status: "out_for_delivery" })
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.orders.id, orderIds), (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId)));
+    // 4. إرسال إشعار لمندوب التوصيل
+    await (0, notifications_1.sendPushNotification)({
+        recipientType: "delivery_man",
+        recipientId: deliveryManId,
+        title: "طلبات جديدة خارجة للتوصيل",
+        body: `تم إسناد ${eligibleOrders.length} طلب إليك وهي الآن خارجة للتوصيل.`,
+        data: {
+            restaurantId,
+            orderIds,
+            status: "out_for_delivery",
+            type: "ORDER_OUT_FOR_DELIVERY",
+        },
+    });
     return (0, response_1.SuccessResponse)(res, {
         message: `Successfully assigned ${eligibleOrders.length} order(s) to ${existingDeliveryMan.name}`,
         data: {

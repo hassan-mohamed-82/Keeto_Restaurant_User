@@ -7,7 +7,12 @@
   },
   "servers": [
     {
-      "url": "/"
+      "url": "http://localhost:3000",
+      "description": "Main"
+    },
+    {
+      "url": "http://localhost:3000",
+      "description": "Local"
     }
   ],
   "paths": {
@@ -91,7 +96,19 @@
         "tags": [
           "Restaurant / Auth"
         ],
-        "security": []
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/auth/logout": {
@@ -117,7 +134,19 @@
         "tags": [
           "Restaurant / Auth"
         ],
-        "security": []
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/restaurantadmin/roles": {
@@ -167,7 +196,19 @@
         },
         "tags": [
           "Restaurant / Restaurantadmin"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "get": {
         "description": "",
@@ -215,7 +256,19 @@
         },
         "tags": [
           "Restaurant / Restaurantadmin"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/restaurantadmin/{id}": {
@@ -279,7 +332,19 @@
         },
         "tags": [
           "Restaurant / Restaurantadmin"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "delete": {
         "description": "",
@@ -360,7 +425,19 @@
         },
         "tags": [
           "Restaurant / Roles"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "get": {
         "description": "",
@@ -447,7 +524,19 @@
         },
         "tags": [
           "Restaurant / Roles"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "delete": {
         "description": "",
@@ -2501,7 +2590,19 @@
         },
         "tags": [
           "Restaurant / Branchemenu"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/branchemenu/{branchId}": {
@@ -2567,7 +2668,19 @@
         },
         "tags": [
           "Restaurant / Branchemenu"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "delete": {
         "description": "",
@@ -2664,7 +2777,19 @@
         },
         "tags": [
           "Restaurant / Food Locks"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/food-locks/food/{foodId}/ingredient/{ingredientId}/lock": {
@@ -2705,7 +2830,19 @@
         },
         "tags": [
           "Restaurant / Food Locks"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/FinancialAccount/select": {
@@ -4848,7 +4985,19 @@
         },
         "tags": [
           "Restaurant / Wallets"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/restaurantsetting/": {
@@ -4896,7 +5045,19 @@
         },
         "tags": [
           "Restaurant / Restaurantsetting"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/restaurant-zone-delivery-fees/select": {
@@ -5913,7 +6074,19 @@
         },
         "tags": [
           "Restaurant / Ingredientcategory"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "get": {
         "description": "",
@@ -6000,7 +6173,19 @@
         },
         "tags": [
           "Restaurant / Ingredientcategory"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "delete": {
         "description": "",
@@ -6109,7 +6294,19 @@
         },
         "tags": [
           "Restaurant / Ratings"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "get": {
         "description": "",
@@ -6422,7 +6619,19 @@
         },
         "tags": [
           "Restaurant / RestQR"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "get": {
         "description": "",
@@ -6540,7 +6749,19 @@
         },
         "tags": [
           "Restaurant / RestQR"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/discounts/": {
@@ -7222,7 +7443,78 @@
         },
         "tags": [
           "Restaurant / Coupons"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "nameAr": {
+                    "type": "string"
+                  },
+                  "nameFr": {
+                    "type": "string"
+                  },
+                  "discountType": {
+                    "type": "string",
+                    "enum": [
+                      "percentage",
+                      "fixed_amount",
+                      "free_delivery"
+                    ]
+                  },
+                  "discountValue": {
+                    "type": "string"
+                  },
+                  "maxDiscount": {
+                    "type": "string"
+                  },
+                  "minOrderAmount": {
+                    "type": "string"
+                  },
+                  "usageLimit": {
+                    "type": "integer"
+                  },
+                  "usedCount": {
+                    "type": "integer"
+                  },
+                  "userUsageType": {
+                    "type": "string",
+                    "enum": [
+                      "fixed",
+                      "unlimited"
+                    ]
+                  },
+                  "perUserLimit": {
+                    "type": "integer"
+                  },
+                  "startDate": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "endDate": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "isActive": {
+                    "type": "boolean"
+                  },
+                  "isGlobal": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/restaurant/coupons/{id}/usages": {
@@ -7845,7 +8137,94 @@
         },
         "tags": [
           "Restaurant / Popups"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "Title": {
+                    "type": "string"
+                  },
+                  "TitleAr": {
+                    "type": "string"
+                  },
+                  "TitleFr": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "descriptionAr": {
+                    "type": "string"
+                  },
+                  "descriptionFr": {
+                    "type": "string"
+                  },
+                  "image": {
+                    "type": "string"
+                  },
+                  "imageAr": {
+                    "type": "string"
+                  },
+                  "imageFr": {
+                    "type": "string"
+                  },
+                  "restaurantId": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "web",
+                      "home_web",
+                      "home_app",
+                      "mykeeto_app"
+                    ]
+                  },
+                  "linkType": {
+                    "type": "string",
+                    "enum": [
+                      "link",
+                      "subcategory",
+                      "product",
+                      "discount"
+                    ]
+                  },
+                  "link": {
+                    "type": "string"
+                  },
+                  "subcategoryId": {
+                    "type": "string"
+                  },
+                  "foodId": {
+                    "type": "string"
+                  },
+                  "discountId": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "inactive"
+                    ]
+                  },
+                  "startDate": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "endDate": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/restaurant/report/my-restaurant": {
@@ -8510,7 +8889,19 @@
         },
         "tags": [
           "Restaurant / Profile"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/profile/change-password": {
@@ -8535,7 +8926,19 @@
         },
         "tags": [
           "Restaurant / Profile"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/profile/fcm-token": {
@@ -8560,7 +8963,19 @@
         },
         "tags": [
           "Restaurant / Profile"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/restaurant-users/blocked": {
@@ -8710,7 +9125,19 @@
         },
         "tags": [
           "Restaurant / Restaurant Users"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "delete": {
         "description": "",
@@ -9045,7 +9472,19 @@
         },
         "tags": [
           "Restaurant / Expenses"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "get": {
         "description": "",
@@ -9132,7 +9571,19 @@
         },
         "tags": [
           "Restaurant / Expenses"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "delete": {
         "description": "",
@@ -9188,7 +9639,19 @@
         },
         "tags": [
           "Restaurant / Expense Categories"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "get": {
         "description": "",
@@ -9275,7 +9738,19 @@
         },
         "tags": [
           "Restaurant / Expense Categories"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "delete": {
         "description": "",
@@ -9522,7 +9997,19 @@
         },
         "tags": [
           "Restaurant / Points Orders"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/points-orders/verify/{code}": {
@@ -10262,7 +10749,19 @@
         },
         "tags": [
           "Restaurant / Free Delivery"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "delete": {
         "description": "",
@@ -10536,7 +11035,19 @@
         },
         "tags": [
           "Restaurant / Pricing"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pricing/variant-channel": {
@@ -10561,7 +11072,19 @@
         },
         "tags": [
           "Restaurant / Pricing"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/shifts/": {
@@ -11193,7 +11716,50 @@
         },
         "tags": [
           "Restaurant / Shifts"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "restaurantId": {
+                    "type": "string"
+                  },
+                  "branchId": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "nameAr": {
+                    "type": "string"
+                  },
+                  "nameFr": {
+                    "type": "string"
+                  },
+                  "from": {
+                    "type": "string"
+                  },
+                  "to": {
+                    "type": "string"
+                  },
+                  "isTomorrow": {
+                    "type": "boolean"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "inactive"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/restaurant/order-delay-alerts/": {
@@ -11221,7 +11787,19 @@
         },
         "tags": [
           "Restaurant / Order Delay Alerts"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "get": {
         "description": "",
@@ -11311,7 +11889,19 @@
         },
         "tags": [
           "Restaurant / Order Delay Alerts"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "delete": {
         "description": "",
@@ -11375,7 +11965,19 @@
         },
         "tags": [
           "Restaurant / Order Delay Alerts"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/printers/": {
@@ -11688,7 +12290,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "get": {
         "description": "",
@@ -11736,7 +12350,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/shifts/list-shifts": {
@@ -11761,7 +12387,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/shifts/branch/{branch_id}": {
@@ -11825,7 +12463,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/shifts/branches": {
@@ -11873,7 +12523,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/shifts/{id}": {
@@ -11940,7 +12602,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "delete": {
         "description": "",
@@ -12004,7 +12678,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/service-fees/": {
@@ -12841,7 +13527,54 @@
         },
         "tags": [
           "Restaurant / Service Fees"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "restaurantId": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "nameAr": {
+                    "type": "string"
+                  },
+                  "nameFr": {
+                    "type": "string"
+                  },
+                  "amount": {
+                    "type": "string"
+                  },
+                  "amountType": {
+                    "type": "string",
+                    "enum": [
+                      "percentage",
+                      "value"
+                    ]
+                  },
+                  "modules": {
+                    "type": "object"
+                  },
+                  "branchIds": {
+                    "type": "object"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "inactive"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/service-fees/": {
@@ -12869,7 +13602,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "get": {
         "description": "",
@@ -12917,7 +13662,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/service-fees/options": {
@@ -13040,7 +13797,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/service-fees/{id}/branches": {
@@ -13104,7 +13873,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/service-fees/subcategories": {
@@ -13152,7 +13933,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/service-fees/foods": {
@@ -13200,7 +13993,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/service-fees/{id}": {
@@ -13267,7 +14072,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "delete": {
         "description": "",
@@ -13331,7 +14148,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/taxes/": {
@@ -14709,7 +15538,73 @@
         },
         "tags": [
           "Restaurant / Taxes"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "restaurantId": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "nameAr": {
+                    "type": "string"
+                  },
+                  "nameFr": {
+                    "type": "string"
+                  },
+                  "amount": {
+                    "type": "string"
+                  },
+                  "amountType": {
+                    "type": "string",
+                    "enum": [
+                      "percentage",
+                      "value"
+                    ]
+                  },
+                  "modules": {
+                    "type": "object"
+                  },
+                  "moduleType": {
+                    "type": "string",
+                    "enum": [
+                      "pos",
+                      "online",
+                      "all"
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "web",
+                      "app",
+                      "all"
+                    ]
+                  },
+                  "foodIds": {
+                    "type": "object"
+                  },
+                  "branchIds": {
+                    "type": "object"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "inactive"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/taxes/": {
@@ -14737,7 +15632,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "get": {
         "description": "",
@@ -14785,7 +15692,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/taxes/options": {
@@ -14908,7 +15827,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/taxes/{id}/branches": {
@@ -14972,7 +15903,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/taxes/subcategories": {
@@ -15020,7 +15963,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/taxes/subcategories/{subcategoryId}/foods": {
@@ -15084,7 +16039,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/taxes/foods": {
@@ -15132,7 +16099,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/taxes/foods/subcategory/{subcategoryId}": {
@@ -15196,7 +16175,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/taxes/{id}/foods": {
@@ -15260,7 +16251,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/taxes/{id}": {
@@ -15327,7 +16330,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "delete": {
         "description": "",
@@ -15391,7 +16406,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/tax/": {
@@ -15419,7 +16446,19 @@
         },
         "tags": [
           "Restaurant / Tax"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "get": {
         "description": "",
@@ -15467,7 +16506,19 @@
         },
         "tags": [
           "Restaurant / Tax"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/tax/options": {
@@ -15590,7 +16641,19 @@
         },
         "tags": [
           "Restaurant / Tax"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/tax/{id}/branches": {
@@ -15654,7 +16717,19 @@
         },
         "tags": [
           "Restaurant / Tax"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/tax/subcategories": {
@@ -15702,7 +16777,19 @@
         },
         "tags": [
           "Restaurant / Tax"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/tax/subcategories/{subcategoryId}/foods": {
@@ -15766,7 +16853,19 @@
         },
         "tags": [
           "Restaurant / Tax"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/tax/foods": {
@@ -15814,7 +16913,19 @@
         },
         "tags": [
           "Restaurant / Tax"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/tax/foods/subcategory/{subcategoryId}": {
@@ -15878,7 +16989,19 @@
         },
         "tags": [
           "Restaurant / Tax"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/tax/{id}/foods": {
@@ -15942,7 +17065,19 @@
         },
         "tags": [
           "Restaurant / Tax"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/tax/{id}": {
@@ -16009,7 +17144,19 @@
         },
         "tags": [
           "Restaurant / Tax"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "delete": {
         "description": "",
@@ -16073,7 +17220,19 @@
         },
         "tags": [
           "Restaurant / Tax"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/tax/": {
@@ -16101,7 +17260,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "get": {
         "description": "",
@@ -16149,7 +17320,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/tax/options": {
@@ -16272,7 +17455,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/tax/{id}/branches": {
@@ -16336,7 +17531,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/tax/subcategories": {
@@ -16384,7 +17591,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/tax/subcategories/{subcategoryId}/foods": {
@@ -16448,7 +17667,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/tax/foods": {
@@ -16496,7 +17727,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/tax/foods/subcategory/{subcategoryId}": {
@@ -16560,7 +17803,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/tax/{id}/foods": {
@@ -16624,7 +17879,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/tax/{id}": {
@@ -16691,7 +17958,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "delete": {
         "description": "",
@@ -16755,7 +18034,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/bundles/": {
@@ -16783,7 +18074,19 @@
         },
         "tags": [
           "Restaurant / Bundles"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "get": {
         "description": "",
@@ -16831,7 +18134,19 @@
         },
         "tags": [
           "Restaurant / Bundles"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/bundles/branches": {
@@ -16879,7 +18194,19 @@
         },
         "tags": [
           "Restaurant / Bundles"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/bundles/foods": {
@@ -16933,7 +18260,19 @@
         },
         "tags": [
           "Restaurant / Bundles"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/bundles/{id}/branches": {
@@ -16997,7 +18336,19 @@
         },
         "tags": [
           "Restaurant / Bundles"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/bundles/{id}/foods": {
@@ -17061,7 +18412,19 @@
         },
         "tags": [
           "Restaurant / Bundles"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/bundles/{id}": {
@@ -17128,7 +18491,19 @@
         },
         "tags": [
           "Restaurant / Bundles"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "delete": {
         "description": "",
@@ -17192,7 +18567,19 @@
         },
         "tags": [
           "Restaurant / Bundles"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/bundles/{id}/toggle-status": {
@@ -17225,7 +18612,19 @@
         },
         "tags": [
           "Restaurant / Bundles"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/bundles/": {
@@ -17253,7 +18652,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "get": {
         "description": "",
@@ -17301,7 +18712,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/bundles/branches": {
@@ -17349,7 +18772,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/bundles/foods": {
@@ -17403,7 +18838,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/bundles/{id}/branches": {
@@ -17467,7 +18914,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/bundles/{id}/foods": {
@@ -17531,7 +18990,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/bundles/{id}": {
@@ -17598,7 +19069,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "delete": {
         "description": "",
@@ -17662,7 +19145,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/bundles/{id}/toggle-status": {
@@ -17695,7 +19190,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/tax-type/": {
@@ -18071,7 +19578,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "put": {
         "description": "",
@@ -18097,7 +19616,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/tax-type/{restrauntid}": {
@@ -18164,7 +19695,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "put": {
         "description": "",
@@ -18198,7 +19741,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/tax-type/upsert": {
@@ -18226,7 +19781,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/tax-types/": {
@@ -18602,7 +20169,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "put": {
         "description": "",
@@ -18628,7 +20207,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/tax-types/{restrauntid}": {
@@ -18695,7 +20286,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "put": {
         "description": "",
@@ -18729,7 +20332,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/tax-types/upsert": {
@@ -18757,7 +20372,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/notes/assign-food": {
@@ -18785,7 +20412,19 @@
         },
         "tags": [
           "Restaurant / Notes"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "patch": {
         "description": "",
@@ -18811,7 +20450,19 @@
         },
         "tags": [
           "Restaurant / Notes"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/notes/": {
@@ -18839,7 +20490,19 @@
         },
         "tags": [
           "Restaurant / Notes"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "get": {
         "description": "",
@@ -18887,7 +20550,19 @@
         },
         "tags": [
           "Restaurant / Notes"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/notes/{id}": {
@@ -18954,7 +20629,19 @@
         },
         "tags": [
           "Restaurant / Notes"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "delete": {
         "description": "",
@@ -19018,7 +20705,19 @@
         },
         "tags": [
           "Restaurant / Notes"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/notes/assign-food": {
@@ -19046,7 +20745,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "patch": {
         "description": "",
@@ -19072,7 +20783,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/notes/": {
@@ -19100,7 +20823,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "get": {
         "description": "",
@@ -19148,7 +20883,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/notes/{id}": {
@@ -19215,7 +20962,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "delete": {
         "description": "",
@@ -19279,7 +21038,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/notes-items/": {
@@ -19307,7 +21078,19 @@
         },
         "tags": [
           "Restaurant / Notes Items"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "get": {
         "description": "",
@@ -19358,7 +21141,19 @@
         },
         "tags": [
           "Restaurant / Notes Items"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/notes-items/group/{group_id}": {
@@ -19458,7 +21253,19 @@
         },
         "tags": [
           "Restaurant / Notes Items"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "delete": {
         "description": "",
@@ -19522,7 +21329,19 @@
         },
         "tags": [
           "Restaurant / Notes Items"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/notes-items/": {
@@ -19550,7 +21369,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "get": {
         "description": "",
@@ -19601,7 +21432,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/notes-items/group/{group_id}": {
@@ -19701,7 +21544,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "delete": {
         "description": "",
@@ -19765,7 +21620,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/note-items/": {
@@ -20118,7 +21985,41 @@
         },
         "tags": [
           "Restaurant / Note Items"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "restaurantId": {
+                    "type": "string"
+                  },
+                  "group_note_id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "nameAr": {
+                    "type": "string"
+                  },
+                  "nameFr": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "inactive"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/note-items/": {
@@ -20146,7 +22047,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "get": {
         "description": "",
@@ -20197,7 +22110,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/note-items/group/{group_id}": {
@@ -20297,7 +22222,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "delete": {
         "description": "",
@@ -20361,7 +22298,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/offers/": {
@@ -20415,7 +22364,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "put": {
         "description": "",
@@ -20441,7 +22402,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "delete": {
         "description": "",
@@ -20492,7 +22465,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/offers/available-foods": {
@@ -20546,7 +22531,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/offers/{foodId}": {
@@ -20582,7 +22579,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "delete": {
         "description": "",
@@ -20669,7 +22678,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/offers/{foodId}/details": {
@@ -20702,7 +22723,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/suppliers/": {
@@ -21015,7 +23048,37 @@
         },
         "tags": [
           "Restaurant / Suppliers"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "restaurantId": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string"
+                  },
+                  "phone": {
+                    "type": "string"
+                  },
+                  "balance": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/suppliers/": {
@@ -21043,7 +23106,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "get": {
         "description": "",
@@ -21097,7 +23172,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/suppliers/{id}": {
@@ -21164,7 +23251,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "delete": {
         "description": "",
@@ -21228,7 +23327,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/stores/": {
@@ -21645,7 +23756,43 @@
         },
         "tags": [
           "Restaurant / Stores"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "restaurantId": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "nameAr": {
+                    "type": "string"
+                  },
+                  "nameFr": {
+                    "type": "string"
+                  },
+                  "lat": {
+                    "type": "string"
+                  },
+                  "lng": {
+                    "type": "string"
+                  },
+                  "brancheIds": {
+                    "type": "object"
+                  },
+                  "status": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/stores/": {
@@ -21673,7 +23820,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "get": {
         "description": "",
@@ -21727,7 +23886,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/stores/selection": {
@@ -21775,7 +23946,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/stores/{id}": {
@@ -21842,7 +24025,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "delete": {
         "description": "",
@@ -21906,7 +24101,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/store-men/": {
@@ -22320,7 +24527,40 @@
         },
         "tags": [
           "Restaurant / Store Men"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "restaurantId": {
+                    "type": "string"
+                  },
+                  "storeId": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "phone": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  },
+                  "image": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/store-men/": {
@@ -22348,7 +24588,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "get": {
         "description": "",
@@ -22402,7 +24654,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/store-men/stores": {
@@ -22450,7 +24714,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/store-men/{id}": {
@@ -22517,7 +24793,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "delete": {
         "description": "",
@@ -22581,7 +24869,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/captain-orders/": {
@@ -23228,7 +25528,46 @@
         },
         "tags": [
           "Restaurant / Captain Orders"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "restaurantId": {
+                    "type": "string"
+                  },
+                  "branchId": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "userName": {
+                    "type": "string"
+                  },
+                  "phone": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  },
+                  "image": {
+                    "type": "string"
+                  },
+                  "hallIds": {
+                    "type": "object"
+                  },
+                  "status": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/captain-orders/": {
@@ -23256,7 +25595,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "get": {
         "description": "",
@@ -23310,7 +25661,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/captain-orders/branches": {
@@ -23358,7 +25721,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/captain-orders/halls": {
@@ -23406,7 +25781,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/captain-orders/{id}/halls": {
@@ -23470,7 +25857,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/captain-orders/{id}": {
@@ -23537,7 +25936,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "delete": {
         "description": "",
@@ -23601,7 +26012,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/cashier-men/": {
@@ -24075,7 +26498,55 @@
         },
         "tags": [
           "Restaurant / Cashier Men"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "restaurantId": {
+                    "type": "string"
+                  },
+                  "branchId": {
+                    "type": "string"
+                  },
+                  "cashierId": {
+                    "type": "string"
+                  },
+                  "myId": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "userName": {
+                    "type": "string"
+                  },
+                  "phone": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  },
+                  "image": {
+                    "type": "string"
+                  },
+                  "roles": {
+                    "type": "object"
+                  },
+                  "report_perimission": {
+                    "type": "object"
+                  },
+                  "status": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/cashier-men/": {
@@ -24103,7 +26574,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "get": {
         "description": "",
@@ -24157,7 +26640,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/cashier-men/branches": {
@@ -24205,7 +26700,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/cashier-men/{id}": {
@@ -24272,7 +26779,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "delete": {
         "description": "",
@@ -24336,7 +26855,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/halls/": {
@@ -24756,7 +27287,43 @@
         },
         "tags": [
           "Restaurant / Halls"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "restaurantId": {
+                    "type": "string"
+                  },
+                  "branchId": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "nameAr": {
+                    "type": "string"
+                  },
+                  "nameFr": {
+                    "type": "string"
+                  },
+                  "lat": {
+                    "type": "string"
+                  },
+                  "lng": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/halls/": {
@@ -24784,7 +27351,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "get": {
         "description": "",
@@ -24838,7 +27417,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/halls/branches": {
@@ -24886,7 +27477,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/halls/{id}": {
@@ -24953,7 +27556,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "delete": {
         "description": "",
@@ -25017,7 +27632,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/hall-tables/": {
@@ -25428,7 +28055,40 @@
         },
         "tags": [
           "Restaurant / Hall Tables"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "restaurantId": {
+                    "type": "string"
+                  },
+                  "hallId": {
+                    "type": "string"
+                  },
+                  "tblNumber": {
+                    "type": "string"
+                  },
+                  "capacity": {
+                    "type": "integer"
+                  },
+                  "qr": {
+                    "type": "string"
+                  },
+                  "occupied": {
+                    "type": "boolean"
+                  },
+                  "status": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/restaurant/hall-tables/{id}/toggle-occupied": {
@@ -25461,7 +28121,40 @@
         },
         "tags": [
           "Restaurant / Hall Tables"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "restaurantId": {
+                    "type": "string"
+                  },
+                  "hallId": {
+                    "type": "string"
+                  },
+                  "tblNumber": {
+                    "type": "string"
+                  },
+                  "capacity": {
+                    "type": "integer"
+                  },
+                  "qr": {
+                    "type": "string"
+                  },
+                  "occupied": {
+                    "type": "boolean"
+                  },
+                  "status": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/hall-tables/": {
@@ -25489,7 +28182,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "get": {
         "description": "",
@@ -25543,7 +28248,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/hall-tables/halls": {
@@ -25591,7 +28308,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/hall-tables/{id}": {
@@ -25658,7 +28387,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       },
       "delete": {
         "description": "",
@@ -25722,7 +28463,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/restaurant/pos/hall-tables/{id}/toggle-occupied": {
@@ -25755,7 +28508,19 @@
         },
         "tags": [
           "Restaurant / Pos"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/cashier/auth/login": {
@@ -25922,7 +28687,19 @@
         "tags": [
           "Delivery Man / Auth"
         ],
-        "security": []
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/api/delivery_man/dashboard/": {
@@ -26280,7 +29057,43 @@
         },
         "tags": [
           "Delivery Man / Notifications"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "recipientType": {
+                    "type": "string",
+                    "enum": [
+                      "user",
+                      "restaurant",
+                      "superadmin",
+                      "delivery_man"
+                    ]
+                  },
+                  "recipientId": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "body": {
+                    "type": "string"
+                  },
+                  "data": {
+                    "type": "object"
+                  },
+                  "isRead": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/delivery_man/notifications/{id}/read": {
@@ -26313,7 +29126,43 @@
         },
         "tags": [
           "Delivery Man / Notifications"
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "recipientType": {
+                    "type": "string",
+                    "enum": [
+                      "user",
+                      "restaurant",
+                      "superadmin",
+                      "delivery_man"
+                    ]
+                  },
+                  "recipientId": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "body": {
+                    "type": "string"
+                  },
+                  "data": {
+                    "type": "object"
+                  },
+                  "isRead": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -26333,6 +29182,186 @@
   ],
   "tags": [
     {
+      "name": "General"
+    },
+    {
+      "name": "Restaurant / Auth"
+    },
+    {
+      "name": "Restaurant / Restaurantadmin"
+    },
+    {
+      "name": "Restaurant / Roles"
+    },
+    {
+      "name": "Restaurant / Subcategories"
+    },
+    {
+      "name": "Restaurant / Order"
+    },
+    {
+      "name": "Restaurant / Addons"
+    },
+    {
+      "name": "Restaurant / Branchemenu"
+    },
+    {
+      "name": "Restaurant / Food Locks"
+    },
+    {
+      "name": "Restaurant / FinancialAccount"
+    },
+    {
+      "name": "Restaurant / Food"
+    },
+    {
+      "name": "Restaurant / Image"
+    },
+    {
+      "name": "Restaurant / Wallets"
+    },
+    {
+      "name": "Restaurant / Restaurantsetting"
+    },
+    {
+      "name": "Restaurant / Restaurant Zone Delivery Fees"
+    },
+    {
+      "name": "Restaurant / Branches"
+    },
+    {
+      "name": "Restaurant / Ingredients"
+    },
+    {
+      "name": "Restaurant / Ingredientcategory"
+    },
+    {
+      "name": "Restaurant / Ratings"
+    },
+    {
+      "name": "Restaurant / Slider"
+    },
+    {
+      "name": "Restaurant / RestQR"
+    },
+    {
+      "name": "Restaurant / Discounts"
+    },
+    {
+      "name": "Restaurant / Coupons"
+    },
+    {
+      "name": "Restaurant / Policy"
+    },
+    {
+      "name": "Restaurant / Popups"
+    },
+    {
+      "name": "Restaurant / Report"
+    },
+    {
+      "name": "Restaurant / Notifications"
+    },
+    {
+      "name": "Restaurant / Socialmedia"
+    },
+    {
+      "name": "Restaurant / Profile"
+    },
+    {
+      "name": "Restaurant / Restaurant Users"
+    },
+    {
+      "name": "Restaurant / Cashiers"
+    },
+    {
+      "name": "Restaurant / Expenses"
+    },
+    {
+      "name": "Restaurant / Expense Categories"
+    },
+    {
+      "name": "Restaurant / Points Products"
+    },
+    {
+      "name": "Restaurant / Points Orders"
+    },
+    {
+      "name": "Restaurant / Delivery Men"
+    },
+    {
+      "name": "Restaurant / Recommended Foods"
+    },
+    {
+      "name": "Restaurant / Free Delivery"
+    },
+    {
+      "name": "Restaurant / Pricing"
+    },
+    {
+      "name": "Restaurant / Shifts"
+    },
+    {
+      "name": "Restaurant / Order Delay Alerts"
+    },
+    {
+      "name": "Restaurant / Printers"
+    },
+    {
+      "name": "Restaurant / Payment Transactions"
+    },
+    {
+      "name": "Restaurant / Pos"
+    },
+    {
+      "name": "Restaurant / Service Fees"
+    },
+    {
+      "name": "Restaurant / Taxes"
+    },
+    {
+      "name": "Restaurant / Tax"
+    },
+    {
+      "name": "Restaurant / Bundles"
+    },
+    {
+      "name": "Restaurant / Tax Type"
+    },
+    {
+      "name": "Restaurant / Tax Types"
+    },
+    {
+      "name": "Restaurant / Notes"
+    },
+    {
+      "name": "Restaurant / Notes Items"
+    },
+    {
+      "name": "Restaurant / Note Items"
+    },
+    {
+      "name": "Restaurant / Suppliers"
+    },
+    {
+      "name": "Restaurant / Stores"
+    },
+    {
+      "name": "Restaurant / Store Men"
+    },
+    {
+      "name": "Restaurant / Captain Orders"
+    },
+    {
+      "name": "Restaurant / Cashier Men"
+    },
+    {
+      "name": "Restaurant / Halls"
+    },
+    {
+      "name": "Restaurant / Hall Tables"
+    },
+    {
       "name": "Cashier / Auth"
     },
     {
@@ -26342,193 +29371,13 @@
       "name": "Delivery Man / Dashboard"
     },
     {
-      "name": "Delivery Man / Notifications"
-    },
-    {
       "name": "Delivery Man / Orders"
     },
     {
       "name": "Delivery Man / Profile"
     },
     {
-      "name": "General"
-    },
-    {
-      "name": "Restaurant / Addons"
-    },
-    {
-      "name": "Restaurant / Auth"
-    },
-    {
-      "name": "Restaurant / Branchemenu"
-    },
-    {
-      "name": "Restaurant / Branches"
-    },
-    {
-      "name": "Restaurant / Bundles"
-    },
-    {
-      "name": "Restaurant / Captain Orders"
-    },
-    {
-      "name": "Restaurant / Cashier Men"
-    },
-    {
-      "name": "Restaurant / Cashiers"
-    },
-    {
-      "name": "Restaurant / Coupons"
-    },
-    {
-      "name": "Restaurant / Delivery Men"
-    },
-    {
-      "name": "Restaurant / Discounts"
-    },
-    {
-      "name": "Restaurant / Expense Categories"
-    },
-    {
-      "name": "Restaurant / Expenses"
-    },
-    {
-      "name": "Restaurant / FinancialAccount"
-    },
-    {
-      "name": "Restaurant / Food"
-    },
-    {
-      "name": "Restaurant / Food Locks"
-    },
-    {
-      "name": "Restaurant / Free Delivery"
-    },
-    {
-      "name": "Restaurant / Hall Tables"
-    },
-    {
-      "name": "Restaurant / Halls"
-    },
-    {
-      "name": "Restaurant / Image"
-    },
-    {
-      "name": "Restaurant / Ingredientcategory"
-    },
-    {
-      "name": "Restaurant / Ingredients"
-    },
-    {
-      "name": "Restaurant / Note Items"
-    },
-    {
-      "name": "Restaurant / Notes"
-    },
-    {
-      "name": "Restaurant / Notes Items"
-    },
-    {
-      "name": "Restaurant / Notifications"
-    },
-    {
-      "name": "Restaurant / Order"
-    },
-    {
-      "name": "Restaurant / Order Delay Alerts"
-    },
-    {
-      "name": "Restaurant / Payment Transactions"
-    },
-    {
-      "name": "Restaurant / Points Orders"
-    },
-    {
-      "name": "Restaurant / Points Products"
-    },
-    {
-      "name": "Restaurant / Policy"
-    },
-    {
-      "name": "Restaurant / Popups"
-    },
-    {
-      "name": "Restaurant / Pos"
-    },
-    {
-      "name": "Restaurant / Pricing"
-    },
-    {
-      "name": "Restaurant / Printers"
-    },
-    {
-      "name": "Restaurant / Profile"
-    },
-    {
-      "name": "Restaurant / Ratings"
-    },
-    {
-      "name": "Restaurant / Recommended Foods"
-    },
-    {
-      "name": "Restaurant / Report"
-    },
-    {
-      "name": "Restaurant / RestQR"
-    },
-    {
-      "name": "Restaurant / Restaurant Users"
-    },
-    {
-      "name": "Restaurant / Restaurant Zone Delivery Fees"
-    },
-    {
-      "name": "Restaurant / Restaurantadmin"
-    },
-    {
-      "name": "Restaurant / Restaurantsetting"
-    },
-    {
-      "name": "Restaurant / Roles"
-    },
-    {
-      "name": "Restaurant / Service Fees"
-    },
-    {
-      "name": "Restaurant / Shifts"
-    },
-    {
-      "name": "Restaurant / Slider"
-    },
-    {
-      "name": "Restaurant / Socialmedia"
-    },
-    {
-      "name": "Restaurant / Store Men"
-    },
-    {
-      "name": "Restaurant / Stores"
-    },
-    {
-      "name": "Restaurant / Subcategories"
-    },
-    {
-      "name": "Restaurant / Suppliers"
-    },
-    {
-      "name": "Restaurant / Tax"
-    },
-    {
-      "name": "Restaurant / Tax Type"
-    },
-    {
-      "name": "Restaurant / Tax Types"
-    },
-    {
-      "name": "Restaurant / Taxes"
-    },
-    {
-      "name": "Restaurant / Wallets"
+      "name": "Delivery Man / Notifications"
     }
   ]
 }

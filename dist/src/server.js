@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const path_1 = __importDefault(require("path"));
+const crypto_1 = __importDefault(require("crypto"));
 const routes_1 = __importDefault(require("./routes"));
 const errorHandler_1 = require("./middlewares/errorHandler");
 const Errors_1 = require("./Errors");
@@ -18,6 +19,8 @@ const connection_1 = require("./models/connection");
 const orderNotificationCron_1 = require("./services/orderNotificationCron");
 const orderDelayAlertCron_1 = require("./services/orderDelayAlertCron");
 require("./config/redis");
+const swagger_ui_express_1 = __importDefault(require("swagger-ui-express"));
+const swagger_output_json_1 = __importDefault(require("./swagger-output.json"));
 const initNotificationCleanupCron_1 = require("./services/initNotificationCleanupCron");
 // import { initAbandonedCartCron } from "./services/abandonedCartCron";
 dotenv_1.default.config();
@@ -69,6 +72,44 @@ app.get("/", (req, res) => {
         }
     });
 });
+/* ================= Swagger Docs ================= */
+const docsEnabled = process.env.NODE_ENV !== 'production' || process.env.ENABLE_DOCS === 'true';
+// Basic Auth بسيط من غير مكتبات
+const docsAuth = (req, res, next) => {
+    // في الـ development مفيش باسورد
+    if (process.env.NODE_ENV !== 'production')
+        return next();
+    const user = process.env.DOCS_USER;
+    const pass = process.env.DOCS_PASSWORD;
+    if (!user || !pass)
+        return res.status(503).send('Docs credentials not configured');
+    const header = req.headers.authorization ?? '';
+    const [scheme, encoded] = header.split(' ');
+    const [u = '', p = ''] = Buffer.from(encoded ?? '', 'base64').toString().split(':');
+    const safeEqual = (a, b) => {
+        const ab = Buffer.from(a);
+        const bb = Buffer.from(b);
+        return ab.length === bb.length && crypto_1.default.timingSafeEqual(ab, bb);
+    };
+    if (scheme === 'Basic' && safeEqual(u, user) && safeEqual(p, pass))
+        return next();
+    res.setHeader('WWW-Authenticate', 'Basic realm="API Docs"');
+    return res.status(401).send('Authentication required');
+};
+if (docsEnabled) {
+    app.use('/api-docs', docsAuth, swagger_ui_express_1.default.serve, swagger_ui_express_1.default.setup(swagger_output_json_1.default, {
+        customSiteTitle: 'Keeto API Docs',
+        swaggerOptions: {
+            persistAuthorization: true,
+            docExpansion: 'none',
+            filter: true,
+            displayRequestDuration: true,
+            // tagsSorter: 'alpha',
+        },
+    }));
+    app.get('/swagger.json', docsAuth, (_req, res) => res.json(swagger_output_json_1.default));
+}
+/* ================================================= */
 // مسارات الـ API
 app.use("/api", routes_1.default);
 // معالج مسارات 404 - تم تعديله لتجنب خطأ ENOENT

@@ -47,7 +47,8 @@ async function checkAndApplyVisaSwitch(restaurantId, addedServiceFee = 0, execut
         paymentGatewayType: schema_1.restaurantSettings.paymentGatewayType,
         visaSwitchConditionType: schema_1.restaurantSettings.visaSwitchConditionType,
         visaSwitchAmountThreshold: schema_1.restaurantSettings.visaSwitchAmountThreshold,
-        visaSwitchDate: schema_1.restaurantSettings.visaSwitchDate,
+        visaSwitchDayOfWeek: schema_1.restaurantSettings.visaSwitchDayOfWeek,
+        visaSwitchDayOfMonth: schema_1.restaurantSettings.visaSwitchDayOfMonth,
         visaSwitchApplied: schema_1.restaurantSettings.visaSwitchApplied,
         customGatewayAccumulatedFees: schema_1.restaurantSettings.customGatewayAccumulatedFees,
     })
@@ -82,12 +83,21 @@ async function checkAndApplyVisaSwitch(restaurantId, addedServiceFee = 0, execut
         }
     }
     // ========================
-    // شرط التاريخ (date)
+    // شرط يوم الأسبوع (day_of_week)
     // ========================
-    if (settings.visaSwitchConditionType === "date" && settings.visaSwitchDate) {
-        const today = new Date().toISOString().split("T")[0]; // "YYYY-MM-DD"
-        const switchDate = String(settings.visaSwitchDate);
-        if (today >= switchDate) {
+    if (settings.visaSwitchConditionType === "day_of_week" && settings.visaSwitchDayOfWeek) {
+        const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+        const todayDayOfWeek = dayNames[new Date().getDay()];
+        if (todayDayOfWeek === String(settings.visaSwitchDayOfWeek).trim().toLowerCase()) {
+            shouldSwitch = true;
+        }
+    }
+    // ========================
+    // شرط يوم الشهر (day_of_month)
+    // ========================
+    if (settings.visaSwitchConditionType === "day_of_month" && settings.visaSwitchDayOfMonth != null) {
+        const todayDayOfMonth = new Date().getDate();
+        if (todayDayOfMonth === Number(settings.visaSwitchDayOfMonth)) {
             shouldSwitch = true;
         }
     }

@@ -978,7 +978,7 @@ exports.getRestaurantOrderById = getRestaurantOrderById;
 // ==========================================
 const updateOrderStatus = async (req, res) => {
     const { orderId } = req.params;
-    const { status, cancelReasonId, customReason } = req.body;
+    const { status, cancelReasonId, customReason, deliveryManId } = req.body;
     const adminRestaurantId = req.user?.restaurantId || req.user?.id;
     const adminBranchId = req.user?.branchId;
     if (!status)
@@ -990,6 +990,18 @@ const updateOrderStatus = async (req, res) => {
         throw new BadRequest_1.BadRequest("Unauthorized");
     if (adminBranchId && existingOrder.branchId !== adminBranchId)
         throw new BadRequest_1.BadRequest("Unauthorized");
+    let finalDeliveryManId = null;
+    if (deliveryManId) {
+        const [deliveryMan] = await connection_1.db
+            .select()
+            .from(schema_1.deliveryMen)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.deliveryMen.id, deliveryManId), (0, drizzle_orm_1.eq)(schema_1.deliveryMen.restaurantId, adminRestaurantId), (0, drizzle_orm_1.eq)(schema_1.deliveryMen.isDeleted, false)))
+            .limit(1);
+        if (!deliveryMan) {
+            throw new NotFound_1.NotFound("Delivery man not found or does not belong to your restaurant");
+        }
+        finalDeliveryManId = deliveryMan.id;
+    }
     const currentStatus = existingOrder.status;
     //const finalStatuses = ["delivered", "cancelled", "refund"];
     const finalStatuses = ["cancelled", "refund"];
@@ -1037,14 +1049,18 @@ const updateOrderStatus = async (req, res) => {
     }
     await connection_1.db.transaction(async (tx) => {
         // 1. تحديث حالة الطلب
-        await tx.update(schema_1.orders)
-            .set({
+        const orderUpdatePayload = {
             status: status,
             cancelReasonId: status === "cancelled" ? finalReasonId : null,
             cancelReason: status === "cancelled" ? finalReasonText : null,
             cancelReasonType: status === "cancelled" ? "restaurant" : null,
             updatedAt: new Date()
-        })
+        };
+        if (finalDeliveryManId) {
+            orderUpdatePayload.deliveryManId = finalDeliveryManId;
+        }
+        await tx.update(schema_1.orders)
+            .set(orderUpdatePayload)
             .where((0, drizzle_orm_1.eq)(schema_1.orders.id, orderId));
         // ==========================================
         // 💰 2. الـ Refund لمحفظة العميل (User Wallet) عند الإلغاء
@@ -1181,6 +1197,31 @@ const updateOrderStatus = async (req, res) => {
             type: "ORDER_STATUS_UPDATE"
         }
     });
+    // ==========================================
+    // 5. إرسال إشعار لمندوب التوصيل (Delivery Man)
+    // ==========================================
+    const orderType = existingOrder.orderType || existingOrder.type;
+    const targetDeliveryManId = finalDeliveryManId || existingOrder.deliveryManId;
+    if (orderType === "delivery" && targetDeliveryManId && (status === "out_for_delivery" || finalDeliveryManId)) {
+        await (0, notifications_1.sendPushNotification)({
+            recipientType: "delivery_man",
+            recipientId: targetDeliveryManId,
+            branchId: existingOrder.branchId || null,
+            title: status === "out_for_delivery" ? "طلب خارج للتوصيل" : "طلب جديد مُسند إليك",
+            body: status === "out_for_delivery"
+                ? `الطلب رقم #${existingOrder.dailyOrderNumber || existingOrder.orderNumber} أصبح خارجاً للتوصيل ومُسند إليك.`
+                : `تم إسناد الطلب رقم #${existingOrder.dailyOrderNumber || existingOrder.orderNumber} إليك.`,
+            data: {
+                restaurantId: existingOrder.restaurantId,
+                branchId: existingOrder.branchId || null,
+                orderId: existingOrder.id,
+                orderNumber: existingOrder.orderNumber,
+                dailyOrderNumber: existingOrder.dailyOrderNumber,
+                status: status,
+                type: status === "out_for_delivery" ? "ORDER_OUT_FOR_DELIVERY" : "ORDER_ASSIGNED",
+            },
+        });
+    }
     return (0, response_1.SuccessResponse)(res, { message: `Order status successfully updated to ${status}` });
 };
 exports.updateOrderStatus = updateOrderStatus;
@@ -1660,6 +1701,23 @@ const assignDelivery = async (req, res) => {
     await connection_1.db.update(schema_1.orders)
         .set({ deliveryManId, updatedAt: new Date() })
         .where((0, drizzle_orm_1.eq)(schema_1.orders.id, orderId));
+    // 4. إرسال إشعار لمندوب التوصيل
+    await (0, notifications_1.sendPushNotification)({
+        recipientType: "delivery_man",
+        recipientId: deliveryManId,
+        branchId: existingOrder.branchId || null,
+        title: "طلب جديد مُسند إليك",
+        body: `تم إسناد الطلب رقم #${existingOrder.dailyOrderNumber || existingOrder.orderNumber} إليك.`,
+        data: {
+            restaurantId: existingOrder.restaurantId,
+            branchId: existingOrder.branchId || null,
+            orderId: existingOrder.id,
+            orderNumber: existingOrder.orderNumber,
+            dailyOrderNumber: existingOrder.dailyOrderNumber,
+            status: existingOrder.status,
+            type: "ORDER_ASSIGNED",
+        },
+    });
     return (0, response_1.SuccessResponse)(res, { message: "Delivery man successfully assigned to order" });
 };
 exports.assignDelivery = assignDelivery;
