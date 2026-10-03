@@ -1,5 +1,6 @@
-import express from "express";
+import express, { Request, Response, NextFunction } from "express";
 import path from "path";
+import crypto from "crypto";
 import ApiRoute from "./routes";
 import { errorHandler } from "./middlewares/errorHandler";
 import { NotFound } from "./Errors";
@@ -13,6 +14,8 @@ import { connectDB } from './models/connection';
 import { initOrderNotificationCron } from './services/orderNotificationCron';
 import { initOrderDelayAlertCron } from './services/orderDelayAlertCron';
 import './config/redis';
+import swaggerUi from 'swagger-ui-express';
+import swaggerFile from './swagger-output.json';
 import { initNotificationCleanupCron } from "./services/initNotificationCleanupCron";
 // import { initAbandonedCartCron } from "./services/abandonedCartCron";
 
@@ -77,6 +80,56 @@ app.get("/", (req, res) => {
   });
 });
 
+
+
+/* ================= Swagger Docs ================= */
+const docsEnabled =
+  process.env.NODE_ENV !== 'production' || process.env.ENABLE_DOCS === 'true';
+
+// Basic Auth بسيط من غير مكتبات
+const docsAuth = (req: Request, res: Response, next: NextFunction) => {
+  // في الـ development مفيش باسورد
+  if (process.env.NODE_ENV !== 'production') return next();
+
+  const user = process.env.DOCS_USER;
+  const pass = process.env.DOCS_PASSWORD;
+  if (!user || !pass) return res.status(503).send('Docs credentials not configured');
+
+  const header = req.headers.authorization ?? '';
+  const [scheme, encoded] = header.split(' ');
+  const [u = '', p = ''] = Buffer.from(encoded ?? '', 'base64').toString().split(':');
+
+  const safeEqual = (a: string, b: string) => {
+    const ab = Buffer.from(a);
+    const bb = Buffer.from(b);
+    return ab.length === bb.length && crypto.timingSafeEqual(ab, bb);
+  };
+
+  if (scheme === 'Basic' && safeEqual(u, user) && safeEqual(p, pass)) return next();
+
+  res.setHeader('WWW-Authenticate', 'Basic realm="API Docs"');
+  return res.status(401).send('Authentication required');
+};
+
+if (docsEnabled) {
+  app.use(
+    '/api-docs',
+    docsAuth,
+    swaggerUi.serve,
+    swaggerUi.setup(swaggerFile, {
+      customSiteTitle: 'Keeto API Docs',
+      swaggerOptions: {
+        persistAuthorization: true,
+        docExpansion: 'none',
+        filter: true,
+        displayRequestDuration: true,
+        // tagsSorter: 'alpha',
+      },
+    })
+  );
+  app.get('/swagger.json', docsAuth, (_req, res) => res.json(swaggerFile));
+}
+/* ================================================= */
 // مسارات الـ API
 app.use("/api", ApiRoute);
 

@@ -8,7 +8,7 @@ import deliveryManRouter from './delivery_man/index';
 const route = Router();
 
 route.use('/restaurant', adminRouter);
-route.use('/user', userRouter);
+// route.use('/user', userRouter);
 route.use('/cashier', cashierRouter);
 route.use('/restaurant/pos', posRouter);
 route.use('/delivery_man', deliveryManRouter);
