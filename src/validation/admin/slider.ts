@@ -43,9 +43,26 @@ const normalizeSliderPayload = (obj: any) => {
         if (obj.priority !== undefined && obj.periorty === undefined) {
             obj.periorty = obj.priority;
         }
+        // status aliases
+        if (obj.status === undefined) {
+            if (obj.isActive !== undefined) obj.status = obj.isActive;
+            else if (obj.is_active !== undefined) obj.status = obj.is_active;
+            else if (obj.active !== undefined) obj.status = obj.active;
+        }
     }
     return obj;
 };
+
+// Accepts true/false, "true"/"false", 1/0, "1"/"0", "active"/"inactive"
+// Output is always "active" | "inactive" (or undefined if not sent)
+const statusSchema = z.preprocess((val) => {
+    if (val === undefined || val === null || val === "") return undefined;
+    if (val === true || val === "true" || val === 1 || val === "1" || val === "active") return "active";
+    if (val === false || val === "false" || val === 0 || val === "0" || val === "inactive") return "inactive";
+    return val; // will fail enum validation with a clear error
+}, z.enum(["active", "inactive"], {
+    errorMap: () => ({ message: "Status must be true, false, 'active' or 'inactive'" }),
+}).optional());
 
 export const createSliderSchema = z.preprocess(
     normalizeSliderPayload,
@@ -62,6 +79,7 @@ export const createSliderSchema = z.preprocess(
         foodId: z.string().min(1).optional().nullable(),
         productId: z.string().min(1).optional().nullable(),
         discountId: z.string().min(1).optional().nullable(),
+        status: statusSchema,
     }).superRefine((data, ctx) => {
         if (data.linkType === "subcategory") {
             if (!data.subcategoryId || data.subcategoryId.trim() === "") {
@@ -107,6 +125,7 @@ export const updateSliderSchema = z.preprocess(
         foodId: z.string().optional().nullable(),
         productId: z.string().optional().nullable(),
         discountId: z.string().optional().nullable(),
+        status: statusSchema,
     }).superRefine((data, ctx) => {
         if (data.linkType === "subcategory") {
             if (data.subcategoryId !== undefined && (!data.subcategoryId || data.subcategoryId.trim() === "")) {
