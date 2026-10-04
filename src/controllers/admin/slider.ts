@@ -19,7 +19,8 @@ export const createImage = async (req: Request, res: Response) => {
         categoryId,
         foodId,
         productId,
-        discountId
+        discountId,
+        status
     } = req.body;
     const restaurantId = req.user?.restaurantId || req.user?.id;
 
@@ -39,6 +40,8 @@ export const createImage = async (req: Request, res: Response) => {
         throw new BadRequest("Image is required.");
     }
 
+    const resolvedStatus = status === true || status === "active" ? "active" : "inactive";
+
     const id = uuidv4();
     await db.insert(sliders).values({
         id,
@@ -50,6 +53,7 @@ export const createImage = async (req: Request, res: Response) => {
         subcategoryId: linkType === "subcategory" ? resolvedSubcategoryId : null,
         foodId: linkType === "product" ? resolvedFoodId : null,
         discountId: linkType === "discount" ? resolvedDiscountId : null,
+        status: resolvedStatus,
     });
 
     return SuccessResponse(res, {
@@ -64,6 +68,7 @@ export const createImage = async (req: Request, res: Response) => {
             foodId: linkType === "product" ? resolvedFoodId : null,
             productId: linkType === "product" ? resolvedFoodId : null,
             discountId: linkType === "discount" ? resolvedDiscountId : null,
+            status: resolvedStatus,
         }
     }, 201);
 };
@@ -81,6 +86,7 @@ export const getAllImages = async (req: Request, res: Response) => {
             restaurantid: sliders.restaurantid,
             img: sliders.img,
             periorty: sliders.periorty,
+            status: sliders.status,
             linkType: sliders.linkType,
             link: sliders.link,
             subcategoryId: sliders.subcategoryId,
@@ -126,6 +132,7 @@ export const getImageById = async (req: Request, res: Response) => {
             restaurantid: sliders.restaurantid,
             img: sliders.img,
             periorty: sliders.periorty,
+            status: sliders.status,
             linkType: sliders.linkType,
             link: sliders.link,
             subcategoryId: sliders.subcategoryId,
@@ -182,7 +189,6 @@ export const deleteImage = async (req: Request, res: Response) => {
     }, 200);
 };
 
-
 export const updateImage = async (req: Request, res: Response) => {
     const { id } = req.params;
     const {
@@ -194,7 +200,8 @@ export const updateImage = async (req: Request, res: Response) => {
         categoryId,
         foodId,
         productId,
-        discountId
+        discountId,
+        status
     } = req.body;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) {
@@ -223,6 +230,10 @@ export const updateImage = async (req: Request, res: Response) => {
     );
 
     const updateData: any = { updatedAt: new Date() };
+
+    if (status !== undefined) {
+        updateData.status = status === true || status === "active" ? "active" : "inactive";
+    }
 
     if (img) {
         const updatedUrl = await handleImageUpdate(req, existing.img, img, "sliders");
