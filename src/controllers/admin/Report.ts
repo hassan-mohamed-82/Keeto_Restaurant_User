@@ -1003,6 +1003,7 @@ export const getVisaReport = async (req: Request | any, res: Response) => {
             appCommission: orders.appCommission,
             discountAmount: orders.discountAmount,
             totalAmount: orders.totalAmount,
+            visaCommission: orders.visaCommission,
 
             // بيانات الفرع
             branchId: orders.branchId,
@@ -1029,6 +1030,7 @@ export const getVisaReport = async (req: Request | any, res: Response) => {
     let successAmount = 0;
     let failedCount = 0;
     let failedAmount = 0;
+    let totalVisaCommission = 0;
 
     const formattedOrders = orderList.map(order => {
         const amount = parseFloat(order.totalAmount as string || "0");
@@ -1043,6 +1045,7 @@ export const getVisaReport = async (req: Request | any, res: Response) => {
         if (isPaid) {
             successCount++;
             successAmount += amount;
+            totalVisaCommission += parseFloat(order.visaCommission as string || "0");
         } else if (isFailed) {
             failedCount++;
             failedAmount += amount;
@@ -1059,6 +1062,7 @@ export const getVisaReport = async (req: Request | any, res: Response) => {
             appCommission: parseFloat(order.appCommission as string || "0").toFixed(2),
             discountAmount: parseFloat(order.discountAmount as string || "0").toFixed(2),
             totalAmount: amount.toFixed(2),
+            visaCommission: parseFloat(order.visaCommission as string || "0").toFixed(2),
         };
     });
 
@@ -1078,6 +1082,7 @@ export const getVisaReport = async (req: Request | any, res: Response) => {
             summary: {
                 totalOrders: totalOrdersCount,
                 totalAmount: totalOrdersAmount.toFixed(2),
+                totalVisaCommission: totalVisaCommission.toFixed(2),
                 success: {
                     count: successCount,
                     totalAmount: successAmount.toFixed(2),
