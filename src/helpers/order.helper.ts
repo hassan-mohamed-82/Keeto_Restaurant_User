@@ -196,3 +196,30 @@ export const buildOrderDateConditions = async (
 
     return conditions;
 };
+
+// ==========================================
+// Helper: تحويل shippingAddress من JSON string إلى object
+// ==========================================
+/**
+ * Safely parses a shippingAddress value that may be stored as a
+ * JSON-encoded string in the database.
+ *
+ * @param value - The raw shippingAddress value (string | object | null | undefined)
+ * @returns Parsed object, or null if the value is absent / invalid JSON
+ *
+ * @example
+ * const address = parseShippingAddress(order.shippingAddress);
+ * // { title: 'work', street: 'شارع مسجد حاتم', lat: 31.21, lng: 29.94, ... }
+ */
+export const parseShippingAddress = (
+    value: string | object | null | undefined
+): Record<string, unknown> | null => {
+    if (!value) return null;
+    if (typeof value === "object") return value as Record<string, unknown>;
+    try {
+        const parsed = JSON.parse(value);
+        return typeof parsed === "object" && parsed !== null ? parsed : null;
+    } catch {
+        return null;
+    }
+};

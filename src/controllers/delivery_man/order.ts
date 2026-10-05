@@ -13,7 +13,7 @@ import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { UnauthorizedError } from "../../Errors";
 import { NotFound } from "../../Errors/NotFound";
-import { excludeUnpaidVisaOrders } from "../../helpers/order.helper";
+import { excludeUnpaidVisaOrders, parseShippingAddress } from "../../helpers/order.helper";
 import { sendPushNotification } from "../../utils/notifications";
 import { settleDeliveredOrder } from "../../services/restaurantWalletService";
 
@@ -106,7 +106,11 @@ export const getAssignedOrders = async (req: Request, res: Response) => {
 
         return SuccessResponse(res, {
             message: "Order details fetched successfully",
-            data: { ...order, items },
+            data: {
+                ...order,
+                shippingAddress: parseShippingAddress(order.shippingAddress),
+                items,
+            },
         });
     }
 
@@ -148,7 +152,10 @@ export const getAssignedOrders = async (req: Request, res: Response) => {
     return SuccessResponse(res, {
         message: "Assigned orders fetched successfully",
         total: assignedOrders.length,
-        data: assignedOrders,
+        data: assignedOrders.map((o) => ({
+            ...o,
+            shippingAddress: parseShippingAddress(o.shippingAddress),
+        })),
     });
 };
 
@@ -230,7 +237,10 @@ export const getOrderHistory = async (req: Request, res: Response) => {
         page,
         limit,
         total: historyOrders.length,
-        data: historyOrders,
+        data: historyOrders.map((o) => ({
+            ...o,
+            shippingAddress: parseShippingAddress(o.shippingAddress),
+        })),
     });
 };
 
