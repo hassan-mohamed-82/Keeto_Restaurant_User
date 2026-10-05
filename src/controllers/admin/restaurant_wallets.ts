@@ -7,7 +7,7 @@ import {
     restaurantSettings,
     orders
 } from "../../models/schema";
-import { eq, desc, or, and, sql } from "drizzle-orm";
+import { eq, desc, or, and, sql, notInArray, gte, lte } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors/NotFound";
@@ -101,6 +101,23 @@ export const getMyWallet = async (req: Request, res: Response) => {
         throw new BadRequest("Unauthorized: Only restaurant owners can view wallet data");
     }
 
+    const { startDate, endDate } = req.query as { startDate?: string; endDate?: string };
+
+    let start: Date | undefined;
+    let end: Date | undefined;
+
+    if (startDate) {
+        start = new Date(`${startDate}T00:00:00`);
+        if (isNaN(start.getTime())) throw new BadRequest("Invalid startDate");
+    }
+    if (endDate) {
+        end = new Date(`${endDate}T23:59:59.999`); // لحد آخر لحظة في اليوم
+        if (isNaN(end.getTime())) throw new BadRequest("Invalid endDate");
+    }
+    if (start && end && start > end) {
+        throw new BadRequest("startDate must be before endDate");
+    }
+
     // 1. جلب بيانات المحفظة
     const [wallet] = await db.select()
         .from(restaurantWallets)
@@ -131,33 +148,24 @@ export const getMyWallet = async (req: Request, res: Response) => {
     const activeSubscriptions = {
         monthly: activePlans
             .filter((p) => p.isMonthlyActive)
-            .map((p) => ({
-                platformType: p.platformType,
-                amount: p.monthlyAmount,
-            })),
+            .map((p) => ({ platformType: p.platformType, amount: p.monthlyAmount })),
         quarterly: activePlans
             .filter((p) => p.isQuarterlyActive)
-            .map((p) => ({
-                platformType: p.platformType,
-                amount: p.quarterlyAmount,
-            })),
+            .map((p) => ({ platformType: p.platformType, amount: p.quarterlyAmount })),
         annually: activePlans
             .filter((p) => p.isAnnuallyActive)
-            .map((p) => ({
-                platformType: p.platformType,
-                amount: p.annuallyAmount,
-            })),
+            .map((p) => ({ platformType: p.platformType, amount: p.annuallyAmount })),
     };
 
     // إجمالي المبالغ المستحقة لكل دورة
     const totalActiveMonthly = activeSubscriptions.monthly.reduce(
-        (acc, s) => acc + parseFloat(s.amount as string || "0"), 0
+        (acc, s) => acc + parseFloat((s.amount as string) || "0"), 0
     );
     const totalActiveQuarterly = activeSubscriptions.quarterly.reduce(
-        (acc, s) => acc + parseFloat(s.amount as string || "0"), 0
+        (acc, s) => acc + parseFloat((s.amount as string) || "0"), 0
     );
     const totalActiveAnnually = activeSubscriptions.annually.reduce(
-        (acc, s) => acc + parseFloat(s.amount as string || "0"), 0
+        (acc, s) => acc + parseFloat((s.amount as string) || "0"), 0
     );
 
     // 3. جلب إعدادات بوابات الدفع والسويتش التلقائي
@@ -175,21 +183,28 @@ export const getMyWallet = async (req: Request, res: Response) => {
         .where(eq(restaurantSettings.restaurantId, restaurantId))
         .limit(1);
 
-    // 4. جلب آخر الحركات التي كونت هذا الرصيد مع تفاصيل الأوردرات
-    const recentTransactions = await getWalletTransactionsWithOrderDetails(restaurantId, 15);
 
-    // 5. إجمالي الأوردرات (الإجماليات المالية مباشرةً من جدول الأوردرات)
+
+    // 5. إجمالي الأوردرات (مع فلتر التاريخ)
     const [orderAggregates] = await db
         .select({
             totalOrders: sql<number>`COUNT(*)`,
             totalSubtotal: sql<string>`COALESCE(SUM(${orders.subtotal}), 0)`,
-            totalAmount: sql<string>`COALESCE(SUM(${orders.totalAmount}), 0)`,
+            // إجمالي الأوردر بعد خصم الـ service fees
+            totalAmount: sql<string>`COALESCE(SUM(${orders.totalAmount} - COALESCE(${orders.serviceFee}, 0)), 0)`,
             totalDeliveryFees: sql<string>`COALESCE(SUM(${orders.deliveryFee}), 0)`,
         })
         .from(orders)
-        .where(eq(orders.restaurantId, restaurantId));
+        .where(
+            and(
+                eq(orders.restaurantId, restaurantId),
+                notInArray(orders.status, ["cancelled", "failed", "refund"]),
+                start ? gte(orders.createdAt, start) : undefined,
+                end ? lte(orders.createdAt, end) : undefined,
+            )
+        );
 
-    const numericBalance = parseFloat(wallet.balance as string || "0");
+    const numericBalance = parseFloat((wallet.balance as string) || "0");
     const accountStatus = numericBalance < 0
         ? "DUE_ON_RESTAURANT"   // المطعم عليه فلوس للمنصة
         : numericBalance > 0
@@ -205,14 +220,14 @@ export const getMyWallet = async (req: Request, res: Response) => {
     return SuccessResponse(res, {
         message: "Get wallet details success",
         data: {
-            // ملخص الحساب المالي المباشر
+            // ملخص الحساب المالي (تراكمي، غير متأثر بفلتر التاريخ)
             accountSummary: {
-                status: accountStatus,               // "DUE_ON_RESTAURANT" | "DUE_TO_RESTAURANT" | "SETTLED"
-                description: statusDescription,       // رسالة واضحة بالعربي
-                netAmount: Math.abs(numericBalance).toFixed(2), // المبلغ الصافي المستحق
-                balance: wallet.balance,             // رصيد المحفظة الأصلي
-                collectedCash: wallet.collectedCash, // الكاش الموجود في يد المطعم
-                totalEarning: wallet.totalEarning,   // إجمالي أرباح ومبيعات المطعم
+                status: accountStatus,
+                description: statusDescription,
+                netAmount: Math.abs(numericBalance).toFixed(2),
+                balance: wallet.balance,
+                collectedCash: wallet.collectedCash,
+                totalEarning: wallet.totalEarning,
             },
 
             // الرسوم والعمولات المتراكمة
@@ -244,10 +259,10 @@ export const getMyWallet = async (req: Request, res: Response) => {
             // الرسوم والعمولات الحالية لكل طلب
             currentPlanFees: {
                 totalServiceFeePerOrder: activePlans
-                    .reduce((acc, p) => acc + parseFloat(p.serviceFee as string || "0"), 0)
+                    .reduce((acc, p) => acc + parseFloat((p.serviceFee as string) || "0"), 0)
                     .toFixed(2),
                 totalCommissionRatePercent: activePlans
-                    .reduce((acc, p) => acc + parseFloat(p.commissionRate as string || "0"), 0)
+                    .reduce((acc, p) => acc + parseFloat((p.commissionRate as string) || "0"), 0)
                     .toFixed(2),
             },
 
@@ -262,21 +277,41 @@ export const getMyWallet = async (req: Request, res: Response) => {
                 isSwitchApplied: settings.visaSwitchApplied,
             } : null,
 
-            // إجمالي الأوردرات (مباشرةً من جدول الأوردرات – غير مرتبط بالمحفظة)
+            // إجمالي الأوردرات خلال الفترة المختارة
             foodOrdersSummary: {
+                period: {
+                    startDate: startDate ?? null,
+                    endDate: endDate ?? null,
+                },
                 totalOrders: Number(orderAggregates?.totalOrders ?? 0),
-                totalSubtotal: parseFloat(orderAggregates?.totalSubtotal as string ?? "0").toFixed(2),
-                totalAmount: parseFloat(orderAggregates?.totalAmount as string ?? "0").toFixed(2),
-                totalDeliveryFees: parseFloat(orderAggregates?.totalDeliveryFees as string ?? "0").toFixed(2),
+                totalSubtotal: parseFloat((orderAggregates?.totalSubtotal as string) ?? "0").toFixed(2),
+                totalAmount: parseFloat((orderAggregates?.totalAmount as string) ?? "0").toFixed(2),
+                totalDeliveryFees: parseFloat((orderAggregates?.totalDeliveryFees as string) ?? "0").toFixed(2),
             },
-
-            // سجل الأوردرات والعمليات التي كونت هذا الحساب
-            recentTransactions,
 
             updatedAt: wallet.updatedAt,
         }
     });
 };
+
+// ─────────────────────────────────────────────────────────────
+// تعديل الدالة المساعدة (لازم تقبل الباراميتر الثالث)
+// ─────────────────────────────────────────────────────────────
+/*
+export async function getWalletTransactionsWithOrderDetails(
+    restaurantId: string,
+    limit = 15,
+    range?: { start?: Date; end?: Date }
+) {
+    // ...
+    .where(and(
+        eq(walletTransactions.restaurantId, restaurantId),
+        range?.start ? gte(walletTransactions.createdAt, range.start) : undefined,
+        range?.end ? lte(walletTransactions.createdAt, range.end) : undefined,
+    ))
+    // ...
+}
+*/
 
 // ==========================================
 // 2. جلب سجل حركات المحفظة (Transactions History)
