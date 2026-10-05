@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.buildOrderDateConditions = exports.getRestaurantShiftStartTime = exports.excludeUnpaidVisaOrders = void 0;
+exports.parseShippingAddress = exports.buildOrderDateConditions = exports.getRestaurantShiftStartTime = exports.excludeUnpaidVisaOrders = void 0;
 const dayjs_1 = __importDefault(require("dayjs"));
 const utc_1 = __importDefault(require("dayjs/plugin/utc"));
 const timezone_1 = __importDefault(require("dayjs/plugin/timezone"));
@@ -169,3 +169,31 @@ const buildOrderDateConditions = async (req, restaurantId, hasFilterPermission =
     return conditions;
 };
 exports.buildOrderDateConditions = buildOrderDateConditions;
+// ==========================================
+// Helper: تحويل shippingAddress من JSON string إلى object
+// ==========================================
+/**
+ * Safely parses a shippingAddress value that may be stored as a
+ * JSON-encoded string in the database.
+ *
+ * @param value - The raw shippingAddress value (string | object | null | undefined)
+ * @returns Parsed object, or null if the value is absent / invalid JSON
+ *
+ * @example
+ * const address = parseShippingAddress(order.shippingAddress);
+ * // { title: 'work', street: 'شارع مسجد حاتم', lat: 31.21, lng: 29.94, ... }
+ */
+const parseShippingAddress = (value) => {
+    if (!value)
+        return null;
+    if (typeof value === "object")
+        return value;
+    try {
+        const parsed = JSON.parse(value);
+        return typeof parsed === "object" && parsed !== null ? parsed : null;
+    }
+    catch {
+        return null;
+    }
+};
+exports.parseShippingAddress = parseShippingAddress;

@@ -47,9 +47,31 @@ const normalizeSliderPayload = (obj) => {
         if (obj.priority !== undefined && obj.periorty === undefined) {
             obj.periorty = obj.priority;
         }
+        // status aliases
+        if (obj.status === undefined) {
+            if (obj.isActive !== undefined)
+                obj.status = obj.isActive;
+            else if (obj.is_active !== undefined)
+                obj.status = obj.is_active;
+            else if (obj.active !== undefined)
+                obj.status = obj.active;
+        }
     }
     return obj;
 };
+// Accepts true/false, "true"/"false", 1/0, "1"/"0", "active"/"inactive"
+// Output is always "active" | "inactive" (or undefined if not sent)
+const statusSchema = zod_1.z.preprocess((val) => {
+    if (val === undefined || val === null || val === "")
+        return undefined;
+    if (val === true || val === "true" || val === 1 || val === "1" || val === "active")
+        return "active";
+    if (val === false || val === "false" || val === 0 || val === "0" || val === "inactive")
+        return "inactive";
+    return val; // will fail enum validation with a clear error
+}, zod_1.z.enum(["active", "inactive"], {
+    errorMap: () => ({ message: "Status must be true, false, 'active' or 'inactive'" }),
+}).optional());
 exports.createSliderSchema = zod_1.z.preprocess(normalizeSliderPayload, zod_1.z.object({
     img: zod_1.z.string({ required_error: "Image is required" }).min(1, "Image is required"),
     periorty: zod_1.z.preprocess((val) => {
@@ -64,6 +86,7 @@ exports.createSliderSchema = zod_1.z.preprocess(normalizeSliderPayload, zod_1.z.
     foodId: zod_1.z.string().min(1).optional().nullable(),
     productId: zod_1.z.string().min(1).optional().nullable(),
     discountId: zod_1.z.string().min(1).optional().nullable(),
+    status: statusSchema,
 }).superRefine((data, ctx) => {
     if (data.linkType === "subcategory") {
         if (!data.subcategoryId || data.subcategoryId.trim() === "") {
@@ -108,6 +131,7 @@ exports.updateSliderSchema = zod_1.z.preprocess(normalizeSliderPayload, zod_1.z.
     foodId: zod_1.z.string().optional().nullable(),
     productId: zod_1.z.string().optional().nullable(),
     discountId: zod_1.z.string().optional().nullable(),
+    status: statusSchema,
 }).superRefine((data, ctx) => {
     if (data.linkType === "subcategory") {
         if (data.subcategoryId !== undefined && (!data.subcategoryId || data.subcategoryId.trim() === "")) {

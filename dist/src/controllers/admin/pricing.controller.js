@@ -979,7 +979,9 @@ const upsertProductChannelPricing = async (req, res) => {
                 }
             }
             const priceVal = String(entry.price);
-            const statusVal = entry.status === "inactive" ? "inactive" : "active";
+            const statusVal = entry.branchPriceStatus === "inactive" || entry.status === "inactive"
+                ? "inactive"
+                : "active";
             for (const targetBranchId of targetBranches) {
                 for (const module of targetModules) {
                     await (0, pricing_overrides_1.upsertFoodPricingOverride)(tx, {
@@ -1044,7 +1046,9 @@ const upsertVariantChannelPricing = async (req, res) => {
                 }
             }
             const priceVal = String(entry.price);
-            const statusVal = entry.status === "inactive" ? "inactive" : "active";
+            const statusVal = entry.branchPriceStatus === "inactive" || entry.status === "inactive"
+                ? "inactive"
+                : "active";
             for (const targetBranchId of targetBranches) {
                 for (const module of targetModules) {
                     await (0, pricing_overrides_1.upsertVariantPricingOverride)(tx, {

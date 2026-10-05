@@ -14,7 +14,6 @@ const cors_1 = __importDefault(require("cors"));
 const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const helmet_1 = __importDefault(require("helmet"));
 const http_1 = __importDefault(require("http"));
-const socket_io_1 = require("socket.io");
 const connection_1 = require("./models/connection");
 const orderNotificationCron_1 = require("./services/orderNotificationCron");
 const orderDelayAlertCron_1 = require("./services/orderDelayAlertCron");
@@ -22,6 +21,7 @@ require("./config/redis");
 const swagger_ui_express_1 = __importDefault(require("swagger-ui-express"));
 const swagger_output_json_1 = __importDefault(require("./swagger-output.json"));
 const initNotificationCleanupCron_1 = require("./services/initNotificationCleanupCron");
+const socketService_1 = require("./services/socket/socketService");
 // import { initAbandonedCartCron } from "./services/abandonedCartCron";
 dotenv_1.default.config();
 const app = (0, express_1.default)();
@@ -32,12 +32,7 @@ app.set("trust proxy", true);
 (0, initNotificationCleanupCron_1.initNotificationCleanupCron)();
 // initAbandonedCartCron();
 const httpServer = http_1.default.createServer(app);
-const io = new socket_io_1.Server(httpServer, {
-    cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-    }
-});
+const io = (0, socketService_1.initSocket)(httpServer);
 // إعدادات CORS
 app.use((0, cors_1.default)({
     origin: "*",

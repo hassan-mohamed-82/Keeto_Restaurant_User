@@ -1651,6 +1651,9 @@
                   "appCommission": {
                     "type": "string"
                   },
+                  "visaCommission": {
+                    "type": "string"
+                  },
                   "discountId": {
                     "type": "string"
                   },
@@ -1729,6 +1732,32 @@
                   },
                   "deliveryManId": {
                     "type": "string"
+                  },
+                  "shippingCompanyId": {
+                    "type": "string"
+                  },
+                  "shippingStatus": {
+                    "type": "string",
+                    "enum": [
+                      "pending_dispatch",
+                      "assigned",
+                      "picked_up",
+                      "delivered",
+                      "manual_required"
+                    ]
+                  },
+                  "shippingFailReason": {
+                    "type": "string",
+                    "enum": [
+                      "no_company",
+                      "company_inactive",
+                      "out_of_zone",
+                      "no_courier",
+                      "max_attempts"
+                    ]
+                  },
+                  "dispatchAttempts": {
+                    "type": "integer"
                   },
                   "isCashCollected": {
                     "type": "boolean"
@@ -1891,6 +1920,9 @@
                   "appCommission": {
                     "type": "string"
                   },
+                  "visaCommission": {
+                    "type": "string"
+                  },
                   "discountId": {
                     "type": "string"
                   },
@@ -1969,6 +2001,32 @@
                   },
                   "deliveryManId": {
                     "type": "string"
+                  },
+                  "shippingCompanyId": {
+                    "type": "string"
+                  },
+                  "shippingStatus": {
+                    "type": "string",
+                    "enum": [
+                      "pending_dispatch",
+                      "assigned",
+                      "picked_up",
+                      "delivered",
+                      "manual_required"
+                    ]
+                  },
+                  "shippingFailReason": {
+                    "type": "string",
+                    "enum": [
+                      "no_company",
+                      "company_inactive",
+                      "out_of_zone",
+                      "no_courier",
+                      "max_attempts"
+                    ]
+                  },
+                  "dispatchAttempts": {
+                    "type": "integer"
                   },
                   "isCashCollected": {
                     "type": "boolean"
@@ -2131,6 +2189,9 @@
                   "appCommission": {
                     "type": "string"
                   },
+                  "visaCommission": {
+                    "type": "string"
+                  },
                   "discountId": {
                     "type": "string"
                   },
@@ -2209,6 +2270,32 @@
                   },
                   "deliveryManId": {
                     "type": "string"
+                  },
+                  "shippingCompanyId": {
+                    "type": "string"
+                  },
+                  "shippingStatus": {
+                    "type": "string",
+                    "enum": [
+                      "pending_dispatch",
+                      "assigned",
+                      "picked_up",
+                      "delivered",
+                      "manual_required"
+                    ]
+                  },
+                  "shippingFailReason": {
+                    "type": "string",
+                    "enum": [
+                      "no_company",
+                      "company_inactive",
+                      "out_of_zone",
+                      "no_courier",
+                      "max_attempts"
+                    ]
+                  },
+                  "dispatchAttempts": {
+                    "type": "integer"
                   },
                   "isCashCollected": {
                     "type": "boolean"
@@ -6422,6 +6509,13 @@
                   },
                   "discountId": {
                     "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "inactive"
+                    ]
                   }
                 },
                 "required": [
@@ -6589,6 +6683,13 @@
                   },
                   "discountId": {
                     "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "inactive"
+                    ]
                   }
                 }
               }
@@ -10106,6 +10207,9 @@
                   "restaurantId": {
                     "type": "string"
                   },
+                  "shippingCompanyId": {
+                    "type": "string"
+                  },
                   "branchId": {
                     "type": "string"
                   },
@@ -10124,6 +10228,49 @@
                   "image": {
                     "type": "string"
                   },
+                  "deliveryType": {
+                    "type": "string",
+                    "enum": [
+                      "restaurant",
+                      "outsource"
+                    ]
+                  },
+                  "workType": {
+                    "type": "string",
+                    "enum": [
+                      "restaurant_shift",
+                      "outsource"
+                    ]
+                  },
+                  "activeOrdersCount": {
+                    "type": "integer"
+                  },
+                  "shiftStatus": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "inactive"
+                    ]
+                  },
+                  "isOnline": {
+                    "type": "boolean"
+                  },
+                  "isAvailable": {
+                    "type": "boolean"
+                  },
+                  "currentLat": {
+                    "type": "string"
+                  },
+                  "currentLng": {
+                    "type": "string"
+                  },
+                  "lastLocationUpdate": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "fcmToken": {
+                    "type": "string"
+                  },
                   "isActive": {
                     "type": "boolean"
                   },
@@ -10132,7 +10279,6 @@
                   }
                 },
                 "required": [
-                  "restaurantId",
                   "name",
                   "phone"
                 ]
@@ -10257,6 +10403,9 @@
                   "restaurantId": {
                     "type": "string"
                   },
+                  "shippingCompanyId": {
+                    "type": "string"
+                  },
                   "branchId": {
                     "type": "string"
                   },
@@ -10275,6 +10424,49 @@
                   "image": {
                     "type": "string"
                   },
+                  "deliveryType": {
+                    "type": "string",
+                    "enum": [
+                      "restaurant",
+                      "outsource"
+                    ]
+                  },
+                  "workType": {
+                    "type": "string",
+                    "enum": [
+                      "restaurant_shift",
+                      "outsource"
+                    ]
+                  },
+                  "activeOrdersCount": {
+                    "type": "integer"
+                  },
+                  "shiftStatus": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "inactive"
+                    ]
+                  },
+                  "isOnline": {
+                    "type": "boolean"
+                  },
+                  "isAvailable": {
+                    "type": "boolean"
+                  },
+                  "currentLat": {
+                    "type": "string"
+                  },
+                  "currentLng": {
+                    "type": "string"
+                  },
+                  "lastLocationUpdate": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "fcmToken": {
+                    "type": "string"
+                  },
                   "isActive": {
                     "type": "boolean"
                   },
@@ -10283,7 +10475,6 @@
                   }
                 },
                 "required": [
-                  "restaurantId",
                   "name",
                   "phone"
                 ]
@@ -10326,6 +10517,9 @@
                   "restaurantId": {
                     "type": "string"
                   },
+                  "shippingCompanyId": {
+                    "type": "string"
+                  },
                   "branchId": {
                     "type": "string"
                   },
@@ -10344,6 +10538,49 @@
                   "image": {
                     "type": "string"
                   },
+                  "deliveryType": {
+                    "type": "string",
+                    "enum": [
+                      "restaurant",
+                      "outsource"
+                    ]
+                  },
+                  "workType": {
+                    "type": "string",
+                    "enum": [
+                      "restaurant_shift",
+                      "outsource"
+                    ]
+                  },
+                  "activeOrdersCount": {
+                    "type": "integer"
+                  },
+                  "shiftStatus": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "inactive"
+                    ]
+                  },
+                  "isOnline": {
+                    "type": "boolean"
+                  },
+                  "isAvailable": {
+                    "type": "boolean"
+                  },
+                  "currentLat": {
+                    "type": "string"
+                  },
+                  "currentLng": {
+                    "type": "string"
+                  },
+                  "lastLocationUpdate": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "fcmToken": {
+                    "type": "string"
+                  },
                   "isActive": {
                     "type": "boolean"
                   },
@@ -10352,7 +10589,6 @@
                   }
                 },
                 "required": [
-                  "restaurantId",
                   "name",
                   "phone"
                 ]
@@ -10457,6 +10693,9 @@
                   "restaurantId": {
                     "type": "string"
                   },
+                  "shippingCompanyId": {
+                    "type": "string"
+                  },
                   "branchId": {
                     "type": "string"
                   },
@@ -10473,6 +10712,49 @@
                     "type": "string"
                   },
                   "image": {
+                    "type": "string"
+                  },
+                  "deliveryType": {
+                    "type": "string",
+                    "enum": [
+                      "restaurant",
+                      "outsource"
+                    ]
+                  },
+                  "workType": {
+                    "type": "string",
+                    "enum": [
+                      "restaurant_shift",
+                      "outsource"
+                    ]
+                  },
+                  "activeOrdersCount": {
+                    "type": "integer"
+                  },
+                  "shiftStatus": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "inactive"
+                    ]
+                  },
+                  "isOnline": {
+                    "type": "boolean"
+                  },
+                  "isAvailable": {
+                    "type": "boolean"
+                  },
+                  "currentLat": {
+                    "type": "string"
+                  },
+                  "currentLng": {
+                    "type": "string"
+                  },
+                  "lastLocationUpdate": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "fcmToken": {
                     "type": "string"
                   },
                   "isActive": {

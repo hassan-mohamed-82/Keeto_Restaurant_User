@@ -38,6 +38,7 @@ exports.orders = (0, mysql_core_1.mysqlTable)("orders", {
     deliveryFee: (0, mysql_core_1.decimal)("delivery_fee", { precision: 10, scale: 2 }).default("0.00"),
     serviceFee: (0, mysql_core_1.decimal)("service_fee", { precision: 10, scale: 2 }).default("0.00"),
     appCommission: (0, mysql_core_1.decimal)("app_commission", { precision: 10, scale: 2 }).default("0.00"),
+    visaCommission: (0, mysql_core_1.decimal)("visa_commission", { precision: 10, scale: 2 }).default("0.00"),
     // --- Discount & Coupon Fields ---
     discountId: (0, mysql_core_1.char)("discount_id", { length: 36 })
         .references(() => schema_1.discounts.id, { onDelete: "set null" }),
@@ -72,6 +73,22 @@ exports.orders = (0, mysql_core_1.mysqlTable)("orders", {
     note: (0, mysql_core_1.text)("note"),
     deliveryManId: (0, mysql_core_1.char)("delivery_man_id", { length: 36 })
         .references(() => delivery_man_1.deliveryMen.id),
+    shippingCompanyId: (0, mysql_core_1.char)("shipping_company_id", { length: 36 }),
+    shippingStatus: (0, mysql_core_1.mysqlEnum)("shipping_status", [
+        "pending_dispatch",
+        "assigned",
+        "picked_up",
+        "delivered",
+        "manual_required"
+    ]).default("pending_dispatch"),
+    shippingFailReason: (0, mysql_core_1.mysqlEnum)("shipping_fail_reason", [
+        "no_company",
+        "company_inactive",
+        "out_of_zone",
+        "no_courier",
+        "max_attempts"
+    ]),
+    dispatchAttempts: (0, mysql_core_1.int)("dispatch_attempts").default(0).notNull(),
     // تحصيل الكاش من مندوب التوصيل وتوريده لخزينة المطعم
     isCashCollected: (0, mysql_core_1.boolean)("is_cash_collected").default(false),
     cashCollectedAt: (0, mysql_core_1.timestamp)("cash_collected_at"),

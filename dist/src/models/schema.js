@@ -91,3 +91,4 @@ __exportStar(require("./schema/admin/restaurantPaymentCredentials"), exports);
 __exportStar(require("./schema/admin/printer"), exports);
 __exportStar(require("./schema/admin/paymentTransactions"), exports);
 __exportStar(require("./schema/admin/adminFcmTokens"), exports);
+__exportStar(require("./schema/admin/shippingCompany"), exports);

@@ -89,7 +89,11 @@ const getAssignedOrders = async (req, res) => {
             .where((0, drizzle_orm_1.eq)(schema_1.orderItems.orderId, orderId));
         return (0, response_1.SuccessResponse)(res, {
             message: "Order details fetched successfully",
-            data: { ...order, items },
+            data: {
+                ...order,
+                shippingAddress: (0, order_helper_1.parseShippingAddress)(order.shippingAddress),
+                items,
+            },
         });
     }
     // Otherwise return all active assigned orders (list view)
@@ -121,7 +125,10 @@ const getAssignedOrders = async (req, res) => {
     return (0, response_1.SuccessResponse)(res, {
         message: "Assigned orders fetched successfully",
         total: assignedOrders.length,
-        data: assignedOrders,
+        data: assignedOrders.map((o) => ({
+            ...o,
+            shippingAddress: (0, order_helper_1.parseShippingAddress)(o.shippingAddress),
+        })),
     });
 };
 exports.getAssignedOrders = getAssignedOrders;
@@ -196,7 +203,10 @@ const getOrderHistory = async (req, res) => {
         page,
         limit,
         total: historyOrders.length,
-        data: historyOrders,
+        data: historyOrders.map((o) => ({
+            ...o,
+            shippingAddress: (0, order_helper_1.parseShippingAddress)(o.shippingAddress),
+        })),
     });
 };
 exports.getOrderHistory = getOrderHistory;

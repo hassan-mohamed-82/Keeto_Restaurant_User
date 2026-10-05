@@ -11,7 +11,7 @@ const uuid_1 = require("uuid");
 const handleImages_1 = require("../../utils/handleImages");
 const popup_1 = require("./popup");
 const createImage = async (req, res) => {
-    const { img, periorty = 0, linkType = "link", link, subcategoryId, categoryId, foodId, productId, discountId } = req.body;
+    const { img, periorty = 0, linkType = "link", link, subcategoryId, categoryId, foodId, productId, discountId, status } = req.body;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) {
         throw new BadRequest_1.BadRequest("Restaurant context is missing or unauthorized");
@@ -25,6 +25,7 @@ const createImage = async (req, res) => {
     if (!result) {
         throw new BadRequest_1.BadRequest("Image is required.");
     }
+    const resolvedStatus = status === true || status === "active" ? "active" : "inactive";
     const id = (0, uuid_1.v4)();
     await connection_1.db.insert(schema_1.sliders).values({
         id,
@@ -36,6 +37,7 @@ const createImage = async (req, res) => {
         subcategoryId: linkType === "subcategory" ? resolvedSubcategoryId : null,
         foodId: linkType === "product" ? resolvedFoodId : null,
         discountId: linkType === "discount" ? resolvedDiscountId : null,
+        status: resolvedStatus,
     });
     return (0, response_1.SuccessResponse)(res, {
         message: "Slider created successfully",
@@ -49,6 +51,7 @@ const createImage = async (req, res) => {
             foodId: linkType === "product" ? resolvedFoodId : null,
             productId: linkType === "product" ? resolvedFoodId : null,
             discountId: linkType === "discount" ? resolvedDiscountId : null,
+            status: resolvedStatus,
         }
     }, 201);
 };
@@ -64,6 +67,7 @@ const getAllImages = async (req, res) => {
         restaurantid: schema_1.sliders.restaurantid,
         img: schema_1.sliders.img,
         periorty: schema_1.sliders.periorty,
+        status: schema_1.sliders.status,
         linkType: schema_1.sliders.linkType,
         link: schema_1.sliders.link,
         subcategoryId: schema_1.sliders.subcategoryId,
@@ -107,6 +111,7 @@ const getImageById = async (req, res) => {
         restaurantid: schema_1.sliders.restaurantid,
         img: schema_1.sliders.img,
         periorty: schema_1.sliders.periorty,
+        status: schema_1.sliders.status,
         linkType: schema_1.sliders.linkType,
         link: schema_1.sliders.link,
         subcategoryId: schema_1.sliders.subcategoryId,
@@ -163,7 +168,7 @@ const deleteImage = async (req, res) => {
 exports.deleteImage = deleteImage;
 const updateImage = async (req, res) => {
     const { id } = req.params;
-    const { img, periorty, linkType, link, subcategoryId, categoryId, foodId, productId, discountId } = req.body;
+    const { img, periorty, linkType, link, subcategoryId, categoryId, foodId, productId, discountId, status } = req.body;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) {
         throw new BadRequest_1.BadRequest("Restaurant context is missing or unauthorized");
@@ -181,6 +186,9 @@ const updateImage = async (req, res) => {
     const resolvedDiscountId = discountId !== undefined ? discountId : existing.discountId;
     await (0, popup_1.validateTargetEntity)(restaurantId, effectiveLinkType, effectiveLinkType === "subcategory" ? resolvedSubcategoryId : null, effectiveLinkType === "product" ? resolvedFoodId : null, effectiveLinkType === "discount" ? resolvedDiscountId : null);
     const updateData = { updatedAt: new Date() };
+    if (status !== undefined) {
+        updateData.status = status === true || status === "active" ? "active" : "inactive";
+    }
     if (img) {
         const updatedUrl = await (0, handleImages_1.handleImageUpdate)(req, existing.img, img, "sliders");
         if (updatedUrl)

@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.verifyToken = exports.generateDeliveryManToken = exports.generateGuestToken = exports.generateRestaurantAdminToken = exports.generateAdminToken = exports.generateUserToken = void 0;
+exports.verifyToken = exports.generateShippingCompanyToken = exports.generateDeliveryManToken = exports.generateGuestToken = exports.generateRestaurantAdminToken = exports.generateAdminToken = exports.generateUserToken = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const JWT_SECRET = process.env.JWT_SECRET;
 // =======================
@@ -63,13 +63,29 @@ const generateDeliveryManToken = (data) => {
     return jsonwebtoken_1.default.sign({
         id: data.id,
         name: data.name,
+        phone: data.phone || null,
         role: "delivery_man",
         type: "delivery_man",
         restaurantId: data.restaurantId,
         branchId: data.branchId || null,
+        shippingCompanyId: data.shippingCompanyId || null,
+        deliveryType: data.deliveryType || null,
     }, JWT_SECRET, { expiresIn: "30d" });
 };
 exports.generateDeliveryManToken = generateDeliveryManToken;
+// =======================
+// Generate Shipping Company Token
+// =======================
+const generateShippingCompanyToken = (data) => {
+    return jsonwebtoken_1.default.sign({
+        id: data.id,
+        name: data.name,
+        email: data.email,
+        role: "shipping_company",
+        shippingCompanyId: data.id,
+    }, JWT_SECRET, { expiresIn: "30d" });
+};
+exports.generateShippingCompanyToken = generateShippingCompanyToken;
 // =======================
 // Verify Token
 // =======================
