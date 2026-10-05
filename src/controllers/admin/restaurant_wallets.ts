@@ -7,7 +7,7 @@ import {
     restaurantSettings,
     orders
 } from "../../models/schema";
-import { eq, desc, or, and } from "drizzle-orm";
+import { eq, desc, or, and, sql } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors/NotFound";
@@ -178,6 +178,17 @@ export const getMyWallet = async (req: Request, res: Response) => {
     // 4. جلب آخر الحركات التي كونت هذا الرصيد مع تفاصيل الأوردرات
     const recentTransactions = await getWalletTransactionsWithOrderDetails(restaurantId, 15);
 
+    // 5. إجمالي الأوردرات (الإجماليات المالية مباشرةً من جدول الأوردرات)
+    const [orderAggregates] = await db
+        .select({
+            totalOrders: sql<number>`COUNT(*)`,
+            totalSubtotal: sql<string>`COALESCE(SUM(${orders.subtotal}), 0)`,
+            totalAmount: sql<string>`COALESCE(SUM(${orders.totalAmount}), 0)`,
+            totalDeliveryFees: sql<string>`COALESCE(SUM(${orders.deliveryFee}), 0)`,
+        })
+        .from(orders)
+        .where(eq(orders.restaurantId, restaurantId));
+
     const numericBalance = parseFloat(wallet.balance as string || "0");
     const accountStatus = numericBalance < 0
         ? "DUE_ON_RESTAURANT"   // المطعم عليه فلوس للمنصة
@@ -251,6 +262,14 @@ export const getMyWallet = async (req: Request, res: Response) => {
                 isSwitchApplied: settings.visaSwitchApplied,
             } : null,
 
+            // إجمالي الأوردرات (مباشرةً من جدول الأوردرات – غير مرتبط بالمحفظة)
+            foodOrdersSummary: {
+                totalOrders: Number(orderAggregates?.totalOrders ?? 0),
+                totalSubtotal: parseFloat(orderAggregates?.totalSubtotal as string ?? "0").toFixed(2),
+                totalAmount: parseFloat(orderAggregates?.totalAmount as string ?? "0").toFixed(2),
+                totalDeliveryFees: parseFloat(orderAggregates?.totalDeliveryFees as string ?? "0").toFixed(2),
+            },
+
             // سجل الأوردرات والعمليات التي كونت هذا الحساب
             recentTransactions,
 
@@ -273,7 +292,55 @@ export const getMyWalletTransactions = async (req: Request, res: Response) => {
         throw new BadRequest("Unauthorized: Only restaurant owners can view transaction history");
     }
 
-    // 2. جلب سجل الحركات وترتيبه من الأحدث للأقدم مع تفاصيل الأوردرات
+    // ── Guard 1: Business Plan ──────────────────────────────────────────────
+    // إذا كانت جميع رسوم وعمولات خطط العمل = 0 ← لا يوجد نشاط مالي مُعرَّف
+    const businessPlans = await db
+        .select({
+            commissionRate: restaurantBusinessPlans.commissionRate,
+            serviceFee: restaurantBusinessPlans.serviceFee,
+            monthlyAmount: restaurantBusinessPlans.monthlyAmount,
+            quarterlyAmount: restaurantBusinessPlans.quarterlyAmount,
+            annuallyAmount: restaurantBusinessPlans.annuallyAmount,
+        })
+        .from(restaurantBusinessPlans)
+        .where(eq(restaurantBusinessPlans.restaurantId, restaurantId));
+
+    const allPlansAreZero =
+        businessPlans.length === 0 ||
+        businessPlans.every((p) =>
+            parseFloat(p.commissionRate as string || "0") === 0 &&
+            parseFloat(p.serviceFee as string || "0") === 0 &&
+            parseFloat(p.monthlyAmount as string || "0") === 0 &&
+            parseFloat(p.quarterlyAmount as string || "0") === 0 &&
+            parseFloat(p.annuallyAmount as string || "0") === 0
+        );
+
+    if (allPlansAreZero) {
+        return SuccessResponse(res, {
+            message: "Get wallet transactions success",
+            data: []
+        });
+    }
+
+    // ── Guard 2: Transaction Totals ─────────────────────────────────────────
+    // إذا كان إجمالي قيم الحركات المسجلة = 0 ← لا يوجد تحريك مالي فعلي
+    const [txAggregate] = await db
+        .select({
+            totalAmount: sql<string>`COALESCE(SUM(ABS(${restaurantWalletTransactions.amount})), 0)`,
+        })
+        .from(restaurantWalletTransactions)
+        .where(eq(restaurantWalletTransactions.restaurantId, restaurantId));
+
+    const totalTxAmount = parseFloat(txAggregate?.totalAmount as string || "0");
+
+    if (totalTxAmount === 0) {
+        return SuccessResponse(res, {
+            message: "Get wallet transactions success",
+            data: []
+        });
+    }
+
+    // ── جلب سجل الحركات ─────────────────────────────────────────────────────
     const transactions = await getWalletTransactionsWithOrderDetails(restaurantId);
 
     return SuccessResponse(res, {
@@ -281,6 +348,7 @@ export const getMyWalletTransactions = async (req: Request, res: Response) => {
         data: transactions
     });
 };
+
 
 
 // ==========================================
