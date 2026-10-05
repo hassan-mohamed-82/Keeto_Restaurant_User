@@ -53,7 +53,14 @@ async function getWalletTransactionsWithOrderDetails(restaurantId: string, limit
                 eq(restaurantWalletTransactions.reference, orders.orderNumber)
             )
         ))
-        .where(eq(restaurantWalletTransactions.restaurantId, restaurantId))
+        .where(and(
+            eq(restaurantWalletTransactions.restaurantId, restaurantId),
+            // 🚫 استبعاد الحركات اللي الـ service fee والـ commission بتوعها الاتنين = 0 (أو NULL)
+            or(
+                sql`COALESCE(${restaurantWalletTransactions.serviceFee}, 0) <> 0`,
+                sql`COALESCE(${restaurantWalletTransactions.commission}, 0) <> 0`,
+            ),
+        ))
         .orderBy(desc(restaurantWalletTransactions.createdAt));
 
     const rows = limit ? await query.limit(limit) : await query;
@@ -90,6 +97,15 @@ async function getWalletTransactionsWithOrderDetails(restaurantId: string, limit
 // ==========================================
 // 1. جلب تفاصيل محفظة المطعم الشاملة (الأرصدة + الرسوم + العمولات + الاشتراكات)
 // ==========================================
+// مصادر الأوردرات (زي orders.orderSource)
+const ORDER_SOURCES = [
+    "online_order_web",
+    "online_order_app",
+    "food_aggregator",
+    "my_keeto",
+    "pos",
+] as const;
+
 export const getMyWallet = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     const branchId = req.user?.branchId; // لو موجود يبقى مدير فرع
@@ -183,7 +199,13 @@ export const getMyWallet = async (req: Request, res: Response) => {
         .where(eq(restaurantSettings.restaurantId, restaurantId))
         .limit(1);
 
-
+    // 4. شرط الأوردرات المشترك (مع فلتر التاريخ)
+    const ordersWhere = and(
+        eq(orders.restaurantId, restaurantId),
+        notInArray(orders.status, ["cancelled", "failed", "refund"]),
+        start ? gte(orders.createdAt, start) : undefined,
+        end ? lte(orders.createdAt, end) : undefined,
+    );
 
     // 5. إجمالي الأوردرات (مع فلتر التاريخ)
     const [orderAggregates] = await db
@@ -195,15 +217,47 @@ export const getMyWallet = async (req: Request, res: Response) => {
             totalDeliveryFees: sql<string>`COALESCE(SUM(${orders.deliveryFee}), 0)`,
         })
         .from(orders)
-        .where(
-            and(
-                eq(orders.restaurantId, restaurantId),
-                notInArray(orders.status, ["cancelled", "failed", "refund"]),
-                start ? gte(orders.createdAt, start) : undefined,
-                end ? lte(orders.createdAt, end) : undefined,
-            )
-        );
+        .where(ordersWhere);
 
+    // 6. الـ service fees والعمولات grouped by source
+    const sourceRows = await db
+        .select({
+            source: orders.orderSource,
+            totalOrders: sql<number>`COUNT(*)`,
+            serviceFees: sql<string>`COALESCE(SUM(${orders.serviceFee}), 0)`,
+            appCommission: sql<string>`COALESCE(SUM(${orders.appCommission}), 0)`,
+            visaCommission: sql<string>`COALESCE(SUM(${orders.visaCommission}), 0)`,
+        })
+        .from(orders)
+        .where(ordersWhere)
+        .groupBy(orders.orderSource);
+
+    // نضمن إن كل source يظهر حتى لو مفيش له أوردرات (بقيم صفر)
+    const bySource = Object.fromEntries(
+        ORDER_SOURCES.map((src) => {
+            const r = sourceRows.find((x) => x.source === src);
+            const service = parseFloat(r?.serviceFees ?? "0");
+            const app = parseFloat(r?.appCommission ?? "0");
+            const visa = parseFloat(r?.visaCommission ?? "0");
+            return [src, {
+                totalOrders: Number(r?.totalOrders ?? 0),
+                serviceFees: service.toFixed(2),
+                appCommission: app.toFixed(2),
+                visaCommission: visa.toFixed(2),
+                totalCommission: (app + visa).toFixed(2),
+            }];
+        })
+    );
+
+    // الإجماليات من نفس البيانات (بدون query إضافي)
+    const sumBy = (k: "serviceFees" | "appCommission" | "visaCommission") =>
+        sourceRows.reduce((acc, r) => acc + parseFloat(r[k] ?? "0"), 0);
+
+    const totalServiceFees = sumBy("serviceFees");
+    const totalAppCommission = sumBy("appCommission");
+    const totalVisaCommission = sumBy("visaCommission");
+
+    // 7. حالة الحساب
     const numericBalance = parseFloat((wallet.balance as string) || "0");
     const accountStatus = numericBalance < 0
         ? "DUE_ON_RESTAURANT"   // المطعم عليه فلوس للمنصة
@@ -238,6 +292,21 @@ export const getMyWallet = async (req: Request, res: Response) => {
                 lastMonthlySubscription: wallet.lastMonthlySubscription,
                 lastQuarterlySubscription: wallet.lastQuarterlySubscription,
                 lastAnnuallySubscription: wallet.lastAnnuallySubscription,
+            },
+
+            // الرسوم والعمولات الفعلية من الأوردرات خلال الفترة (إجمالي + حسب المصدر)
+            feesAndCommissions: {
+                period: {
+                    startDate: startDate ?? null,
+                    endDate: endDate ?? null,
+                },
+                totals: {
+                    serviceFees: totalServiceFees.toFixed(2),
+                    appCommission: totalAppCommission.toFixed(2),
+                    visaCommission: totalVisaCommission.toFixed(2),
+                    totalCommission: (totalAppCommission + totalVisaCommission).toFixed(2),
+                },
+                bySource,
             },
 
             // الاشتراكات الفعّالة الجارية
@@ -293,25 +362,6 @@ export const getMyWallet = async (req: Request, res: Response) => {
         }
     });
 };
-
-// ─────────────────────────────────────────────────────────────
-// تعديل الدالة المساعدة (لازم تقبل الباراميتر الثالث)
-// ─────────────────────────────────────────────────────────────
-/*
-export async function getWalletTransactionsWithOrderDetails(
-    restaurantId: string,
-    limit = 15,
-    range?: { start?: Date; end?: Date }
-) {
-    // ...
-    .where(and(
-        eq(walletTransactions.restaurantId, restaurantId),
-        range?.start ? gte(walletTransactions.createdAt, range.start) : undefined,
-        range?.end ? lte(walletTransactions.createdAt, range.end) : undefined,
-    ))
-    // ...
-}
-*/
 
 // ==========================================
 // 2. جلب سجل حركات المحفظة (Transactions History)
