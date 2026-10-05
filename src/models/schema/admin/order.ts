@@ -89,6 +89,26 @@ export const orders = mysqlTable("orders", {
     deliveryManId: char("delivery_man_id", { length: 36 })
         .references(() => deliveryMen.id),
 
+    shippingCompanyId: char("shipping_company_id", { length: 36 }),
+
+    shippingStatus: mysqlEnum("shipping_status", [
+        "pending_dispatch",
+        "assigned",
+        "picked_up",
+        "delivered",
+        "manual_required"
+    ]).default("pending_dispatch"),
+
+    shippingFailReason: mysqlEnum("shipping_fail_reason", [
+        "no_company",
+        "company_inactive",
+        "out_of_zone",
+        "no_courier",
+        "max_attempts"
+    ]),
+
+    dispatchAttempts: int("dispatch_attempts").default(0).notNull(),
+
     // تحصيل الكاش من مندوب التوصيل وتوريده لخزينة المطعم
     isCashCollected: boolean("is_cash_collected").default(false),
     cashCollectedAt: timestamp("cash_collected_at"),

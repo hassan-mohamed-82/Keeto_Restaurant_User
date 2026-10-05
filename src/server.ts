@@ -9,7 +9,6 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import http from "http";
-import { Server } from "socket.io";
 import { connectDB } from './models/connection';
 import { initOrderNotificationCron } from './services/orderNotificationCron';
 import { initOrderDelayAlertCron } from './services/orderDelayAlertCron';
@@ -17,6 +16,7 @@ import './config/redis';
 import swaggerUi from 'swagger-ui-express';
 import swaggerFile from './swagger-output.json';
 import { initNotificationCleanupCron } from "./services/initNotificationCleanupCron";
+import { initSocket } from "./services/socket/socketService";
 // import { initAbandonedCartCron } from "./services/abandonedCartCron";
 
 dotenv.config();
@@ -31,12 +31,7 @@ initNotificationCleanupCron();
 
 const httpServer: http.Server = http.createServer(app);
 
-const io = new Server(httpServer, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  }
-});
+const io = initSocket(httpServer);
 
 // إعدادات CORS
 app.use(cors({

@@ -94,16 +94,41 @@ export const generateDeliveryManToken = (data: {
     name: string;
     restaurantId: string;
     branchId?: string | null;
+    shippingCompanyId?: string | null;
+    deliveryType?: string;
     phone?: string;
 }): string => {
     return jwt.sign(
         {
             id: data.id,
             name: data.name,
+            phone: data.phone || null,
             role: "delivery_man",
             type: "delivery_man",
             restaurantId: data.restaurantId,
             branchId: data.branchId || null,
+            shippingCompanyId: data.shippingCompanyId || null,
+            deliveryType: data.deliveryType || null,
+        },
+        JWT_SECRET,
+        { expiresIn: "30d" }
+    );
+};
+// =======================
+// Generate Shipping Company Token
+// =======================
+export const generateShippingCompanyToken = (data: {
+    id: string;
+    name: string;
+    email: string;
+}): string => {
+    return jwt.sign(
+        {
+            id: data.id,
+            name: data.name,
+            email: data.email,
+            role: "shipping_company",
+            shippingCompanyId: data.id,
         },
         JWT_SECRET,
         { expiresIn: "30d" }

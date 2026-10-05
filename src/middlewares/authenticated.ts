@@ -36,6 +36,8 @@ export const authenticated = (
         restaurantId: decoded.restaurantId,
         branchId: decoded.branchId,
         isGuest: Boolean(decoded.isGuest),
+        shippingCompanyId: decoded.shippingCompanyId,
+        deliveryManId: decoded.deliveryManId,
     };
 
     next();
