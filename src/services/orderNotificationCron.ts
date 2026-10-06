@@ -4,7 +4,7 @@ import { orders, restaurantSettings, users } from "../models/schema";
 import { and, eq, inArray, lt, sql } from "drizzle-orm";
 import { sendPushNotification } from "../utils/notifications";
 
-export const PENDING_PAYMENT_ALERT_MINUTES = Number(process.env.PENDING_PAYMENT_ALERT_MINUTES ?? 2);
+export const PENDING_PAYMENT_ALERT_MINUTES = Number(process.env.PENDING_PAYMENT_ALERT_MINUTES ?? 5);
 
 // In-memory Map to keep track of alerted overdue orders
 const alertedOverdueOrders = new Map<string, number>();
