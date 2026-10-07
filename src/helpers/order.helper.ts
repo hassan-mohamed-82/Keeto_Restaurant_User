@@ -223,3 +223,40 @@ export const parseShippingAddress = (
         return null;
     }
 };
+
+// ==========================================
+// Helper: استخراج وتنسيق بيانات وسيلة الدفع (ID, Name, NameAr)
+// ==========================================
+/**
+ * Resolves payment method ID, English name, and Arabic name.
+ * Handles database payment methods join or fallback for known slugs
+ * like 'cash_on_delivery', 'visa', 'wallet', 'cash', etc.
+ */
+export const resolvePaymentMethodDetails = (
+    pmId: string | null | undefined,
+    pmName?: string | null,
+    pmNameAr?: string | null
+): { id: string | null; name: string | null; nameAr: string | null } => {
+    if (pmName) {
+        return {
+            id: pmId ?? null,
+            name: pmName,
+            nameAr: pmNameAr || pmName,
+        };
+    }
+    if (!pmId) {
+        return { id: null, name: null, nameAr: null };
+    }
+    switch (pmId) {
+        case "cash_on_delivery":
+        case "cash":
+            return { id: pmId, name: "Cash on Delivery", nameAr: "الدفع عند الاستلام" };
+        case "visa":
+            return { id: pmId, name: "Credit Card", nameAr: "بطاقة" };
+        case "wallet":
+            return { id: pmId, name: "Wallet", nameAr: "محفظتي" };
+        default:
+            return { id: pmId, name: pmId, nameAr: pmId };
+    }
+};
+

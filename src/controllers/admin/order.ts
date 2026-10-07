@@ -46,6 +46,7 @@ import {
     getRestaurantShiftStartTime,
     buildOrderDateConditions,
     excludeUnpaidVisaOrders,
+    resolvePaymentMethodDetails,
 } from "../../helpers/order.helper";
 import { handleCancelledOrder, settleDeliveredOrder } from "../../services/restaurantWalletService";
 
@@ -138,6 +139,8 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
             orderType: orders.orderType,
             orderSource: orders.orderSource,
             paymentMethod: orders.paymentMethod,
+            paymentMethodName: paymentMethods.name,
+            paymentMethodNameAr: paymentMethods.nameAr,
             subtotal: orders.subtotal,
             deliveryFee: orders.deliveryFee,
             serviceFee: orders.serviceFee,
@@ -172,6 +175,7 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
         .leftJoin(addresses, eq(orders.addressId, addresses.id))
         .leftJoin(restaurantZoneDeliveryFees, eq(orders.zoneId, restaurantZoneDeliveryFees.id))
         .leftJoin(zones, or(eq(restaurantZoneDeliveryFees.zoneId, zones.id), eq(orders.zoneId, zones.id)))
+        .leftJoin(paymentMethods, eq(orders.paymentMethod, paymentMethods.id))
         .where(and(...conditions))
         .orderBy(desc(orders.createdAt));
 
@@ -234,9 +238,13 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
                 } catch (e) { }
             }
 
+            const pmDetails = resolvePaymentMethodDetails(o.paymentMethod, o.paymentMethodName, o.paymentMethodNameAr);
             const { addressLat, addressLng, ...rest } = o;
             return {
                 ...rest,
+                paymentMethod: pmDetails.id,
+                paymentMethodName: pmDetails.name,
+                paymentMethodNameAr: pmDetails.nameAr,
                 zoneName: finalZoneName,
                 shippingAddress: shippingAddressData && typeof shippingAddressData === "object"
                     ? {
@@ -367,6 +375,8 @@ export const getOrdersByStatus = async (
             orderType: orders.orderType,
             orderSource: orders.orderSource,
             paymentMethod: orders.paymentMethod,
+            paymentMethodName: paymentMethods.name,
+            paymentMethodNameAr: paymentMethods.nameAr,
             subtotal: orders.subtotal,
             deliveryFee: orders.deliveryFee,
             serviceFee: orders.serviceFee,
@@ -401,6 +411,7 @@ export const getOrdersByStatus = async (
         .leftJoin(addresses, eq(orders.addressId, addresses.id))
         .leftJoin(restaurantZoneDeliveryFees, eq(orders.zoneId, restaurantZoneDeliveryFees.id))
         .leftJoin(zones, or(eq(restaurantZoneDeliveryFees.zoneId, zones.id), eq(orders.zoneId, zones.id)))
+        .leftJoin(paymentMethods, eq(orders.paymentMethod, paymentMethods.id))
         .where(and(...conditions))
         .orderBy(desc(orders.createdAt));
 
@@ -463,9 +474,13 @@ export const getOrdersByStatus = async (
                 } catch (e) { }
             }
 
+            const pmDetails = resolvePaymentMethodDetails(o.paymentMethod, o.paymentMethodName, o.paymentMethodNameAr);
             const { addressLat, addressLng, ...rest } = o;
             return {
                 ...rest,
+                paymentMethod: pmDetails.id,
+                paymentMethodName: pmDetails.name,
+                paymentMethodNameAr: pmDetails.nameAr,
                 zoneName: finalZoneName,
                 shippingAddress: shippingAddressData && typeof shippingAddressData === "object"
                     ? {
@@ -581,6 +596,11 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             name: deliveryMen.name,
             phone: deliveryMen.phone,
         },
+        paymentMethodData: {
+            id: paymentMethods.id,
+            name: paymentMethods.name,
+            nameAr: paymentMethods.nameAr,
+        },
     })
         .from(orders)
         .leftJoin(users, eq(orders.userId, users.id))
@@ -590,6 +610,7 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
         .leftJoin(addresses, eq(orders.addressId, addresses.id))
         .leftJoin(restaurantZoneDeliveryFees, eq(orders.zoneId, restaurantZoneDeliveryFees.id))
         .leftJoin(zones, eq(restaurantZoneDeliveryFees.zoneId, zones.id))
+        .leftJoin(paymentMethods, eq(orders.paymentMethod, paymentMethods.id))
         .where(eq(orders.id, id))
         .limit(1);
 
@@ -841,17 +862,20 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
         };
     }));
 
-    // 4. جلب بيانات وسيلة الدفع من جدول payment_methods
-    let pmDetails: any = null;
-    const pmValue = orderDetail.order.paymentMethod;
+    // 4. جلب بيانات وسيلة الدفع
+    let pmDetails = resolvePaymentMethodDetails(
+        orderDetail.order.paymentMethod,
+        orderDetail.paymentMethodData?.name,
+        orderDetail.paymentMethodData?.nameAr
+    );
 
-    if (pmValue && pmValue.length === 36) {
+    if (!pmDetails.name && orderDetail.order.paymentMethod && orderDetail.order.paymentMethod.length === 36) {
         try {
             const [pm] = await db.select({
                 id: paymentMethods.id,
                 name: paymentMethods.name,
                 nameAr: paymentMethods.nameAr
-            }).from(paymentMethods).where(eq(paymentMethods.id, pmValue)).limit(1);
+            }).from(paymentMethods).where(eq(paymentMethods.id, orderDetail.order.paymentMethod)).limit(1);
 
             if (pm) {
                 pmDetails = {
@@ -859,26 +883,9 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
                     name: pm.name,
                     nameAr: pm.nameAr,
                 };
-            } else {
-                pmDetails = { id: pmValue, name: "Unknown", nameAr: "غير معروف" };
             }
         } catch (error) {
             console.error("Error fetching payment method:", error);
-            pmDetails = { id: pmValue, name: "Unknown", nameAr: "غير معروف" };
-        }
-    } else {
-        switch (pmValue) {
-            case "cash_on_delivery":
-                pmDetails = { id: pmValue, name: "Cash on Delivery", nameAr: "الدفع عند الاستلام", nameFr: "Paiement à la livraison" };
-                break;
-            case "visa":
-                pmDetails = { id: pmValue, name: "Credit Card", nameAr: "بطاقة", nameFr: "Carte de crédit" };
-                break;
-            case "wallet":
-                pmDetails = { id: pmValue, name: "Wallet", nameAr: "محفظتي", nameFr: "Portefeuille" };
-                break;
-            default:
-                pmDetails = { id: pmValue, name: pmValue, nameAr: pmValue };
         }
     }
 
@@ -996,10 +1003,10 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
                 totalOrders: userTotalOrders,
             },
 
-            // ✅ فصلنا الداتا عشان الرياكت ميضربش ويقرأ الـ ID زي ما هو متعود
-            paymentMethod: typeof pmDetails === "object" && pmDetails !== null ? pmDetails.id : pmDetails,
-            paymentMethodName: typeof pmDetails === "object" && pmDetails !== null ? pmDetails.name : pmDetails,
-            paymentMethodNameAr: typeof pmDetails === "object" && pmDetails !== null ? pmDetails.nameAr : pmDetails,
+            // ✅ إرجاع معرف واسم وسيلة الدفع بالعربي والإنجليزي
+            paymentMethod: pmDetails.id,
+            paymentMethodName: pmDetails.name,
+            paymentMethodNameAr: pmDetails.nameAr,
 
             deliveryManId: orderDetail.order.deliveryManId,
             deliveryMan: orderDetail.driver,
@@ -1461,7 +1468,12 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
         zone: {
             id: zones.id,
             name: zones.name
-        }
+        },
+        paymentMethodData: {
+            id: paymentMethods.id,
+            name: paymentMethods.name,
+            nameAr: paymentMethods.nameAr,
+        },
     })
         .from(orders)
         .leftJoin(users, eq(orders.userId, users.id))
@@ -1470,6 +1482,7 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
         .leftJoin(addresses, eq(orders.addressId, addresses.id))
         .leftJoin(restaurantZoneDeliveryFees, eq(orders.zoneId, restaurantZoneDeliveryFees.id))
         .leftJoin(zones, eq(restaurantZoneDeliveryFees.zoneId, zones.id))
+        .leftJoin(paymentMethods, eq(orders.paymentMethod, paymentMethods.id))
         .where(eq(orders.id, orderId))
         .limit(1);
 
@@ -1610,26 +1623,33 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
     }));
 
     // 3. جلب اسم وسيلة الدفع بدل الـ ID
-    let paymentName = "Unknown";
-    const pmValue = orderDetail.order.paymentMethod;
+    let pmDetails = resolvePaymentMethodDetails(
+        orderDetail.order.paymentMethod,
+        orderDetail.paymentMethodData?.name,
+        orderDetail.paymentMethodData?.nameAr
+    );
 
-    if (pmValue && pmValue.length === 36) {
+    if (!pmDetails.name && orderDetail.order.paymentMethod && orderDetail.order.paymentMethod.length === 36) {
         try {
-            const [pm] = await db.select({ name: paymentMethods.name }).from(paymentMethods).where(eq(paymentMethods.id, pmValue)).limit(1);
-            if (pm) paymentName = pm.name;
-            else paymentName = pmValue;
+            const [pm] = await db.select({
+                id: paymentMethods.id,
+                name: paymentMethods.name,
+                nameAr: paymentMethods.nameAr,
+            }).from(paymentMethods).where(eq(paymentMethods.id, orderDetail.order.paymentMethod)).limit(1);
+
+            if (pm) {
+                pmDetails = {
+                    id: pm.id,
+                    name: pm.name,
+                    nameAr: pm.nameAr,
+                };
+            }
         } catch (error) {
             console.error("Error fetching payment method for PDF:", error);
-            paymentName = "Cash";
-        }
-    } else {
-        switch (pmValue) {
-            case "cash_on_delivery": paymentName = "Cash on Delivery"; break;
-            case "visa": paymentName = "Credit Card"; break;
-            case "wallet": paymentName = "Wallet"; break;
-            default: paymentName = pmValue || "Unknown";
         }
     }
+
+    const paymentName = pmDetails.name || pmDetails.nameAr || "Unknown";
 
     // 4. إنشاء الـ PDF بحجم إيصال حراري
     const doc = new PDFDocument({ margin: 20, size: [250, 600] });
