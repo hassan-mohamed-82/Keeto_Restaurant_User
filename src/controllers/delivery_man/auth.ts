@@ -91,6 +91,14 @@ async function _processLogin(res: Response, deliveryMan: any, password: string, 
         }
     }
 
+    // Save FCM token (only after all checks passed)
+    if (fcmToken && typeof fcmToken === "string" && fcmToken.trim()) {
+        await db
+            .update(deliveryMen)
+            .set({ fcmToken: fcmToken.trim() })
+            .where(eq(deliveryMen.id, deliveryMan.id));
+    }
+
     // Generate token
     const token = generateDeliveryManToken({
         id: deliveryMan.id,
@@ -123,11 +131,36 @@ async function _processLogin(res: Response, deliveryMan: any, password: string, 
 // POST /delivery-man/auth/logout
 // ==========================================
 export const logoutDeliveryMan = async (req: Request, res: Response) => {
-    // Stateless JWT: logout is handled client-side.
-    // Optionally clear FCM token if provided.
     const deliveryManId = req.user?.id;
     if (!deliveryManId) throw new UnauthorizedError("Not authenticated");
 
-    // Token is invalidated client-side. Return success.
+    // JWT is stateless and is discarded client-side.
+    // Clear the FCM token so this device stops receiving pushes after logout.
+    await db
+        .update(deliveryMen)
+        .set({ fcmToken: null })
+        .where(eq(deliveryMen.id, deliveryManId));
+
     return SuccessResponse(res, { message: "Logged out successfully" });
+};
+
+// ==========================================
+// POST /delivery-man/auth/fcm-token
+// Called by the app when Firebase refreshes the token (onTokenRefresh)
+// ==========================================
+export const updateFcmToken = async (req: Request, res: Response) => {
+    const deliveryManId = req.user?.id;
+    if (!deliveryManId) throw new UnauthorizedError("Not authenticated");
+
+    const { fcmToken } = req.body;
+    if (!fcmToken || typeof fcmToken !== "string" || !fcmToken.trim()) {
+        throw new BadRequest("fcmToken is required");
+    }
+
+    await db
+        .update(deliveryMen)
+        .set({ fcmToken: fcmToken.trim() })
+        .where(eq(deliveryMen.id, deliveryManId));
+
+    return SuccessResponse(res, { message: "FCM token updated successfully" });
 };
