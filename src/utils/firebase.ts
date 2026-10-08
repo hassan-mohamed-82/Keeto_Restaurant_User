@@ -106,10 +106,12 @@ import admin from "firebase-admin";
 const PROJECTS: Record<string, string> = {
   primary: "FIREBASE",
   secondary: "FIREBASE2",
+  delivery: "FIREBASE_DELIVERY",
 };
 
 // المشروع اللي فيه تطبيقات الأدمن (Android + iOS)
 export const ADMIN_PROJECT = "primary";
+export const DELIVERY_PROJECT = "delivery";
 
 export type FirebaseProjectKey = string;
 

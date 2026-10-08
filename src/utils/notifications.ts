@@ -470,11 +470,11 @@
 // };
 
 
-import { getMessaging, ADMIN_PROJECT } from "./firebase";
+import { getMessaging, ADMIN_PROJECT, DELIVERY_PROJECT } from "./firebase";
 import { db } from "../models/connection";
 import {
     notifications, users, restaurants, restrauntadmin,
-    restaurantSettings, userFcmTokens, adminFcmTokens
+    restaurantSettings, userFcmTokens, adminFcmTokens, deliveryMen
 } from "../models/schema";
 import { eq, and, or, sql } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
@@ -600,6 +600,13 @@ export const sendPushNotification = async (params: {
                 ));
 
             for (const adm of admins) add(adm.fcmToken, ADMIN_PROJECT);
+        } else if (recipientType === "delivery_man") {
+            const [deliveryMan] = await db
+                .select({ fcmToken: deliveryMen.fcmToken })
+                .from(deliveryMen)
+                .where(eq(deliveryMen.id, recipientId))
+                .limit(1);
+            add(deliveryMan?.fcmToken, DELIVERY_PROJECT);
         }
 
         // 3. الإرسال مجمّع حسب المشروع
@@ -645,6 +652,7 @@ export const sendPushNotification = async (params: {
                         await db.delete(adminFcmTokens).where(eq(adminFcmTokens.fcmToken, dead));
                         await db.update(restaurants).set({ fcmToken: null }).where(eq(restaurants.fcmToken, dead));
                         await db.update(users).set({ fcmToken: null }).where(eq(users.fcmToken, dead));
+                        await db.update(deliveryMen).set({ fcmToken: null }).where(eq(deliveryMen.fcmToken, dead));
                     } else {
                         // مشكلة إعدادات (زي mismatched-credential): متمسحش، سجّل بس
                         console.error(`[FCM] ${project} failed (${code}) for ${recipientType} ${recipientId}`);
