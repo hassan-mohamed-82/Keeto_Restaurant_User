@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { catchAsync } from "../../utils/catchAsync";
 import { hasPermission } from "../../middlewares/hasPermission";
+import { validate } from "../../middlewares/validation";
+import { upsertFreeDeliveryOfferSchema } from "../../validation/admin/freeDeliveryOffer";
 import {
     getFreeDeliveryOffer,
     upsertFreeDeliveryOffer,
@@ -13,7 +15,7 @@ const router = Router();
 router.get("/", hasPermission("order", "read"), catchAsync(getFreeDeliveryOffer));
 
 // ✅ Create / Update free delivery offer for restaurant
-router.post("/", hasPermission("order", "update"), catchAsync(upsertFreeDeliveryOffer));
+router.post("/", hasPermission("order", "update"), validate(upsertFreeDeliveryOfferSchema), catchAsync(upsertFreeDeliveryOffer));
 
 // ✅ Delete / Reset free delivery offer
 router.delete("/", hasPermission("order", "delete"), catchAsync(deleteFreeDeliveryOffer));

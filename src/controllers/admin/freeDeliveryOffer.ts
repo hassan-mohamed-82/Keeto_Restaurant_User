@@ -37,7 +37,7 @@ export const getFreeDeliveryOffer = async (req: Request, res: Response) => {
 // ==========================================
 export const upsertFreeDeliveryOffer = async (req: Request, res: Response) => {
     const restaurantId = getAdminRestaurantId(req);
-    const { status, minOrderAmount, startDate, endDate } = req.body;
+    const { status, minOrderAmount, maxOrdersPerUser, startDate, endDate } = req.body;
 
     if (status && !["active", "inactive"].includes(status)) {
         throw new BadRequest("Status must be 'active' or 'inactive'");
@@ -46,6 +46,14 @@ export const upsertFreeDeliveryOffer = async (req: Request, res: Response) => {
     const minAmount = minOrderAmount !== undefined ? parseFloat(String(minOrderAmount)) : 0;
     if (isNaN(minAmount) || minAmount < 0) {
         throw new BadRequest("minOrderAmount must be a non-negative number");
+    }
+
+    let parsedMaxOrdersPerUser: number | null = null;
+    if (maxOrdersPerUser !== undefined && maxOrdersPerUser !== null) {
+        parsedMaxOrdersPerUser = parseInt(String(maxOrdersPerUser), 10);
+        if (isNaN(parsedMaxOrdersPerUser) || parsedMaxOrdersPerUser < 1) {
+            throw new BadRequest("maxOrdersPerUser must be an integer >= 1");
+        }
     }
 
     let parsedStartDate: Date | null = null;
@@ -82,6 +90,7 @@ export const upsertFreeDeliveryOffer = async (req: Request, res: Response) => {
             .set({
                 status: status || existing.status,
                 minOrderAmount: minAmount.toFixed(2),
+                maxOrdersPerUser: maxOrdersPerUser !== undefined ? parsedMaxOrdersPerUser : existing.maxOrdersPerUser,
                 startDate: startDate !== undefined ? parsedStartDate : existing.startDate,
                 endDate: endDate !== undefined ? parsedEndDate : existing.endDate,
                 updatedAt: new Date(),
@@ -93,6 +102,7 @@ export const upsertFreeDeliveryOffer = async (req: Request, res: Response) => {
             restaurantId,
             status: status || "active",
             minOrderAmount: minAmount.toFixed(2),
+            maxOrdersPerUser: parsedMaxOrdersPerUser,
             startDate: parsedStartDate,
             endDate: parsedEndDate,
         });
