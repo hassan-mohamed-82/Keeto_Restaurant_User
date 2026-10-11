@@ -6,10 +6,11 @@ import {
     getMyInvoices, 
     getDashboardReports, 
     getOrdersByPaymentMethod,
-    getVisaReport
+    getVisaReport,
+    getDeliveryManReport,
 } from "../../controllers/admin/Report";
 import { validate } from "../../middlewares/validation";
-import { reportVisaQuerySchema } from "../../validation/admin/report";
+import { reportVisaQuerySchema, deliveryManReportQuerySchema } from "../../validation/admin/report";
 
 const router = Router();
 
@@ -22,6 +23,9 @@ router.get("/payment-method", catchAsync(getOrdersByPaymentMethod));
 // تقرير الفيزا (جميع طلبات الفيزا نجاح وفشل افتراضياً، مع إمكانية الفلترة بـ success أو failed)
 // GET /report/visa?status=success|failed&startDate=...&endDate=...&branchId=...
 router.get("/visa", validate(reportVisaQuerySchema, "query"), catchAsync(getVisaReport));
+
+// GET /report/delivery-man?deliveryManId=...&startDate=...&endDate=...&branchId=...&status=...
+router.get("/delivery-man", validate(deliveryManReportQuerySchema, "query"), catchAsync(getDeliveryManReport));
 
 // تحميل كشف حساب المطعم كـ PDF
 //GET /report/my-restaurant/invoice?startDate=2026-01-01&endDate=2026-05-19

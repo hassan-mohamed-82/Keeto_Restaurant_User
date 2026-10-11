@@ -16,6 +16,7 @@ import {
     restaurantRatings,
     restaurantSettings,
     restaurantPaymentCredentials,
+    deliveryMen,
 } from "../../models/schema";
 import { eq, and, desc, gte, lte, sql, inArray, like, or, ne } from "drizzle-orm";
 import { UnauthorizedError } from "../../Errors";
@@ -1098,3 +1099,346 @@ export const getVisaReport = async (req: Request | any, res: Response) => {
 };
 
 export const reportVisa = getVisaReport;
+
+export const getDeliveryManReport = async (req: Request | any, res: Response) => {
+    if (!req.user) throw new UnauthorizedError("Unauthenticated");
+
+    const restaurantId = req.user.restaurantId || req.user.id;
+    if (!restaurantId) throw new BadRequest("Restaurant ID not found");
+
+    const {
+        deliveryManId,
+        branchId,
+        startDate,
+        endDate,
+        status,
+        paymentMethod,
+        search,
+        page,
+        limit,
+    } = req.query;
+
+    const conditions: any[] = [
+        eq(orders.restaurantId, restaurantId),
+        eq(orders.orderType, "delivery"),
+        excludeUnpaidVisaOrders(),
+    ];
+
+    if (startDate) conditions.push(gte(orders.createdAt, new Date(startDate as string)));
+    if (endDate) {
+        const end = new Date(endDate as string);
+        end.setHours(23, 59, 59, 999);
+        conditions.push(lte(orders.createdAt, end));
+    }
+
+    if (branchId) conditions.push(eq(orders.branchId, branchId as string));
+    if (req.user.branchId) conditions.push(eq(orders.branchId, req.user.branchId));
+
+    if (deliveryManId && deliveryManId !== "all") {
+        conditions.push(eq(orders.deliveryManId, deliveryManId as string));
+    }
+
+    if (status && status !== "all") {
+        conditions.push(eq(orders.status, status as any));
+    }
+
+    if (search) {
+        const searchPattern = `%${(search as string).trim()}%`;
+        conditions.push(
+            or(
+                like(orders.orderNumber, searchPattern),
+                like(users.name, searchPattern),
+                like(users.phone, searchPattern),
+                like(deliveryMen.name, searchPattern),
+                like(deliveryMen.phone, searchPattern)
+            )
+        );
+    }
+
+    if (paymentMethod && paymentMethod !== "all") {
+        const pm = (paymentMethod as string).toLowerCase().trim();
+        if (pm === "cash" || pm === "cash_on_delivery") {
+            conditions.push(
+                or(
+                    eq(orders.paymentMethod, "cash"),
+                    eq(orders.paymentMethod, "cash_on_delivery"),
+                    like(paymentMethods.name, "%cash%"),
+                    like(paymentMethods.nameAr, "%استلام%"),
+                    like(paymentMethods.nameAr, "%كاش%")
+                )
+            );
+        } else if (pm === "visa" || pm === "card" || pm === "online") {
+            conditions.push(
+                or(
+                    eq(orders.paymentMethod, "visa"),
+                    like(paymentMethods.name, "%visa%"),
+                    like(paymentMethods.name, "%card%"),
+                    like(paymentMethods.nameAr, "%فيزا%"),
+                    like(paymentMethods.nameAr, "%بطاقة%")
+                )
+            );
+        } else {
+            conditions.push(
+                or(
+                    eq(orders.paymentMethod, paymentMethod as string),
+                    like(paymentMethods.name, `%${paymentMethod}%`),
+                    like(paymentMethods.nameAr, `%${paymentMethod}%`)
+                )
+            );
+        }
+    }
+
+    const orderList = await db
+        .select({
+            orderId: orders.id,
+            orderNumber: orders.orderNumber,
+            dailyOrderNumber: orders.dailyOrderNumber,
+            status: orders.status,
+            orderType: orders.orderType,
+            orderSource: orders.orderSource,
+
+            userId: orders.userId,
+            customerName: sql<string>`COALESCE(${users.name}, 'Guest')`,
+            customerPhone: sql<string>`COALESCE(${users.phone}, 'N/A')`,
+
+            deliveryManId: orders.deliveryManId,
+            deliveryManName: sql<string | null>`${deliveryMen.name}`,
+            deliveryManPhone: sql<string | null>`${deliveryMen.phone}`,
+            deliveryManImage: sql<string | null>`${deliveryMen.image}`,
+
+            branchId: orders.branchId,
+            branchName: branches.name,
+            branchNameAr: branches.nameAr,
+
+            paymentMethodId: orders.paymentMethod,
+            paymentMethodName: paymentMethods.name,
+            paymentMethodNameAr: paymentMethods.nameAr,
+            paymentStatus: orders.paymentStatus,
+            isCashCollected: orders.isCashCollected,
+            cashCollectedAt: orders.cashCollectedAt,
+            cashCollectedBy: orders.cashCollectedBy,
+
+            subtotal: orders.subtotal,
+            deliveryFee: orders.deliveryFee,
+            serviceFee: orders.serviceFee,
+            appCommission: orders.appCommission,
+            discountAmount: orders.discountAmount,
+            totalAmount: orders.totalAmount,
+
+            shippingAddress: orders.shippingAddress,
+            note: orders.note,
+            createdAt: orders.createdAt,
+            updatedAt: orders.updatedAt,
+        })
+        .from(orders)
+        .leftJoin(deliveryMen, eq(orders.deliveryManId, deliveryMen.id))
+        .leftJoin(users, eq(orders.userId, users.id))
+        .leftJoin(branches, eq(orders.branchId, branches.id))
+        .leftJoin(paymentMethods, eq(orders.paymentMethod, paymentMethods.id))
+        .where(and(...conditions))
+        .orderBy(desc(orders.createdAt));
+
+    const checkPaymentType = (name?: string | null, nameAr?: string | null, raw?: string | null) => {
+        const n = (name || "").toLowerCase();
+        const nar = (nameAr || "");
+        const r = (raw || "").toLowerCase();
+
+        const isCash = n.includes("cash") || nar.includes("استلام") || nar.includes("كاش") || r.includes("cash") || r.includes("استلام");
+        const isWallet = n.includes("wallet") || nar.includes("محفظ") || r.includes("wallet");
+        const isVisa = !isCash && !isWallet;
+
+        return { isCash, isVisa, isWallet };
+    };
+
+    let totalOrders = 0;
+    let totalDeliveredOrders = 0;
+    let totalOutForDeliveryOrders = 0;
+    let totalPendingOrders = 0;
+    let totalCancelledOrders = 0;
+
+    let totalAmount = 0;
+    let deliveredAmount = 0;
+
+    let totalCash = 0;
+    let totalCashOrders = 0;
+
+    let totalVisa = 0;
+    let totalVisaOrders = 0;
+
+    let totalWallet = 0;
+    let totalWalletOrders = 0;
+
+    let cashOnHand = 0;
+    let cashCollected = 0;
+
+    const deliveryMenMap = new Map<string, {
+        deliveryManId: string;
+        deliveryManName: string;
+        deliveryManPhone: string | null;
+        deliveryManImage: string | null;
+        totalOrders: number;
+        deliveredOrdersCount: number;
+        outForDeliveryOrdersCount: number;
+        totalAmount: number;
+        deliveredAmount: number;
+        totalCash: number;
+        totalVisa: number;
+        cashOnHand: number;
+        cashCollected: number;
+        ordersCountByStatus: Record<string, number>;
+    }>();
+
+    const formattedOrders = orderList.map(order => {
+        totalOrders++;
+        const amount = parseFloat(order.totalAmount as string || "0");
+        const { isCash, isVisa, isWallet } = checkPaymentType(
+            order.paymentMethodName,
+            order.paymentMethodNameAr,
+            order.paymentMethodId
+        );
+        const isDelivered = order.status === "delivered";
+        const isCashCollected = Boolean(order.isCashCollected);
+
+        totalAmount += amount;
+
+        if (order.status === "delivered") {
+            totalDeliveredOrders++;
+            deliveredAmount += amount;
+
+            if (isCash) {
+                totalCash += amount;
+                totalCashOrders++;
+                if (isCashCollected) {
+                    cashCollected += amount;
+                } else {
+                    cashOnHand += amount;
+                }
+            } else if (isVisa) {
+                totalVisa += amount;
+                totalVisaOrders++;
+            } else if (isWallet) {
+                totalWallet += amount;
+                totalWalletOrders++;
+            }
+        } else if (order.status === "out_for_delivery") {
+            totalOutForDeliveryOrders++;
+        } else if (order.status === "cancelled" || order.status === "failed" || order.status === "refund") {
+            totalCancelledOrders++;
+        } else {
+            totalPendingOrders++;
+        }
+
+        const dmId = order.deliveryManId || "unassigned";
+        const dmName = order.deliveryManName || "Unassigned";
+        const dmPhone = order.deliveryManPhone || null;
+        const dmImage = order.deliveryManImage || null;
+
+        if (!deliveryMenMap.has(dmId)) {
+            deliveryMenMap.set(dmId, {
+                deliveryManId: dmId,
+                deliveryManName: dmName,
+                deliveryManPhone: dmPhone,
+                deliveryManImage: dmImage,
+                totalOrders: 0,
+                deliveredOrdersCount: 0,
+                outForDeliveryOrdersCount: 0,
+                totalAmount: 0,
+                deliveredAmount: 0,
+                totalCash: 0,
+                totalVisa: 0,
+                cashOnHand: 0,
+                cashCollected: 0,
+                ordersCountByStatus: {},
+            });
+        }
+
+        const dmGroup = deliveryMenMap.get(dmId)!;
+        dmGroup.totalOrders++;
+        dmGroup.totalAmount += amount;
+        dmGroup.ordersCountByStatus[order.status || "unknown"] = (dmGroup.ordersCountByStatus[order.status || "unknown"] || 0) + 1;
+
+        if (isDelivered) {
+            dmGroup.deliveredOrdersCount++;
+            dmGroup.deliveredAmount += amount;
+            if (isCash) {
+                dmGroup.totalCash += amount;
+                if (isCashCollected) {
+                    dmGroup.cashCollected += amount;
+                } else {
+                    dmGroup.cashOnHand += amount;
+                }
+            } else if (isVisa) {
+                dmGroup.totalVisa += amount;
+            }
+        } else if (order.status === "out_for_delivery") {
+            dmGroup.outForDeliveryOrdersCount++;
+        }
+
+        return {
+            ...order,
+            paymentType: isCash ? "cash" : isVisa ? "visa" : "wallet",
+            isCash,
+            isVisa,
+            isWallet,
+            isCashCollected,
+            subtotal: parseFloat(order.subtotal as string || "0").toFixed(2),
+            deliveryFee: parseFloat(order.deliveryFee as string || "0").toFixed(2),
+            serviceFee: parseFloat(order.serviceFee as string || "0").toFixed(2),
+            appCommission: parseFloat(order.appCommission as string || "0").toFixed(2),
+            discountAmount: parseFloat(order.discountAmount as string || "0").toFixed(2),
+            totalAmount: amount.toFixed(2),
+        };
+    });
+
+    const deliveryMenBreakdown = Array.from(deliveryMenMap.values()).map(dm => ({
+        ...dm,
+        totalAmount: dm.totalAmount.toFixed(2),
+        deliveredAmount: dm.deliveredAmount.toFixed(2),
+        totalCash: dm.totalCash.toFixed(2),
+        totalVisa: dm.totalVisa.toFixed(2),
+        cashOnHand: dm.cashOnHand.toFixed(2),
+        cashCollected: dm.cashCollected.toFixed(2),
+        cashWithDeliveryMan: dm.cashOnHand.toFixed(2),
+    }));
+
+    let paginatedOrders = formattedOrders;
+    let paginationInfo: any = null;
+
+    if (page && limit) {
+        const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
+        const limitNum = Math.max(1, parseInt(limit as string, 10) || 20);
+        const startIndex = (pageNum - 1) * limitNum;
+        paginatedOrders = formattedOrders.slice(startIndex, startIndex + limitNum);
+        paginationInfo = {
+            page: pageNum,
+            limit: limitNum,
+            totalPages: Math.ceil(formattedOrders.length / limitNum),
+            totalOrders: formattedOrders.length,
+        };
+    }
+
+    return SuccessResponse(res, {
+        message: "Delivery man report retrieved successfully",
+        summary: {
+            totalOrders,
+            totalDeliveredOrders,
+            totalOutForDeliveryOrders,
+            totalPendingOrders,
+            totalCancelledOrders,
+            totalAmount: totalAmount.toFixed(2),
+            deliveredAmount: deliveredAmount.toFixed(2),
+            totalCash: totalCash.toFixed(2),
+            totalVisa: totalVisa.toFixed(2),
+            totalWallet: totalWallet.toFixed(2),
+            cashOnHand: cashOnHand.toFixed(2),
+            cashWithDeliveryMan: cashOnHand.toFixed(2),
+            cashCollected: cashCollected.toFixed(2),
+            totalCashOrders,
+            totalVisaOrders,
+            totalWalletOrders,
+        },
+        deliveryMen: deliveryMenBreakdown,
+        orders: paginatedOrders,
+        ...(paginationInfo ? { pagination: paginationInfo } : {}),
+    });
+};
