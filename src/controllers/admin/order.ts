@@ -2116,6 +2116,35 @@ export const getSelectData = async (req: Request, res: Response) => {
     });
 };
 
+// select branches for transfer order
+export const getSelectBranches = async (req: Request, res: Response) => {
+    if (!req.user) {
+        throw new UnauthorizedError("Not authenticated");
+    }
+
+    const adminRestaurantId = req.user.restaurantId || req.user.id;
+
+    if (!adminRestaurantId) {
+        throw new BadRequest("Restaurant ID not found");
+    }
+
+    const branchList = await db
+        .select({
+            id: branches.id,
+            name: branches.name,
+            nameAr: branches.nameAr,
+        })
+        .from(branches)
+        .where(and(eq(branches.restaurantId, adminRestaurantId), eq(branches.status, "active")))
+
+    return SuccessResponse(res, {
+        message: "Get select data success",
+        data: {
+            branches: branchList,
+        },
+    });
+};
+
 // ==========================================
 // Transfer Order Branch
 // ==========================================

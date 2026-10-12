@@ -21,7 +21,8 @@ import {
     selectDeliveryMan,
     setOrderPreparingDuration,
     getSelectData,
-    transferOrderBranch
+    transferOrderBranch,
+    getSelectBranches
 } from "../../controllers/admin/order";
 
 const router = Router();
@@ -31,6 +32,7 @@ router.get("/reasons", hasPermission("order", "read"), catchAsync(getReasons));
 router.get("/numbers", hasPermission("order", "read", true), catchAsync(getallnumbersoforders));
 router.get("/select", hasPermission("order", "read", true), catchAsync(selectDeliveryMan))
 router.get("/select-data", hasPermission("order", "read", true), catchAsync(getSelectData))
+router.get("/select-branches", hasPermission("order", "read", true), catchAsync(getSelectBranches))
 
 // ✅ كل الأوردرات - يحتاج صلاحية read + التحقق من الفرع
 router.get("/", hasPermission("order", "read", true), catchAsync(getRestaurantOrders));
