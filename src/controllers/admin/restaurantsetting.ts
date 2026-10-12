@@ -12,6 +12,33 @@ export const updateSettings = async (req: Request, res: Response): Promise<void>
     return;
   }
 
+  // 🛡️ Both-off guard: run BEFORE the transaction to avoid double-response issues.
+  // If cashEnabled or enableOnlinePayment is being changed, check the merged result
+  // against existing DB values so we catch the case where one is already false.
+  if (settings && (settings.cashEnabled !== undefined || settings.enableOnlinePayment !== undefined)) {
+    const [currentSettings] = await db
+      .select({ cashEnabled: restaurantSettings.cashEnabled, enableOnlinePayment: restaurantSettings.enableOnlinePayment })
+      .from(restaurantSettings)
+      .where(eq(restaurantSettings.restaurantId, restaurantId))
+      .limit(1);
+
+    const resolvedCashEnabled = settings.cashEnabled !== undefined
+      ? Boolean(settings.cashEnabled)
+      : (currentSettings?.cashEnabled ?? true);
+
+    const resolvedOnlinePayment = settings.enableOnlinePayment !== undefined
+      ? Boolean(settings.enableOnlinePayment)
+      : (currentSettings?.enableOnlinePayment ?? false);
+
+    if (resolvedCashEnabled === false && resolvedOnlinePayment === false) {
+      res.status(400).json({
+        success: false,
+        message: "At least one payment method must be active. You cannot disable both cash and online payment at the same time.",
+      });
+      return;
+    }
+  }
+
   try {
     // بدأ الـ Transaction
     await db.transaction(async (tx) => {
@@ -44,6 +71,12 @@ export const updateSettings = async (req: Request, res: Response): Promise<void>
           const busyVal = settings.isBusy !== undefined ? settings.isBusy : settings.busy;
           settingsData.isBusy = Boolean(busyVal);
         }
+
+        // ✅ cashEnabled — toggle cash payment on/off per restaurant
+        if (settings.cashEnabled !== undefined) settingsData.cashEnabled = Boolean(settings.cashEnabled);
+
+        // ✅ enableOnlinePayment
+        if (settings.enableOnlinePayment !== undefined) settingsData.enableOnlinePayment = Boolean(settings.enableOnlinePayment);
 
         // Other fields
         if (settings.productView !== undefined || settings.productview !== undefined) {
