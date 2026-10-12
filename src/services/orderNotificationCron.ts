@@ -54,6 +54,7 @@ export async function notifyStuckPendingPayments() {
     .select({
       id: orders.id,
       orderNumber: orders.orderNumber,
+      dailyOrderNumber: orders.dailyOrderNumber,
       restaurantId: orders.restaurantId,
       branchId: orders.branchId,
       createdAt: orders.createdAt,
@@ -73,8 +74,8 @@ export async function notifyStuckPendingPayments() {
     try {
       const customerName = order.customerName || "Customer";
       const minutes = Math.max(1, Math.round((Date.now() - new Date(order.createdAt ?? Date.now()).getTime()) / 60000));
-      const bodyAr = `الطلب رقم ${order.orderNumber} ما زال بانتظار دفع الفيزا منذ ${minutes} دقيقة. تواصل مع العميل: ${customerName}.`;
-      const bodyEn = `Order ${order.orderNumber} is still waiting for card payment (${minutes} min). Contact the customer: ${customerName}.`;
+      const bodyAr = `الطلب رقم ${order.dailyOrderNumber} ما زال بانتظار دفع الفيزا منذ ${minutes} دقيقة. تواصل مع العميل: ${customerName}.`;
+      const bodyEn = `Order ${order.dailyOrderNumber} is still waiting for card payment (${minutes} min). Contact the customer: ${customerName}.`;
 
       await sendPushNotification({
         recipientType: "restaurant",
@@ -86,13 +87,13 @@ export async function notifyStuckPendingPayments() {
           type: "payment_issue",
           issueType: "pending_payment_stuck",
           orderId: order.id,
-          orderNumber: order.orderNumber,
+          orderNumber: order.dailyOrderNumber,
           restaurantId: order.restaurantId,
         },
       });
     } catch (error) {
       await releasePaymentIssueNotificationClaim(order.id, "pending_payment_stuck");
-      console.error(`[PaymentIssueCron] Failed to notify order ${order.orderNumber}:`, error);
+      console.error(`[PaymentIssueCron] Failed to notify order ${order.dailyOrderNumber}:`, error);
     }
   }
 }
