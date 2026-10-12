@@ -2115,3 +2115,210 @@ export const getSelectData = async (req: Request, res: Response) => {
         },
     });
 };
+
+// ==========================================
+// Transfer Order Branch
+// ==========================================
+export const transferOrderBranch = async (req: Request, res: Response) => {
+    if (!req.user) {
+        throw new UnauthorizedError("Not authenticated");
+    }
+
+    const adminRestaurantId = req.user.restaurantId || req.user.id;
+    const adminBranchId = req.user.branchId;
+
+    if (!adminRestaurantId) {
+        throw new BadRequest("Restaurant ID not found");
+    }
+
+    const orderId = req.params.orderId || req.body?.orderId;
+    const targetBranchId = req.body?.branchId || req.body?.targetBranchId;
+    const note = req.body?.note;
+
+    if (!orderId) {
+        throw new BadRequest("orderId is required");
+    }
+
+    if (!targetBranchId) {
+        throw new BadRequest("Target branchId is required");
+    }
+
+    // 1. Fetch the order
+    const [existingOrder] = await db
+        .select()
+        .from(orders)
+        .where(eq(orders.id, orderId))
+        .limit(1);
+
+    if (!existingOrder) {
+        throw new NotFound("Order not found");
+    }
+
+    // 2. Authorization checks
+    if (existingOrder.restaurantId !== adminRestaurantId) {
+        throw new BadRequest("Unauthorized: Order does not belong to your restaurant");
+    }
+
+    if (adminBranchId && existingOrder.branchId !== adminBranchId) {
+        throw new BadRequest("Unauthorized: You can only transfer orders belonging to your branch");
+    }
+
+    // 3. Verify order status can only be transferred if pending or accepted
+    const transferableStatuses = ["pending", "accepted"];
+    if (!transferableStatuses.includes(existingOrder.status as string)) {
+        throw new BadRequest(`Cannot transfer order with status "${existingOrder.status}". Only pending and accepted orders can be transferred.`);
+    }
+
+    // 4. Check if target branch is different from current branch
+    if (existingOrder.branchId === targetBranchId) {
+        throw new BadRequest("Order is already assigned to this branch");
+    }
+
+    // 5. Verify target branch exists, is active, and belongs to this restaurant
+    const [targetBranch] = await db
+        .select()
+        .from(branches)
+        .where(
+            and(
+                eq(branches.id, targetBranchId),
+                eq(branches.restaurantId, adminRestaurantId)
+            )
+        )
+        .limit(1);
+
+    if (!targetBranch) {
+        throw new NotFound("Target branch not found or does not belong to your restaurant");
+    }
+
+    if (targetBranch.status !== "active") {
+        throw new BadRequest("Cannot transfer order to an inactive branch");
+    }
+
+    // 6. Fetch previous branch details if exists
+    let previousBranchName = "الفرع السابق";
+    if (existingOrder.branchId) {
+        const [oldBranch] = await db
+            .select()
+            .from(branches)
+            .where(eq(branches.id, existingOrder.branchId))
+            .limit(1);
+        if (oldBranch) {
+            previousBranchName = oldBranch.nameAr || oldBranch.name;
+        }
+    }
+
+    const previousDeliveryManId = existingOrder.deliveryManId;
+    const newBranchName = targetBranch.nameAr || targetBranch.name;
+
+    // 7. Update order in database (unassign delivery man if assigned to old branch)
+    let updatedNote = existingOrder.note;
+    if (note && note.trim()) {
+        const transferNoteTag = `[تم تحويل الفرع إلى ${newBranchName}: ${note.trim()}]`;
+        updatedNote = updatedNote ? `${updatedNote}\n${transferNoteTag}` : transferNoteTag;
+    }
+
+    await db
+        .update(orders)
+        .set({
+            branchId: targetBranchId,
+            note: updatedNote,
+            updatedAt: new Date(),
+        })
+        .where(eq(orders.id, orderId));
+
+    // 8. Send notification to the SELECTED (TARGET) branch
+    const now = new Date();
+    const cairoTimeFormatted = new Intl.DateTimeFormat("ar-EG", {
+        timeZone: "Africa/Cairo",
+        hour: "numeric",
+        minute: "numeric",
+        hour12: true,
+    }).format(now);
+
+    const orderDisplayNumber = existingOrder.dailyOrderNumber || existingOrder.orderNumber;
+    const notifTitle = "طلب محوّل إلى فرعكم 🔄";
+    const notifBody = `تم تحويل الطلب #${orderDisplayNumber} بقيمة ${existingOrder.totalAmount} ج.م إلى فرعكم (${newBranchName}) من ${previousBranchName} الساعة ${cairoTimeFormatted}.`;
+
+    try {
+        await sendPushNotification({
+            recipientType: "restaurant",
+            recipientId: adminRestaurantId,
+            branchId: targetBranchId,
+            title: notifTitle,
+            body: notifBody,
+            data: {
+                type: "order_transferred",
+                orderId: existingOrder.id,
+                orderNumber: existingOrder.orderNumber,
+                dailyOrderNumber: existingOrder.dailyOrderNumber,
+                fromBranchId: existingOrder.branchId || null,
+                fromBranchName: previousBranchName,
+                toBranchId: targetBranchId,
+                toBranchName: newBranchName,
+                status: existingOrder.status,
+                restaurantId: adminRestaurantId,
+                branchId: targetBranchId,
+            },
+        });
+    } catch (notifErr) {
+        console.error("[TRANSFER_ORDER] Error sending push notification to new branch:", notifErr);
+    }
+
+    // 9. Notify customer (user) about the transfer if user exists
+    // if (existingOrder.userId) {
+    //     try {
+    //         await sendPushNotification({
+    //             recipientType: "user",
+    //             recipientId: existingOrder.userId,
+    //             branchId: targetBranchId,
+    //             title: "تحديث بشأن طلبك | Order Update",
+    //             body: `طلبك رقم #${orderDisplayNumber} جاري متابعته وتجهيزه من فرع (${newBranchName}).`,
+    //             data: {
+    //                 type: "order_transferred",
+    //                 orderId: existingOrder.id,
+    //                 orderNumber: existingOrder.orderNumber,
+    //                 dailyOrderNumber: existingOrder.dailyOrderNumber,
+    //                 status: existingOrder.status,
+    //                 branchId: targetBranchId,
+    //                 restaurantId: adminRestaurantId,
+    //             },
+    //         });
+    //     } catch (userNotifErr) {
+    //         console.error("[TRANSFER_ORDER] Error sending push notification to user:", userNotifErr);
+    //     }
+    // }
+
+    // 10. Notify previous delivery man if order had an assigned delivery man
+    // if (previousDeliveryManId) {
+    //     try {
+    //         await sendPushNotification({
+    //             recipientType: "delivery_man",
+    //             recipientId: previousDeliveryManId,
+    //             branchId: existingOrder.branchId || null,
+    //             title: "إلغاء إسناد الطلب",
+    //             body: `تم تحويل الطلب رقم #${orderDisplayNumber} إلى فرع آخر وإلغاء إسناده لك.`,
+    //             data: {
+    //                 type: "order_unassigned",
+    //                 orderId: existingOrder.id,
+    //                 orderNumber: existingOrder.orderNumber,
+    //             },
+    //         });
+    //     } catch (dmNotifErr) {
+    //         console.error("[TRANSFER_ORDER] Error sending push notification to delivery man:", dmNotifErr);
+    //     }
+    // }
+
+    return SuccessResponse(res, {
+        message: "Order transferred to selected branch successfully",
+        data: {
+            orderId: existingOrder.id,
+            orderNumber: existingOrder.orderNumber,
+            dailyOrderNumber: existingOrder.dailyOrderNumber,
+            previousBranchId: existingOrder.branchId || null,
+            previousBranchName,
+            newBranchId: targetBranchId,
+            newBranchName,
+            status: existingOrder.status,
+        },
+    });
+};

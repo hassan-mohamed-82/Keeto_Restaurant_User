@@ -182,7 +182,6 @@ export const getSettingsByRestaurantId = async (req: Request, res: Response): Pr
     data: {
       settings: settingsResult,
       schedules: schedules || [],
-      isBusy,
       busyStatus: isBusy ? "busy" : "available",
     }
   });

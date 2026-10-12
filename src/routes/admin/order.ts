@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { catchAsync } from "../../utils/catchAsync";
 import { hasPermission } from "../../middlewares/hasPermission";
+import { validate } from "../../middlewares/validation";
+import { transferOrderBranchSchema } from "../../validation/admin/order";
 import {
     getRestaurantOrders,
     getRestaurantOrderById,
@@ -18,7 +20,8 @@ import {
     assignDelivery,
     selectDeliveryMan,
     setOrderPreparingDuration,
-    getSelectData
+    getSelectData,
+    transferOrderBranch
 } from "../../controllers/admin/order";
 
 const router = Router();
@@ -46,6 +49,9 @@ router.get("/:id", hasPermission("order", "read", true), catchAsync(getRestauran
 
 // ✅ تحميل الفاتورة (Receipt PDF) للأوردر
 router.get("/:orderId/invoice", hasPermission("order", "read", true), catchAsync(generateOrderInvoicePDF));
+
+// ✅ تحويل الأوردر إلى فرع آخر - يحتاج صلاحية update
+router.put("/:orderId/transfer-branch", hasPermission("order", "update"), validate(transferOrderBranchSchema), catchAsync(transferOrderBranch));
 
 // ✅ تحديث حالة الأوردر - يحتاج صلاحية update + التحقق من الفرع
 router.put("/:orderId", hasPermission("order", "update", true), catchAsync(updateOrderStatus));
