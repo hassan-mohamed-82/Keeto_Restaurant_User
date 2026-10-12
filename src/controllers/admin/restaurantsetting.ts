@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { db } from '../../models/connection'; // غير المسار حسب مكان ملف اتصال قاعدة البيانات عندك
-import { restaurantSettings, restaurantSchedules } from '../../models/schema';
-import { eq } from 'drizzle-orm';
+import { restaurantSettings, restaurantSchedules, restaurants, restaurantBusinessPlans } from '../../models/schema';
+import { eq, and } from 'drizzle-orm';
 
 export const updateSettings = async (req: Request, res: Response): Promise<void> => {
   const restaurantId = req.user?.restaurantId || req.user?.id;
@@ -39,6 +39,11 @@ export const updateSettings = async (req: Request, res: Response): Promise<void>
         if (settings.isAlwaysOpen !== undefined) settingsData.isAlwaysOpen = settings.isAlwaysOpen;
         if (settings.isSameTimeEveryDay !== undefined) settingsData.isSameTimeEveryDay = settings.isSameTimeEveryDay;
         if (settings.isTemporarilyClosed !== undefined) settingsData.isTemporarilyClosed = settings.isTemporarilyClosed;
+
+        if (settings.isBusy !== undefined || settings.busy !== undefined) {
+          const busyVal = settings.isBusy !== undefined ? settings.isBusy : settings.busy;
+          settingsData.isBusy = Boolean(busyVal);
+        }
 
         // Other fields
         if (settings.productView !== undefined || settings.productview !== undefined) {
@@ -137,11 +142,126 @@ export const getSettingsByRestaurantId = async (req: Request, res: Response): Pr
     settingsResult = newSettings[0];
   }
 
+  const isBusy = Boolean(settingsResult?.isBusy);
+
   res.status(200).json({
     success: true,
     data: {
       settings: settingsResult,
-      schedules: schedules || []
+      schedules: schedules || [],
+      isBusy,
+      busyStatus: isBusy ? "busy" : "available",
+    }
+  });
+};
+
+export const updateBusyStatus = async (req: Request, res: Response): Promise<void> => {
+  const restaurantId = req.user?.restaurantId || req.user?.id;
+
+  if (!restaurantId) {
+    res.status(400).json({ success: false, message: "Restaurant id is required" });
+    return;
+  }
+
+  // 1. Verify restaurant has an active MyKeeto plan
+  const [mykeetoPlan] = await db
+    .select()
+    .from(restaurantBusinessPlans)
+    .where(
+      and(
+        eq(restaurantBusinessPlans.restaurantId, restaurantId),
+        eq(restaurantBusinessPlans.platformType, "mykeeto")
+      )
+    )
+    .limit(1);
+
+  if (!mykeetoPlan || mykeetoPlan.mykeetoStatus === "inactive") {
+    res.status(400).json({
+      success: false,
+      message: "This feature is only available for restaurants subscribed to the active MyKeeto plan"
+    });
+    return;
+  }
+
+  // 2. Determine target busy status
+  let targetIsBusy: boolean;
+  if (req.body.isBusy !== undefined) {
+    targetIsBusy = Boolean(req.body.isBusy);
+  } else if (req.body.busy !== undefined) {
+    targetIsBusy = Boolean(req.body.busy);
+  } else if (req.body.status !== undefined) {
+    targetIsBusy = req.body.status === "busy";
+  } else {
+    res.status(400).json({ success: false, message: "isBusy or status is required" });
+    return;
+  }
+
+  // 3. Update restaurantSettings
+  const existingSettings = await db
+    .select()
+    .from(restaurantSettings)
+    .where(eq(restaurantSettings.restaurantId, restaurantId))
+    .limit(1);
+
+  if (existingSettings.length > 0) {
+    await db
+      .update(restaurantSettings)
+      .set({ isBusy: targetIsBusy })
+      .where(eq(restaurantSettings.restaurantId, restaurantId));
+  } else {
+    await db
+      .insert(restaurantSettings)
+      .values({ restaurantId, isBusy: targetIsBusy });
+  }
+
+  res.status(200).json({
+    success: true,
+    message: `Restaurant status updated to ${targetIsBusy ? "busy" : "available"} successfully`,
+    data: {
+      restaurantId,
+      isBusy: targetIsBusy,
+      busyStatus: targetIsBusy ? "busy" : "available",
+      status: targetIsBusy ? "busy" : "available"
+    }
+  });
+};
+
+export const getBusyStatus = async (req: Request, res: Response): Promise<void> => {
+  const restaurantId = req.user?.restaurantId || req.user?.id;
+
+  if (!restaurantId) {
+    res.status(400).json({ success: false, message: "Restaurant id is required" });
+    return;
+  }
+
+  const [settings] = await db
+    .select({ isBusy: restaurantSettings.isBusy })
+    .from(restaurantSettings)
+    .where(eq(restaurantSettings.restaurantId, restaurantId))
+    .limit(1);
+
+  const [mykeetoPlan] = await db
+    .select()
+    .from(restaurantBusinessPlans)
+    .where(
+      and(
+        eq(restaurantBusinessPlans.restaurantId, restaurantId),
+        eq(restaurantBusinessPlans.platformType, "mykeeto")
+      )
+    )
+    .limit(1);
+
+  const isBusy = Boolean(settings?.isBusy);
+  const hasMykeetoPlan = Boolean(mykeetoPlan && mykeetoPlan.mykeetoStatus === "active");
+
+  res.status(200).json({
+    success: true,
+    data: {
+      restaurantId,
+      isBusy,
+      busyStatus: isBusy ? "busy" : "available",
+      status: isBusy ? "busy" : "available",
+      hasMykeetoPlan
     }
   });
 };
