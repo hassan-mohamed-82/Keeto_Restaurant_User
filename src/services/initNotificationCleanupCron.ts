@@ -1,7 +1,7 @@
 import cron from "node-cron";
 import { db } from "../models/connection";
 import { notifications } from "../models/schema";
-import { lte, inArray, and, eq } from "drizzle-orm";
+import { lte, inArray, and, eq, or } from "drizzle-orm";
 
 // دالة مساعدة لعمل تريث (Delay) بين الدفعات لتخفيف الضغط على MySQL
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -26,7 +26,7 @@ export function initNotificationCleanupCron() {
                     .select({ id: notifications.id })
                     .from(notifications)
                     .where(
-                        and(
+                        or(
                             eq(notifications.isRead, true),
                             lte(notifications.createdAt, oneDayAgo)
                         )
