@@ -78,4 +78,5 @@ export * from "./schema/admin/printer";
 export * from "./schema/admin/paymentTransactions";
 export * from "./schema/admin/adminFcmTokens";
 export * from "./schema/admin/shippingCompany";
-export * from "./schema/admin/firstOrderDiscount";
+export * from "./schema/admin/firstOrderDiscount";
+export * from "./schema/admin/platformPaymentGateways";

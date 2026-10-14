@@ -985,6 +985,8 @@ export const getVisaReport = async (req: Request | any, res: Response) => {
             paymentTransactionId: orders.paymentTransactionId,
             orderSource: orders.orderSource,
             orderType: orders.orderType,
+            paymentGateway: orders.paymentGateway,
+            paymentGatewayType: orders.paymentGatewayType,
 
             // بيانات العميل
             userId: orders.userId,
@@ -1055,8 +1057,8 @@ export const getVisaReport = async (req: Request | any, res: Response) => {
         return {
             ...order,
             visaStatus,
-            gatewayType,
-            gatewayName,
+            gatewayType: order.paymentGatewayType || gatewayType,
+            gatewayName: order.paymentGateway || gatewayName,
             subtotal: parseFloat(order.subtotal as string || "0").toFixed(2),
             deliveryFee: parseFloat(order.deliveryFee as string || "0").toFixed(2),
             serviceFee: parseFloat(order.serviceFee as string || "0").toFixed(2),
@@ -1441,4 +1443,4 @@ export const getDeliveryManReport = async (req: Request | any, res: Response) =>
         orders: paginatedOrders,
         ...(paginationInfo ? { pagination: paginationInfo } : {}),
     });
-};
+};
