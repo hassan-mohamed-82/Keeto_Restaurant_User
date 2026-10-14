@@ -813,9 +813,13 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
                 };
             }));
         }
-        const finalVarPrice = parseFloat(item.variationsPrice || "0") > 0 ? parseFloat(item.variationsPrice || "0") : totalCalculatedVarPrice;
+        const finalVarPrice = item.variationsPrice != null
+            ? parseFloat(item.variationsPrice)
+            : totalCalculatedVarPrice;
         const finalAddonsPrice = parseFloat(item.addonsPrice || "0");
-        const finalTotalPrice = (parseFloat(item.basePrice || "0") + finalVarPrice + finalAddonsPrice) * item.quantity;
+        const finalTotalPrice = item.totalPrice != null
+            ? parseFloat(item.totalPrice)
+            : (parseFloat(item.basePrice || "0") + finalVarPrice + finalAddonsPrice) * item.quantity;
 
         // 🌟 جلب تفاصيل الـ Addons اللي اختارها العميل فعلاً
         let foodAddons: any[] = [];
