@@ -12,6 +12,7 @@ import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors/NotFound";
 import { v4 as uuidv4 } from "uuid";
+import { excludeUnpaidVisaOrders } from "../../helpers/order.helper";
 
 /**
  * دالة مساعدة لجلب حركات المحفظة مربوطة ببيانات الأوردر (dailyOrderNumber, orderNumber, ...)
@@ -42,6 +43,7 @@ async function getWalletTransactionsWithOrderDetails(restaurantId: string, limit
                 orderType: orders.orderType,
                 orderSource: orders.orderSource,
                 totalAmount: orders.totalAmount,
+                paymentStatus: orders.paymentStatus,
                 createdAt: orders.createdAt,
             }
         })
@@ -60,6 +62,8 @@ async function getWalletTransactionsWithOrderDetails(restaurantId: string, limit
                 sql`COALESCE(${restaurantWalletTransactions.serviceFee}, 0) <> 0`,
                 sql`COALESCE(${restaurantWalletTransactions.commission}, 0) <> 0`,
             ),
+            // 🚫 استبعاد حركات طلبات الفيزا المعلقة أو الفاشلة
+            sql`(${orders.id} IS NULL OR ${excludeUnpaidVisaOrders()})`
         ))
         .orderBy(desc(restaurantWalletTransactions.createdAt));
 
@@ -89,6 +93,7 @@ async function getWalletTransactionsWithOrderDetails(restaurantId: string, limit
             orderType: r.order.orderType,
             orderSource: r.order.orderSource,
             totalAmount: r.order.totalAmount,
+            paymentStatus: r.order.paymentStatus,
             createdAt: r.order.createdAt,
         } : null
     }));
@@ -203,6 +208,7 @@ export const getMyWallet = async (req: Request, res: Response) => {
     const ordersWhere = and(
         eq(orders.restaurantId, restaurantId),
         notInArray(orders.status, ["cancelled", "failed", "refund"]),
+        excludeUnpaidVisaOrders(),
         start ? gte(orders.createdAt, start) : undefined,
         end ? lte(orders.createdAt, end) : undefined,
     );
@@ -414,7 +420,21 @@ export const getMyWalletTransactions = async (req: Request, res: Response) => {
             totalAmount: sql<string>`COALESCE(SUM(ABS(${restaurantWalletTransactions.amount})), 0)`,
         })
         .from(restaurantWalletTransactions)
-        .where(eq(restaurantWalletTransactions.restaurantId, restaurantId));
+        .leftJoin(orders, or(
+            eq(restaurantWalletTransactions.orderId, orders.id),
+            and(
+                eq(restaurantWalletTransactions.type, "order_payment"),
+                eq(restaurantWalletTransactions.reference, orders.orderNumber)
+            )
+        ))
+        .where(and(
+            eq(restaurantWalletTransactions.restaurantId, restaurantId),
+            or(
+                sql`COALESCE(${restaurantWalletTransactions.serviceFee}, 0) <> 0`,
+                sql`COALESCE(${restaurantWalletTransactions.commission}, 0) <> 0`,
+            ),
+            sql`(${orders.id} IS NULL OR ${excludeUnpaidVisaOrders()})`
+        ));
 
     const totalTxAmount = parseFloat(txAggregate?.totalAmount as string || "0");
 

@@ -35,10 +35,18 @@ const TIMEZONE = "Africa/Cairo";
  */
 export const excludeUnpaidVisaOrders = () =>
     sql`(
-        ${orders.paymentMethod} IS NULL
-        OR ${orders.paymentMethod} NOT IN (
-            SELECT id FROM payment_methods
-            WHERE LOWER(name) LIKE '%visa%'
+        (
+            (
+                ${orders.paymentMethod} IS NULL
+                OR (
+                    LOWER(${orders.paymentMethod}) <> 'visa'
+                    AND ${orders.paymentMethod} NOT IN (
+                        SELECT id FROM payment_methods
+                        WHERE LOWER(name) LIKE '%visa%'
+                    )
+                )
+            )
+            AND ${orders.paymentGateway} IS NULL
         )
         OR ${orders.paymentStatus} NOT IN ('pending_payment', 'payment_failed')
     )`;
