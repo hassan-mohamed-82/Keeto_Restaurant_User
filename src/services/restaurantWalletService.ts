@@ -598,11 +598,33 @@ export async function handleCancelledOrder(params: {
             });
         }
 
-        // Persist the fully-reversed wallet state and stop here — the
-        // settlement reversal above (plus the pending-fee refund if any) is
-        // the correct and COMPLETE adjustment for an order that was already
-        // delivered. Do NOT also apply the "cancelled before delivery"
-        // penalty logic below; that is a separate scenario.
+        // إذا كان الإلغاء من طرف المطعم: يتم تطبيق الغرامة / رسوم المنصة على المطعم
+        if (cancelReasonType === "restaurant") {
+            const appDues = roundMoney(appCommission + serviceFee);
+            if (appDues > 0) {
+                const balanceBeforePenalty = currentBalance;
+                currentBalance = roundMoney(currentBalance - appDues);
+                currentFees = roundMoney(currentFees + serviceFee);
+
+                await tx.insert(restaurantWalletTransactions).values({
+                    id: uuidv4(),
+                    restaurantId: order.restaurantId,
+                    orderId: order.id,
+                    type: "adjustment",
+                    amount: `-${appDues.toFixed(2)}`,
+                    balanceBefore: balanceBeforePenalty.toFixed(2),
+                    balanceAfter: currentBalance.toFixed(2),
+                    method: "penalty",
+                    reference: order.orderNumber,
+                    serviceFee: serviceFee.toFixed(2),
+                    commission: appCommission.toFixed(2),
+                    orderAmount: totalAmount.toFixed(2),
+                    note: `Cancellation penalty: order #${order.dailyOrderNumber || order.orderNumber}; platform=${mapOrderSourceToPlatformType(order.orderSource)}; cancelledBy=restaurant.`,
+                    createdAt: new Date()
+                });
+            }
+        }
+
         await tx.update(restaurantWallets)
             .set({
                 balance: currentBalance.toFixed(2),
