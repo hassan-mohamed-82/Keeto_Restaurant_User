@@ -16,6 +16,7 @@ import { BadRequest } from "../../Errors/BadRequest";
 import { v4 as uuidv4 } from "uuid";
 import redis from "../../config/redis";
 import { handleImageUpdate } from "../../utils/handleImages";
+import { activeFoodCondition } from "../../helpers/foodConditions";
 
 export const createSubcategory = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
@@ -456,7 +457,8 @@ export const updateBranchSubcategoryStatus = async (req: Request, res: Response)
         .where(
             and(
                 eq(food.subcategoryid, subcategoryId),
-                eq(food.restaurantid, restaurantId)
+                eq(food.restaurantid, restaurantId),
+                activeFoodCondition
             )
         );
 
@@ -723,7 +725,7 @@ export const updateBranchSubcategoryOutOfStock = async (req: Request, res: Respo
     }
 
     // بناء شروط البحث عن المنتجات
-    const foodConditions: any[] = [eq(food.restaurantid, restaurantId)];
+    const foodConditions: any[] = [eq(food.restaurantid, restaurantId), activeFoodCondition];
     if (subcategoryId) foodConditions.push(eq(food.subcategoryid, subcategoryId));
 
     const targetFoods = await db

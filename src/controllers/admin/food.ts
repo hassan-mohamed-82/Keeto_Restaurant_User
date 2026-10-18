@@ -422,11 +422,11 @@ export const updateFood = async (req: Request, res: Response) => {
         throw new BadRequest("Restaurant ID missing or unauthorized");
     }
 
-    // ✅ تأكد إن الأكلة تخص نفس الريستورانت
+    // ✅ تأكد إن الأكلة تخص نفس الريستورانت وغير محذوفة
     const existingFood = await db
         .select()
         .from(food)
-        .where(and(eq(food.id, id), eq(food.restaurantid, restaurantId)))
+        .where(and(eq(food.id, id), eq(food.restaurantid, restaurantId), activeFoodCondition))
         .limit(1);
 
     if (!existingFood[0]) {
@@ -753,7 +753,7 @@ export const deleteFood = async (req: Request, res: Response) => {
     const [existingFood] = await db
         .select({ id: food.id, status: food.status, deletedAt: food.deletedAt })
         .from(food)
-        .where(and(eq(food.id, id), eq(food.restaurantid, restaurantId)))
+        .where(and(eq(food.id, id), eq(food.restaurantid, restaurantId), activeFoodCondition))
         .limit(1);
 
     if (!existingFood) {
@@ -934,7 +934,7 @@ export const toggleVariationStatus = async (req: Request, res: Response) => {
 
     const existingVariation = await db.select({ id: foodVariations.id })
         .from(foodVariations)
-        .innerJoin(food, eq(foodVariations.foodId, food.id))
+        .innerJoin(food, and(eq(foodVariations.foodId, food.id), activeFoodCondition))
         .where(and(eq(foodVariations.id, id), eq(food.restaurantid, restaurantId)))
         .limit(1);
 
@@ -961,7 +961,7 @@ export const toggleVariationOptionStatus = async (req: Request, res: Response) =
     const existingOption = await db.select({ id: variationOptions.id })
         .from(variationOptions)
         .innerJoin(foodVariations, eq(variationOptions.variationId, foodVariations.id))
-        .innerJoin(food, eq(foodVariations.foodId, food.id))
+        .innerJoin(food, and(eq(foodVariations.foodId, food.id), activeFoodCondition))
         .where(and(eq(variationOptions.id, id), eq(food.restaurantid, restaurantId)))
         .limit(1);
 
@@ -1002,7 +1002,7 @@ export const changeFoodStatus = async (req: Request, res: Response) => {
             subcategoryid: food.subcategoryid,
         })
         .from(food)
-        .where(and(eq(food.id, id), eq(food.restaurantid, restaurantId)))
+        .where(and(eq(food.id, id), eq(food.restaurantid, restaurantId), activeFoodCondition))
         .limit(1);
 
     if (!existingFood) throw new NotFound("Food not found or does not belong to you");
@@ -1109,7 +1109,7 @@ export const toggleFoodOutOfStock = async (req: Request, res: Response) => {
     const [existingFood] = await db
         .select({ id: food.id, isOutOfStock: food.isOutOfStock, subcategoryid: food.subcategoryid })
         .from(food)
-        .where(and(eq(food.id, id), eq(food.restaurantid, restaurantId)))
+        .where(and(eq(food.id, id), eq(food.restaurantid, restaurantId), activeFoodCondition))
         .limit(1);
 
     if (!existingFood) throw new NotFound("Food not found or does not belong to you");
@@ -1217,7 +1217,7 @@ async function recomputeSubcategoryGlobalStatus(
     const allFoods = await db
         .select({ status: food.status, isOutOfStock: food.isOutOfStock })
         .from(food)
-        .where(and(eq(food.subcategoryid, subcategoryId), eq(food.restaurantid, restaurantId)));
+        .where(and(eq(food.subcategoryid, subcategoryId), eq(food.restaurantid, restaurantId), activeFoodCondition));
 
     if (allFoods.length === 0) return;
 
@@ -1248,7 +1248,7 @@ async function recomputeSubcategoryBranchStatus(
     const allFoods = await db
         .select({ id: food.id, status: food.status, isOutOfStock: food.isOutOfStock })
         .from(food)
-        .where(and(eq(food.subcategoryid, subcategoryId), eq(food.restaurantid, restaurantId)));
+        .where(and(eq(food.subcategoryid, subcategoryId), eq(food.restaurantid, restaurantId), activeFoodCondition));
 
     if (allFoods.length === 0) return;
 
@@ -1395,6 +1395,7 @@ export const getOutOfStockFoods = async (req: Request, res: Response) => {
             .where(
                 and(
                     eq(branchMenuItems.branchId, branchId),
+                    activeFoodCondition,
                     or(
                         // Limited stock exhausted
                         and(
@@ -1486,7 +1487,7 @@ export const getOutOfStockFoods = async (req: Request, res: Response) => {
         .from(food)
         .leftJoin(categories, eq(food.categoryid, categories.id))
         .leftJoin(subcategories, eq(food.subcategoryid, subcategories.id))
-        .where(eq(food.restaurantid, restaurantId));
+        .where(and(eq(food.restaurantid, restaurantId), activeFoodCondition));
 
     if (rawFoods.length === 0) {
         return SuccessResponse(res, {

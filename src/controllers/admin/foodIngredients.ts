@@ -10,6 +10,7 @@ import { eq, and, inArray } from "drizzle-orm";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors/NotFound";
 import { SuccessResponse } from "../../utils/response";
+import { activeFoodCondition } from "../../helpers/foodConditions";
 
 // =========================================================
 // 🍳 إدارة الوصفة (Recipe / Food Ingredients)
@@ -23,8 +24,8 @@ export const assignIngredientsToFood = async (req: Request, res: Response) => {
     if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
     if (!Array.isArray(ingredientsList)) throw new BadRequest("ingredientsList must be an array");
 
-    // 1. التأكد من وجود الوجبة وتبعيتا للمطعم
-    const existingFood = await db.select().from(food).where(and(eq(food.id, id), eq(food.restaurantid, restaurantId))).limit(1);
+    // 1. التأكد من وجود الوجبة وتبعيتا للمطعم وغير محذوفة
+    const existingFood = await db.select().from(food).where(and(eq(food.id, id), eq(food.restaurantid, restaurantId), activeFoodCondition)).limit(1);
     if (!existingFood[0]) throw new NotFound("Food not found or does not belong to you");
 
     if (ingredientsList.length > 0) {
@@ -68,7 +69,7 @@ export const getFoodRecipe = async (req: Request, res: Response) => {
 
     if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
 
-    const existingFood = await db.select().from(food).where(and(eq(food.id, id), eq(food.restaurantid, restaurantId))).limit(1);
+    const existingFood = await db.select().from(food).where(and(eq(food.id, id), eq(food.restaurantid, restaurantId), activeFoodCondition)).limit(1);
     if (!existingFood[0]) throw new NotFound("Food not found");
 
     const recipe = await db.select({
