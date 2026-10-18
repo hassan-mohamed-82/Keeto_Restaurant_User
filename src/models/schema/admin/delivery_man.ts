@@ -27,9 +27,6 @@ export const deliveryMen = mysqlTable("delivery_men", {
     // نوع التوصيل: لمطعم محدد أم لشركة شحن خارجية (outsource)
     deliveryType: mysqlEnum("delivery_type", ["restaurant", "outsource"]).default("restaurant").notNull(),
 
-    // طبيعة العمل: شيفت لمطعم محدد في أوقات معينة أم outsource عام لشركة الشحن
-    workType: mysqlEnum("work_type", ["restaurant_shift", "outsource"]).default("outsource").notNull(),
-
     // عدد الطلبات النشطة حالياً عند المندوب
     activeOrdersCount: int("active_orders_count").default(0).notNull(),
 
