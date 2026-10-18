@@ -137,7 +137,6 @@ export const updateMyProfile = async (req: Request, res: Response) => {
                 deliveryManId,
                 lat,
                 lng,
-                existing.shippingCompanyId || undefined
             );
         }
     }
