@@ -1,13 +1,29 @@
-import { mysqlTable, varchar, char, timestamp, decimal, mysqlEnum, text, int, json, boolean } from "drizzle-orm/mysql-core";
+import {
+    mysqlTable,
+    varchar,
+    char,
+    timestamp,
+    decimal,
+    mysqlEnum,
+    text,
+    int,
+    json,
+    boolean,
+    index
+} from "drizzle-orm/mysql-core";
 import { sql, relations } from "drizzle-orm";
 import { restaurants } from "./restaurants";
 import { food } from "./food";
 import { users } from "../user/Users";
-import { branches, coupons, discounts, offers, shippingCompanies } from "../../schema";
+import { branches, coupons, discounts, offers } from "../../schema";
 import { addresses } from "../user/address";
 import { selectReasons } from "./selectReasons";
 import { deliveryMen } from "./delivery_man";
+import { shippingCompanies } from "./shippingCompany";
 
+// ==========================================
+// 1. جدول الطلبات (Orders Table)
+// ==========================================
 export const orders = mysqlTable("orders", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
     orderNumber: varchar("order_number", { length: 20 }).notNull().unique(),
@@ -109,7 +125,8 @@ export const orders = mysqlTable("orders", {
         "company_inactive",
         "out_of_zone",
         "no_courier",
-        "max_attempts"
+        "max_attempts",
+        "no_coordinates"
     ]),
 
     dispatchAttempts: int("dispatch_attempts").default(0).notNull(),
@@ -177,7 +194,7 @@ export const orders = mysqlTable("orders", {
     paymentIssueNotifiedAt: timestamp("payment_issue_notified_at"),
     paymentIssueType: varchar("payment_issue_type", { length: 30 }),
 
-    // Shipping timestamps for performance/reports
+    // Phase 1: Shipping timestamps for performance/reports
     shippingAssignedAt: timestamp("shipping_assigned_at"),
     pickedUpAt: timestamp("picked_up_at"),
     deliveredAt: timestamp("delivered_at"),
@@ -187,13 +204,13 @@ export const orders = mysqlTable("orders", {
 });
 
 // ==========================================
-// 3. جدول أصناف الأوردر (Order Items)
+// 2. جدول أصناف الأوردر (Order Items Table)
 // ==========================================
 export const orderItems = mysqlTable("order_items", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
 
     orderId: char("order_id", { length: 36 })
-        .references(() => orders.id)
+        .references(() => orders.id, { onDelete: "cascade" })
         .notNull(),
 
     foodId: char("food_id", { length: 36 })
@@ -212,11 +229,9 @@ export const orderItems = mysqlTable("order_items", {
 
     variations: json("variations"),
 
-    // 🔥 addons المختارة لحظة الطلب
     addons: json("addons"),
 
     note: text("note"),
-
 });
 
 // ==========================================

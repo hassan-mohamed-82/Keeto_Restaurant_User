@@ -2,27 +2,30 @@ import { Server as HttpServer } from "http";
 import { Server, Socket } from "socket.io";
 import { verifyToken } from "../../utils/auth";
 import { db } from "../../models/connection";
-import { deliveryMen, orders } from "../../models/schema";
+import { deliveryMen, orders, shippingCompanies } from "../../models/schema";
 import { eq, and, inArray } from "drizzle-orm";
 import { updateCourierRedisLocation, removeCourierFromRedis, rejectOrderByCourier } from "../shipping/dispatchEngine";
+import { SOCKET_EVENTS } from "./socketEvents";
 
 let io: Server | null = null;
 
-// تتبع آخر وقت تم الحفظ فيه في MySQL لكل مندوب (لتخفيف الضغط والحفظ كل 30 ثانية فقط)
+// Track last DB write time per courier to save coordinates to MySQL every 30s
 const lastDbWriteTimeMap = new Map<string, number>();
 
-// مؤقتات فترة السماح (Grace Period) عند انقطاع الاتصال (30 ثانية)
+// Grace period timers upon disconnect (30s grace)
 const disconnectGraceTimers = new Map<string, NodeJS.Timeout>();
 
 export const initSocket = (httpServer: HttpServer): Server => {
     io = new Server(httpServer, {
         cors: {
             origin: "*",
-            methods: ["GET", "POST"]
-        }
+            methods: ["GET", "POST"],
+        },
     });
 
-    // الـ Middleware العام للمصادقة عبر التوكن
+    // -------------------------------------------------------------
+    // Phase 7.1: Mandatory Authentication Middleware
+    // -------------------------------------------------------------
     const authMiddleware = (socket: Socket, next: (err?: Error) => void) => {
         try {
             const token =
@@ -31,49 +34,63 @@ export const initSocket = (httpServer: HttpServer): Server => {
                 (socket.handshake.query?.token as string);
 
             if (!token) {
-                return next();
+                return next(new Error("Authentication error: No token provided"));
             }
 
             const decoded = verifyToken(token);
+            if (!decoded || !decoded.id || !decoded.role) {
+                return next(new Error("Authentication error: Invalid token"));
+            }
+
             socket.data.user = decoded;
             next();
-        } catch (error) {
-            console.error("Socket authentication error:", error);
-            next();
+        } catch (error: any) {
+            return next(new Error(`Authentication error: ${error.message}`));
         }
     };
 
     io.use(authMiddleware);
 
     // =========================================================================
-    // Handler للاتصال العام و /courier Namespace
+    // Courier Connection Handler (Used by both main IO and /courier namespace)
     // =========================================================================
     const handleCourierConnection = (socket: Socket) => {
         const user = socket.data.user;
-        const deliveryManId = user?.deliveryManId || user?.id;
 
-        // إلغاء مؤقت قطع الاتصال إن وجد (في حالة إعادة الاتصال السريع)
+        // Phase 7: Only couriers are handled here
+        if (user?.role !== "delivery_man") {
+            socket.disconnect(true);
+            return;
+        }
+
+        const deliveryManId = user.deliveryManId || user.id;
+
+        // Cancel grace timer if reconnected
         if (deliveryManId && disconnectGraceTimers.has(deliveryManId)) {
             clearTimeout(disconnectGraceTimers.get(deliveryManId)!);
             disconnectGraceTimers.delete(deliveryManId);
         }
 
-        // 1. حدث تسجيل المندوب أونلاين (courier:online)
-        socket.on("courier:online", async () => {
-            if (!deliveryManId) return;
+        // Join courier personal room
+        socket.join(`courier:${deliveryManId}`);
 
-            socket.join(`delivery_man:${deliveryManId}`);
-            socket.join(`courier:${deliveryManId}`);
-
+        // Event: courier:online
+        socket.on(SOCKET_EVENTS.COURIER_ONLINE, async () => {
             try {
                 await db
                     .update(deliveryMen)
                     .set({ isOnline: true })
                     .where(eq(deliveryMen.id, deliveryManId));
 
-                if (user?.shippingCompanyId) {
-                    io?.to(`shipping_company:${user.shippingCompanyId}`).emit("courier:online", {
-                        courierId: deliveryManId,
+                const [dm] = await db
+                    .select({ shippingCompanyId: deliveryMen.shippingCompanyId })
+                    .from(deliveryMen)
+                    .where(eq(deliveryMen.id, deliveryManId))
+                    .limit(1);
+
+                if (dm?.shippingCompanyId) {
+                    notifyShippingCompany(dm.shippingCompanyId, "courier:status_changed", {
+                        deliveryManId,
                         isOnline: true,
                     });
                 }
@@ -82,149 +99,127 @@ export const initSocket = (httpServer: HttpServer): Server => {
             }
         });
 
-        // 2. حدث إرسال الموقع الجغرافي كل 5 ثوانٍ (courier:location)
-        socket.on("courier:location", async (data: { lat: number | string; lng: number | string; speed?: number; heading?: number }) => {
-            if (!deliveryManId) return;
+        // Event: courier:location
+        socket.on(SOCKET_EVENTS.COURIER_LOCATION, async (payload: { lat: number; lng: number }) => {
+            try {
+                const { lat, lng } = payload;
+                if (lat === undefined || lng === undefined) return;
 
-            const latNum = typeof data.lat === "string" ? parseFloat(data.lat) : data.lat;
-            const lngNum = typeof data.lng === "string" ? parseFloat(data.lng) : data.lng;
-            if (isNaN(latNum) || isNaN(lngNum)) return;
+                // 1. Update Redis GEO & alive key (TTL 60s)
+                await updateCourierRedisLocation(deliveryManId, lat, lng);
 
-            const companyId = user?.shippingCompanyId;
+                const [dm] = await db
+                    .select({
+                        shippingCompanyId: deliveryMen.shippingCompanyId,
+                        activeOrdersCount: deliveryMen.activeOrdersCount,
+                        name: deliveryMen.name,
+                        phone: deliveryMen.phone,
+                    })
+                    .from(deliveryMen)
+                    .where(eq(deliveryMen.id, deliveryManId))
+                    .limit(1);
 
-            const [dmInfo] = await db
-                .select({
-                    name: deliveryMen.name,
-                    phone: deliveryMen.phone,
-                    shippingCompanyId: deliveryMen.shippingCompanyId,
-                })
-                .from(deliveryMen)
-                .where(eq(deliveryMen.id, deliveryManId))
-                .limit(1);
+                // 2. Fetch courier active orders (both assigned and picked_up)
+                const activeOrders = await db
+                    .select({
+                        id: orders.id,
+                        orderNumber: orders.orderNumber,
+                        shippingStatus: orders.shippingStatus,
+                    })
+                    .from(orders)
+                    .where(
+                        and(
+                            eq(orders.deliveryManId, deliveryManId),
+                            inArray(orders.shippingStatus, ["assigned", "picked_up"])
+                        )
+                    );
 
-            const effectiveCompanyId = companyId || dmInfo?.shippingCompanyId;
+                // Broadcast to company dashboard live map (includes courier details & active orders)
+                if (dm?.shippingCompanyId) {
+                    notifyShippingCompany(dm.shippingCompanyId, SOCKET_EVENTS.DELIVERY_LOCATION_CHANGED, {
+                        deliveryManId,
+                        deliveryManName: dm.name || null,
+                        deliveryManPhone: dm.phone || null,
+                        lat,
+                        lng,
+                        activeOrders: activeOrders.map((o) => ({
+                            orderId: o.id,
+                            orderNumber: o.orderNumber,
+                            shippingStatus: o.shippingStatus,
+                        })),
+                        updatedAt: new Date(),
+                    });
+                }
 
-            // A) حفظ اللوكيشن في Redis GEO + ضبط مفتاح Alive بـ TTL 60 ثانية
-            await updateCourierRedisLocation(deliveryManId, latNum, lngNum, effectiveCompanyId || undefined);
+                // 3. Broadcast to active assigned orders tracking rooms
+                for (const ord of activeOrders) {
+                    notifyOrderTracking(ord.id, SOCKET_EVENTS.ORDER_COURIER_LOCATION, {
+                        orderId: ord.id,
+                        deliveryManId,
+                        deliveryManName: dm?.name || null,
+                        deliveryManPhone: dm?.phone || null,
+                        lat,
+                        lng,
+                    });
+                }
 
-            // جلب الأوردرات النشطة الحالية للمندوب
-            const activeOrders = await db
-                .select({
-                    id: orders.id,
-                    orderNumber: orders.orderNumber,
-                    status: orders.status,
-                    shippingStatus: orders.shippingStatus,
-                })
-                .from(orders)
-                .where(
-                    and(
-                        eq(orders.deliveryManId, deliveryManId),
-                        inArray(orders.status, ["accepted", "preparing", "out_for_delivery"])
-                    )
-                );
-
-            const locationPayload = {
-                deliveryManId,
-                courierId: deliveryManId,
-                deliveryManName: dmInfo?.name || null,
-                deliveryManPhone: dmInfo?.phone || null,
-                lat: latNum,
-                lng: lngNum,
-                speed: data.speed,
-                heading: data.heading,
-                activeOrders: activeOrders.map((o) => ({
-                    orderId: o.id,
-                    orderNumber: o.orderNumber,
-                    status: o.status,
-                    shippingStatus: o.shippingStatus,
-                })),
-                updatedAt: new Date(),
-                timestamp: Date.now(),
-            };
-
-            // B) بث مباشر لداشبورد شركة الشحن (Live Map)
-            if (effectiveCompanyId) {
-                io?.to(`shipping_company:${effectiveCompanyId}`).emit("delivery:location_changed", locationPayload);
-                io?.to(`shipping_company:${effectiveCompanyId}`).emit("courier:location_update", locationPayload);
-            }
-
-            // بث لغرف تتبع الأوردرات الجاري توصيلها
-            for (const ord of activeOrders) {
-                const orderLocationPayload = {
-                    orderId: ord.id,
-                    deliveryManId,
-                    courierId: deliveryManId,
-                    deliveryManName: dmInfo?.name || null,
-                    deliveryManPhone: dmInfo?.phone || null,
-                    lat: latNum,
-                    lng: lngNum,
-                };
-                io?.to(`order:${ord.id}`).emit("order:delivery_location", orderLocationPayload);
-                io?.to(`order:${ord.id}`).emit("order:courier_location", orderLocationPayload);
-                io?.to(`order:track:${ord.id}`).emit("order:courier_location", orderLocationPayload);
-            }
-
-            // C) حفظ في MySQL كل 30 ثانية فقط (Throttled DB Backup)
-            const now = Date.now();
-            const lastWrite = lastDbWriteTimeMap.get(deliveryManId) || 0;
-            if (now - lastWrite >= 30000) {
-                lastDbWriteTimeMap.set(deliveryManId, now);
-                try {
+                // 4. Save to MySQL every 30s as backup
+                const lastWrite = lastDbWriteTimeMap.get(deliveryManId) || 0;
+                const now = Date.now();
+                if (now - lastWrite >= 30000) {
+                    lastDbWriteTimeMap.set(deliveryManId, now);
                     await db
                         .update(deliveryMen)
                         .set({
-                            currentLat: String(latNum),
-                            currentLng: String(lngNum),
+                            currentLat: String(lat),
+                            currentLng: String(lng),
                             lastLocationUpdate: new Date(),
                         })
                         .where(eq(deliveryMen.id, deliveryManId));
-                } catch (dbErr) {
-                    console.error("Error backing up courier location to MySQL:", dbErr);
                 }
+            } catch (err) {
+                console.error("Error updating courier location:", err);
             }
         });
 
-        // 3. حدث رفض المندوب للطلب مع السبب الإجباري وإعادة التوزيع
-        socket.on("courier:reject_order", async (data: { orderId: string; rejectReason: string }, ack?: (res: any) => void) => {
+        // Event: order:reject
+        socket.on(SOCKET_EVENTS.COURIER_REJECT, async (payload: { orderId: string; reason: string }) => {
             try {
-                if (!deliveryManId) throw new Error("Courier not identified");
-                if (!data.rejectReason || data.rejectReason.trim() === "") {
-                    throw new Error("Reject reason is mandatory");
+                const { orderId, reason } = payload;
+                if (!orderId || !reason) {
+                    socket.emit("error", { message: "orderId and reason are required" });
+                    return;
                 }
-
-                const retryResult = await rejectOrderByCourier(data.orderId, deliveryManId, data.rejectReason);
-
-                if (ack) {
-                    ack({ success: true, message: "Order rejected and re-dispatched", result: retryResult });
-                }
+                const result = await rejectOrderByCourier(orderId, deliveryManId, reason);
+                socket.emit("order:reject_ack", { success: true, orderId, result });
             } catch (err: any) {
-                if (ack) {
-                    ack({ success: false, message: err.message });
-                }
+                socket.emit("error", { message: err.message });
             }
         });
 
-        // 4. حدث تسجيل المندوب أوفلاين أو انقطاع الاتصال مع فترة سماح 30 ثانية
+        // Event: courier:offline / disconnect with 30s grace period
         const handleOffline = () => {
-            if (!deliveryManId) return;
-
-            // ضبط مؤقت سماح لمدة 30 ثانية قبل الحذف النهائي من Redis GEO وتحديث الـ DB
             const timer = setTimeout(async () => {
-                disconnectGraceTimers.delete(deliveryManId);
-                await removeCourierFromRedis(deliveryManId);
-
                 try {
+                    await removeCourierFromRedis(deliveryManId);
                     await db
                         .update(deliveryMen)
                         .set({ isOnline: false })
                         .where(eq(deliveryMen.id, deliveryManId));
 
-                    if (user?.shippingCompanyId) {
-                        io?.to(`shipping_company:${user.shippingCompanyId}`).emit("courier:online", {
-                            courierId: deliveryManId,
+                    const [dm] = await db
+                        .select({ shippingCompanyId: deliveryMen.shippingCompanyId })
+                        .from(deliveryMen)
+                        .where(eq(deliveryMen.id, deliveryManId))
+                        .limit(1);
+
+                    if (dm?.shippingCompanyId) {
+                        notifyShippingCompany(dm.shippingCompanyId, "courier:status_changed", {
+                            deliveryManId,
                             isOnline: false,
                         });
                     }
+                    disconnectGraceTimers.delete(deliveryManId);
                 } catch (err) {
                     console.error("Error setting courier offline after grace period:", err);
                 }
@@ -233,44 +228,85 @@ export const initSocket = (httpServer: HttpServer): Server => {
             disconnectGraceTimers.set(deliveryManId, timer);
         };
 
-        socket.on("courier:offline", handleOffline);
+        socket.on(SOCKET_EVENTS.COURIER_OFFLINE, handleOffline);
         socket.on("disconnect", handleOffline);
     };
 
-    // تطبيق الـ Handler على الـ default connection
-    io.on("connection", async (socket: Socket) => {
-        const user = socket.data.user;
-
-        // إذا كان المندوب متصلاً بالسوكيت الرئيسي
-        if (user && (user.role === "delivery_man" || user.type === "delivery_man")) {
-            handleCourierConnection(socket);
-        }
-
-        // إذا كان المتصل شركة شحن أو أدمن الشركة
-        if (user && (user.role === "shipping_company" || user.shippingCompanyId)) {
-            const companyId = user.shippingCompanyId || user.id;
-            socket.join(`shipping_company:${companyId}`);
-        }
-
-        // متابعة أوردر معين
-        socket.on("order:track", (data: { orderId: string }) => {
-            if (data?.orderId) {
-                socket.join(`order:${data.orderId}`);
-            }
-        });
-
-        socket.on("order:untrack", (data: { orderId: string }) => {
-            if (data?.orderId) {
-                socket.leave(`order:${data.orderId}`);
-            }
-        });
-    });
-
-    // دعم الـ Namespace المخصص /courier
+    // =========================================================================
+    // /courier Dedicated Namespace
+    // =========================================================================
     const courierNamespace = io.of("/courier");
     courierNamespace.use(authMiddleware);
-    courierNamespace.on("connection", (socket: Socket) => {
-        handleCourierConnection(socket);
+    courierNamespace.on("connection", handleCourierConnection);
+
+    // =========================================================================
+    // Default '/' Namespace Handler
+    // =========================================================================
+    io.on("connection", async (socket: Socket) => {
+        const user = socket.data.user;
+        if (!user) {
+            socket.disconnect(true);
+            return;
+        }
+
+        // If courier connects to default namespace
+        if (user.role === "delivery_man") {
+            handleCourierConnection(socket);
+            return;
+        }
+
+        // Super-admin room
+        if (user.role === "admin" && user.type === "super_admin") {
+            socket.join("superadmin:room");
+        }
+
+        // Restaurant room
+        if (user.restaurantId) {
+            socket.join(`restaurant:${user.restaurantId}`);
+        }
+
+        // Shipping company room: ONLY shipping_company users join (Phase 7.2)
+        if (user.role === "shipping_company" && user.shippingCompanyId) {
+            socket.join(`shipping_company:${user.shippingCompanyId}`);
+        }
+
+        // Phase 7.3: order:track authorized joining
+        socket.on(SOCKET_EVENTS.ORDER_TRACK, async (data: { orderId: string }) => {
+            try {
+                const { orderId } = data;
+                if (!orderId) return;
+
+                // Verify access to track order
+                const [ord] = await db
+                    .select({
+                        id: orders.id,
+                        userId: orders.userId,
+                        restaurantId: orders.restaurantId,
+                        shippingCompanyId: orders.shippingCompanyId,
+                        deliveryManId: orders.deliveryManId,
+                    })
+                    .from(orders)
+                    .where(eq(orders.id, orderId))
+                    .limit(1);
+
+                if (!ord) return;
+
+                const isCustomer = user.role === "user" && ord.userId === user.id;
+                const isSuperAdmin = user.role === "admin" && user.type === "super_admin";
+                const isRest = (user.role === "restaurant_admin" || user.restaurantId) && ord.restaurantId === user.restaurantId;
+                const isCompany = user.role === "shipping_company" && ord.shippingCompanyId === user.shippingCompanyId;
+                const isCourier = user.role === "delivery_man" && ord.deliveryManId === (user.deliveryManId || user.id);
+
+                if (isCustomer || isSuperAdmin || isRest || isCompany || isCourier) {
+                    socket.join(`order:track:${orderId}`);
+                    socket.emit("order:track:joined", { orderId, success: true });
+                } else {
+                    socket.emit("error", { message: "Unauthorized to track this order" });
+                }
+            } catch (err) {
+                console.error("Error joining order track room:", err);
+            }
+        });
     });
 
     return io;
@@ -278,15 +314,18 @@ export const initSocket = (httpServer: HttpServer): Server => {
 
 export const getIO = (): Server => {
     if (!io) {
-        throw new Error("Socket.IO has not been initialized!");
+        throw new Error("Socket.io has not been initialized. Call initSocket first.");
     }
     return io;
 };
 
+// =========================================================================
+// Helpers for broadcasting
+// =========================================================================
 export const notifyDeliveryMan = (deliveryManId: string, event: string, data: any) => {
     if (io) {
-        io.to(`delivery_man:${deliveryManId}`).emit(event, data);
-        io.of("/courier").to(`delivery_man:${deliveryManId}`).emit(event, data);
+        io.to(`courier:${deliveryManId}`).emit(event, data);
+        io.of("/courier").to(`courier:${deliveryManId}`).emit(event, data);
     }
 };
 
@@ -296,8 +335,20 @@ export const notifyShippingCompany = (companyId: string, event: string, data: an
     }
 };
 
+export const notifyRestaurant = (restaurantId: string, event: string, data: any) => {
+    if (io) {
+        io.to(`restaurant:${restaurantId}`).emit(event, data);
+    }
+};
+
+export const notifyAdmins = (event: string, data: any) => {
+    if (io) {
+        io.to("superadmin:room").emit(event, data);
+    }
+};
+
 export const notifyOrderTracking = (orderId: string, event: string, data: any) => {
     if (io) {
-        io.to(`order:${orderId}`).emit(event, data);
+        io.to(`order:track:${orderId}`).emit(event, data);
     }
 };

@@ -80,7 +80,6 @@ export const shippingZones = mysqlTable("shipping_zones", {
 
 // =========================================================================
 // 4. شفتات المندوب لخدمة مطعم معين (Delivery Man Shifts)
-// للمناديب من نوع: workType = 'restaurant_shift'
 // =========================================================================
 export const deliveryManShifts = mysqlTable("delivery_man_shifts", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),

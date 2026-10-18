@@ -1,4 +1,4 @@
-import { mysqlTable, varchar, char, timestamp, boolean, mysqlEnum, text, int } from "drizzle-orm/mysql-core";
+import { mysqlTable, varchar, char, timestamp, boolean, mysqlEnum, text, int, index } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
 import { restaurants } from "./restaurants";
 import { branches } from "../../schema";
@@ -27,6 +27,9 @@ export const deliveryMen = mysqlTable("delivery_men", {
     // نوع التوصيل: لمطعم محدد أم لشركة شحن خارجية (outsource)
     deliveryType: mysqlEnum("delivery_type", ["restaurant", "outsource"]).default("restaurant").notNull(),
 
+    // D5: هل يخدم كل مناطق الشركة أم مناطق محددة فقط في delivery_man_zones
+    allZones: boolean("all_zones").default(true).notNull(),
+
     // عدد الطلبات النشطة حالياً عند المندوب
     activeOrdersCount: int("active_orders_count").default(0).notNull(),
 
@@ -49,4 +52,6 @@ export const deliveryMen = mysqlTable("delivery_men", {
 
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
-});
+}, (table) => [
+    index("idx_delivery_men_dispatch").on(table.shippingCompanyId, table.isOnline, table.isActive, table.isDeleted),
+]);
