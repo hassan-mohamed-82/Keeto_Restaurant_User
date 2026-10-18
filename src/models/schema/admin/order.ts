@@ -177,6 +177,11 @@ export const orders = mysqlTable("orders", {
     paymentIssueNotifiedAt: timestamp("payment_issue_notified_at"),
     paymentIssueType: varchar("payment_issue_type", { length: 30 }),
 
+    // Shipping timestamps for performance/reports
+    shippingAssignedAt: timestamp("shipping_assigned_at"),
+    pickedUpAt: timestamp("picked_up_at"),
+    deliveredAt: timestamp("delivered_at"),
+
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
     createdAt: timestamp("created_at").defaultNow(),
 });

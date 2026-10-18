@@ -7,6 +7,7 @@ import { BadRequest } from "../../Errors/BadRequest";
 import { UnauthorizedError } from "../../Errors";
 import { NotFound } from "../../Errors/NotFound";
 import bcrypt from "bcrypt";
+import { updateCourierRedisLocation, removeCourierFromRedis } from "../../services/shipping/dispatchEngine";
 
 // ==========================================
 // GET /delivery-man/profile
@@ -22,6 +23,14 @@ export const getMyProfile = async (req: Request, res: Response) => {
             phone: deliveryMen.phone,
             email: deliveryMen.email,
             image: deliveryMen.image,
+            deliveryType: deliveryMen.deliveryType,
+            shiftStatus: deliveryMen.shiftStatus,
+            isOnline: deliveryMen.isOnline,
+            isAvailable: deliveryMen.isAvailable,
+            activeOrdersCount: deliveryMen.activeOrdersCount,
+            currentLat: deliveryMen.currentLat,
+            currentLng: deliveryMen.currentLng,
+            shippingCompanyId: deliveryMen.shippingCompanyId,
             isActive: deliveryMen.isActive,
             restaurantId: deliveryMen.restaurantId,
             restaurant: {
@@ -62,7 +71,18 @@ export const updateMyProfile = async (req: Request, res: Response) => {
     if (!req.user) throw new UnauthorizedError("Unauthenticated");
     const deliveryManId = req.user.id;
 
-    const { name, phone, email, image, currentPassword, newPassword } = req.body;
+    const {
+        name,
+        phone,
+        email,
+        image,
+        currentPassword,
+        newPassword,
+        shiftStatus,
+        isOnline,
+        currentLat,
+        currentLng,
+    } = req.body;
 
     const [existing] = await db
         .select()
@@ -78,6 +98,13 @@ export const updateMyProfile = async (req: Request, res: Response) => {
     if (phone) updateData.phone = phone;
     if (email !== undefined) updateData.email = email || null;
     if (image !== undefined) updateData.image = image || null;
+    if (shiftStatus !== undefined) updateData.shiftStatus = shiftStatus;
+    if (isOnline !== undefined) updateData.isOnline = isOnline;
+    if (currentLat !== undefined) updateData.currentLat = currentLat;
+    if (currentLng !== undefined) updateData.currentLng = currentLng;
+    if (currentLat !== undefined || currentLng !== undefined) {
+        updateData.lastLocationUpdate = new Date();
+    }
 
     // Handle password change
     if (newPassword) {
@@ -99,6 +126,22 @@ export const updateMyProfile = async (req: Request, res: Response) => {
 
     await db.update(deliveryMen).set(updateData).where(eq(deliveryMen.id, deliveryManId));
 
+    // Handle Redis GEO sync
+    if (isOnline === false) {
+        await removeCourierFromRedis(deliveryManId);
+    } else if (updateData.currentLat && updateData.currentLng) {
+        const lat = parseFloat(updateData.currentLat);
+        const lng = parseFloat(updateData.currentLng);
+        if (!isNaN(lat) && !isNaN(lng)) {
+            await updateCourierRedisLocation(
+                deliveryManId,
+                lat,
+                lng,
+                existing.shippingCompanyId || undefined
+            );
+        }
+    }
+
     // Return updated profile (without password)
     const [updated] = await db
         .select({
@@ -107,6 +150,14 @@ export const updateMyProfile = async (req: Request, res: Response) => {
             phone: deliveryMen.phone,
             email: deliveryMen.email,
             image: deliveryMen.image,
+            deliveryType: deliveryMen.deliveryType,
+            shiftStatus: deliveryMen.shiftStatus,
+            isOnline: deliveryMen.isOnline,
+            isAvailable: deliveryMen.isAvailable,
+            activeOrdersCount: deliveryMen.activeOrdersCount,
+            currentLat: deliveryMen.currentLat,
+            currentLng: deliveryMen.currentLng,
+            shippingCompanyId: deliveryMen.shippingCompanyId,
             isActive: deliveryMen.isActive,
             restaurantId: deliveryMen.restaurantId,
             branchId: deliveryMen.branchId,

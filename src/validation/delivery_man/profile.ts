@@ -7,6 +7,10 @@ export const deliveryManUpdateProfileSchema = z.object({
     image: z.string().url("Invalid image URL").optional().nullable(),
     currentPassword: z.string().optional(),
     newPassword: z.string().min(6, "New password must be at least 6 characters").optional(),
+    shiftStatus: z.enum(["active", "inactive"]).optional(),
+    isOnline: z.boolean().optional(),
+    currentLat: z.string().optional().nullable(),
+    currentLng: z.string().optional().nullable(),
 }).refine((data) => {
     if (data.newPassword && !data.currentPassword) {
         return false;

@@ -19,6 +19,12 @@ export const deliveryManUpdateOrderStatusSchema = z.object({
     }),
 });
 
+export const rejectOrderSchema = z.object({
+    reason: z.string().min(1, "Reject reason is mandatory").max(500),
+});
+
 export type DeliveryManAssignedOrdersQueryInput = z.infer<typeof deliveryManAssignedOrdersQuerySchema>;
 export type DeliveryManOrderHistoryQueryInput = z.infer<typeof deliveryManOrderHistoryQuerySchema>;
 export type DeliveryManUpdateOrderStatusInput = z.infer<typeof deliveryManUpdateOrderStatusSchema>;
+export type RejectOrderInput = z.infer<typeof rejectOrderSchema>;
+

@@ -25,6 +25,7 @@ import {
     restaurantBusinessPlans,
     discounts,
     coupons,
+    shippingCompanies,
 } from "../../models/schema";
 import { eq, and, or, desc, inArray, sql, gte, lte, isNull } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
@@ -49,6 +50,7 @@ import {
     resolvePaymentMethodDetails,
 } from "../../helpers/order.helper";
 import { handleCancelledOrder, settleDeliveredOrder } from "../../services/restaurantWalletService";
+import { dispatchOrder, releaseCourierForOrder } from "../../services/shipping/dispatchEngine";
 
 export {
     resolveZoneFromCoords,
@@ -1361,6 +1363,75 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
                 status: status,
                 type: status === "out_for_delivery" ? "ORDER_OUT_FOR_DELIVERY" : "ORDER_ASSIGNED",
             },
+        });
+    }
+
+    // ==========================================
+    // 6. التوزيع التلقائي لشركة الشحن أو تحرير المندوب (Shipping & Dispatch Integration)
+    // ==========================================
+    // D9: Fire-and-forget dispatchOrder when order moves to 'accepted' and orderType is delivery
+    if (status === "accepted" && orderType === "delivery" && !finalDeliveryManId && !existingOrder.deliveryManId) {
+        // فحص مسبق: التحقق أولاً هل الأوردر نفسه يحمل shippingCompanyId أو هل المطعم مسجل لديه شركة شحن في الإعدادات
+        let targetShippingCompanyId = existingOrder.shippingCompanyId;
+
+        if (!targetShippingCompanyId && existingOrder.restaurantId) {
+            const [settings] = await db
+                .select({ shippingCompanyId: restaurantSettings.shippingCompanyId })
+                .from(restaurantSettings)
+                .where(eq(restaurantSettings.restaurantId, existingOrder.restaurantId))
+                .limit(1);
+
+            targetShippingCompanyId = settings?.shippingCompanyId || null;
+        }
+
+        // الدخول فقط والبدء بالتوزيع إذا كان للأوردر أو للمطعم شركة شحن
+        if (targetShippingCompanyId) {
+            const [company] = await db
+                .select({
+                    id: shippingCompanies.id,
+                    name: shippingCompanies.name,
+                    status: shippingCompanies.status,
+                })
+                .from(shippingCompanies)
+                .where(eq(shippingCompanies.id, targetShippingCompanyId))
+                .limit(1);
+
+            if (company && company.status === "active") {
+                // ربط شركة الشحن بالأوردر إذا لم تكن مسجلة مسبقاً
+                if (!existingOrder.shippingCompanyId) {
+                    await db
+                        .update(orders)
+                        .set({
+                            shippingCompanyId: targetShippingCompanyId,
+                            shippingStatus: "pending_dispatch",
+                            updatedAt: new Date(),
+                        })
+                        .where(eq(orders.id, orderId));
+                }
+
+                // D9: Fire-and-forget dispatchOrder
+                dispatchOrder(orderId).catch((err) => {
+                    console.error(`[dispatchOrder:fire-and-forget] failed for order ${orderId} (Company: ${company.name}):`, err);
+                });
+            } else {
+                console.warn(`[dispatchOrder] Shipping company ${targetShippingCompanyId} for restaurant ${existingOrder.restaurantId} is inactive or not found`);
+                await db
+                    .update(orders)
+                    .set({
+                        shippingCompanyId: targetShippingCompanyId,
+                        shippingStatus: "manual_required",
+                        shippingFailReason: "company_inactive",
+                        updatedAt: new Date(),
+                    })
+                    .where(eq(orders.id, orderId));
+            }
+        }
+    }
+
+    // Release delivery man activeOrdersCount when order completes or cancels
+    if (["delivered", "cancelled", "refund"].includes(status) && targetDeliveryManId) {
+        releaseCourierForOrder(orderId, targetDeliveryManId).catch((err) => {
+            console.error(`[releaseCourierForOrder] failed for order ${orderId}:`, err);
         });
     }
 

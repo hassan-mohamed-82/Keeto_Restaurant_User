@@ -64,6 +64,19 @@ export async function removeCourierFromRedis(courierId: string) {
     }
 }
 
+export async function releaseCourierForOrder(orderId: string, courierId: string): Promise<void> {
+    try {
+        await db
+            .update(deliveryMen)
+            .set({
+                activeOrdersCount: sql`GREATEST(0, ${deliveryMen.activeOrdersCount} - 1)`,
+            })
+            .where(eq(deliveryMen.id, courierId));
+    } catch (err) {
+        console.error("Error releasing courier orders count:", err);
+    }
+}
+
 /**
  * 2. المحرك الرئيسي لتوزيع الطلبات (dispatchOrder)
  */

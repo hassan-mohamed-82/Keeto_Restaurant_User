@@ -92,24 +92,29 @@ export const initSocket = (httpServer: HttpServer): Server => {
 
             const companyId = user?.shippingCompanyId;
 
+            const [dmInfo] = await db
+                .select({
+                    name: deliveryMen.name,
+                    phone: deliveryMen.phone,
+                    shippingCompanyId: deliveryMen.shippingCompanyId,
+                })
+                .from(deliveryMen)
+                .where(eq(deliveryMen.id, deliveryManId))
+                .limit(1);
+
+            const effectiveCompanyId = companyId || dmInfo?.shippingCompanyId;
+
             // A) حفظ اللوكيشن في Redis GEO + ضبط مفتاح Alive بـ TTL 60 ثانية
-            await updateCourierRedisLocation(deliveryManId, latNum, lngNum, companyId);
+            await updateCourierRedisLocation(deliveryManId, latNum, lngNum, effectiveCompanyId || undefined);
 
-            // B) بث مباشر لداشبورد شركة الشحن (Live Map)
-            if (companyId) {
-                io?.to(`shipping_company:${companyId}`).emit("courier:location_update", {
-                    courierId: deliveryManId,
-                    lat: latNum,
-                    lng: lngNum,
-                    speed: data.speed,
-                    heading: data.heading,
-                    timestamp: Date.now(),
-                });
-            }
-
-            // بث لغرف تتبع الأوردرات الجاري توصيلها
+            // جلب الأوردرات النشطة الحالية للمندوب
             const activeOrders = await db
-                .select({ id: orders.id })
+                .select({
+                    id: orders.id,
+                    orderNumber: orders.orderNumber,
+                    status: orders.status,
+                    shippingStatus: orders.shippingStatus,
+                })
                 .from(orders)
                 .where(
                     and(
@@ -118,13 +123,45 @@ export const initSocket = (httpServer: HttpServer): Server => {
                     )
                 );
 
+            const locationPayload = {
+                deliveryManId,
+                courierId: deliveryManId,
+                deliveryManName: dmInfo?.name || null,
+                deliveryManPhone: dmInfo?.phone || null,
+                lat: latNum,
+                lng: lngNum,
+                speed: data.speed,
+                heading: data.heading,
+                activeOrders: activeOrders.map((o) => ({
+                    orderId: o.id,
+                    orderNumber: o.orderNumber,
+                    status: o.status,
+                    shippingStatus: o.shippingStatus,
+                })),
+                updatedAt: new Date(),
+                timestamp: Date.now(),
+            };
+
+            // B) بث مباشر لداشبورد شركة الشحن (Live Map)
+            if (effectiveCompanyId) {
+                io?.to(`shipping_company:${effectiveCompanyId}`).emit("delivery:location_changed", locationPayload);
+                io?.to(`shipping_company:${effectiveCompanyId}`).emit("courier:location_update", locationPayload);
+            }
+
+            // بث لغرف تتبع الأوردرات الجاري توصيلها
             for (const ord of activeOrders) {
-                io?.to(`order:${ord.id}`).emit("order:delivery_location", {
+                const orderLocationPayload = {
                     orderId: ord.id,
+                    deliveryManId,
                     courierId: deliveryManId,
+                    deliveryManName: dmInfo?.name || null,
+                    deliveryManPhone: dmInfo?.phone || null,
                     lat: latNum,
                     lng: lngNum,
-                });
+                };
+                io?.to(`order:${ord.id}`).emit("order:delivery_location", orderLocationPayload);
+                io?.to(`order:${ord.id}`).emit("order:courier_location", orderLocationPayload);
+                io?.to(`order:track:${ord.id}`).emit("order:courier_location", orderLocationPayload);
             }
 
             // C) حفظ في MySQL كل 30 ثانية فقط (Throttled DB Backup)

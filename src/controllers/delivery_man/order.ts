@@ -7,8 +7,9 @@ import {
     users,
     paymentMethods,
     food,
+    dispatchAssignments,
 } from "../../models/schema";
-import { eq, and, inArray, desc, gte, lte } from "drizzle-orm";
+import { eq, and, inArray, desc, gte, lte, sql } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { UnauthorizedError } from "../../Errors";
@@ -16,6 +17,9 @@ import { NotFound } from "../../Errors/NotFound";
 import { excludeUnpaidVisaOrders, parseShippingAddress } from "../../helpers/order.helper";
 import { sendPushNotification } from "../../utils/notifications";
 import { settleDeliveredOrder } from "../../services/restaurantWalletService";
+import { rejectOrderByCourier } from "../../services/shipping/dispatchEngine";
+import { notifyShippingCompany, notifyOrderTracking } from "../../services/socket/socketService";
+import { SOCKET_EVENTS } from "../../services/socket/socketEvents";
 
 // ==========================================
 // GET /delivery-man/orders/assigned
@@ -27,7 +31,6 @@ export const getAssignedOrders = async (req: Request, res: Response) => {
 
     const deliveryManId = req.user.id;
     const restaurantId = req.user.restaurantId;
-    if (!restaurantId) throw new BadRequest("Restaurant ID missing");
 
     const { orderId } = req.query as { orderId?: string };
 
@@ -41,6 +44,7 @@ export const getAssignedOrders = async (req: Request, res: Response) => {
                 orderNumber: orders.orderNumber,
                 dailyOrderNumber: orders.dailyOrderNumber,
                 status: orders.status,
+                shippingStatus: orders.shippingStatus,
                 orderType: orders.orderType,
                 orderSource: orders.orderSource,
                 subtotal: orders.subtotal,
@@ -58,6 +62,10 @@ export const getAssignedOrders = async (req: Request, res: Response) => {
                 isCashCollected: orders.isCashCollected,
                 cashCollectedAt: orders.cashCollectedAt,
                 deliveryManId: orders.deliveryManId,
+                shippingCompanyId: orders.shippingCompanyId,
+                shippingAssignedAt: orders.shippingAssignedAt,
+                pickedUpAt: orders.pickedUpAt,
+                deliveredAt: orders.deliveredAt,
                 durationOrderPreparing: orders.durationOrderPreparing,
                 cancelReason: orders.cancelReason,
                 cancelReasonType: orders.cancelReasonType,
@@ -75,7 +83,7 @@ export const getAssignedOrders = async (req: Request, res: Response) => {
                 and(
                     eq(orders.id, orderId),
                     eq(orders.deliveryManId, deliveryManId),
-                    eq(orders.restaurantId, restaurantId),
+                    restaurantId ? eq(orders.restaurantId, restaurantId) : undefined,
                     excludeUnpaidVisaOrders()
                 )
             )
@@ -121,13 +129,18 @@ export const getAssignedOrders = async (req: Request, res: Response) => {
             orderNumber: orders.orderNumber,
             dailyOrderNumber: orders.dailyOrderNumber,
             status: orders.status,
+            shippingStatus: orders.shippingStatus,
             orderType: orders.orderType,
             totalAmount: orders.totalAmount,
+            deliveryFee: orders.deliveryFee,
             paymentMethod: orders.paymentMethod,
             paymentMethodName: paymentMethods.name,
             paymentMethodNameAr: paymentMethods.nameAr,
             note: orders.note,
             shippingAddress: orders.shippingAddress,
+            shippingCompanyId: orders.shippingCompanyId,
+            shippingAssignedAt: orders.shippingAssignedAt,
+            pickedUpAt: orders.pickedUpAt,
             durationOrderPreparing: orders.durationOrderPreparing,
             // Customer info
             customerId: users.id,
@@ -141,7 +154,7 @@ export const getAssignedOrders = async (req: Request, res: Response) => {
         .where(
             and(
                 eq(orders.deliveryManId, deliveryManId),
-                eq(orders.restaurantId, restaurantId),
+                restaurantId ? eq(orders.restaurantId, restaurantId) : undefined,
                 eq(orders.orderType, "delivery"),
                 inArray(orders.status, [...activeStatuses]),
                 excludeUnpaidVisaOrders()
@@ -168,7 +181,6 @@ export const getOrderHistory = async (req: Request, res: Response) => {
 
     const deliveryManId = req.user.id;
     const restaurantId = req.user.restaurantId;
-    if (!restaurantId) throw new BadRequest("Restaurant ID missing");
 
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
@@ -186,11 +198,11 @@ export const getOrderHistory = async (req: Request, res: Response) => {
 
     const conditions: any[] = [
         eq(orders.deliveryManId, deliveryManId),
-        eq(orders.restaurantId, restaurantId),
+        restaurantId ? eq(orders.restaurantId, restaurantId) : undefined,
         eq(orders.orderType, "delivery"),
         inArray(orders.status, targetStatuses),
         excludeUnpaidVisaOrders(),
-    ];
+    ].filter(Boolean);
 
     if (startDate) {
         conditions.push(gte(orders.createdAt, new Date(startDate)));
@@ -207,6 +219,7 @@ export const getOrderHistory = async (req: Request, res: Response) => {
             orderNumber: orders.orderNumber,
             dailyOrderNumber: orders.dailyOrderNumber,
             status: orders.status,
+            shippingStatus: orders.shippingStatus,
             orderType: orders.orderType,
             totalAmount: orders.totalAmount,
             deliveryFee: orders.deliveryFee,
@@ -217,6 +230,8 @@ export const getOrderHistory = async (req: Request, res: Response) => {
             cashCollectedAt: orders.cashCollectedAt,
             cancelReason: orders.cancelReason,
             shippingAddress: orders.shippingAddress,
+            pickedUpAt: orders.pickedUpAt,
+            deliveredAt: orders.deliveredAt,
             // Customer info
             customerId: users.id,
             customerName: users.name,
@@ -245,25 +260,100 @@ export const getOrderHistory = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// PATCH /delivery-man/orders/:orderId/status
-// Delivery man can ONLY set status to "delivered"
+// POST /delivery-man/orders/:orderId/picked-up
+// Delivery man marks the order as picked up from the restaurant/branch
 // ==========================================
-export const updateOrderStatusToDelivered = async (req: Request, res: Response) => {
+export const markOrderPickedUp = async (req: Request, res: Response) => {
     if (!req.user) throw new UnauthorizedError("Unauthenticated");
 
     const deliveryManId = req.user.id;
-    const restaurantId = req.user.restaurantId;
-    if (!restaurantId) throw new BadRequest("Restaurant ID missing");
-
     const { orderId } = req.params;
-    const { status } = req.body;
 
-    // Delivery man can only mark as delivered
-    if (status !== "delivered") {
-        throw new BadRequest("Delivery man can only update order status to 'delivered'");
+    const [order] = await db
+        .select()
+        .from(orders)
+        .where(
+            and(
+                eq(orders.id, orderId),
+                eq(orders.deliveryManId, deliveryManId),
+                req.user.restaurantId ? eq(orders.restaurantId, req.user.restaurantId) : undefined
+            )
+        )
+        .limit(1);
+
+    if (!order) {
+        throw new NotFound("Order not found or not assigned to you");
     }
 
-    // Fetch order and verify ownership
+    if (order.status === "out_for_delivery" || order.shippingStatus === "picked_up") {
+        throw new BadRequest("Order has already been picked up");
+    }
+
+    if (["delivered", "cancelled", "refund", "failed"].includes(order.status as string)) {
+        throw new BadRequest(`Order is already ${order.status} and cannot be picked up`);
+    }
+
+    const now = new Date();
+
+    await db
+        .update(orders)
+        .set({
+            shippingStatus: "picked_up",
+            pickedUpAt: now,
+            status: "out_for_delivery",
+            updatedAt: now,
+        })
+        .where(eq(orders.id, orderId));
+
+    if (order.shippingCompanyId) {
+        notifyShippingCompany(order.shippingCompanyId, SOCKET_EVENTS.ORDER_STATUS_CHANGED, {
+            orderId,
+            shippingStatus: "picked_up",
+            updatedAt: now,
+        });
+    }
+
+    notifyOrderTracking(orderId, SOCKET_EVENTS.ORDER_PICKED_UP, {
+        orderId,
+        courierId: deliveryManId,
+        pickedUpAt: now,
+    });
+
+    if (order.userId) {
+        await sendPushNotification({
+            recipientType: "user",
+            recipientId: order.userId,
+            branchId: order.branchId || null,
+            title: "Order Picked Up",
+            body: `Your order #${order.dailyOrderNumber || order.orderNumber} is picked up and on the way!`,
+            data: {
+                restaurantId: order.restaurantId,
+                branchId: order.branchId || null,
+                orderId: order.id,
+                orderNumber: order.orderNumber,
+                dailyOrderNumber: order.dailyOrderNumber,
+                status: "out_for_delivery",
+                shippingStatus: "picked_up",
+                type: "ORDER_STATUS_UPDATE",
+            },
+        });
+    }
+
+    return SuccessResponse(res, {
+        message: "Order marked as picked up successfully",
+    });
+};
+
+// ==========================================
+// POST /delivery-man/orders/:orderId/delivered
+// Delivery man marks the order as delivered
+// ==========================================
+export const markOrderDelivered = async (req: Request, res: Response) => {
+    if (!req.user) throw new UnauthorizedError("Unauthenticated");
+
+    const deliveryManId = req.user.id;
+    const { orderId } = req.params;
+
     const [existingOrder] = await db
         .select()
         .from(orders)
@@ -271,7 +361,7 @@ export const updateOrderStatusToDelivered = async (req: Request, res: Response) 
             and(
                 eq(orders.id, orderId),
                 eq(orders.deliveryManId, deliveryManId),
-                eq(orders.restaurantId, restaurantId)
+                req.user.restaurantId ? eq(orders.restaurantId, req.user.restaurantId) : undefined
             )
         )
         .limit(1);
@@ -280,8 +370,7 @@ export const updateOrderStatusToDelivered = async (req: Request, res: Response) 
 
     const currentStatus = existingOrder.status as string;
 
-    // Only allow transitioning from out_for_delivery
-    if (currentStatus === "delivered") {
+    if (currentStatus === "delivered" || existingOrder.shippingStatus === "delivered") {
         throw new BadRequest("Order is already delivered");
     }
 
@@ -289,40 +378,136 @@ export const updateOrderStatusToDelivered = async (req: Request, res: Response) 
         throw new BadRequest(`Order is already ${currentStatus} and cannot be changed`);
     }
 
-    if (currentStatus !== "out_for_delivery") {
-        throw new BadRequest(`Cannot mark order as delivered from status '${currentStatus}'. Order must be 'out_for_delivery' first.`);
-    }
+    const now = new Date();
 
-    // Update order status and trigger settlement
     await db.transaction(async (tx) => {
+        // 1. Update order status and shipping status
         await tx
             .update(orders)
-            .set({ status: "delivered", updatedAt: new Date() })
+            .set({
+                status: "delivered",
+                shippingStatus: "delivered",
+                deliveredAt: now,
+                updatedAt: now,
+            })
             .where(eq(orders.id, orderId));
 
-        // Settle financial accounts (restaurant wallet, etc.)
+        // 2. Decrement courier activeOrdersCount
+        await tx
+            .update(deliveryMen)
+            .set({
+                activeOrdersCount: sql`GREATEST(0, ${deliveryMen.activeOrdersCount} - 1)`,
+            })
+            .where(eq(deliveryMen.id, deliveryManId));
+
+        // 3. Mark dispatch assignment completed
+        await tx
+            .update(dispatchAssignments)
+            .set({
+                status: "completed",
+                respondedAt: now,
+            })
+            .where(
+                and(
+                    eq(dispatchAssignments.orderId, orderId),
+                    eq(dispatchAssignments.deliveryManId, deliveryManId),
+                    eq(dispatchAssignments.status, "active")
+                )
+            );
+
+        // 4. Settle restaurant earnings via shared service
         await settleDeliveredOrder(orderId, tx);
     });
 
-    // Send push notification to customer
-    await sendPushNotification({
-        recipientType: "user",
-        recipientId: existingOrder.userId,
-        branchId: existingOrder.branchId || null,
-        title: "Order Delivered",
-        body: `Your order #${existingOrder.dailyOrderNumber} has been delivered successfully!`,
-        data: {
-            restaurantId: existingOrder.restaurantId,
-            branchId: existingOrder.branchId || null,
-            orderId: existingOrder.id,
-            orderNumber: existingOrder.orderNumber,
-            dailyOrderNumber: existingOrder.dailyOrderNumber,
-            status: "delivered",
-            type: "ORDER_STATUS_UPDATE",
-        },
+    if (existingOrder.shippingCompanyId) {
+        notifyShippingCompany(existingOrder.shippingCompanyId, SOCKET_EVENTS.ORDER_STATUS_CHANGED, {
+            orderId,
+            shippingStatus: "delivered",
+            updatedAt: now,
+        });
+    }
+
+    notifyOrderTracking(orderId, SOCKET_EVENTS.ORDER_DELIVERED, {
+        orderId,
+        courierId: deliveryManId,
+        deliveredAt: now,
     });
+
+    if (existingOrder.userId) {
+        await sendPushNotification({
+            recipientType: "user",
+            recipientId: existingOrder.userId,
+            branchId: existingOrder.branchId || null,
+            title: "Order Delivered",
+            body: `Your order #${existingOrder.dailyOrderNumber || existingOrder.orderNumber} has been delivered successfully!`,
+            data: {
+                restaurantId: existingOrder.restaurantId,
+                branchId: existingOrder.branchId || null,
+                orderId: existingOrder.id,
+                orderNumber: existingOrder.orderNumber,
+                dailyOrderNumber: existingOrder.dailyOrderNumber,
+                status: "delivered",
+                shippingStatus: "delivered",
+                type: "ORDER_STATUS_UPDATE",
+            },
+        });
+    }
 
     return SuccessResponse(res, {
         message: "Order has been marked as delivered successfully",
+    });
+};
+
+// ==========================================
+// PATCH /delivery-man/orders/:orderId/status
+// Backward compatibility wrapper for delivery man setting delivered status
+// ==========================================
+export const updateOrderStatusToDelivered = async (req: Request, res: Response) => {
+    const { status } = req.body;
+    if (status !== "delivered") {
+        throw new BadRequest("Delivery man can only update order status to 'delivered'");
+    }
+    return markOrderDelivered(req, res);
+};
+
+// ==========================================
+// POST /delivery-man/orders/:orderId/reject
+// Delivery man rejects an assigned order with mandatory reason
+// ==========================================
+export const rejectOrderCourierEndpoint = async (req: Request, res: Response) => {
+    if (!req.user) throw new UnauthorizedError("Unauthenticated");
+
+    const deliveryManId = req.user.id;
+    const { orderId } = req.params;
+    const { reason } = req.body;
+
+    if (!reason || reason.trim() === "") {
+        throw new BadRequest("Reject reason is mandatory");
+    }
+
+    const [order] = await db
+        .select()
+        .from(orders)
+        .where(
+            and(
+                eq(orders.id, orderId),
+                eq(orders.deliveryManId, deliveryManId)
+            )
+        )
+        .limit(1);
+
+    if (!order) {
+        throw new NotFound("Order not found or not assigned to you");
+    }
+
+    if (order.status === "delivered" || order.status === "cancelled") {
+        throw new BadRequest(`Cannot reject order that is already ${order.status}`);
+    }
+
+    const result = await rejectOrderByCourier(orderId, deliveryManId, reason);
+
+    return SuccessResponse(res, {
+        message: "Order rejected and re-dispatch initiated",
+        data: result,
     });
 };

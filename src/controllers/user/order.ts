@@ -34,6 +34,7 @@ import { applyPriorityDiscount, getAvailableDiscounts } from "../../utils/discou
 import { validateUserNotBlocked } from "../../utils/userBlockCheck";
 import { calculateCurrentStatus } from "./restaurantFeatures";
 import { chargePendingServiceFee, handleCancelledOrder, mapOrderSourceToPlatformType } from "../../services/restaurantWalletService";
+import { releaseCourierForOrder } from "../../services/shipping/dispatchEngine";
 
 // 👇 1. دالة تظبيط الوقت لتوقيت مصر عشان نص الإشعار
 const formatToEgyptTime = (date: Date) => {
@@ -1137,6 +1138,13 @@ export const cancelOrder = async (req: Request | any, res: Response) => {
 
         await handleCancelledOrder({ orderId, cancelReasonType: "user", tx });
     });
+
+    // Release courier's activeOrdersCount if a delivery man was already assigned
+    if (order.deliveryManId) {
+        releaseCourierForOrder(orderId, order.deliveryManId).catch((err) => {
+            console.error(`[releaseCourierForOrder] failed on user cancel for order ${orderId}:`, err);
+        });
+    }
 
     return SuccessResponse(res, { message: "Order cancelled successfully" });
 };
