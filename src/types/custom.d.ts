@@ -106,7 +106,8 @@ export type ModuleName =
     | "country"
     | "delivery_man"
     | "delivery_man_accounts"
-    | "socialmedia";
+    | "socialmedia"
+    | "Videos";
 
 export interface PermissionAction {
     id?: string;

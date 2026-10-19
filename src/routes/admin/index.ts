@@ -63,6 +63,7 @@ import HallTableRouter from "./pos/hallTables";
 import PrinterRouter from "./printer";
 import paymentTransactionsRouter from "./paymentTransactions";
 import FirstOrderDiscountRouter from "./firstOrderDiscount";
+import videosRouter from "./videos";
 const router = Router();
 
 router.use("/auth", authRouter);
@@ -114,7 +115,7 @@ router.use("/order-delay-alerts", OrderDelayAlertRouter);
 router.use("/printers", PrinterRouter);
 router.use("/payment-transactions", paymentTransactionsRouter);
 router.use("/first-order-discounts", FirstOrderDiscountRouter);
-
+router.use("/videos", videosRouter);
 
 // POS Routes
 router.use("/pos/shifts", ShiftsRouter);
