@@ -17,6 +17,9 @@ import {
     restaurantSettings,
     restaurantPaymentCredentials,
     deliveryMen,
+    foodVariations,
+    variationOptions,
+    categories,
 } from "../../models/schema";
 import { eq, and, desc, gte, lte, sql, inArray, like, or, ne } from "drizzle-orm";
 import { UnauthorizedError } from "../../Errors";
@@ -27,6 +30,7 @@ import fs from "fs";
 import { invoices } from "../../models/schema/admin/invoices";
 import { SuccessResponse } from "../../utils/response";
 import { excludeUnpaidVisaOrders } from "../../helpers/order.helper";
+import { activeFoodCondition } from "../../helpers/foodConditions";
 
 type OrderStatus = "pending" | "accepted" | "preparing" | "out_for_delivery" | "delivered" | "cancelled" | "rejected" | "refund";
 
@@ -1441,6 +1445,498 @@ export const getDeliveryManReport = async (req: Request | any, res: Response) =>
         },
         deliveryMen: deliveryMenBreakdown,
         orders: paginatedOrders,
+        ...(paginationInfo ? { pagination: paginationInfo } : {}),
+    });
+};
+
+// =============================================
+// Food & Variations Sales Report API
+// =============================================
+export const getFoodReport = async (req: Request | any, res: Response) => {
+    if (!req.user) throw new UnauthorizedError("Unauthenticated");
+
+    const restaurantId = req.user.restaurantId || req.user.id;
+    if (!restaurantId) throw new BadRequest("Restaurant ID not found");
+
+    const {
+        startDate,
+        endDate,
+        branchId,
+        status,
+        search,
+        categoryId,
+        arrangedType,
+        sortOrder,
+        sort,
+        sortBy,
+        onlySold,
+        page,
+        limit,
+    } = req.query;
+
+    // 1. تحديد النطاق الزمني (الافتراضي هو اليوم الحالي)
+    const now = new Date();
+    let start: Date;
+    let end: Date;
+    let isDefaultToday = false;
+
+    if (startDate && endDate) {
+        start = new Date(startDate as string);
+        start.setHours(0, 0, 0, 0);
+        end = new Date(endDate as string);
+        end.setHours(23, 59, 59, 999);
+    } else if (startDate) {
+        start = new Date(startDate as string);
+        start.setHours(0, 0, 0, 0);
+        end = new Date(startDate as string);
+        end.setHours(23, 59, 59, 999);
+    } else if (endDate) {
+        end = new Date(endDate as string);
+        end.setHours(23, 59, 59, 999);
+        start = new Date(endDate as string);
+        start.setHours(0, 0, 0, 0);
+    } else {
+        isDefaultToday = true;
+        start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    }
+
+    // 2. شروط الطلبات
+    const orderConditions: any[] = [
+        eq(orders.restaurantId, restaurantId),
+        excludeUnpaidVisaOrders(),
+        gte(orders.createdAt, start),
+        lte(orders.createdAt, end),
+    ];
+
+    if (branchId) orderConditions.push(eq(orders.branchId, branchId as string));
+    if (req.user.branchId) orderConditions.push(eq(orders.branchId, req.user.branchId));
+
+    if (status) {
+        orderConditions.push(eq(orders.status, status as any));
+    } else {
+        orderConditions.push(
+            and(
+                ne(orders.status, "cancelled"),
+                ne(orders.status, "refund"),
+                ne(orders.status, "failed")
+            )
+        );
+    }
+
+    // 3. جلب الطلبات المطابقة للشروط
+    const matchedOrders = await db
+        .select({ id: orders.id })
+        .from(orders)
+        .where(and(...orderConditions));
+
+    const orderIds = matchedOrders.map(o => o.id);
+    let orderItemsList: any[] = [];
+
+    if (orderIds.length > 0) {
+        const batchSize = 500;
+        for (let i = 0; i < orderIds.length; i += batchSize) {
+            const batch = orderIds.slice(i, i + batchSize);
+            const items = await db
+                .select({
+                    id: orderItems.id,
+                    orderId: orderItems.orderId,
+                    foodId: orderItems.foodId,
+                    quantity: orderItems.quantity,
+                    basePrice: orderItems.basePrice,
+                    variationsPrice: orderItems.variationsPrice,
+                    totalPrice: orderItems.totalPrice,
+                    variations: orderItems.variations,
+                })
+                .from(orderItems)
+                .where(inArray(orderItems.orderId, batch));
+            orderItemsList.push(...items);
+        }
+    }
+
+    // 4. جلب وجبات المطعم
+    const foodConditions: any[] = [
+        eq(food.restaurantid, restaurantId),
+        activeFoodCondition,
+    ];
+
+    if (categoryId) foodConditions.push(eq(food.categoryid, categoryId as string));
+    if (search) {
+        foodConditions.push(
+            or(
+                like(food.name, `%${search}%`),
+                like(food.nameAr, `%${search}%`)
+            )
+        );
+    }
+
+    const foodsList = await db
+        .select({
+            id: food.id,
+            name: food.name,
+            nameAr: food.nameAr,
+            nameFr: food.nameFr,
+            price: food.price,
+            image: food.image,
+            categoryid: food.categoryid,
+            categoryName: categories.name,
+            categoryNameAr: categories.nameAr,
+            status: food.status,
+        })
+        .from(food)
+        .leftJoin(categories, eq(food.categoryid, categories.id))
+        .where(and(...foodConditions));
+
+    // في حال بيع وجبات كانت محذوفة مؤخراً أو غير متواجدة في القائمة بدون فلاتر بحث
+    const currentFoodIds = new Set(foodsList.map(f => f.id));
+    if (!search && !categoryId) {
+        const missingFoodIds = [...new Set(orderItemsList.map(i => i.foodId))].filter(id => !currentFoodIds.has(id));
+        if (missingFoodIds.length > 0) {
+            const missingFoods = await db
+                .select({
+                    id: food.id,
+                    name: food.name,
+                    nameAr: food.nameAr,
+                    nameFr: food.nameFr,
+                    price: food.price,
+                    image: food.image,
+                    categoryid: food.categoryid,
+                    categoryName: categories.name,
+                    categoryNameAr: categories.nameAr,
+                    status: food.status,
+                })
+                .from(food)
+                .leftJoin(categories, eq(food.categoryid, categories.id))
+                .where(and(eq(food.restaurantid, restaurantId), inArray(food.id, missingFoodIds)));
+            foodsList.push(...missingFoods);
+        }
+    }
+
+    const allFoodIds = foodsList.map(f => f.id);
+    let dbVariations: any[] = [];
+    let dbOptions: any[] = [];
+
+    if (allFoodIds.length > 0) {
+        dbVariations = await db
+            .select()
+            .from(foodVariations)
+            .where(inArray(foodVariations.foodId, allFoodIds));
+
+        const varIds = dbVariations.map(v => v.id);
+        if (varIds.length > 0) {
+            dbOptions = await db
+                .select()
+                .from(variationOptions)
+                .where(inArray(variationOptions.variationId, varIds));
+        }
+    }
+
+    // 5. تهيئة خريطة الوجبات مع الفارييشنز والأوبشنز
+    const foodMap = new Map<string, any>();
+
+    for (const f of foodsList) {
+        foodMap.set(f.id, {
+            foodId: f.id,
+            foodName: f.name,
+            foodNameAr: f.nameAr,
+            foodNameFr: f.nameFr,
+            image: f.image,
+            category: {
+                id: f.categoryid,
+                name: f.categoryName,
+                nameAr: f.categoryNameAr,
+            },
+            basePrice: parseFloat((f.price as string) || "0").toFixed(2),
+            status: f.status,
+            totalSold: 0,
+            totalSoldQuantity: 0,
+            totalOrdersCount: 0,
+            totalRevenue: 0,
+            soldWithoutVariations: 0,
+            soldWithVariations: 0,
+            distinctOrders: new Set<string>(),
+            variationsMap: new Map<string, any>(),
+            optionsMap: new Map<string, any>(),
+            optionsByNameMap: new Map<string, any>(),
+        });
+    }
+
+    // ربط الـ Variations بكل وجبة
+    for (const v of dbVariations) {
+        const foodEntry = foodMap.get(v.foodId);
+        if (!foodEntry) continue;
+
+        const varObj = {
+            variationId: v.id,
+            variationName: v.name,
+            variationNameAr: v.nameAr,
+            variationNameFr: v.nameFr,
+            selectionType: v.selectionType,
+            isRequired: v.isRequired,
+            totalVariationSoldCount: 0,
+            options: [] as any[],
+        };
+        foodEntry.variationsMap.set(v.id, varObj);
+    }
+
+    // ربط الـ Options بكل Variation
+    for (const o of dbOptions) {
+        for (const foodEntry of foodMap.values()) {
+            const varObj = foodEntry.variationsMap.get(o.variationId);
+            if (varObj) {
+                const optObj = {
+                    optionId: o.id,
+                    optionName: o.optionName,
+                    optionNameAr: o.optionNameAr,
+                    optionNameFr: o.optionNameFr,
+                    additionalPrice: parseFloat((o.additionalPrice as string) || "0").toFixed(2),
+                    soldCount: 0,
+                    totalRevenue: 0,
+                };
+                varObj.options.push(optObj);
+                foodEntry.optionsMap.set(o.id, optObj);
+                if (o.optionName) {
+                    foodEntry.optionsByNameMap.set(o.optionName.trim().toLowerCase(), optObj);
+                }
+                if (o.optionNameAr) {
+                    foodEntry.optionsByNameMap.set(o.optionNameAr.trim().toLowerCase(), optObj);
+                }
+            }
+        }
+    }
+
+    // دالة مساعدة لفك تشفير Variations بأمان
+    const parseItemVariations = (raw: any): any[] => {
+        if (!raw) return [];
+        let parsed = raw;
+        if (typeof parsed === "string") {
+            try {
+                parsed = JSON.parse(parsed);
+                if (typeof parsed === "string") {
+                    parsed = JSON.parse(parsed);
+                }
+            } catch {
+                return [];
+            }
+        }
+        if (Array.isArray(parsed)) return parsed;
+        if (parsed && typeof parsed === "object") {
+            if (Array.isArray(parsed.variations)) return parsed.variations;
+            return Object.values(parsed);
+        }
+        return [];
+    };
+
+    // 6. حساب المبيعات لكل وجبة وكل خيار
+    for (const item of orderItemsList) {
+        const foodEntry = foodMap.get(item.foodId);
+        if (!foodEntry) continue;
+
+        const qty = Math.max(1, item.quantity || 1);
+        const itemTotal = parseFloat((item.totalPrice as string) || "0");
+
+        foodEntry.totalSold += qty;
+        foodEntry.totalSoldQuantity += qty;
+        foodEntry.totalRevenue += itemTotal;
+        foodEntry.distinctOrders.add(item.orderId);
+
+        const parsedVars = parseItemVariations(item.variations);
+
+        if (parsedVars.length === 0) {
+            foodEntry.soldWithoutVariations += qty;
+        } else {
+            foodEntry.soldWithVariations += qty;
+
+            for (const pv of parsedVars) {
+                const optId = pv.optionId || pv.option_id || pv.id || (pv.option && pv.option.id);
+                const varId = pv.variationId || pv.variation_id || (pv.variation && pv.variation.id);
+                const optName = (pv.optionName || pv.name || pv.value || "").trim();
+                const optNameAr = pv.optionNameAr || pv.nameAr || pv.valueAr || "";
+                const optPrice = parseFloat(pv.additionalPrice || pv.price || pv.amount || "0");
+
+                let matchedOpt = optId ? foodEntry.optionsMap.get(optId) : null;
+                if (!matchedOpt && optName) {
+                    matchedOpt = foodEntry.optionsByNameMap.get(optName.toLowerCase());
+                }
+
+                if (matchedOpt) {
+                    matchedOpt.soldCount += qty;
+                    matchedOpt.totalRevenue += (qty * parseFloat(matchedOpt.additionalPrice || "0"));
+
+                    if (varId && foodEntry.variationsMap.has(varId)) {
+                        foodEntry.variationsMap.get(varId).totalVariationSoldCount += qty;
+                    } else {
+                        for (const vObj of foodEntry.variationsMap.values()) {
+                            if (vObj.options.some((o: any) => o.optionId === matchedOpt.optionId)) {
+                                vObj.totalVariationSoldCount += qty;
+                                break;
+                            }
+                        }
+                    }
+                } else if (optName || optId) {
+                    let targetVar = varId ? foodEntry.variationsMap.get(varId) : null;
+                    if (!targetVar) {
+                        const fallbackVarName = pv.variationName || pv.name || "Custom Options";
+                        for (const vObj of foodEntry.variationsMap.values()) {
+                            if (vObj.variationName.toLowerCase() === fallbackVarName.toLowerCase()) {
+                                targetVar = vObj;
+                                break;
+                            }
+                        }
+                        if (!targetVar) {
+                            targetVar = {
+                                variationId: varId || "other",
+                                variationName: fallbackVarName,
+                                variationNameAr: pv.variationNameAr || fallbackVarName,
+                                variationNameFr: pv.variationNameFr || fallbackVarName,
+                                selectionType: null,
+                                isRequired: false,
+                                totalVariationSoldCount: 0,
+                                options: [],
+                            };
+                            foodEntry.variationsMap.set(targetVar.variationId, targetVar);
+                        }
+                    }
+
+                    const newOpt = {
+                        optionId: optId || `custom-${optName}`,
+                        optionName: optName || "Unnamed Option",
+                        optionNameAr: optNameAr || null,
+                        optionNameFr: pv.optionNameFr || null,
+                        additionalPrice: optPrice.toFixed(2),
+                        soldCount: qty,
+                        totalRevenue: qty * optPrice,
+                    };
+                    targetVar.options.push(newOpt);
+                    targetVar.totalVariationSoldCount += qty;
+                    if (optId) foodEntry.optionsMap.set(optId, newOpt);
+                    if (optName) foodEntry.optionsByNameMap.set(optName.toLowerCase(), newOpt);
+                }
+            }
+        }
+    }
+
+    // 7. صياغة النتيجة وترتيب الـ Options
+    let formattedFoods = Array.from(foodMap.values()).map(f => {
+        const variations = Array.from(f.variationsMap.values()).map((v: any) => {
+            const sortedOptions = [...v.options].sort((a: any, b: any) => b.soldCount - a.soldCount);
+            return {
+                variationId: v.variationId,
+                variationName: v.variationName,
+                variationNameAr: v.variationNameAr,
+                variationNameFr: v.variationNameFr,
+                selectionType: v.selectionType,
+                isRequired: v.isRequired,
+                totalVariationSoldCount: v.totalVariationSoldCount,
+                options: sortedOptions.map((opt: any) => ({
+                    optionId: opt.optionId,
+                    optionName: opt.optionName,
+                    optionNameAr: opt.optionNameAr,
+                    optionNameFr: opt.optionNameFr,
+                    additionalPrice: opt.additionalPrice,
+                    soldCount: opt.soldCount,
+                    totalRevenue: opt.totalRevenue.toFixed(2),
+                })),
+            };
+        });
+
+        return {
+            foodId: f.foodId,
+            foodName: f.foodName,
+            foodNameAr: f.foodNameAr,
+            foodNameFr: f.foodNameFr,
+            image: f.image,
+            category: f.category,
+            basePrice: f.basePrice,
+            status: f.status,
+            totalSold: f.totalSold,
+            totalSoldQuantity: f.totalSoldQuantity,
+            totalOrdersCount: f.distinctOrders.size,
+            totalRevenue: f.totalRevenue.toFixed(2),
+            soldWithoutVariations: f.soldWithoutVariations,
+            soldWithVariations: f.soldWithVariations,
+            variations,
+        };
+    });
+
+    // فلترة الأكلات المباعة فقط إذا طُلب ذلك
+    if (onlySold === "true" || onlySold === "1") {
+        formattedFoods = formattedFoods.filter(f => f.totalSoldQuantity > 0);
+    }
+
+    // 8. الترتيب (Arranged Type: ASC or DESC)
+    const arrangement = ((arrangedType || sortOrder || sort || "desc") as string).toLowerCase().trim();
+    const isAsc = arrangement === "asc" || arrangement === "ascn" || arrangement === "ascending";
+    const sortField = ((sortBy || "totalSold") as string).toLowerCase().trim();
+
+    formattedFoods.sort((a, b) => {
+        let diff = 0;
+        if (sortField === "totalrevenue" || sortField === "revenue") {
+            diff = parseFloat(a.totalRevenue) - parseFloat(b.totalRevenue);
+        } else if (sortField === "name" || sortField === "foodname") {
+            diff = a.foodName.localeCompare(b.foodName);
+        } else if (sortField === "totalorders" || sortField === "orders") {
+            diff = a.totalOrdersCount - b.totalOrdersCount;
+        } else {
+            diff = a.totalSoldQuantity - b.totalSoldQuantity;
+        }
+        return isAsc ? diff : -diff;
+    });
+
+    // 9. ملخص كلي
+    let overallSoldQuantity = 0;
+    let overallRevenue = 0;
+    let foodsWithSalesCount = 0;
+    const overallOrdersSet = new Set<string>();
+
+    for (const item of orderItemsList) {
+        overallOrdersSet.add(item.orderId);
+    }
+
+    for (const f of formattedFoods) {
+        overallSoldQuantity += f.totalSoldQuantity;
+        overallRevenue += parseFloat(f.totalRevenue);
+        if (f.totalSoldQuantity > 0) foodsWithSalesCount++;
+    }
+
+    // 10. الترقيم (Pagination)
+    let paginatedFoods = formattedFoods;
+    let paginationInfo: any = null;
+
+    if (page && limit) {
+        const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
+        const limitNum = Math.max(1, parseInt(limit as string, 10) || 20);
+        const startIndex = (pageNum - 1) * limitNum;
+        paginatedFoods = formattedFoods.slice(startIndex, startIndex + limitNum);
+        paginationInfo = {
+            page: pageNum,
+            limit: limitNum,
+            totalPages: Math.ceil(formattedFoods.length / limitNum),
+            totalItems: formattedFoods.length,
+        };
+    }
+
+    return SuccessResponse(res, {
+        message: "Food report retrieved successfully",
+        dateRange: {
+            startDate: start.toISOString(),
+            endDate: end.toISOString(),
+            isDefaultToday,
+        },
+        filter: {
+            branchId: (branchId || req.user.branchId) || null,
+            arrangedType: isAsc ? "asc" : "desc",
+            sortBy: sortField,
+            status: status || "all_non_cancelled",
+        },
+        summary: {
+            totalFoodsCount: formattedFoods.length,
+            foodsWithSalesCount,
+            totalSoldQuantity: overallSoldQuantity,
+            totalRevenue: overallRevenue.toFixed(2),
+            totalOrdersCount: overallOrdersSet.size,
+        },
+        foods: paginatedFoods,
         ...(paginationInfo ? { pagination: paginationInfo } : {}),
     });
 };

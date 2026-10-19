@@ -28,3 +28,21 @@ export const deliveryManReportQuerySchema = z.object({
 }).passthrough();
 
 export type DeliveryManReportQueryInput = z.infer<typeof deliveryManReportQuerySchema>;
+
+export const foodReportQuerySchema = z.object({
+    startDate: z.string().optional(),
+    endDate: z.string().optional(),
+    branchId: z.string().optional(),
+    status: z.string().optional(),
+    search: z.string().optional(),
+    categoryId: z.string().optional(),
+    arrangedType: z.string().optional(),
+    sortOrder: z.string().optional(),
+    sort: z.string().optional(),
+    sortBy: z.string().optional(),
+    onlySold: z.string().optional(),
+    page: z.string().optional(),
+    limit: z.string().optional(),
+}).passthrough();
+
+export type FoodReportQueryInput = z.infer<typeof foodReportQuerySchema>;
