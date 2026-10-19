@@ -609,8 +609,6 @@ export const downloadSavedInvoicePDF = async (req: Request | any, res: Response)
     doc.end();
 };
 
-// controllers/restaurant/RestaurantInvoiceController.ts
-
 export const getMyInvoices = async (req: Request | any, res: Response) => {
     if (!req.user) throw new UnauthorizedError("Unauthenticated");
     const restaurantId = req.user.restaurantId || req.user.id;
@@ -1150,12 +1148,15 @@ export const getDeliveryManReport = async (req: Request | any, res: Response) =>
         excludeUnpaidVisaOrders(),
     ];
 
-    if (startDate) conditions.push(gte(orders.createdAt, new Date(startDate as string)));
-    if (endDate) {
-        const end = new Date(endDate as string);
-        end.setHours(23, 59, 59, 999);
-        conditions.push(lte(orders.createdAt, end));
-    }
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const defaultStart = startDate ? new Date(startDate as string) : today;
+    const defaultEnd = endDate ? new Date(endDate as string) : new Date(today);
+    defaultEnd.setHours(23, 59, 59, 999);
+
+    conditions.push(gte(orders.createdAt, defaultStart));
+    conditions.push(lte(orders.createdAt, defaultEnd));
 
     if (branchId) conditions.push(eq(orders.branchId, branchId as string));
     if (req.user.branchId) conditions.push(eq(orders.branchId, req.user.branchId));
