@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
 import { users, restaurant_users, restaurants, userRestaurantPoints, orders, orderItems, food } from "../../models/schema";
-import { eq, and, or, sql, desc, inArray } from "drizzle-orm";
+import { eq, and, or, sql, desc, inArray, like, gte, lte, ne } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors";
@@ -9,7 +9,7 @@ import { handleImageUpdate } from "../../utils/handleImages";
 import { excludeUnpaidVisaOrders } from "../../helpers/order.helper";
 
 // =======================================================
-// 1. Get Restaurant Users (Supports ?status=active/blocked)
+// 1. Get Restaurant Users (Supports ?status=active/blocked, filters, search & pagination)
 // =======================================================
 export const getRestaurantUsers = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id || req.user?.branchId;
@@ -18,28 +18,103 @@ export const getRestaurantUsers = async (req: Request, res: Response) => {
         throw new BadRequest("Restaurant ID is required");
     }
 
+    const {
+        status,
+        search,
+        phone,
+        name,
+        email,
+        startDate,
+        endDate,
+        totalSpending,
+        page,
+        limit,
+        sortBy,
+        sortOrder,
+    } = req.query;
+
     const conditions: any[] = [
         eq(restaurant_users.restaurantId, restaurantId)
     ];
 
-    const data = await db.select({
-        id: restaurant_users.id,
-        userId: users.id,
-        name: users.name,
-        phone: users.phone,
-        email: users.email,
-        photo: users.photo,
-        points: sql<number>`COALESCE(${userRestaurantPoints.points}, 0)`,
-        totalOrders: sql<number>`COALESCE(${userRestaurantPoints.totalOrders}, 0)`,
-        status: restaurant_users.status,
-        userStatus: users.status,
-        createdAt: restaurant_users.createdAt,
-        updatedAt: restaurant_users.updatedAt,
-        restaurant: {
-            id: restaurants.id,
-            name: restaurants.name,
-        }
-    })
+    // 1. Status Filter (active / blocked)
+    if (status) {
+        conditions.push(eq(restaurant_users.status, status as any));
+    }
+
+    // 2. Search by Phone, Name, Email
+    if (search) {
+        const searchPattern = `%${search}%`;
+        conditions.push(
+            or(
+                like(users.name, searchPattern),
+                like(users.phone, searchPattern),
+                like(users.email, searchPattern)
+            )
+        );
+    }
+    if (phone) {
+        conditions.push(like(users.phone, `%${phone}%`));
+    }
+    if (name) {
+        conditions.push(like(users.name, `%${name}%`));
+    }
+    if (email) {
+        conditions.push(like(users.email, `%${email}%`));
+    }
+
+    // 3. Date Filter (restaurant_users.createdAt)
+    if (startDate) {
+        const start = new Date(startDate as string);
+        start.setHours(0, 0, 0, 0);
+        conditions.push(gte(restaurant_users.createdAt, start));
+    }
+    if (endDate) {
+        const end = new Date(endDate as string);
+        end.setHours(23, 59, 59, 999);
+        conditions.push(lte(restaurant_users.createdAt, end));
+    }
+
+    // 4. Order Conditions for totalSpendings calculation
+    const orderConditions = [
+        eq(orders.userId, users.id),
+        eq(orders.restaurantId, restaurant_users.restaurantId),
+        ne(orders.status, "cancelled"),
+        excludeUnpaidVisaOrders(),
+    ];
+
+    // 5. Total Spending Search (Having Condition)
+    const havingConditions: any[] = [];
+    if (totalSpending !== undefined && totalSpending !== "") {
+        havingConditions.push(sql`COALESCE(SUM(${orders.totalAmount}), 0) >= ${Number(totalSpending)}`);
+    }
+
+    // 6. Pagination Setup
+    const pageNum = page ? Math.max(1, parseInt(page as string, 10) || 1) : 1;
+    const limitNum = limit ? Math.max(1, parseInt(limit as string, 10) || 20) : 20;
+    const offset = (pageNum - 1) * limitNum;
+
+    // 7. Base Query with totalSpendings
+    let query = db
+        .select({
+            id: restaurant_users.id,
+            userId: users.id,
+            name: users.name,
+            phone: users.phone,
+            email: users.email,
+            photo: users.photo,
+            points: sql<number>`COALESCE(${userRestaurantPoints.points}, 0)`,
+            totalOrders: sql<number>`COALESCE(${userRestaurantPoints.totalOrders}, 0)`,
+            totalSpendings: sql<string>`COALESCE(SUM(${orders.totalAmount}), 0)`,
+            status: restaurant_users.status,
+            userStatus: users.status,
+            createdAt: restaurant_users.createdAt,
+            updatedAt: restaurant_users.updatedAt,
+            restaurant: {
+                id: restaurants.id,
+                name: restaurants.name,
+            }
+        })
         .from(restaurant_users)
         .innerJoin(users, eq(restaurant_users.userId, users.id))
         .innerJoin(restaurants, eq(restaurant_users.restaurantId, restaurants.id))
@@ -50,9 +125,88 @@ export const getRestaurantUsers = async (req: Request, res: Response) => {
                 eq(userRestaurantPoints.restaurantId, restaurant_users.restaurantId)
             )
         )
-        .where(and(...conditions));
+        .leftJoin(
+            orders,
+            and(...orderConditions)
+        )
+        .where(and(...conditions))
+        .groupBy(
+            restaurant_users.id,
+            users.id,
+            users.name,
+            users.phone,
+            users.email,
+            users.photo,
+            users.status,
+            userRestaurantPoints.points,
+            userRestaurantPoints.totalOrders,
+            restaurant_users.status,
+            restaurant_users.createdAt,
+            restaurant_users.updatedAt,
+            restaurants.id,
+            restaurants.name
+        )
+        .$dynamic();
 
-    return SuccessResponse(res, { message: "Restaurant users fetched successfully", data }, 200);
+    if (havingConditions.length > 0) {
+        query = query.having(and(...havingConditions));
+    }
+
+    // Sorting
+    const sortField = ((sortBy as string) || "createdAt").toLowerCase().trim();
+    const isAsc = ((sortOrder as string) || "desc").toLowerCase().trim() === "asc";
+
+    if (sortField === "totalspending" || sortField === "totalspendings") {
+        query = query.orderBy(isAsc ? sql`COALESCE(SUM(${orders.totalAmount}), 0) ASC` : sql`COALESCE(SUM(${orders.totalAmount}), 0) DESC`);
+    } else if (sortField === "points") {
+        query = query.orderBy(isAsc ? sql`COALESCE(${userRestaurantPoints.points}, 0) ASC` : sql`COALESCE(${userRestaurantPoints.points}, 0) DESC`);
+    } else if (sortField === "totalorders") {
+        query = query.orderBy(isAsc ? sql`COALESCE(${userRestaurantPoints.totalOrders}, 0) ASC` : sql`COALESCE(${userRestaurantPoints.totalOrders}, 0) DESC`);
+    } else if (sortField === "name") {
+        query = query.orderBy(isAsc ? users.name : desc(users.name));
+    } else {
+        query = query.orderBy(isAsc ? restaurant_users.createdAt : desc(restaurant_users.createdAt));
+    }
+
+    // 8. Count query for total
+    let total = 0;
+    if (havingConditions.length > 0) {
+        const countQuery = db
+            .select({ id: restaurant_users.id })
+            .from(restaurant_users)
+            .innerJoin(users, eq(restaurant_users.userId, users.id))
+            .leftJoin(orders, and(...orderConditions))
+            .where(and(...conditions))
+            .groupBy(restaurant_users.id)
+            .having(and(...havingConditions));
+        const countRows = await countQuery;
+        total = countRows.length;
+    } else {
+        const countResult = await db
+            .select({ total: sql<number>`count(distinct ${restaurant_users.id})` })
+            .from(restaurant_users)
+            .innerJoin(users, eq(restaurant_users.userId, users.id))
+            .where(and(...conditions));
+        total = Number(countResult[0]?.total || 0);
+    }
+
+    // Apply pagination
+    if (limitNum) {
+        query = query.limit(limitNum).offset(offset);
+    }
+
+    const data = await query;
+
+    return SuccessResponse(res, {
+        message: "Restaurant users fetched successfully",
+        data,
+        pagination: {
+            page: pageNum,
+            limit: limitNum || total,
+            total,
+            totalPages: limitNum ? Math.ceil(total / limitNum) : 1,
+        }
+    }, 200);
 };
 
 // =======================================================
