@@ -20,6 +20,7 @@ import {
     foodVariations,
     variationOptions,
     categories,
+    restaurant_users,
 } from "../../models/schema";
 import { eq, and, desc, gte, lte, sql, inArray, like, or, ne } from "drizzle-orm";
 import { UnauthorizedError } from "../../Errors";
@@ -847,6 +848,23 @@ export const getDashboardReports = async (req: Request | any, res: Response) => 
     }
 
     // ==========================================
+    // إجمالي مستخدمي / عملاء المطعم (Total Users)
+    // ==========================================
+    const [resUsersRow] = await db
+        .select({ total: sql<number>`count(distinct ${restaurant_users.userId})` })
+        .from(restaurant_users)
+        .where(eq(restaurant_users.restaurantId, restaurantId));
+    let totalUsers = Number(resUsersRow?.total || 0);
+
+    if (totalUsers === 0) {
+        const [ordersUsersRow] = await db
+            .select({ total: sql<number>`count(distinct ${orders.userId})` })
+            .from(orders)
+            .where(eq(orders.restaurantId, restaurantId));
+        totalUsers = Number(ordersUsersRow?.total || 0);
+    }
+
+    // ==========================================
     // إرسال الـ Response
     // ==========================================
     return res.status(200).json({
@@ -857,7 +875,9 @@ export const getDashboardReports = async (req: Request | any, res: Response) => 
                 totalRevenue: totalRevenue.toFixed(2),
                 numberOfOrders,
                 averageOrderValue: numberOfOrders > 0 ? (totalRevenue / numberOfOrders).toFixed(2) : "0.00",
+                totalUsers,
             },
+            totalUsers,
             peakHours: Object.entries(peakHoursObj).map(([hour, orders]) => ({ hour, orders })),
             peakDays: Object.entries(peakDaysObj).map(([day, rev]) => ({ day, revenue: rev.toFixed(2) })),
             topProducts,
