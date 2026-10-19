@@ -2,7 +2,7 @@ import { Router } from "express";
 import { catchAsync } from "../../utils/catchAsync";
 import { hasPermission } from "../../middlewares/hasPermission";
 import { validate } from "../../middlewares/validation";
-import { transferOrderBranchSchema } from "../../validation/admin/order";
+import { transferOrderBranchSchema, getRestaurantOrdersQuerySchema } from "../../validation/admin/order";
 import {
     getRestaurantOrders,
     getRestaurantOrderById,
@@ -35,16 +35,16 @@ router.get("/select-data", hasPermission("order", "read", true), catchAsync(getS
 router.get("/select-branches", hasPermission("order", "read", true), catchAsync(getSelectBranches))
 
 // ✅ كل الأوردرات - يحتاج صلاحية read + التحقق من الفرع
-router.get("/", hasPermission("order", "read", true), catchAsync(getRestaurantOrders));
+router.get("/", hasPermission("order", "read", true), validate(getRestaurantOrdersQuerySchema, "query"), catchAsync(getRestaurantOrders));
 
 // ✅ أوردرات بحالة معينة - يحتاج صلاحية read + التحقق من الفرع
-router.get("/pending", hasPermission("order", "read", true), catchAsync(getPendingOrders));
-router.get("/accepted", hasPermission("order", "read", true), catchAsync(getAcceptedOrders));
-router.get("/preparing", hasPermission("order", "read", true), catchAsync(getPreparingOrders));
-router.get("/out-for-delivery", hasPermission("order", "read", true), catchAsync(getOutForDeliveryOrders));
-router.get("/delivered", hasPermission("order", "read", true), catchAsync(getDeliveredOrders));
-router.get("/cancelled", hasPermission("order", "read", true), catchAsync(getCancelledOrders));
-router.get("/refund", hasPermission("order", "read", true), catchAsync(getRefundOrders));
+router.get("/pending", hasPermission("order", "read", true), validate(getRestaurantOrdersQuerySchema, "query"), catchAsync(getPendingOrders));
+router.get("/accepted", hasPermission("order", "read", true), validate(getRestaurantOrdersQuerySchema, "query"), catchAsync(getAcceptedOrders));
+router.get("/preparing", hasPermission("order", "read", true), validate(getRestaurantOrdersQuerySchema, "query"), catchAsync(getPreparingOrders));
+router.get("/out-for-delivery", hasPermission("order", "read", true), validate(getRestaurantOrdersQuerySchema, "query"), catchAsync(getOutForDeliveryOrders));
+router.get("/delivered", hasPermission("order", "read", true), validate(getRestaurantOrdersQuerySchema, "query"), catchAsync(getDeliveredOrders));
+router.get("/cancelled", hasPermission("order", "read", true), validate(getRestaurantOrdersQuerySchema, "query"), catchAsync(getCancelledOrders));
+router.get("/refund", hasPermission("order", "read", true), validate(getRestaurantOrdersQuerySchema, "query"), catchAsync(getRefundOrders));
 
 // ✅ تفاصيل أوردر بالـ ID - يحتاج صلاحية read + التحقق من الفرع
 router.get("/:id", hasPermission("order", "read", true), catchAsync(getRestaurantOrderById));

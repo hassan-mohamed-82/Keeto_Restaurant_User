@@ -27,7 +27,7 @@ import {
     coupons,
     shippingCompanies,
 } from "../../models/schema";
-import { eq, and, or, desc, inArray, sql, gte, lte, isNull } from "drizzle-orm";
+import { eq, and, or, desc, inArray, sql, gte, lte, isNull, gt, isNotNull } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
@@ -127,6 +127,52 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
     );
     conditions.push(...dateConditions);
 
+    // ✅ فلترة الطلبات التي تحتوي على خصم (Discounted Orders)
+    const discountFilter = (req.query?.hasDiscount || req.query?.discounted || req.query?.isDiscounted || req.query?.hasDiscounts) as string | undefined;
+    if (discountFilter !== undefined && discountFilter !== "") {
+        const isDiscount = discountFilter === "true" || discountFilter === "1";
+        if (isDiscount) {
+            conditions.push(
+                or(
+                    gt(orders.discountAmount, "0.00"),
+                    isNotNull(orders.discountId),
+                    isNotNull(orders.couponId),
+                    isNotNull(orders.firstOrderDiscountId)
+                )
+            );
+        } else {
+            conditions.push(
+                and(
+                    or(isNull(orders.discountAmount), eq(orders.discountAmount, "0.00")),
+                    isNull(orders.discountId),
+                    isNull(orders.couponId),
+                    isNull(orders.firstOrderDiscountId)
+                )
+            );
+        }
+    }
+
+    // ✅ فلترة طلبات استبدال النقاط (Redeem Points Orders)
+    const redeemFilter = (req.query?.isPointsRedeemed || req.query?.reedempoints || req.query?.redeemPoints || req.query?.reedemPoints || req.query?.hasRedeemPoints) as string | undefined;
+    if (redeemFilter !== undefined && redeemFilter !== "") {
+        const isRedeem = redeemFilter === "true" || redeemFilter === "1";
+        if (isRedeem) {
+            conditions.push(
+                or(
+                    eq(orders.isPointsRedeemed, true),
+                    isNotNull(orders.redeemCode)
+                )
+            );
+        } else {
+            conditions.push(
+                and(
+                    or(eq(orders.isPointsRedeemed, false), isNull(orders.isPointsRedeemed)),
+                    isNull(orders.redeemCode)
+                )
+            );
+        }
+    }
+
     const rawRestaurantOrders = await db
         .select({
             id: orders.id,
@@ -149,6 +195,8 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
             appCommission: orders.appCommission,
             discountAmount: orders.discountAmount,
             couponCode: orders.couponCode,
+            isPointsRedeemed: orders.isPointsRedeemed,
+            redeemCode: orders.redeemCode,
             totalAmount: orders.totalAmount,
             status: orders.status,
             durationOrderPreparing: orders.durationOrderPreparing,
@@ -363,6 +411,52 @@ export const getOrdersByStatus = async (
     );
     conditions.push(...dateConditions);
 
+    // ✅ فلترة الطلبات التي تحتوي على خصم (Discounted Orders)
+    const discountFilter = (req.query?.hasDiscount || req.query?.discounted || req.query?.isDiscounted || req.query?.hasDiscounts) as string | undefined;
+    if (discountFilter !== undefined && discountFilter !== "") {
+        const isDiscount = discountFilter === "true" || discountFilter === "1";
+        if (isDiscount) {
+            conditions.push(
+                or(
+                    gt(orders.discountAmount, "0.00"),
+                    isNotNull(orders.discountId),
+                    isNotNull(orders.couponId),
+                    isNotNull(orders.firstOrderDiscountId)
+                )
+            );
+        } else {
+            conditions.push(
+                and(
+                    or(isNull(orders.discountAmount), eq(orders.discountAmount, "0.00")),
+                    isNull(orders.discountId),
+                    isNull(orders.couponId),
+                    isNull(orders.firstOrderDiscountId)
+                )
+            );
+        }
+    }
+
+    // ✅ فلترة طلبات استبدال النقاط (Redeem Points Orders)
+    const redeemFilter = (req.query?.isPointsRedeemed || req.query?.reedempoints || req.query?.redeemPoints || req.query?.reedemPoints || req.query?.hasRedeemPoints) as string | undefined;
+    if (redeemFilter !== undefined && redeemFilter !== "") {
+        const isRedeem = redeemFilter === "true" || redeemFilter === "1";
+        if (isRedeem) {
+            conditions.push(
+                or(
+                    eq(orders.isPointsRedeemed, true),
+                    isNotNull(orders.redeemCode)
+                )
+            );
+        } else {
+            conditions.push(
+                and(
+                    or(eq(orders.isPointsRedeemed, false), isNull(orders.isPointsRedeemed)),
+                    isNull(orders.redeemCode)
+                )
+            );
+        }
+    }
+
     const rawResult = await db
         .select({
             id: orders.id,
@@ -385,6 +479,8 @@ export const getOrdersByStatus = async (
             appCommission: orders.appCommission,
             discountAmount: orders.discountAmount,
             couponCode: orders.couponCode,
+            isPointsRedeemed: orders.isPointsRedeemed,
+            redeemCode: orders.redeemCode,
             totalAmount: orders.totalAmount,
             status: orders.status,
             durationOrderPreparing: orders.durationOrderPreparing,

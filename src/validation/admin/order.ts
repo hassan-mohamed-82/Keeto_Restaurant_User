@@ -16,3 +16,23 @@ export const transferOrderBranchSchema = z
     });
 
 export type TransferOrderBranchInput = z.infer<typeof transferOrderBranchSchema>;
+
+// ==========================================
+// Get Restaurant Orders Query Schema
+// ==========================================
+export const getRestaurantOrdersQuerySchema = z
+    .object({
+        branchId: z.string().optional(),
+        source: z.string().optional(),
+        orderSource: z.string().optional(),
+        zoneId: z.string().optional(),
+        cityId: z.string().optional(),
+        hasDiscount: z.string().optional(),
+        isPointsRedeemed: z.string().optional(),
+        startDate: z.string().optional(),
+        endDate: z.string().optional(),
+        date: z.string().optional(),
+    })
+    .passthrough();
+
+export type GetRestaurantOrdersQueryInput = z.infer<typeof getRestaurantOrdersQuerySchema>;
