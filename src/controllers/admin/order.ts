@@ -51,6 +51,14 @@ import {
 } from "../../helpers/order.helper";
 import { handleCancelledOrder, settleDeliveredOrder } from "../../services/restaurantWalletService";
 import { dispatchOrder, releaseCourierForOrder } from "../../services/shipping/dispatchEngine";
+import {
+    notifyRestaurant,
+    notifyOrderTracking,
+    notifyShippingCompany,
+    notifyDeliveryMan,
+    notifyAdmins,
+} from "../../services/socket/socketService";
+import { SOCKET_EVENTS } from "../../services/socket/socketEvents";
 
 export {
     resolveZoneFromCoords,
@@ -1529,6 +1537,28 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
         releaseCourierForOrder(orderId, targetDeliveryManId).catch((err) => {
             console.error(`[releaseCourierForOrder] failed for order ${orderId}:`, err);
         });
+    }
+
+    // 7. إرسال تحديثات الحالة الحية عبر الـ WebSockets (Real-time Live UI)
+    const statusPayload = {
+        orderId: existingOrder.id,
+        orderNumber: existingOrder.orderNumber,
+        dailyOrderNumber: existingOrder.dailyOrderNumber,
+        status: status,
+        updatedAt: new Date(),
+    };
+
+    if (existingOrder.restaurantId) {
+        notifyRestaurant(existingOrder.restaurantId, SOCKET_EVENTS.ORDER_STATUS_CHANGED, statusPayload);
+    }
+    notifyOrderTracking(existingOrder.id, SOCKET_EVENTS.ORDER_STATUS_CHANGED, statusPayload);
+    notifyAdmins(SOCKET_EVENTS.ORDER_STATUS_CHANGED, statusPayload);
+
+    if (existingOrder.shippingCompanyId) {
+        notifyShippingCompany(existingOrder.shippingCompanyId, SOCKET_EVENTS.ORDER_STATUS_CHANGED, statusPayload);
+    }
+    if (targetDeliveryManId) {
+        notifyDeliveryMan(targetDeliveryManId, SOCKET_EVENTS.ORDER_STATUS_CHANGED, statusPayload);
     }
 
     return SuccessResponse(res, { message: `Order status successfully updated to ${status}` });
