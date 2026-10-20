@@ -48,8 +48,10 @@ export const excludeUnpaidVisaOrders = () =>
             )
             AND ${orders.paymentGateway} IS NULL
         )
+        OR ${orders.paymentStatus} IS NULL
         OR ${orders.paymentStatus} NOT IN ('pending_payment', 'payment_failed')
     )`;
+
 
 // ==========================================
 // 1. Helper: حساب تاريخ بداية الشيفت الحالي للمطعم
