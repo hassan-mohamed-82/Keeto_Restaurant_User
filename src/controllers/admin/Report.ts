@@ -68,11 +68,11 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
             status: orders.status,
             orderSource: orders.orderSource,
             orderType: orders.orderType,
-            
+
             // 👇 التعديل هنا: جلب اسم طريقة الدفع بدل الـ UUID
-            paymentMethodId: orders.paymentMethod, 
-            paymentMethodName: paymentMethods.name, 
-            
+            paymentMethodId: orders.paymentMethod,
+            paymentMethodName: paymentMethods.name,
+
             subtotal: orders.subtotal,
             deliveryFee: orders.deliveryFee,
             serviceFee: orders.serviceFee,
@@ -114,12 +114,12 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
     const branchSummary: Record<string, any> = {};
     const dailyTrend: Record<string, { date: string; orders: number; revenue: number }> = {};
 
-    let totalOrders = 0; 
-    let validOrdersForFinancials = 0; 
-    
+    let totalOrders = 0;
+    let validOrdersForFinancials = 0;
+
     // متغيرات الفلوس
     let grossTotalAllOrders = 0; // ✅ مجموع كل الأوردرات بغض النظر عن الستاتوس
-    let totalRevenue = 0; 
+    let totalRevenue = 0;
     let totalSubtotal = 0;
     let totalDeliveryFees = 0;
     let totalServiceFees = 0;
@@ -127,20 +127,20 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
 
     let totalCashCollected = 0;
     let totalDigitalCollected = 0;
-    
+
     let totalCashCommission = 0;
     let totalDigitalCommission = 0;
     let totalCashServiceFees = 0;
     let totalDigitalServiceFees = 0;
 
-    const validOrderIdsForItems: string[] = []; 
+    const validOrderIdsForItems: string[] = [];
 
     // ==========================================
     // 3. حساب الفلوس وتصفية الأوردرات (The Magic Loop)
     // ==========================================
     for (const order of allOrders) {
-        totalOrders++; 
-        
+        totalOrders++;
+
         const status = order.status || "pending";
         const cancelReasonType = order.cancelReasonType;
 
@@ -149,12 +149,12 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
 
         // 🛑 الفلتر السحري: هل اليوزر كنسل الطلب؟
         const isCancelledByUser = status === "cancelled" && cancelReasonType === "user";
-        
+
         if (isCancelledByUser) {
             if (statusSummary[status]) {
                 statusSummary[status].count++;
             }
-            continue; 
+            continue;
         }
 
         // ✅ الأوردر صالح ماليًا
@@ -166,11 +166,11 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
         const dlvFee = parseFloat(order.deliveryFee as string || "0");
         const svcFee = parseFloat(order.serviceFee as string || "0");
         const commission = parseFloat(order.appCommission as string || "0");
-        
+
         // 👇 الاعتماد على الاسم بدل الـ ID
         const payment = (order.paymentMethodName || "").toLowerCase();
         const isCash = payment.includes("cash") || payment.includes("استلام");
-        
+
         const oType = order.orderType || "delivery";
         const oSource = order.orderSource || "online_order";
 
@@ -226,7 +226,7 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
         }
         branchSummary[bId].totalOrders++;
         branchSummary[bId].totalAmount += amount;
-        if (status === "cancelled" ) {
+        if (status === "cancelled") {
             branchSummary[bId].cancelledOrders++;
         }
 
@@ -290,7 +290,7 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
     const [restaurantInfo] = await db.select({ id: restaurants.id, name: restaurants.name, logo: restaurants.logo, status: restaurants.status }).from(restaurants).where(eq(restaurants.id, restaurantId)).limit(1);
 
     const netRevenue = totalRevenue - totalAppCommission - totalServiceFees;
-    
+
     // حساب المديونيات الدقيق
     const restaurantOwesPlatform = totalCashCommission + totalCashServiceFees;
     const platformOwesRestaurant = totalDigitalCollected - (totalDigitalCommission + totalDigitalServiceFees);
@@ -330,18 +330,18 @@ export const getMyRestaurantReport = async (req: Request | any, res: Response) =
                 youOwePlatform: restaurantOwesPlatform.toFixed(2),
                 platformOwesYou: platformOwesRestaurant.toFixed(2),
                 netBalance: netBalance.toFixed(2),
-                status: netBalance > 0 
+                status: netBalance > 0
                     ? `Platform owes you ${Math.abs(netBalance).toFixed(2)} EGP`
-                    : netBalance < 0 
-                    ? `You owe platform ${Math.abs(netBalance).toFixed(2)} EGP`
-                    : "Accounts are settled",
+                    : netBalance < 0
+                        ? `You owe platform ${Math.abs(netBalance).toFixed(2)} EGP`
+                        : "Accounts are settled",
             },
 
             ordersByStatus: Object.entries(statusSummary).map(([status, data]) => ({ status, count: data.count, totalAmount: data.totalAmount.toFixed(2) })),
             ordersByPayment: Object.entries(paymentSummary).map(([method, data]) => ({ paymentMethod: method, count: data.count, totalAmount: data.totalAmount.toFixed(2) })),
             ordersByType: Object.entries(orderTypeSummary).map(([type, data]) => ({ orderType: type, count: data.count, totalAmount: data.totalAmount.toFixed(2) })),
             ordersBySource: Object.entries(orderSourceSummary).map(([source, data]) => ({ orderSource: source, count: data.count, totalAmount: data.totalAmount.toFixed(2) })),
-            
+
             branchBreakdown: Object.values(branchSummary).map(b => ({
                 branchId: b.branchId,
                 branchName: b.branchName,
@@ -382,13 +382,13 @@ export const getOrdersByPaymentMethod = async (req: Request | any, res: Response
     const restaurantId = req.user.restaurantId || req.user.id;
     if (!restaurantId) throw new BadRequest("Restaurant ID not found");
 
-    const { 
-        startDate, 
-        endDate, 
-        branchId, 
-        paymentMethodId, 
-        paymentMethodName, 
-        paymentMethod 
+    const {
+        startDate,
+        endDate,
+        branchId,
+        paymentMethodId,
+        paymentMethodName,
+        paymentMethod
     } = req.query;
 
     const pMethod = (paymentMethodId || paymentMethod) as string;
@@ -437,16 +437,16 @@ export const getOrdersByPaymentMethod = async (req: Request | any, res: Response
             status: orders.status,
             orderSource: orders.orderSource,
             orderType: orders.orderType,
-            
+
             // 👇 بيانات المستخدم مع معالجة الـ NULLs والـ Guests
             userId: orders.userId,
             userName: sql<string>`COALESCE(${users.name}, 'Guest')`,
             userPhone: sql<string>`COALESCE(${users.phone}, 'N/A')`,
             userEmail: sql<string>`COALESCE(${users.email}, 'N/A')`,
 
-            paymentMethodId: orders.paymentMethod, 
-            paymentMethodName: paymentMethods.name, 
-            
+            paymentMethodId: orders.paymentMethod,
+            paymentMethodName: paymentMethods.name,
+
             subtotal: orders.subtotal,
             deliveryFee: orders.deliveryFee,
             serviceFee: orders.serviceFee,
@@ -486,11 +486,11 @@ export const getOrdersByPaymentMethod = async (req: Request | any, res: Response
         const isCash = name.includes("cash") || name.includes("استلام");
         const isWallet = name.includes("wallet") || name.includes("محفظ");
 
-        const standardKey = isCash 
-            ? "cash_on_delivery" 
-            : isWallet 
-            ? "wallet" 
-            : "visa";
+        const standardKey = isCash
+            ? "cash_on_delivery"
+            : isWallet
+                ? "wallet"
+                : "visa";
 
         if (paymentSummary[standardKey]) {
             paymentSummary[standardKey].count++;
@@ -499,7 +499,7 @@ export const getOrdersByPaymentMethod = async (req: Request | any, res: Response
     }
 
     // تجهيز قائمة الطلبات: تُرجع البيانات فقط إذا تم إرسال طريقة الدفع في الـ Query
-    const formattedOrders = hasPaymentFilter 
+    const formattedOrders = hasPaymentFilter
         ? orderList.map(o => ({
             ...o,
             subtotal: parseFloat(o.subtotal as string || "0").toFixed(2),
@@ -538,7 +538,7 @@ export const getOrdersByPaymentMethod = async (req: Request | any, res: Response
 
 export const downloadSavedInvoicePDF = async (req: Request | any, res: Response) => {
     if (!req.user) throw new UnauthorizedError("Unauthenticated");
-    
+
     const restaurantId = req.user.restaurantId || req.user.id;
     const { invoiceId } = req.params;
 
@@ -553,7 +553,7 @@ export const downloadSavedInvoicePDF = async (req: Request | any, res: Response)
 
     // 3. نعمل الـ PDF بالبيانات المحفوظة سلفاً
     const doc = new PDFDocument({ margin: 50 });
-    
+
     const fontPath = path.join(process.cwd(), 'assets', 'fonts', 'Arial.ttf');
     const cairoPath = path.join(process.cwd(), 'assets', 'fonts', 'Cairo-Regular.ttf');
     const chosenFontPath = fs.existsSync(fontPath) ? fontPath : (fs.existsSync(cairoPath) ? cairoPath : null);
@@ -565,20 +565,20 @@ export const downloadSavedInvoicePDF = async (req: Request | any, res: Response)
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${invoice.invoiceNumber}.pdf"`);
-    
+
     doc.pipe(res);
-    
+
     // Header
     doc.fontSize(24).text(`${restaurantInfo.name}`, { align: 'center' });
     doc.fontSize(14).fillColor('gray').text('Invoice / Financial Statement', { align: 'center' });
     doc.moveDown();
-    
+
     // Invoice Details
     doc.fontSize(12).fillColor('black').text(`Invoice Number: ${invoice.invoiceNumber}`);
     doc.text(`Status: ${(invoice.status || 'unpaid').toUpperCase()}`);
     doc.text(`Period: ${invoice.startDate.toISOString().split('T')[0]} to ${invoice.endDate.toISOString().split('T')[0]}`);
     doc.moveDown();
-    
+
     doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
     doc.moveDown();
 
@@ -593,11 +593,11 @@ export const downloadSavedInvoicePDF = async (req: Request | any, res: Response)
     doc.fontSize(16).text('Settlement Details', { underline: true });
     doc.fontSize(12).text(`You owe platform: ${invoice.restaurantOwesPlatform} EGP`);
     doc.text(`Platform owes you: ${invoice.platformOwesRestaurant} EGP`);
-    
+
     doc.moveDown();
     const net = parseFloat(invoice.netBalance as string);
     doc.fontSize(14).text('Final Account Balance:', { continued: true });
-    
+
     if (net > 0) {
         doc.fillColor('green').text(` Platform owes you ${Math.abs(net)} EGP`);
     } else if (net < 0) {
@@ -605,7 +605,7 @@ export const downloadSavedInvoicePDF = async (req: Request | any, res: Response)
     } else {
         doc.fillColor('black').text(` Settled (0.00 EGP)`);
     }
-    
+
     doc.end();
 };
 
@@ -657,8 +657,11 @@ export const getDashboardReports = async (req: Request | any, res: Response) => 
             status: orders.status,
             totalAmount: orders.totalAmount,
             subtotal: orders.subtotal,
-            discountAmount: orders.discountAmount,
+            discountAmount: sql<string>`COALESCE(${orders.discountAmount}, '0.00')`,
+            discountId: orders.discountId,
+            discountSource: orders.discountSource,
             couponCode: orders.couponCode,
+            couponId: orders.couponId,
             orderSource: orders.orderSource,
             createdAt: orders.createdAt,
             cancelReasonType: sql<string | null>`COALESCE(${orders.cancelReasonType}, ${selectReasons.type})`,
@@ -677,11 +680,11 @@ export const getDashboardReports = async (req: Request | any, res: Response) => 
     // ==========================================
     let totalRevenue = 0;
     let numberOfOrders = 0;
-    
+
     const peakHoursObj: Record<string, number> = Object.fromEntries(
         Array.from({ length: 24 }, (_, i) => [i < 10 ? `0${i}:00` : `${i}:00`, 0])
     );
-    
+
     const peakDaysObj: Record<string, number> = {
         "Sunday": 0, "Monday": 0, "Tuesday": 0, "Wednesday": 0, "Thursday": 0, "Friday": 0, "Saturday": 0
     };
@@ -708,7 +711,7 @@ export const getDashboardReports = async (req: Request | any, res: Response) => 
         const amount = parseFloat((o.totalAmount as string) || "0");
         const sub = parseFloat((o.subtotal as string) || "0");
         const disc = parseFloat((o.discountAmount as string) || "0");
-        
+
         if (o.status !== "cancelled" && o.status !== "refund") {
             totalRevenue += amount;
             numberOfOrders++;
@@ -728,11 +731,11 @@ export const getDashboardReports = async (req: Request | any, res: Response) => 
 
             // مصادر الطلب (Order Source)
             const source = o.orderSource || "unknown";
-            const platformName = source === "my_keeto" ? "my_keeto" 
-                               : source === "online_order_web" ? "Website" 
-                               : source === "online_order_app" ? "App" 
-                               : source === "food_aggregator" ? "Aggregator" 
-                               : source;
+            const platformName = source === "my_keeto" ? "my_keeto"
+                : source === "online_order_web" ? "Website"
+                    : source === "online_order_app" ? "App"
+                        : source === "food_aggregator" ? "Aggregator"
+                            : source;
             orderSourcesObj[platformName] = (orderSourcesObj[platformName] || 0) + 1;
 
             // الخريطة الجغرافية
@@ -743,25 +746,30 @@ export const getDashboardReports = async (req: Request | any, res: Response) => 
         // الإلغاءات
         if (o.status === "cancelled") {
             if (o.cancelReasonType === "user") userCancellations++;
-            else if (o.cancelReasonType === "restaurant") restaurantCancellations++; 
+            else if (o.cancelReasonType === "restaurant") restaurantCancellations++;
             else otherCancellations++;
         }
 
         // تحليل الخصومات والكوبونات (لأي طلب فيه خصم — سواء كوبون أو خصم مباشر)
-        if (disc > 0 && o.status !== "cancelled" && o.status !== "refund") {
-            const revenueBefore = amount + disc;
-            const discountPct = revenueBefore > 0 ? ((disc / revenueBefore) * 100).toFixed(0) : "0";
+        const hasDiscount = disc > 0 || Boolean(o.discountId) || Boolean(o.couponId) || Boolean(o.couponCode);
+        if (hasDiscount && o.status !== "cancelled" && o.status !== "refund") {
+            // إذا discountAmount = 0 لكن في discountId، نحسب الخصم من الفرق
+            const effectiveDisc = disc > 0 ? disc : sub - amount > 0 ? sub - amount : 0;
+            const revenueBefore = amount + effectiveDisc;
+            const discountPct = revenueBefore > 0 && effectiveDisc > 0 ? ((effectiveDisc / revenueBefore) * 100).toFixed(0) : "0";
             if (!discountEffectivenessMap[discountPct]) discountEffectivenessMap[discountPct] = { revenue: 0, count: 0 };
             discountEffectivenessMap[discountPct].revenue += amount;
             discountEffectivenessMap[discountPct].count++;
         }
 
-        // تحليل الكوبونات (revenue before/after per coupon code)
-        if (o.couponCode && o.status !== "cancelled" && o.status !== "refund") {
-            const revenueBefore = amount + disc;
-            if (!couponAnalysis[o.couponCode]) couponAnalysis[o.couponCode] = { before: 0, after: 0 };
-            couponAnalysis[o.couponCode].before += revenueBefore;
-            couponAnalysis[o.couponCode].after += amount;
+        // تحليل الكوبونات (revenue before/after per coupon code or couponId)
+        const couponKey = o.couponCode || (o.couponId ? `coupon:${o.couponId}` : null);
+        if (couponKey && o.status !== "cancelled" && o.status !== "refund") {
+            const effectiveDisc2 = disc > 0 ? disc : sub - amount > 0 ? sub - amount : 0;
+            const revenueBefore = amount + effectiveDisc2;
+            if (!couponAnalysis[couponKey]) couponAnalysis[couponKey] = { before: 0, after: 0 };
+            couponAnalysis[couponKey].before += revenueBefore;
+            couponAnalysis[couponKey].after += amount;
         }
     }
 
@@ -788,7 +796,7 @@ export const getDashboardReports = async (req: Request | any, res: Response) => 
                 .where(inArray(orderItems.orderId, batch));
 
             const itemsByOrder: Record<string, { id: string, name: string }[]> = {};
-            
+
             for (const item of oItems) {
                 const fName = item.foodName || "Unknown";
                 const fId = item.foodId;
@@ -846,7 +854,7 @@ export const getDashboardReports = async (req: Request | any, res: Response) => 
     const ratings = await db.select({ rating: restaurantRatings.rating })
         .from(restaurantRatings)
         .where(and(...ratingConditions));
-    
+
     let avgRating = "0.00";
     if (ratings.length > 0) {
         const sum = ratings.reduce((acc, r) => acc + (r.rating || 0), 0);
@@ -917,11 +925,11 @@ export const getVisaReport = async (req: Request | any, res: Response) => {
     const restaurantId = req.user.restaurantId || req.user.id;
     if (!restaurantId) throw new BadRequest("Restaurant ID not found");
 
-    const { 
-        startDate, 
-        endDate, 
-        branchId, 
-        status, 
+    const {
+        startDate,
+        endDate,
+        branchId,
+        status,
         paymentStatus,
         payment_status,
         type,
@@ -959,8 +967,8 @@ export const getVisaReport = async (req: Request | any, res: Response) => {
         .limit(1);
 
     const gatewayType: "SYSTEM" | "CUSTOM" = restaurantSetting?.paymentGatewayType === "CUSTOM" ? "CUSTOM" : "SYSTEM";
-    const gatewayName = gatewayType === "CUSTOM" 
-        ? (customCred?.title || customCred?.provider || "Custom Visa") 
+    const gatewayName = gatewayType === "CUSTOM"
+        ? (customCred?.title || customCred?.provider || "Custom Visa")
         : "kashier";
 
     // الشرط الأساسي: أوردرات الفيزا / الدفع الإلكتروني لهذا المطعم
