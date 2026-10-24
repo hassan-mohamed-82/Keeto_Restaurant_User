@@ -643,8 +643,12 @@ export const getDashboardReports = async (req: Request | any, res: Response) => 
         end.setHours(23, 59, 59, 999);
         conditions.push(lte(orders.createdAt, end));
     }
-    if (branchId) conditions.push(eq(orders.branchId, branchId as string));
-    if (req.user.branchId) conditions.push(eq(orders.branchId, req.user.branchId));
+    // Branch filter: query param takes priority; fall back to user's assigned branch
+    if (branchId) {
+        conditions.push(eq(orders.branchId, branchId as string));
+    } else if (req.user.branchId) {
+        conditions.push(eq(orders.branchId, req.user.branchId));
+    }
 
     // 2. سحب بيانات الطلبات الأساسية مع الـ Joins المطابقة للـ Schemas
     const rawOrders = await db
@@ -743,17 +747,21 @@ export const getDashboardReports = async (req: Request | any, res: Response) => 
             else otherCancellations++;
         }
 
-        // تحليل الكوبونات
-        if (o.couponCode && o.status !== "cancelled") {
+        // تحليل الخصومات والكوبونات (لأي طلب فيه خصم — سواء كوبون أو خصم مباشر)
+        if (disc > 0 && o.status !== "cancelled" && o.status !== "refund") {
             const revenueBefore = amount + disc;
-            if (!couponAnalysis[o.couponCode]) couponAnalysis[o.couponCode] = { before: 0, after: 0 };
-            couponAnalysis[o.couponCode].before += revenueBefore;
-            couponAnalysis[o.couponCode].after += amount;
-            
             const discountPct = revenueBefore > 0 ? ((disc / revenueBefore) * 100).toFixed(0) : "0";
             if (!discountEffectivenessMap[discountPct]) discountEffectivenessMap[discountPct] = { revenue: 0, count: 0 };
             discountEffectivenessMap[discountPct].revenue += amount;
             discountEffectivenessMap[discountPct].count++;
+        }
+
+        // تحليل الكوبونات (revenue before/after per coupon code)
+        if (o.couponCode && o.status !== "cancelled" && o.status !== "refund") {
+            const revenueBefore = amount + disc;
+            if (!couponAnalysis[o.couponCode]) couponAnalysis[o.couponCode] = { before: 0, after: 0 };
+            couponAnalysis[o.couponCode].before += revenueBefore;
+            couponAnalysis[o.couponCode].after += amount;
         }
     }
 
