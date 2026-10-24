@@ -29,7 +29,7 @@ const router = Router();
 
 // ✅ Get reasons - يحتاج صلاحية read
 router.get("/reasons", hasPermission("order", "read"), catchAsync(getReasons));
-router.get("/numbers", hasPermission("order", "read", true), catchAsync(getallnumbersoforders));
+router.get("/numbers", hasPermission("order", "read", true), validate(getRestaurantOrdersQuerySchema, "query"), catchAsync(getallnumbersoforders));
 router.get("/select", hasPermission("order", "read", true), catchAsync(selectDeliveryMan))
 router.get("/select-data", hasPermission("order", "read", true), catchAsync(getSelectData))
 router.get("/select-branches", hasPermission("order", "read", true), catchAsync(getSelectBranches))

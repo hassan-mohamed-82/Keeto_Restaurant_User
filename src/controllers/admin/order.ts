@@ -24,7 +24,10 @@ import {
     restaurantSchedules,
     restaurantBusinessPlans,
     discounts,
+    discountRestaurants,
     coupons,
+    couponRestaurants,
+    firstOrderDiscounts,
     shippingCompanies,
 } from "../../models/schema";
 import { eq, and, or, desc, inArray, sql, gte, lte, isNull, gt, isNotNull } from "drizzle-orm";
@@ -48,6 +51,7 @@ import {
     buildOrderDateConditions,
     excludeUnpaidVisaOrders,
     resolvePaymentMethodDetails,
+    buildOrderDiscountAndPaymentConditions,
 } from "../../helpers/order.helper";
 import { handleCancelledOrder, settleDeliveredOrder } from "../../services/restaurantWalletService";
 import { dispatchOrder, releaseCourierForOrder } from "../../services/shipping/dispatchEngine";
@@ -129,57 +133,15 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
         req.user.type === "owner"
             ? true
             : await (async () => {
-                  const { checkUserPermission } = await import("../../middlewares/hasPermission");
-                  return checkUserPermission(req.user!.id, "order", "filter" as any);
-              })()
+                const { checkUserPermission } = await import("../../middlewares/hasPermission");
+                return checkUserPermission(req.user!.id, "order", "filter" as any);
+            })()
     );
     conditions.push(...dateConditions);
 
-    // ✅ فلترة الطلبات التي تحتوي على خصم (Discounted Orders)
-    const discountFilter = (req.query?.hasDiscount || req.query?.discounted || req.query?.isDiscounted || req.query?.hasDiscounts) as string | undefined;
-    if (discountFilter !== undefined && discountFilter !== "") {
-        const isDiscount = discountFilter === "true" || discountFilter === "1";
-        if (isDiscount) {
-            conditions.push(
-                or(
-                    gt(orders.discountAmount, "0.00"),
-                    isNotNull(orders.discountId),
-                    isNotNull(orders.couponId),
-                    isNotNull(orders.firstOrderDiscountId)
-                )
-            );
-        } else {
-            conditions.push(
-                and(
-                    or(isNull(orders.discountAmount), eq(orders.discountAmount, "0.00")),
-                    isNull(orders.discountId),
-                    isNull(orders.couponId),
-                    isNull(orders.firstOrderDiscountId)
-                )
-            );
-        }
-    }
-
-    // ✅ فلترة طلبات استبدال النقاط (Redeem Points Orders)
-    const redeemFilter = (req.query?.isPointsRedeemed || req.query?.reedempoints || req.query?.redeemPoints || req.query?.reedemPoints || req.query?.hasRedeemPoints) as string | undefined;
-    if (redeemFilter !== undefined && redeemFilter !== "") {
-        const isRedeem = redeemFilter === "true" || redeemFilter === "1";
-        if (isRedeem) {
-            conditions.push(
-                or(
-                    eq(orders.isPointsRedeemed, true),
-                    isNotNull(orders.redeemCode)
-                )
-            );
-        } else {
-            conditions.push(
-                and(
-                    or(eq(orders.isPointsRedeemed, false), isNull(orders.isPointsRedeemed)),
-                    isNull(orders.redeemCode)
-                )
-            );
-        }
-    }
+    // ✅ فلترة وسيلة الدفع وأنواع الخصم المتعددة (Payment Method & Discount Filters)
+    const discountAndPaymentConditions = buildOrderDiscountAndPaymentConditions(req);
+    conditions.push(...discountAndPaymentConditions);
 
     const rawRestaurantOrders = await db
         .select({
@@ -201,8 +163,15 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
             deliveryFee: orders.deliveryFee,
             serviceFee: orders.serviceFee,
             appCommission: orders.appCommission,
+            discountId: orders.discountId,
+            discountType: orders.discountType,
+            discountValue: orders.discountValue,
+            discountSource: orders.discountSource,
             discountAmount: orders.discountAmount,
+            couponId: orders.couponId,
             couponCode: orders.couponCode,
+            firstOrderDiscountId: orders.firstOrderDiscountId,
+            offerId: orders.offerId,
             isPointsRedeemed: orders.isPointsRedeemed,
             redeemCode: orders.redeemCode,
             totalAmount: orders.totalAmount,
@@ -343,11 +312,17 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
                     }
                     : null,
                 discount: {
+                    discountId: o.discountId ?? null,
                     discountAmount: o.discountAmount ?? "0.00",
+                    discountType: o.discountType ?? null,
+                    discountValue: o.discountValue ?? null,
+                    discountSource: o.discountSource ?? null,
+                    couponId: o.couponId ?? null,
                     couponCode: o.couponCode ?? null,
                     couponName: couponDetails?.name ?? null,
                     couponNameAr: couponDetails?.nameAr ?? null,
                     couponNameFr: couponDetails?.nameFr ?? null,
+                    firstOrderDiscountId: o.firstOrderDiscountId ?? null,
                 },
             };
         })
@@ -413,57 +388,15 @@ export const getOrdersByStatus = async (
         req.user!.type === "owner" || req.user!.type === "branch_manager"
             ? true
             : await (async () => {
-                  const { checkUserPermission } = await import("../../middlewares/hasPermission");
-                  return checkUserPermission(req.user!.id, "order", "filter" as any);
-              })()
+                const { checkUserPermission } = await import("../../middlewares/hasPermission");
+                return checkUserPermission(req.user!.id, "order", "filter" as any);
+            })()
     );
     conditions.push(...dateConditions);
 
-    // ✅ فلترة الطلبات التي تحتوي على خصم (Discounted Orders)
-    const discountFilter = (req.query?.hasDiscount || req.query?.discounted || req.query?.isDiscounted || req.query?.hasDiscounts) as string | undefined;
-    if (discountFilter !== undefined && discountFilter !== "") {
-        const isDiscount = discountFilter === "true" || discountFilter === "1";
-        if (isDiscount) {
-            conditions.push(
-                or(
-                    gt(orders.discountAmount, "0.00"),
-                    isNotNull(orders.discountId),
-                    isNotNull(orders.couponId),
-                    isNotNull(orders.firstOrderDiscountId)
-                )
-            );
-        } else {
-            conditions.push(
-                and(
-                    or(isNull(orders.discountAmount), eq(orders.discountAmount, "0.00")),
-                    isNull(orders.discountId),
-                    isNull(orders.couponId),
-                    isNull(orders.firstOrderDiscountId)
-                )
-            );
-        }
-    }
-
-    // ✅ فلترة طلبات استبدال النقاط (Redeem Points Orders)
-    const redeemFilter = (req.query?.isPointsRedeemed || req.query?.reedempoints || req.query?.redeemPoints || req.query?.reedemPoints || req.query?.hasRedeemPoints) as string | undefined;
-    if (redeemFilter !== undefined && redeemFilter !== "") {
-        const isRedeem = redeemFilter === "true" || redeemFilter === "1";
-        if (isRedeem) {
-            conditions.push(
-                or(
-                    eq(orders.isPointsRedeemed, true),
-                    isNotNull(orders.redeemCode)
-                )
-            );
-        } else {
-            conditions.push(
-                and(
-                    or(eq(orders.isPointsRedeemed, false), isNull(orders.isPointsRedeemed)),
-                    isNull(orders.redeemCode)
-                )
-            );
-        }
-    }
+    // ✅ فلترة وسيلة الدفع وأنواع الخصم المتعددة (Payment Method & Discount Filters)
+    const discountAndPaymentConditions = buildOrderDiscountAndPaymentConditions(req);
+    conditions.push(...discountAndPaymentConditions);
 
     const rawResult = await db
         .select({
@@ -485,8 +418,15 @@ export const getOrdersByStatus = async (
             deliveryFee: orders.deliveryFee,
             serviceFee: orders.serviceFee,
             appCommission: orders.appCommission,
+            discountId: orders.discountId,
+            discountType: orders.discountType,
+            discountValue: orders.discountValue,
+            discountSource: orders.discountSource,
             discountAmount: orders.discountAmount,
+            couponId: orders.couponId,
             couponCode: orders.couponCode,
+            firstOrderDiscountId: orders.firstOrderDiscountId,
+            offerId: orders.offerId,
             isPointsRedeemed: orders.isPointsRedeemed,
             redeemCode: orders.redeemCode,
             totalAmount: orders.totalAmount,
@@ -627,11 +567,17 @@ export const getOrdersByStatus = async (
                     }
                     : null,
                 discount: {
+                    discountId: o.discountId ?? null,
                     discountAmount: o.discountAmount ?? "0.00",
+                    discountType: o.discountType ?? null,
+                    discountValue: o.discountValue ?? null,
+                    discountSource: o.discountSource ?? null,
+                    couponId: o.couponId ?? null,
                     couponCode: o.couponCode ?? null,
                     couponName: couponDetails?.name ?? null,
                     couponNameAr: couponDetails?.nameAr ?? null,
                     couponNameFr: couponDetails?.nameFr ?? null,
+                    firstOrderDiscountId: o.firstOrderDiscountId ?? null,
                 },
             };
         })
@@ -1791,10 +1737,10 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
                     if (optDb) {
                         const resolvedArabicName =
                             (typeof optDb.optionNameAr === "string" && optDb.optionNameAr.trim()) ? optDb.optionNameAr :
-                            (typeof v.optionNameAr === "string" && v.optionNameAr.trim()) ? v.optionNameAr :
-                            (typeof v.valueAr === "string" && v.valueAr.trim()) ? v.valueAr :
-                            (typeof v.option?.optionNameAr === "string" && v.option.optionNameAr.trim()) ? v.option.optionNameAr :
-                            "";
+                                (typeof v.optionNameAr === "string" && v.optionNameAr.trim()) ? v.optionNameAr :
+                                    (typeof v.valueAr === "string" && v.valueAr.trim()) ? v.valueAr :
+                                        (typeof v.option?.optionNameAr === "string" && v.option.optionNameAr.trim()) ? v.option.optionNameAr :
+                                            "";
 
                         const resolvedEnglishName =
                             optDb.optionName ||
@@ -2052,12 +1998,14 @@ export const getallnumbersoforders = async (req: Request, res: Response) => {
         req.user!.type === "owner" || req.user!.type === "branch_manager"
             ? true
             : await (async () => {
-                  const { checkUserPermission } = await import("../../middlewares/hasPermission");
-                  return checkUserPermission(req.user!.id, "order", "filter" as any);
-              })()
+                const { checkUserPermission } = await import("../../middlewares/hasPermission");
+                return checkUserPermission(req.user!.id, "order", "filter" as any);
+            })()
     );
     conditions.push(...dateConditions);
-    //-----------------------
+    // ✅ فلترة وسيلة الدفع وأنواع الخصم المتعددة للأرقام الإجمالية
+    const discountAndPaymentConditions = buildOrderDiscountAndPaymentConditions(req);
+    conditions.push(...discountAndPaymentConditions);
 
     const statusCountsResult = await db
         .select({
@@ -2069,6 +2017,7 @@ export const getallnumbersoforders = async (req: Request, res: Response) => {
         .leftJoin(addresses, eq(orders.addressId, addresses.id))
         .leftJoin(restaurantZoneDeliveryFees, eq(orders.zoneId, restaurantZoneDeliveryFees.id))
         .leftJoin(zones, eq(restaurantZoneDeliveryFees.zoneId, zones.id))
+        .leftJoin(paymentMethods, eq(orders.paymentMethod, paymentMethods.id))
         .where(and(...conditions))
         .groupBy(orders.status);
 
@@ -2215,8 +2164,16 @@ export const getSelectData = async (req: Request, res: Response) => {
         );
     }
 
-    // 3. تنفيذ الـ Queries بالتوازي (Branches, Zones, Business Plans)
-    const [branchList, rawZones, businessPlans] = await Promise.all([
+    // 3. تنفيذ الـ Queries بالتوازي (Branches, Zones, Business Plans, Payment Methods, Discounts, Coupons, First Order Discounts)
+    const [
+        branchList,
+        rawZones,
+        businessPlans,
+        dbPaymentMethods,
+        rawDiscounts,
+        rawCoupons,
+        rawFirstOrderDiscounts,
+    ] = await Promise.all([
         db
             .select({
                 id: branches.id,
@@ -2251,6 +2208,77 @@ export const getSelectData = async (req: Request, res: Response) => {
             })
             .from(restaurantBusinessPlans)
             .where(eq(restaurantBusinessPlans.restaurantId, adminRestaurantId)),
+
+        db
+            .select({
+                id: paymentMethods.id,
+                name: paymentMethods.name,
+                nameAr: paymentMethods.nameAr,
+            })
+            .from(paymentMethods)
+            .where(eq(paymentMethods.isActive, true)),
+
+        db
+            .selectDistinct({
+                id: discounts.id,
+                name: discounts.name,
+                nameAr: discounts.nameAr,
+                nameFr: discounts.nameFr,
+                discountType: discounts.discountType,
+                discountValue: discounts.discountValue,
+                isGlobal: discounts.isGlobal,
+            })
+            .from(discounts)
+            .leftJoin(discountRestaurants, eq(discounts.id, discountRestaurants.discountId))
+            .where(
+                and(
+                    eq(discounts.isActive, true),
+                    or(
+                        eq(discounts.isGlobal, true),
+                        eq(discountRestaurants.restaurantId, adminRestaurantId)
+                    )
+                )
+            ),
+
+        db
+            .selectDistinct({
+                id: coupons.id,
+                code: coupons.code,
+                name: coupons.name,
+                nameAr: coupons.nameAr,
+                nameFr: coupons.nameFr,
+                discountType: coupons.discountType,
+                discountValue: coupons.discountValue,
+                isGlobal: coupons.isGlobal,
+            })
+            .from(coupons)
+            .leftJoin(couponRestaurants, eq(coupons.id, couponRestaurants.couponId))
+            .where(
+                and(
+                    eq(coupons.isActive, true),
+                    or(
+                        eq(couponRestaurants.restaurantId, adminRestaurantId),
+                        eq(coupons.isGlobal, true)
+                    )
+                )
+            ),
+
+        db
+            .select({
+                id: firstOrderDiscounts.id,
+                name: firstOrderDiscounts.name,
+                nameAr: firstOrderDiscounts.nameAr,
+                nameFr: firstOrderDiscounts.nameFr,
+                discountType: firstOrderDiscounts.discountType,
+                discountValue: firstOrderDiscounts.discountValue,
+            })
+            .from(firstOrderDiscounts)
+            .where(
+                and(
+                    eq(firstOrderDiscounts.restaurantId, adminRestaurantId),
+                    eq(firstOrderDiscounts.status, "active")
+                )
+            ),
     ]);
 
     // Deduplicate zones in case multiple fee rules exist for the same zone
@@ -2306,6 +2334,35 @@ export const getSelectData = async (req: Request, res: Response) => {
         return true;
     });
 
+    // 6. قائمة أنواع الخصومات المتاحة للفلترة
+    const discountTypes = [
+        { id: "product_discount", name: "Product Discount", nameAr: "خصم على منتج / وجبة", value: "product_discount" },
+        { id: "discount_id", name: "Restaurant Discount", nameAr: "خصم المطعم", value: "discount_id" },
+        { id: "coupon", name: "Coupon", nameAr: "كوبون خصم", value: "coupon" },
+        { id: "first_order_discount", name: "First Order Discount", nameAr: "خصم أول طلب", value: "first_order_discount" },
+        { id: "free_delivery", name: "Free Delivery", nameAr: "توصيل مجاني", value: "free_delivery" },
+        { id: "points", name: "Points Redemption", nameAr: "استبدال نقاط", value: "points" },
+    ];
+
+    // 7. قائمة وسائل الدفع (الخيارات الأساسية + وسائل الدفع من قاعدة البيانات)
+    const standardPaymentMethods = [
+        { id: "cash", name: "Cash on Delivery", nameAr: "الدفع عند الاستلام", value: "cash" },
+        { id: "visa", name: "Credit / Debit Card (Visa)", nameAr: "بطاقة بنكية (فيزا)", value: "visa" },
+        // { id: "wallet", name: "Wallet", nameAr: "المحفظة", value: "wallet" },
+    ];
+
+    const paymentMethodsList = [
+        ...standardPaymentMethods,
+        ...dbPaymentMethods
+            .filter((pm) => !["cash", "visa", "wallet"].includes(pm.id.toLowerCase()))
+            .map((pm) => ({
+                id: pm.id,
+                name: pm.name,
+                nameAr: pm.nameAr,
+                value: pm.id,
+            })),
+    ];
+
     return SuccessResponse(res, {
         message: "Get select data success",
         data: {
@@ -2313,6 +2370,11 @@ export const getSelectData = async (req: Request, res: Response) => {
             zones: zoneList,
             cities: cityList,
             sources,
+            paymentMethods: paymentMethodsList,
+            discountTypes,
+            discounts: rawDiscounts,
+            coupons: rawCoupons,
+            firstOrderDiscounts: rawFirstOrderDiscounts,
         },
     });
 };
