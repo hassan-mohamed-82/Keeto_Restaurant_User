@@ -3,8 +3,8 @@ import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 import { db } from "../models/connection";
-import { orders, restaurantSettings, restaurantSchedules, paymentMethods, coupons, orderItems, food } from "../models/schema";
-import { eq, gte, lte, sql, or, and, isNull, isNotNull, gt, like } from "drizzle-orm";
+import { orders, restaurantSettings, restaurantSchedules, paymentMethods, coupons, orderItems, food, users } from "../models/schema";
+import { eq, gte, lte, sql, or, and, isNull, isNotNull, gt, like, inArray } from "drizzle-orm";
 import { BadRequest } from "../Errors/BadRequest";
 import { ForbiddenError } from "../Errors/forbiddenError";
 
@@ -521,6 +521,69 @@ export const buildOrderDiscountAndPaymentConditions = (req: Request): any[] => {
                 )
             );
         }
+    }
+
+    return conditions;
+};
+
+// ==========================================
+// Helper: فلترة الطلبات حسب نوع الطلب (orderType) وبيانات العميل (الاسم، الإيميل، الهاتف)
+// ==========================================
+export const buildOrderUserAndTypeConditions = (req: Request): any[] => {
+    const conditions: any[] = [];
+    const query = req.query || {};
+
+    // 1. فلترة نوع الطلب (Order Type: delivery, takeaway, dine_in)
+    const rawOrderType = (query.orderType as string)?.trim();
+    if (rawOrderType && rawOrderType !== "all" && rawOrderType !== "null" && rawOrderType !== "undefined") {
+        const normalizeOrderType = (t: string): string => {
+            const s = t.trim().toLowerCase();
+            if (s === "delivery" || s === "توصيل" || s === "دليفري") return "delivery";
+            if (s === "takeaway" || s === "take_away" || s === "استلام" || s === "تيك_اواي" || s === "تيك اوي" || s === "سفري") return "takeaway";
+            if (s === "dine_in" || s === "dinein" || s === "صالة" || s === "محلي") return "dine_in";
+            return s;
+        };
+
+        if (rawOrderType.includes(",")) {
+            const types = rawOrderType
+                .split(",")
+                .map((t) => normalizeOrderType(t))
+                .filter((t) => ["delivery", "takeaway", "dine_in"].includes(t));
+            if (types.length > 1) {
+                conditions.push(inArray(orders.orderType, types as any));
+            } else if (types.length === 1) {
+                conditions.push(eq(orders.orderType, types[0] as any));
+            }
+        } else {
+            const normalized = normalizeOrderType(rawOrderType);
+            if (["delivery", "takeaway", "dine_in"].includes(normalized)) {
+                conditions.push(eq(orders.orderType, normalized as any));
+            }
+        }
+    }
+
+    // 2. فلترة اسم العميل (User Name)
+    const userName = (query.userName as string)?.trim();
+    if (userName && userName !== "null" && userName !== "undefined") {
+        conditions.push(like(users.name, `%${userName}%`));
+    }
+
+    // 3. فلترة البريد الإلكتروني للعميل (User Email)
+    const userEmail = (query.userEmail as string)?.trim();
+    if (userEmail && userEmail !== "null" && userEmail !== "undefined") {
+        conditions.push(like(users.email, `%${userEmail}%`));
+    }
+
+    // 4. فلترة رقم هاتف العميل (User Phone)
+    const userPhone = (query.userPhone as string)?.trim();
+    if (userPhone && userPhone !== "null" && userPhone !== "undefined") {
+        conditions.push(
+            or(
+                like(users.phone, `%${userPhone}%`),
+                like(users.alternatePhone, `%${userPhone}%`),
+                sql`JSON_UNQUOTE(JSON_EXTRACT(${orders.shippingAddress}, '$.phone')) LIKE ${`%${userPhone}%`}`
+            )
+        );
     }
 
     return conditions;

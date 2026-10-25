@@ -42,6 +42,10 @@ export const getRestaurantOrdersQuerySchema = z
         startDate: z.string().optional(),
         endDate: z.string().optional(),
         date: z.string().optional(),
+        orderType: z.string().optional(),
+        userName: z.string().optional(),
+        userEmail: z.string().optional(),
+        userPhone: z.string().optional(),
     })
     .passthrough();
 

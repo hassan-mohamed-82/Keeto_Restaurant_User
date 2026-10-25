@@ -52,6 +52,7 @@ import {
     excludeUnpaidVisaOrders,
     resolvePaymentMethodDetails,
     buildOrderDiscountAndPaymentConditions,
+    buildOrderUserAndTypeConditions,
 } from "../../helpers/order.helper";
 import { handleCancelledOrder, settleDeliveredOrder } from "../../services/restaurantWalletService";
 import { dispatchOrder, releaseCourierForOrder } from "../../services/shipping/dispatchEngine";
@@ -71,6 +72,7 @@ export {
     haversineKm,
     getRestaurantShiftStartTime,
     buildOrderDateConditions,
+    buildOrderUserAndTypeConditions,
 };
 
 // ==========================================
@@ -143,6 +145,10 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
     const discountAndPaymentConditions = buildOrderDiscountAndPaymentConditions(req);
     conditions.push(...discountAndPaymentConditions);
 
+    // ✅ فلترة نوع الطلب (delivery / takeaway / dine_in) وبيانات العميل (الاسم، الإيميل، الهاتف)
+    const userAndTypeConditions = buildOrderUserAndTypeConditions(req);
+    conditions.push(...userAndTypeConditions);
+
     const rawRestaurantOrders = await db
         .select({
             id: orders.id,
@@ -151,6 +157,7 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
             customerName: users.name,
             customerPhone: users.phone,
             alternatePhone: users.alternatePhone,
+            customerEmail: users.email,
             isGuest: users.isGuest,
             rating: orders.rating,
             ratingComment: orders.ratingComment,
@@ -398,6 +405,10 @@ export const getOrdersByStatus = async (
     const discountAndPaymentConditions = buildOrderDiscountAndPaymentConditions(req);
     conditions.push(...discountAndPaymentConditions);
 
+    // ✅ فلترة نوع الطلب (delivery / takeaway / dine_in) وبيانات العميل (الاسم، الإيميل، الهاتف)
+    const userAndTypeConditions = buildOrderUserAndTypeConditions(req);
+    conditions.push(...userAndTypeConditions);
+
     const rawResult = await db
         .select({
             id: orders.id,
@@ -406,6 +417,7 @@ export const getOrdersByStatus = async (
             customerName: users.name,
             customerPhone: users.phone,
             alternatePhone: users.alternatePhone,
+            customerEmail: users.email,
             isGuest: users.isGuest,
             rating: orders.rating,
             ratingComment: orders.ratingComment,
@@ -2007,12 +2019,17 @@ export const getallnumbersoforders = async (req: Request, res: Response) => {
     const discountAndPaymentConditions = buildOrderDiscountAndPaymentConditions(req);
     conditions.push(...discountAndPaymentConditions);
 
+    // ✅ فلترة نوع الطلب وبيانات العميل للأرقام الإجمالية
+    const userAndTypeConditions = buildOrderUserAndTypeConditions(req);
+    conditions.push(...userAndTypeConditions);
+
     const statusCountsResult = await db
         .select({
             status: orders.status,
             count: sql<number>`count(${orders.id})`,
         })
         .from(orders)
+        .leftJoin(users, eq(orders.userId, users.id))
         .leftJoin(branches, eq(orders.branchId, branches.id))
         .leftJoin(addresses, eq(orders.addressId, addresses.id))
         .leftJoin(restaurantZoneDeliveryFees, eq(orders.zoneId, restaurantZoneDeliveryFees.id))
