@@ -562,26 +562,16 @@ export const buildOrderUserAndTypeConditions = (req: Request): any[] => {
         }
     }
 
-    // 2. فلترة اسم العميل (User Name)
-    const userName = (query.userName as string)?.trim();
-    if (userName && userName !== "null" && userName !== "undefined") {
-        conditions.push(like(users.name, `%${userName}%`));
-    }
-
-    // 3. فلترة البريد الإلكتروني للعميل (User Email)
-    const userEmail = (query.userEmail as string)?.trim();
-    if (userEmail && userEmail !== "null" && userEmail !== "undefined") {
-        conditions.push(like(users.email, `%${userEmail}%`));
-    }
-
-    // 4. فلترة رقم هاتف العميل (User Phone)
-    const userPhone = (query.userPhone as string)?.trim();
-    if (userPhone && userPhone !== "null" && userPhone !== "undefined") {
+    // 2. البحث عن العميل (Search by name, email, or phone)
+    const search = ((query.search || query.q) as string)?.trim();
+    if (search && search !== "null" && search !== "undefined") {
         conditions.push(
             or(
-                like(users.phone, `%${userPhone}%`),
-                like(users.alternatePhone, `%${userPhone}%`),
-                sql`JSON_UNQUOTE(JSON_EXTRACT(${orders.shippingAddress}, '$.phone')) LIKE ${`%${userPhone}%`}`
+                like(users.name, `%${search}%`),
+                like(users.email, `%${search}%`),
+                like(users.phone, `%${search}%`),
+                like(users.alternatePhone, `%${search}%`),
+                sql`JSON_UNQUOTE(JSON_EXTRACT(${orders.shippingAddress}, '$.phone')) LIKE ${`%${search}%`}`
             )
         );
     }
