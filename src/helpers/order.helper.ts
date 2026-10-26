@@ -288,6 +288,43 @@ export const resolvePaymentMethodDetails = (
     }
 };
 
+/**
+ * Helper to parse query parameter values that can be passed as:
+ * - A single string (e.g. "product_discount" or a UUID)
+ * - Comma-separated strings (e.g. "product_discount,discount_id" or "id1,id2")
+ * - JSON array string (e.g. '["id1","id2"]')
+ * - An array of strings / values (e.g. ['product_discount', 'discount_id'])
+ */
+export const parseMultiFilterValues = (val: any): string[] => {
+    if (!val) return [];
+    if (Array.isArray(val)) {
+        return val.flatMap((v) => parseMultiFilterValues(v)).filter(Boolean);
+    }
+    if (typeof val === "string") {
+        const trimmed = val.trim();
+        if (!trimmed || trimmed === "null" || trimmed === "undefined" || trimmed === "all") {
+            return [];
+        }
+        if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+            try {
+                const parsed = JSON.parse(trimmed);
+                if (Array.isArray(parsed)) {
+                    return parsed
+                        .map((item) => String(item).trim())
+                        .filter((item) => item && item !== "null" && item !== "undefined" && item !== "all");
+                }
+            } catch {
+                // Not valid JSON, continue with comma separation
+            }
+        }
+        return trimmed
+            .split(",")
+            .map((item) => item.trim())
+            .filter((item) => item && item !== "null" && item !== "undefined" && item !== "all");
+    }
+    return [];
+};
+
 // ==========================================
 // Helper: فلترة الطلبات حسب نوع الخصم وطريقة الدفع
 // ==========================================
@@ -295,203 +332,219 @@ export const buildOrderDiscountAndPaymentConditions = (req: Request): any[] => {
     const conditions: any[] = [];
     const query = req.query || {};
 
-    // 1. فلترة وسيلة الدفع (Payment Method: visa, cash, wallet, or specific ID)
-    const paymentMethodParam = ((query.paymentMethod || query.payment_method) as string)?.trim();
-    if (paymentMethodParam && paymentMethodParam !== "all" && paymentMethodParam !== "null" && paymentMethodParam !== "undefined") {
-        const pm = paymentMethodParam.toLowerCase();
-        if (pm === "cash" || pm === "cash_on_delivery" || pm === "كاش" || pm === "استلام") {
-            conditions.push(
-                or(
+    // 1. فلترة وسيلة الدفع (يدعم طريقة واحدة أو عدة طرق كـ comma-separated أو مصفوفة)
+    const paymentMethodParams = parseMultiFilterValues(
+        query.paymentMethod ?? query.payment_method ?? query.paymentMethods ?? query.payment_methods
+    );
+    if (paymentMethodParams.length > 0) {
+        const pmConditions = paymentMethodParams.map((param) => {
+            const pm = param.toLowerCase();
+            if (pm === "cash" || pm === "cash_on_delivery" || pm === "كاش" || pm === "استلام") {
+                return or(
                     eq(orders.paymentMethod, "cash"),
                     eq(orders.paymentMethod, "cash_on_delivery"),
                     like(paymentMethods.name, "%cash%"),
                     like(paymentMethods.nameAr, "%استلام%"),
                     like(paymentMethods.nameAr, "%كاش%")
-                )
-            );
-        } else if (pm === "visa" || pm === "card" || pm === "online" || pm === "فيزا" || pm === "بطاقة") {
-            conditions.push(
-                or(
+                );
+            } else if (pm === "visa" || pm === "card" || pm === "online" || pm === "فيزا" || pm === "بطاقة") {
+                return or(
                     eq(orders.paymentMethod, "visa"),
                     like(paymentMethods.name, "%visa%"),
                     like(paymentMethods.name, "%card%"),
                     like(paymentMethods.nameAr, "%فيزا%"),
                     like(paymentMethods.nameAr, "%بطاقة%")
-                )
-            );
-        } else if (pm === "wallet" || pm === "محفظة" || pm === "محفظتي") {
-            conditions.push(
-                or(
+                );
+            } else if (pm === "wallet" || pm === "محفظة" || pm === "محفظتي") {
+                return or(
                     eq(orders.paymentMethod, "wallet"),
                     like(paymentMethods.name, "%wallet%"),
                     like(paymentMethods.nameAr, "%محفظ%")
-                )
-            );
-        } else {
-            conditions.push(
-                or(
-                    eq(orders.paymentMethod, paymentMethodParam),
-                    like(paymentMethods.name, `%${paymentMethodParam}%`),
-                    like(paymentMethods.nameAr, `%${paymentMethodParam}%`)
-                )
-            );
+                );
+            } else {
+                return or(
+                    eq(orders.paymentMethod, param),
+                    like(paymentMethods.name, `%${param}%`),
+                    like(paymentMethods.nameAr, `%${param}%`)
+                );
+            }
+        });
+
+        if (pmConditions.length === 1) {
+            conditions.push(pmConditions[0]);
+        } else if (pmConditions.length > 1) {
+            conditions.push(or(...pmConditions));
         }
     }
 
-    // 2. فلترة خصم معين بالـ ID
-    const discountId = (query.discountId as string)?.trim();
-    if (discountId && discountId !== "null" && discountId !== "undefined") {
-        conditions.push(eq(orders.discountId, discountId));
+    // 2. فلترة خصم معين بالـ ID (يدعم ID واحد أو عدة IDs مفصولة بفاصلة أو JSON أو مصفوفة)
+    const discountIds = parseMultiFilterValues(
+        query.discountId ?? query.discount_id ?? query.discountIds ?? query.discount_ids
+    );
+    if (discountIds.length === 1) {
+        conditions.push(eq(orders.discountId, discountIds[0]));
+    } else if (discountIds.length > 1) {
+        conditions.push(inArray(orders.discountId, discountIds));
     }
 
-    // 3. فلترة كوبون معين بالـ ID أو الكود
-    const couponId = (query.couponId as string)?.trim();
-    if (couponId && couponId !== "null" && couponId !== "undefined") {
-        conditions.push(eq(orders.couponId, couponId));
+    // 3. فلترة كوبون معين بالـ ID أو الكود (يدعم ID واحد أو عدة IDs مفصولة بفاصلة أو JSON أو مصفوفة)
+    const couponIds = parseMultiFilterValues(
+        query.couponId ?? query.coupon_id ?? query.couponIds ?? query.coupon_ids
+    );
+    if (couponIds.length === 1) {
+        conditions.push(eq(orders.couponId, couponIds[0]));
+    } else if (couponIds.length > 1) {
+        conditions.push(inArray(orders.couponId, couponIds));
     }
 
-    const couponCode = (query.couponCode as string)?.trim();
-    if (couponCode && couponCode !== "null" && couponCode !== "undefined") {
-        conditions.push(or(eq(orders.couponCode, couponCode), like(orders.couponCode, `%${couponCode}%`)));
+    const couponCodes = parseMultiFilterValues(
+        query.couponCode ?? query.coupon_code ?? query.couponCodes ?? query.coupon_codes
+    );
+    if (couponCodes.length === 1) {
+        conditions.push(or(eq(orders.couponCode, couponCodes[0]), like(orders.couponCode, `%${couponCodes[0]}%`)));
+    } else if (couponCodes.length > 1) {
+        conditions.push(
+            or(
+                inArray(orders.couponCode, couponCodes),
+                ...couponCodes.map((code) => like(orders.couponCode, `%${code}%`))
+            )
+        );
     }
 
-    // 4. فلترة خصم أول طلب بالـ ID
-    const firstOrderDiscountId = (query.firstOrderDiscountId as string)?.trim();
-    if (firstOrderDiscountId && firstOrderDiscountId !== "null" && firstOrderDiscountId !== "undefined") {
-        conditions.push(eq(orders.firstOrderDiscountId, firstOrderDiscountId));
+    // 4. فلترة خصم أول طلب بالـ ID (يدعم ID واحد أو عدة IDs مفصولة بفاصلة أو JSON أو مصفوفة)
+    const firstOrderDiscountIds = parseMultiFilterValues(
+        query.firstOrderDiscountId ?? query.first_order_discount_id ?? query.firstOrderDiscountIds ?? query.first_order_discount_ids
+    );
+    if (firstOrderDiscountIds.length === 1) {
+        conditions.push(eq(orders.firstOrderDiscountId, firstOrderDiscountIds[0]));
+    } else if (firstOrderDiscountIds.length > 1) {
+        conditions.push(inArray(orders.firstOrderDiscountId, firstOrderDiscountIds));
     }
 
-    // 5. فلترة مصدر الخصم discountSource (food_level, restaurant_discount, global_discount, coupon, first_order_discount)
-    const discountSource = ((query.discountSource || query.discount_source) as string)?.trim();
-    if (discountSource && discountSource !== "null" && discountSource !== "undefined") {
-        conditions.push(eq(orders.discountSource, discountSource as any));
+    // 5. فلترة مصدر الخصم discountSource (يدعم قيمة واحدة أو قيم متعددة)
+    const discountSources = parseMultiFilterValues(
+        query.discountSource ?? query.discount_source ?? query.discountSources ?? query.discount_sources
+    );
+    if (discountSources.length === 1) {
+        conditions.push(eq(orders.discountSource, discountSources[0] as any));
+    } else if (discountSources.length > 1) {
+        conditions.push(inArray(orders.discountSource, discountSources as any));
     }
 
-    // 6. فلترة نوع الخصم (product discount, coupon, first order discount, free delivery, discount id, points, ...)
-    const discountTypeParam = ((query.discountType || query.discount_type) as string)?.toLowerCase().trim();
-    if (discountTypeParam && discountTypeParam !== "all" && discountTypeParam !== "null" && discountTypeParam !== "undefined") {
-        const normalized = discountTypeParam.replace(/[-_ ]+/g, "_");
-        switch (normalized) {
-            case "product_discount":
-            case "product":
-            case "food_level":
-            case "food":
-            case "food_discount":
-            case "وجبة":
-            case "منتج":
-            case "خصم_منتج":
-            case "خصم_وجبة":
-                conditions.push(
-                    or(
-                        eq(orders.discountSource, "food_level"),
-                        sql`EXISTS (
-                            SELECT 1 FROM order_items oi
-                            INNER JOIN food f ON oi.food_id = f.id
-                            WHERE oi.order_id = ${orders.id}
-                            AND ((f.discount_value IS NOT NULL AND f.discount_value > 0) OR f.discount_id IS NOT NULL)
-                        )`
-                    )
-                );
-                break;
-
-            case "discount_id":
-            case "discount":
-            case "restaurant_discount":
-            case "global_discount":
-            case "campaign":
-            case "خصم_مطعم":
-            case "خصم_حملة":
-            case "خصم":
-                conditions.push(
-                    or(
-                        isNotNull(orders.discountId),
-                        eq(orders.discountSource, "restaurant_discount"),
-                        eq(orders.discountSource, "global_discount")
-                    )
-                );
-                break;
-
-            case "coupon":
-            case "coupon_code":
-            case "promo":
-            case "promo_code":
-            case "كوبون":
-            case "كود_خصم":
-                conditions.push(
-                    or(
-                        isNotNull(orders.couponId),
-                        and(isNotNull(orders.couponCode), sql`${orders.couponCode} <> ''`),
-                        eq(orders.discountSource, "coupon")
-                    )
-                );
-                break;
-
-            case "first_order_discount":
-            case "first_order":
-            case "firstorder":
-            case "أول_طلب":
-            case "اول_طلب":
-            case "خصم_اول_طلب":
-                conditions.push(
-                    or(
-                        isNotNull(orders.firstOrderDiscountId),
-                        eq(orders.discountSource, "first_order_discount")
-                    )
-                );
-                break;
-
-            case "free_delivery":
-            case "free_shipping":
-            case "freedelivery":
-            case "توصيل_مجاني":
-                conditions.push(
-                    and(
-                        eq(orders.orderType, "delivery"),
-                        or(
-                            eq(orders.deliveryFee, "0.00"),
-                            isNull(orders.deliveryFee),
+    // 6. فلترة نوع الخصم (يدعم قيمة واحدة أو قيم متعددة مثل ?discountType=product_discount,discount_id)
+    const discountTypes = parseMultiFilterValues(
+        query.discountType ?? query.discount_type ?? query.discountTypes ?? query.discount_types
+    );
+    if (discountTypes.length > 0) {
+        const typeConditions = discountTypes
+            .map((rawType) => {
+                const normalized = rawType.toLowerCase().replace(/[-_ ]+/g, "_");
+                switch (normalized) {
+                    case "product_discount":
+                    case "product":
+                    case "food_level":
+                    case "food":
+                    case "food_discount":
+                    case "وجبة":
+                    case "منتج":
+                    case "خصم_منتج":
+                    case "خصم_وجبة":
+                        return or(
+                            eq(orders.discountSource, "food_level"),
                             sql`EXISTS (
-                                SELECT 1 FROM coupons c
-                                WHERE (c.id = ${orders.couponId} OR c.code = ${orders.couponCode})
-                                AND c.discount_type = 'free_delivery'
+                                SELECT 1 FROM order_items oi
+                                INNER JOIN food f ON oi.food_id = f.id
+                                WHERE oi.order_id = ${orders.id}
+                                AND ((f.discount_value IS NOT NULL AND f.discount_value > 0) OR f.discount_id IS NOT NULL)
                             )`
-                        )
-                    )
-                );
-                break;
+                        );
 
-            case "points":
-            case "redeem_points":
-            case "points_redeemed":
-            case "reedem_points":
-            case "نقاط":
-                conditions.push(
-                    or(
-                        eq(orders.isPointsRedeemed, true),
-                        and(isNotNull(orders.redeemCode), sql`${orders.redeemCode} <> ''`)
-                    )
-                );
-                break;
+                    case "discount_id":
+                    case "discount":
+                    case "restaurant_discount":
+                    case "global_discount":
+                    case "campaign":
+                    case "خصم_مطعم":
+                    case "خصم_حملة":
+                    case "خصم":
+                        return or(
+                            isNotNull(orders.discountId),
+                            eq(orders.discountSource, "restaurant_discount"),
+                            eq(orders.discountSource, "global_discount")
+                        );
 
-            case "percentage":
-            case "نسبة":
-                conditions.push(eq(orders.discountType, "percentage"));
-                break;
+                    case "coupon":
+                    case "coupon_code":
+                    case "promo":
+                    case "promo_code":
+                    case "كوبون":
+                    case "كود_خصم":
+                        return or(
+                            isNotNull(orders.couponId),
+                            and(isNotNull(orders.couponCode), sql`${orders.couponCode} <> ''`),
+                            eq(orders.discountSource, "coupon")
+                        );
 
-            case "fixed_amount":
-            case "fixed":
-            case "مبلغ_ثابت":
-                conditions.push(eq(orders.discountType, "fixed_amount"));
-                break;
+                    case "first_order_discount":
+                    case "first_order":
+                    case "firstorder":
+                    case "أول_طلب":
+                    case "اول_طلب":
+                    case "خصم_اول_طلب":
+                        return or(
+                            isNotNull(orders.firstOrderDiscountId),
+                            eq(orders.discountSource, "first_order_discount")
+                        );
 
-            default:
-                conditions.push(
-                    or(
-                        eq(orders.discountType, discountTypeParam as any),
-                        eq(orders.discountSource, discountTypeParam as any)
-                    )
-                );
-                break;
+                    case "free_delivery":
+                    case "free_shipping":
+                    case "freedelivery":
+                    case "توصيل_مجاني":
+                        return and(
+                            eq(orders.orderType, "delivery"),
+                            or(
+                                eq(orders.deliveryFee, "0.00"),
+                                isNull(orders.deliveryFee),
+                                sql`EXISTS (
+                                    SELECT 1 FROM coupons c
+                                    WHERE (c.id = ${orders.couponId} OR c.code = ${orders.couponCode})
+                                    AND c.discount_type = 'free_delivery'
+                                )`
+                            )
+                        );
+
+                    case "points":
+                    case "redeem_points":
+                    case "points_redeemed":
+                    case "reedem_points":
+                    case "نقاط":
+                        return or(
+                            eq(orders.isPointsRedeemed, true),
+                            and(isNotNull(orders.redeemCode), sql`${orders.redeemCode} <> ''`)
+                        );
+
+                    case "percentage":
+                    case "نسبة":
+                        return eq(orders.discountType, "percentage");
+
+                    case "fixed_amount":
+                    case "fixed":
+                    case "مبلغ_ثابت":
+                        return eq(orders.discountType, "fixed_amount");
+
+                    default:
+                        return or(
+                            eq(orders.discountType, rawType as any),
+                            eq(orders.discountSource, rawType as any)
+                        );
+                }
+            })
+            .filter(Boolean);
+
+        if (typeConditions.length === 1) {
+            conditions.push(typeConditions[0]);
+        } else if (typeConditions.length > 1) {
+            conditions.push(or(...typeConditions));
         }
     }
 
