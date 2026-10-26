@@ -177,8 +177,17 @@ export const buildOrderDateConditions = async (
         if (/^\d{4}-\d{2}-\d{2}$/.test(rawStartDate)) {
             // YYYY-MM-DD يحول لبداية اليوم بتوقيت القاهرة
             startDate = dayjs.tz(rawStartDate, TIMEZONE).startOf("day").toDate();
+        } else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(rawStartDate)) {
+            // datetime مع توقيت (ISO 8601): لو فيه offset (Z أو +HH:MM) يتعامل dayjs معه تلقائيًا
+            // لو بدون offset يُعامَل كتوقيت القاهرة
+            const hasOffset = /[Z+\-]\d*:\d*$|Z$/.test(rawStartDate);
+            startDate = hasOffset
+                ? dayjs(rawStartDate).toDate()
+                : dayjs.tz(rawStartDate, TIMEZONE).toDate();
         } else {
-            startDate = dayjs(rawStartDate).toDate();
+            const parsed = dayjs(rawStartDate);
+            if (!parsed.isValid()) throw new BadRequest("startDate format is invalid. Use YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss");
+            startDate = parsed.toDate();
         }
     } else {
         startDate = await getRestaurantShiftStartTime(restaurantId);
@@ -189,8 +198,16 @@ export const buildOrderDateConditions = async (
         if (/^\d{4}-\d{2}-\d{2}$/.test(rawEndDate)) {
             // YYYY-MM-DD يحول لنهاية اليوم بتوقيت القاهرة (23:59:59)
             endDate = dayjs.tz(rawEndDate, TIMEZONE).endOf("day").toDate();
+        } else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(rawEndDate)) {
+            // datetime مع توقيت (ISO 8601)
+            const hasOffset = /[Z+\-]\d*:\d*$|Z$/.test(rawEndDate);
+            endDate = hasOffset
+                ? dayjs(rawEndDate).toDate()
+                : dayjs.tz(rawEndDate, TIMEZONE).toDate();
         } else {
-            endDate = dayjs(rawEndDate).toDate();
+            const parsed = dayjs(rawEndDate);
+            if (!parsed.isValid()) throw new BadRequest("endDate format is invalid. Use YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss");
+            endDate = parsed.toDate();
         }
     }
 
@@ -206,6 +223,7 @@ export const buildOrderDateConditions = async (
 
     return conditions;
 };
+
 
 // ==========================================
 // Helper: تحويل shippingAddress من JSON string إلى object

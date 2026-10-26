@@ -335,7 +335,15 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
         })
     );
 
-    return SuccessResponse(res, { message: "Get orders success", data: restaurantOrders });
+    // ✅ حساب الـ Summary: إجمالي عدد الأوردرات وإجمالي القيمة بناءً على نفس الفلتر
+    const summary = {
+        totalOrders: restaurantOrders.length,
+        totalAmount: restaurantOrders
+            .reduce((sum, o) => sum + parseFloat((o.totalAmount as string) ?? "0"), 0)
+            .toFixed(2),
+    };
+
+    return SuccessResponse(res, { message: "Get orders success", summary, data: restaurantOrders });
 };
 
 export const getOrdersByStatus = async (
@@ -595,7 +603,15 @@ export const getOrdersByStatus = async (
         })
     );
 
-    return SuccessResponse(res, { message: `Get ${status} orders success`, data: result });
+    // ✅ حساب الـ Summary: إجمالي عدد الأوردرات وإجمالي القيمة بناءً على نفس الفلتر
+    const summary = {
+        totalOrders: result.length,
+        totalAmount: result
+            .reduce((sum, o) => sum + parseFloat((o.totalAmount as string) ?? "0"), 0)
+            .toFixed(2),
+    };
+
+    return SuccessResponse(res, { message: `Get ${status} orders success`, summary, data: result });
 };
 
 // ==========================================
