@@ -316,6 +316,8 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
                         cityId: branchSnapshotData.cityId ?? null,
                         cityName: branchSnapshotData.cityName ?? null,
                         cityNameAr: branchSnapshotData.cityNameAr ?? null,
+                        oldBranch: branchSnapshotData.oldBranch ?? null,
+                        note: branchSnapshotData.note ?? null,
                     }
                     : null,
                 discount: {
@@ -584,6 +586,8 @@ export const getOrdersByStatus = async (
                         cityId: branchSnapshotData.cityId ?? null,
                         cityName: branchSnapshotData.cityName ?? null,
                         cityNameAr: branchSnapshotData.cityNameAr ?? null,
+                        oldBranch: branchSnapshotData.oldBranch ?? null,
+                        note: branchSnapshotData.note ?? null,
                     }
                     : null,
                 discount: {
@@ -1144,6 +1148,8 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
                     cityId: branchSnapshotData.cityId ?? null,
                     cityName: branchSnapshotData.cityName ?? null,
                     cityNameAr: branchSnapshotData.cityNameAr ?? null,
+                    oldBranch: branchSnapshotData.oldBranch ?? null,
+                    note: branchSnapshotData.note ?? null,
                 }
                 : null,
 
@@ -2500,9 +2506,18 @@ export const transferOrderBranch = async (req: Request, res: Response) => {
     }
 
     // 5. Verify target branch exists, is active, and belongs to this restaurant
-    const [targetBranch] = await db
-        .select()
+    const [targetBranchData] = await db
+        .select({
+            branch: branches,
+            zoneName: zones.name,
+            zoneNameAr: zones.nameAr,
+            cityId: zones.cityId,
+            cityName: cities.name,
+            cityNameAr: cities.nameAr,
+        })
         .from(branches)
+        .leftJoin(zones, eq(branches.zoneId, zones.id))
+        .leftJoin(cities, eq(zones.cityId, cities.id))
         .where(
             and(
                 eq(branches.id, targetBranchId),
@@ -2511,9 +2526,11 @@ export const transferOrderBranch = async (req: Request, res: Response) => {
         )
         .limit(1);
 
-    if (!targetBranch) {
+    if (!targetBranchData || !targetBranchData.branch) {
         throw new NotFound("Target branch not found or does not belong to your restaurant");
     }
+
+    const targetBranch = targetBranchData.branch;
 
     if (targetBranch.status !== "active") {
         throw new BadRequest("Cannot transfer order to an inactive branch");
@@ -2521,31 +2538,101 @@ export const transferOrderBranch = async (req: Request, res: Response) => {
 
     // 6. Fetch previous branch details if exists
     let previousBranchName = "الفرع السابق";
+    let oldBranchDetails: { id: string; name: string; nameAr: string | null; nameFr: string | null } | null = null;
+
     if (existingOrder.branchId) {
         const [oldBranch] = await db
-            .select()
+            .select({
+                id: branches.id,
+                name: branches.name,
+                nameAr: branches.nameAr,
+                nameFr: branches.nameFr,
+            })
             .from(branches)
             .where(eq(branches.id, existingOrder.branchId))
             .limit(1);
+
         if (oldBranch) {
             previousBranchName = oldBranch.nameAr || oldBranch.name;
+            oldBranchDetails = {
+                id: oldBranch.id,
+                name: oldBranch.name,
+                nameAr: oldBranch.nameAr ?? null,
+                nameFr: oldBranch.nameFr ?? null,
+            };
         }
+    }
+
+    // Check if existingOrder already had a branchSnapshot
+    let existingBranchSnapshot: any = existingOrder.branchSnapshot;
+    if (typeof existingBranchSnapshot === "string") {
+        try {
+            existingBranchSnapshot = JSON.parse(existingBranchSnapshot);
+            if (typeof existingBranchSnapshot === "string") {
+                existingBranchSnapshot = JSON.parse(existingBranchSnapshot);
+            }
+        } catch {
+            existingBranchSnapshot = null;
+        }
+    }
+
+    // Determine oldBranch object containing only { id, name, nameAr, nameFr }
+    let oldBranchSnapshot: { id: string; name: string; nameAr: string | null; nameFr: string | null } | null = null;
+    if (existingBranchSnapshot && (existingBranchSnapshot.id || existingBranchSnapshot.name)) {
+        oldBranchSnapshot = {
+            id: existingBranchSnapshot.id || existingOrder.branchId || "",
+            name: existingBranchSnapshot.name || previousBranchName,
+            nameAr: existingBranchSnapshot.nameAr ?? null,
+            nameFr: existingBranchSnapshot.nameFr ?? null,
+        };
+    } else if (oldBranchDetails) {
+        oldBranchSnapshot = oldBranchDetails;
+    } else if (existingOrder.branchId) {
+        oldBranchSnapshot = {
+            id: existingOrder.branchId,
+            name: previousBranchName,
+            nameAr: null,
+            nameFr: null,
+        };
     }
 
     const previousDeliveryManId = existingOrder.deliveryManId;
     const newBranchName = targetBranch.nameAr || targetBranch.name;
 
-    // 7. Update order in database (unassign delivery man if assigned to old branch)
+    // 7. Update order notes & snapshots
+    const transferNoteTag = note && note.trim()
+        ? `[تم تحويل الفرع من ${previousBranchName} إلى ${newBranchName}: ${note.trim()}]`
+        : `[تم تحويل الفرع من ${previousBranchName} إلى ${newBranchName}]`;
+
     let updatedNote = existingOrder.note;
-    if (note && note.trim()) {
-        const transferNoteTag = `[تم تحويل الفرع إلى ${newBranchName}: ${note.trim()}]`;
-        updatedNote = updatedNote ? `${updatedNote}\n${transferNoteTag}` : transferNoteTag;
-    }
+    updatedNote = updatedNote ? `${updatedNote}\n${transferNoteTag}` : transferNoteTag;
+
+    // Build updated branchSnapshot with target branch data, oldBranch, and note
+    const updatedBranchSnapshot = {
+        id: targetBranch.id,
+        name: targetBranch.name,
+        nameAr: targetBranch.nameAr ?? null,
+        nameFr: targetBranch.nameFr ?? null,
+        address: targetBranch.address,
+        addressAr: targetBranch.addressAr ?? null,
+        addressFr: targetBranch.addressFr ?? null,
+        phone: targetBranch.phoneNumber ?? null,
+        status: targetBranch.status ?? null,
+        zoneId: targetBranch.zoneId ?? null,
+        zoneName: targetBranchData.zoneName ?? null,
+        zoneNameAr: targetBranchData.zoneNameAr ?? null,
+        cityId: targetBranchData.cityId ?? null,
+        cityName: targetBranchData.cityName ?? null,
+        cityNameAr: targetBranchData.cityNameAr ?? null,
+        note: `تم تحويل الطلب من ${previousBranchName} إلى ${newBranchName}`,
+        oldBranch: oldBranchSnapshot,
+    };
 
     await db
         .update(orders)
         .set({
             branchId: targetBranchId,
+            branchSnapshot: updatedBranchSnapshot,
             note: updatedNote,
             updatedAt: new Date(),
         })
@@ -2614,24 +2701,24 @@ export const transferOrderBranch = async (req: Request, res: Response) => {
     // }
 
     // 10. Notify previous delivery man if order had an assigned delivery man
-    // if (previousDeliveryManId) {
-    //     try {
-    //         await sendPushNotification({
-    //             recipientType: "delivery_man",
-    //             recipientId: previousDeliveryManId,
-    //             branchId: existingOrder.branchId || null,
-    //             title: "إلغاء إسناد الطلب",
-    //             body: `تم تحويل الطلب رقم #${orderDisplayNumber} إلى فرع آخر وإلغاء إسناده لك.`,
-    //             data: {
-    //                 type: "order_unassigned",
-    //                 orderId: existingOrder.id,
-    //                 orderNumber: existingOrder.orderNumber,
-    //             },
-    //         });
-    //     } catch (dmNotifErr) {
-    //         console.error("[TRANSFER_ORDER] Error sending push notification to delivery man:", dmNotifErr);
-    //     }
-    // }
+    if (previousDeliveryManId) {
+        try {
+            await sendPushNotification({
+                recipientType: "delivery_man",
+                recipientId: previousDeliveryManId,
+                branchId: existingOrder.branchId || null,
+                title: "إلغاء إسناد الطلب",
+                body: `تم تحويل الطلب رقم #${orderDisplayNumber} إلى فرع آخر وإلغاء إسناده لك.`,
+                data: {
+                    type: "order_unassigned",
+                    orderId: existingOrder.id,
+                    orderNumber: existingOrder.orderNumber,
+                },
+            });
+        } catch (dmNotifErr) {
+            console.error("[TRANSFER_ORDER] Error sending push notification to delivery man:", dmNotifErr);
+        }
+    }
 
     return SuccessResponse(res, {
         message: "Order transferred to selected branch successfully",
@@ -2641,8 +2728,17 @@ export const transferOrderBranch = async (req: Request, res: Response) => {
             dailyOrderNumber: existingOrder.dailyOrderNumber,
             previousBranchId: existingOrder.branchId || null,
             previousBranchName,
+            oldBranch: oldBranchSnapshot,
             newBranchId: targetBranchId,
             newBranchName,
+            branchId: targetBranchId,
+            branch: {
+                id: targetBranch.id,
+                name: targetBranch.name,
+                nameAr: targetBranch.nameAr ?? null,
+            },
+            branchSnapshot: updatedBranchSnapshot,
+            note: updatedNote,
             status: existingOrder.status,
         },
     });

@@ -177,6 +177,13 @@ export const orders = mysqlTable("orders", {
         cityId?: string | null;
         cityName?: string | null;
         cityNameAr?: string | null;
+        oldBranch?: {
+            id: string;
+            name: string;
+            nameAr?: string | null;
+            nameFr?: string | null;
+        } | null;
+        note?: string | null;
     }>(),
 
     isDelayEmailSent: boolean("is_delay_email_sent").default(false),
