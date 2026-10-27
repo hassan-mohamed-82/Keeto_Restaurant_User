@@ -1209,15 +1209,10 @@ export const upsertProductChannelPricing = async (req: Request, res: Response) =
                     .set({ price: priceVal, updatedAt: new Date() })
                     .where(eq(food.id, foodId));
 
-                // 2. Remove stale global channel overrides (branchId IS NULL) so that the new base price applies across all channels
+                // 2. Remove ALL old pricing overrides (all branches & all modules) so the new price applies everywhere
                 await tx
                     .delete(foodPricingOverrides)
-                    .where(
-                        and(
-                            eq(foodPricingOverrides.foodId, foodId),
-                            isNull(foodPricingOverrides.branchId)
-                        )
-                    );
+                    .where(eq(foodPricingOverrides.foodId, foodId));
             } else {
                 for (const targetBranchId of targetBranches) {
                     for (const module of targetModules) {
@@ -1300,15 +1295,10 @@ export const upsertVariantChannelPricing = async (req: Request, res: Response) =
                     .set({ additionalPrice: priceVal, updatedAt: new Date() })
                     .where(eq(variationOptions.id, variantId));
 
-                // 2. Remove stale global channel overrides (branchId IS NULL) so that the new base price applies across all channels
+                // 2. Remove ALL old pricing overrides (all branches & all modules) so the new price applies everywhere
                 await tx
                     .delete(variantPricingOverrides)
-                    .where(
-                        and(
-                            eq(variantPricingOverrides.variantId, variantId),
-                            isNull(variantPricingOverrides.branchId)
-                        )
-                    );
+                    .where(eq(variantPricingOverrides.variantId, variantId));
             } else {
                 for (const targetBranchId of targetBranches) {
                     for (const module of targetModules) {
