@@ -1199,15 +1199,36 @@ export const upsertProductChannelPricing = async (req: Request, res: Response) =
                 entry.branchPriceStatus === "inactive" || entry.status === "inactive"
                     ? "inactive"
                     : "active";
-            for (const targetBranchId of targetBranches) {
-                for (const module of targetModules) {
-                    await upsertFoodPricingOverride(tx, {
-                        foodId,
-                        branchId: targetBranchId,
-                        serviceModule: module,
-                        price: priceVal,
-                        status: statusVal,
-                    });
+            const isAllBranches = targetBranches.length === 1 && targetBranches[0] === null;
+            const isAllModules = targetModules.length === 1 && targetModules[0] === null;
+
+            if (isAllBranches && isAllModules) {
+                // 1. Update Base Price directly in food table
+                await tx
+                    .update(food)
+                    .set({ price: priceVal, updatedAt: new Date() })
+                    .where(eq(food.id, foodId));
+
+                // 2. Remove stale global channel overrides (branchId IS NULL) so that the new base price applies across all channels
+                await tx
+                    .delete(foodPricingOverrides)
+                    .where(
+                        and(
+                            eq(foodPricingOverrides.foodId, foodId),
+                            isNull(foodPricingOverrides.branchId)
+                        )
+                    );
+            } else {
+                for (const targetBranchId of targetBranches) {
+                    for (const module of targetModules) {
+                        await upsertFoodPricingOverride(tx, {
+                            foodId,
+                            branchId: targetBranchId,
+                            serviceModule: module,
+                            price: priceVal,
+                            status: statusVal,
+                        });
+                    }
                 }
             }
         }
@@ -1269,15 +1290,36 @@ export const upsertVariantChannelPricing = async (req: Request, res: Response) =
                     ? "inactive"
                     : "active";
 
-            for (const targetBranchId of targetBranches) {
-                for (const module of targetModules) {
-                    await upsertVariantPricingOverride(tx, {
-                        variantId,
-                        branchId: targetBranchId,
-                        serviceModule: module,
-                        price: priceVal,
-                        status: statusVal,
-                    });
+            const isAllBranches = targetBranches.length === 1 && targetBranches[0] === null;
+            const isAllModules = targetModules.length === 1 && targetModules[0] === null;
+
+            if (isAllBranches && isAllModules) {
+                // 1. Update Base Additional Price directly in variation_options table
+                await tx
+                    .update(variationOptions)
+                    .set({ additionalPrice: priceVal, updatedAt: new Date() })
+                    .where(eq(variationOptions.id, variantId));
+
+                // 2. Remove stale global channel overrides (branchId IS NULL) so that the new base price applies across all channels
+                await tx
+                    .delete(variantPricingOverrides)
+                    .where(
+                        and(
+                            eq(variantPricingOverrides.variantId, variantId),
+                            isNull(variantPricingOverrides.branchId)
+                        )
+                    );
+            } else {
+                for (const targetBranchId of targetBranches) {
+                    for (const module of targetModules) {
+                        await upsertVariantPricingOverride(tx, {
+                            variantId,
+                            branchId: targetBranchId,
+                            serviceModule: module,
+                            price: priceVal,
+                            status: statusVal,
+                        });
+                    }
                 }
             }
         }
