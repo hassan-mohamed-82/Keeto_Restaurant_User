@@ -449,15 +449,7 @@ export const buildOrderDiscountAndPaymentConditions = (req: Request): any[] => {
                     case "منتج":
                     case "خصم_منتج":
                     case "خصم_وجبة":
-                        return or(
-                            eq(orders.discountSource, "food_level"),
-                            sql`EXISTS (
-                                SELECT 1 FROM order_items oi
-                                INNER JOIN food f ON oi.food_id = f.id
-                                WHERE oi.order_id = ${orders.id}
-                                AND ((f.discount_value IS NOT NULL AND f.discount_value > 0) OR f.discount_id IS NOT NULL)
-                            )`
-                        );
+                        return eq(orders.discountSource, "food_level");
 
                     case "discount_id":
                     case "discount":
