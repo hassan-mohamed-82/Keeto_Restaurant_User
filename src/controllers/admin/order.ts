@@ -2599,14 +2599,6 @@ export const transferOrderBranch = async (req: Request, res: Response) => {
     const previousDeliveryManId = existingOrder.deliveryManId;
     const newBranchName = targetBranch.nameAr || targetBranch.name;
 
-    // 7. Update order notes & snapshots
-    const transferNoteTag = note && note.trim()
-        ? `[تم تحويل الفرع من ${previousBranchName} إلى ${newBranchName}: ${note.trim()}]`
-        : `[تم تحويل الفرع من ${previousBranchName} إلى ${newBranchName}]`;
-
-    let updatedNote = existingOrder.note;
-    updatedNote = updatedNote ? `${updatedNote}\n${transferNoteTag}` : transferNoteTag;
-
     // Build updated branchSnapshot with target branch data, oldBranch, and note
     const updatedBranchSnapshot = {
         id: targetBranch.id,
@@ -2633,7 +2625,6 @@ export const transferOrderBranch = async (req: Request, res: Response) => {
         .set({
             branchId: targetBranchId,
             branchSnapshot: updatedBranchSnapshot,
-            note: updatedNote,
             updatedAt: new Date(),
         })
         .where(eq(orders.id, orderId));
@@ -2738,7 +2729,6 @@ export const transferOrderBranch = async (req: Request, res: Response) => {
                 nameAr: targetBranch.nameAr ?? null,
             },
             branchSnapshot: updatedBranchSnapshot,
-            note: updatedNote,
             status: existingOrder.status,
         },
     });
