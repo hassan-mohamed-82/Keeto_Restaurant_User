@@ -148,7 +148,7 @@ export const getStaffById = async (req: Request, res: Response) => {
 export const updateStaff = async (req: Request, res: Response) => {
     const { id } = req.params;
     const restaurantId = (req.user?.restaurantId || req.user?.id) as string;
-    const { name, email, phoneNumber, branchId, type, roleId, permissions } = req.body;
+    const { name, email, phoneNumber, branchId, type, roleId, permissions , password } = req.body;
 
     const existingStaff = await db.select().from(restrauntadmin)
         .where(and(eq(restrauntadmin.id, id), eq(restrauntadmin.restaurantId, restaurantId))).limit(1);
@@ -172,6 +172,7 @@ export const updateStaff = async (req: Request, res: Response) => {
     if (branchId !== undefined) updateData.branchId = branchId || null;
     if (roleId !== undefined) updateData.roleId = roleId || null;
     if (permissions) updateData.permissions = permissions;
+    if (password) updateData.password = password
 
     // لو بيغير الإيميل، لازم نتأكد إنه مش مستخدم في أي حساب آخر
     if (email && email !== existingStaff[0].email) {
