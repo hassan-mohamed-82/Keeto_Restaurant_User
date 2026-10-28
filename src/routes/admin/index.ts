@@ -64,6 +64,7 @@ import PrinterRouter from "./printer";
 import paymentTransactionsRouter from "./paymentTransactions";
 import FirstOrderDiscountRouter from "./firstOrderDiscount";
 import videosRouter from "./videos";
+import PushedNotificationRouter from "./pushedNotification";
 const router = Router();
 
 router.use("/auth", authRouter);
@@ -116,6 +117,7 @@ router.use("/printers", PrinterRouter);
 router.use("/payment-transactions", paymentTransactionsRouter);
 router.use("/first-order-discounts", FirstOrderDiscountRouter);
 router.use("/videos", videosRouter);
+router.use("/pushed-notifications", PushedNotificationRouter);
 
 // POS Routes
 router.use("/pos/shifts", ShiftsRouter);

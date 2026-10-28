@@ -81,4 +81,5 @@ export * from "./schema/admin/shippingCompany";
 export * from "./schema/admin/firstOrderDiscount";
 export * from "./schema/admin/platformPaymentGateways";
 export * from "./schema/admin/videos";
+export * from "./schema/admin/pushedNotification";
 
