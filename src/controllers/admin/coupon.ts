@@ -21,7 +21,8 @@ export const createCoupon = async (req: Request, res: Response) => {
         maxDiscount, minOrderAmount,
         usageLimit, perUserLimit,
         userUsageType,          // 'fixed' | 'unlimited'
-        startDate, endDate, isActive
+        startDate, endDate, isActive,
+        foodIds, foods,
     } = req.body;
 
     if (!code) throw new BadRequest("Coupon code is required");
@@ -57,6 +58,14 @@ export const createCoupon = async (req: Request, res: Response) => {
     }
     const id = uuidv4();
 
+    // Resolve foodIds: accept foodIds or foods array; null if empty or not provided
+    const rawFoodIds = foodIds !== undefined ? foodIds : foods;
+    let resolvedFoodIds: string[] | null = null;
+    if (Array.isArray(rawFoodIds) && rawFoodIds.length > 0) {
+        const filtered = rawFoodIds.map(String).filter(Boolean);
+        resolvedFoodIds = filtered.length > 0 ? filtered : null;
+    }
+
     // 1. حفظ الكوبون الرئيسي في جدول الكوبونات (isGlobal = false تلقائياً للمطاعم)
     await db.insert(coupons).values({
         id,
@@ -75,6 +84,7 @@ export const createCoupon = async (req: Request, res: Response) => {
         endDate: endDate ? new Date(endDate) : null,
         isActive: isActive !== undefined ? isActive : true,
         isGlobal: false,
+        foodIds: resolvedFoodIds,
     });
 
     // 2. ربط الكوبون بالمطعم الحالي تلقائياً في جدول الربط
@@ -84,7 +94,14 @@ export const createCoupon = async (req: Request, res: Response) => {
         restaurantId: restaurantId,
     });
 
-    return SuccessResponse(res, { message: "Coupon created successfully for your restaurant", data: { id } }, 201);
+    return SuccessResponse(res, {
+        message: "Coupon created successfully for your restaurant",
+        data: {
+            id,
+            foodIds: resolvedFoodIds,
+            foods: resolvedFoodIds,
+        }
+    }, 201);
 };
 
 // ========================================================
@@ -112,6 +129,7 @@ export const getAllCoupons = async (req: Request, res: Response) => {
 
     const allCoupons = rawCoupons.map(r => ({
         ...r.coupons,
+        foods: r.coupons.foodIds ?? null,
         usersCount: Number(r.usersCount || 0),
         usedCount: Math.max(Number(r.coupons.usedCount || 0), Number(r.usagesCount || 0)),
     }));
@@ -150,6 +168,7 @@ export const getCouponById = async (req: Request, res: Response) => {
 
     const couponData = {
         ...rawCoupon.coupons,
+        foods: rawCoupon.coupons.foodIds ?? null,
         usersCount: Number(rawCoupon.usersCount || 0),
         usedCount: Math.max(Number(rawCoupon.coupons.usedCount || 0), Number(rawCoupon.usagesCount || 0)),
     };
@@ -181,7 +200,8 @@ export const updateCoupon = async (req: Request, res: Response) => {
         maxDiscount, minOrderAmount,
         usageLimit, perUserLimit,
         userUsageType,          // 'fixed' | 'unlimited'
-        startDate, endDate, isActive
+        startDate, endDate, isActive,
+        foodIds, foods,
     } = req.body;
 
     const normalizedCode = code ? code.toUpperCase().trim() : existing.coupons.code;
@@ -231,6 +251,17 @@ export const updateCoupon = async (req: Request, res: Response) => {
     if (startDate !== undefined) updateData.startDate = startDate ? new Date(startDate) : null;
     if (endDate !== undefined) updateData.endDate = endDate ? new Date(endDate) : null;
     if (isActive !== undefined) updateData.isActive = isActive;
+
+    // Update foodIds / foods if provided
+    if (foodIds !== undefined || foods !== undefined) {
+        const rawFoodIds = foodIds !== undefined ? foodIds : foods;
+        if (rawFoodIds === null) {
+            updateData.foodIds = null;
+        } else if (Array.isArray(rawFoodIds)) {
+            const filtered = rawFoodIds.map(String).filter(Boolean);
+            updateData.foodIds = filtered.length > 0 ? filtered : null;
+        }
+    }
 
     await db.update(coupons).set(updateData).where(eq(coupons.id, id));
 
@@ -301,10 +332,11 @@ export const toggleCouponStatus = async (req: Request, res: Response) => {
 //     couponCode: string,
 //     userId: string,
 //     restaurantId: string,
-//     subtotal: number
+//     subtotal: number,
+//     cartFoodIds?: string[]
 // ): Promise<{ discountAmount: number; coupon: typeof coupons.$inferSelect }> => {
 //     const now = new Date();
-
+// 
 //     // فحص الكود: نبحث عنه إما أن يكون Global لكل السيستم أو مخصص ومربوط بالمطعم الحالي للطلب
 //     const [rawCoupon] = await db
 //         .selectDistinct({ coupons: coupons })
@@ -320,21 +352,21 @@ export const toggleCouponStatus = async (req: Request, res: Response) => {
 //             )
 //         )
 //         .limit(1);
-
+// 
 //     if (!rawCoupon) throw new BadRequest("Invalid coupon code for this restaurant");
 //     const coupon = rawCoupon.coupons;
-    
+//     
 //     if (!coupon.isActive) throw new BadRequest("This coupon is no longer active");
 //     if (coupon.startDate && now < coupon.startDate) throw new BadRequest("This coupon is not yet valid");
 //     if (coupon.endDate && now > coupon.endDate) throw new BadRequest("This coupon has expired");
-
+// 
 //     const minOrder = parseFloat(coupon.minOrderAmount as string);
 //     if (subtotal < minOrder)
 //         throw new BadRequest(`Minimum order amount to use this coupon is ${minOrder}`);
-
+// 
 //     if (coupon.usageLimit !== null && (coupon.usedCount ?? 0) >= coupon.usageLimit)
 //         throw new BadRequest("This coupon has reached its usage limit");
-
+// 
 //     if (coupon.perUserLimit !== null) {
 //         const rows = await db
 //             .select({ count: sql<number>`COUNT(*)` })
@@ -343,14 +375,23 @@ export const toggleCouponStatus = async (req: Request, res: Response) => {
 //                 eq(couponUsages.couponId, coupon.id),
 //                 eq(couponUsages.userId, userId)
 //             ));
-
+// 
 //         const userUsageCount = Number(rows[0]?.count ?? 0);
 //         if (userUsageCount >= coupon.perUserLimit)
 //             throw new BadRequest("You have already used this coupon the maximum number of times");
 //     }
-
+// 
+//     // Food restriction check: if foodIds is specified and non-empty, cart must contain at least one of them
+//     if (coupon.foodIds && Array.isArray(coupon.foodIds) && coupon.foodIds.length > 0) {
+//         const foods = cartFoodIds || [];
+//         const hasEligibleFood = foods.some(fId => coupon.foodIds!.includes(fId));
+//         if (!hasEligibleFood) {
+//             throw new BadRequest("This coupon is only valid for specific items that are not in your cart");
+//         }
+//     }
+// 
 //     let discountAmount = 0;
-
+// 
 //     if (coupon.discountType === "free_delivery") {
 //         discountAmount = 0;
 //     } else if (coupon.discountType === "percentage") {
@@ -362,43 +403,12 @@ export const toggleCouponStatus = async (req: Request, res: Response) => {
 //         discountAmount = parseFloat(coupon.discountValue as string);
 //         if (discountAmount > subtotal) discountAmount = subtotal;
 //     }
-
+// 
 //     return { discountAmount: parseFloat(discountAmount.toFixed(2)), coupon };
 // };
 
-// // ========================================================
-// // 8. Validate Coupon Endpoint (Used by Customers App)
-// // ========================================================
-// export const validateCouponEndpoint = async (req: Request, res: Response) => {
-//     const { code, subtotal, restaurantId } = req.body;
-//     const userId = req.user?.id; 
-
-//     if (!code) throw new BadRequest("Coupon code is required");
-//     if (!subtotal) throw new BadRequest("Subtotal is required");
-//     if (!restaurantId) throw new BadRequest("Restaurant ID is required");
-//     if (!userId) throw new BadRequest("Unauthorized");
-
-//     const { discountAmount, coupon } = await validateCoupon(
-//         code,
-//         userId,
-//         restaurantId,
-//         parseFloat(subtotal)
-//     );
-
-//     return SuccessResponse(res, {
-//         message: "Coupon is valid",
-//         data: {
-//             code: coupon.code,
-//             name: coupon.name,
-//             discountType: coupon.discountType,
-//             discountValue: coupon.discountValue,
-//             discountAmount,
-//         }
-//     });
-// };
-
 // ========================================================
-// 9. Get Coupon Usage History
+// 8. Get Coupon Usage History
 // ========================================================
 export const getCouponUsages = async (req: Request, res: Response) => {
     const { id } = req.params;

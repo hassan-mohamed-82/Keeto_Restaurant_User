@@ -455,6 +455,16 @@ export const checkout = async (req: Request | any, res: Response) => {
             if (usages[0].count >= coupon.perUserLimit) throw new BadRequest("You have reached the usage limit for this coupon");
         }
 
+        // Food restriction check: coupon only applies if at least one eligible food is in the cart
+        const couponFoodIds = coupon.foodIds as string[] | null;
+        if (couponFoodIds && couponFoodIds.length > 0) {
+            const cartFoodIds = userCart.map(ci => ci.foodId).filter(Boolean) as string[];
+            const hasEligibleFood = cartFoodIds.some(fId => couponFoodIds.includes(fId));
+            if (!hasEligibleFood) {
+                throw new BadRequest("This coupon is only valid for specific items that are not in your cart");
+            }
+        }
+
         const value = parseFloat(coupon.discountValue as string);
         if (coupon.discountType === "free_delivery") {
             isFreeDelivery = true;
