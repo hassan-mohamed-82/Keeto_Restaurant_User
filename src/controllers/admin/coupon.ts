@@ -113,7 +113,6 @@ export const getAllCoupons = async (req: Request, res: Response) => {
     const allCoupons = rawCoupons.map(r => ({
         ...r.coupons,
         usersCount: Number(r.usersCount || 0),
-        uniqueUsersCount: Number(r.usersCount || 0),
         usedCount: Math.max(Number(r.coupons.usedCount || 0), Number(r.usagesCount || 0)),
     }));
 
@@ -152,7 +151,6 @@ export const getCouponById = async (req: Request, res: Response) => {
     const couponData = {
         ...rawCoupon.coupons,
         usersCount: Number(rawCoupon.usersCount || 0),
-        uniqueUsersCount: Number(rawCoupon.usersCount || 0),
         usedCount: Math.max(Number(rawCoupon.coupons.usedCount || 0), Number(rawCoupon.usagesCount || 0)),
     };
 
