@@ -96,7 +96,11 @@ export const getAllCoupons = async (req: Request, res: Response) => {
 
     // جلب الكوبونات الخاصة بالمطعم بالإضافة إلى أي كوبون Global نشط في السيستم
     const rawCoupons = await db
-        .selectDistinct({ coupons: coupons })
+        .selectDistinct({
+            coupons: coupons,
+            usersCount: sql<number>`(SELECT COUNT(DISTINCT ${couponUsages.userId}) FROM ${couponUsages} WHERE ${couponUsages.couponId} = ${coupons.id})`,
+            usagesCount: sql<number>`(SELECT COUNT(*) FROM ${couponUsages} WHERE ${couponUsages.couponId} = ${coupons.id})`
+        })
         .from(coupons)
         .leftJoin(couponRestaurants, eq(coupons.id, couponRestaurants.couponId))
         .where(
@@ -106,7 +110,12 @@ export const getAllCoupons = async (req: Request, res: Response) => {
             )
         );
 
-    const allCoupons = rawCoupons.map(r => r.coupons);
+    const allCoupons = rawCoupons.map(r => ({
+        ...r.coupons,
+        usersCount: Number(r.usersCount || 0),
+        uniqueUsersCount: Number(r.usersCount || 0),
+        usedCount: Math.max(Number(r.coupons.usedCount || 0), Number(r.usagesCount || 0)),
+    }));
 
     return SuccessResponse(res, { message: "Get all coupons success", data: allCoupons });
 };
@@ -120,7 +129,11 @@ export const getCouponById = async (req: Request, res: Response) => {
     if (!restaurantId) throw new BadRequest("Unauthorized");
 
     const [rawCoupon] = await db
-        .selectDistinct({ coupons: coupons })
+        .selectDistinct({
+            coupons: coupons,
+            usersCount: sql<number>`(SELECT COUNT(DISTINCT ${couponUsages.userId}) FROM ${couponUsages} WHERE ${couponUsages.couponId} = ${coupons.id})`,
+            usagesCount: sql<number>`(SELECT COUNT(*) FROM ${couponUsages} WHERE ${couponUsages.couponId} = ${coupons.id})`
+        })
         .from(coupons)
         .leftJoin(couponRestaurants, eq(coupons.id, couponRestaurants.couponId))
         .where(
@@ -136,7 +149,14 @@ export const getCouponById = async (req: Request, res: Response) => {
 
     if (!rawCoupon) throw new NotFound("Coupon not found");
 
-    return SuccessResponse(res, { message: "Get coupon success", data: rawCoupon.coupons });
+    const couponData = {
+        ...rawCoupon.coupons,
+        usersCount: Number(rawCoupon.usersCount || 0),
+        uniqueUsersCount: Number(rawCoupon.usersCount || 0),
+        usedCount: Math.max(Number(rawCoupon.coupons.usedCount || 0), Number(rawCoupon.usagesCount || 0)),
+    };
+
+    return SuccessResponse(res, { message: "Get coupon success", data: couponData });
 };
 
 // ========================================================
