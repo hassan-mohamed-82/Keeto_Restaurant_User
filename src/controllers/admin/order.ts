@@ -53,6 +53,7 @@ import {
     resolvePaymentMethodDetails,
     buildOrderDiscountAndPaymentConditions,
     buildOrderUserAndTypeConditions,
+    buildOrderCancellationConditions,
 } from "../../helpers/order.helper";
 import { handleCancelledOrder, settleDeliveredOrder } from "../../services/restaurantWalletService";
 import { dispatchOrder, releaseCourierForOrder } from "../../services/shipping/dispatchEngine";
@@ -73,6 +74,7 @@ export {
     getRestaurantShiftStartTime,
     buildOrderDateConditions,
     buildOrderUserAndTypeConditions,
+    buildOrderCancellationConditions,
 };
 
 // ==========================================
@@ -148,6 +150,28 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
     // ✅ فلترة نوع الطلب (delivery / takeaway / dine_in) وبيانات العميل (الاسم، الإيميل، الهاتف)
     const userAndTypeConditions = buildOrderUserAndTypeConditions(req);
     conditions.push(...userAndTypeConditions);
+
+    // ✅ فلترة الحالة status (مثل status=cancelled)
+    const rawStatus = (req.query?.status as string)?.trim();
+    if (rawStatus && rawStatus !== "all" && rawStatus !== "null" && rawStatus !== "undefined") {
+        const validStatuses = ["pending", "accepted", "preparing", "out_for_delivery", "delivered", "cancelled", "refund", "failed"];
+        if (rawStatus.includes(",")) {
+            const statuses = rawStatus.split(",").map(s => s.trim().toLowerCase()).filter(s => validStatuses.includes(s));
+            if (statuses.length > 1) {
+                conditions.push(inArray(orders.status, statuses as any));
+            } else if (statuses.length === 1) {
+                conditions.push(eq(orders.status, statuses[0] as any));
+            }
+        } else if (validStatuses.includes(rawStatus.toLowerCase())) {
+            conditions.push(eq(orders.status, rawStatus.toLowerCase() as any));
+        }
+    }
+
+    // ✅ فلترة الطلبات الملغاة بحسب من قام بالإلغاء (user vs restaurant)
+    const cancellationConditions = buildOrderCancellationConditions(req, {
+        enforceCancelledStatusIfFiltered: true,
+    });
+    conditions.push(...cancellationConditions);
 
     const rawRestaurantOrders = await db
         .select({
@@ -418,6 +442,12 @@ export const getOrdersByStatus = async (
     // ✅ فلترة نوع الطلب (delivery / takeaway / dine_in) وبيانات العميل (الاسم، الإيميل، الهاتف)
     const userAndTypeConditions = buildOrderUserAndTypeConditions(req);
     conditions.push(...userAndTypeConditions);
+
+    // ✅ فلترة الطلبات الملغاة بحسب من قام بالإلغاء (user vs restaurant)
+    const cancellationConditions = buildOrderCancellationConditions(req, {
+        enforceCancelledStatusIfFiltered: false,
+    });
+    conditions.push(...cancellationConditions);
 
     const rawResult = await db
         .select({
@@ -2044,6 +2074,12 @@ export const getallnumbersoforders = async (req: Request, res: Response) => {
     // ✅ فلترة نوع الطلب وبيانات العميل للأرقام الإجمالية
     const userAndTypeConditions = buildOrderUserAndTypeConditions(req);
     conditions.push(...userAndTypeConditions);
+
+    // ✅ فلترة الطلبات الملغاة بحسب من قام بالإلغاء للأرقام الإجمالية
+    const cancellationConditions = buildOrderCancellationConditions(req, {
+        enforceCancelledStatusIfFiltered: false,
+    });
+    conditions.push(...cancellationConditions);
 
     const statusCountsResult = await db
         .select({

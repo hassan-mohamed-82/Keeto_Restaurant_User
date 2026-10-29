@@ -3,7 +3,7 @@ import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 import { db } from "../models/connection";
-import { orders, restaurantSettings, restaurantSchedules, paymentMethods, coupons, orderItems, food, users } from "../models/schema";
+import { orders, restaurantSettings, restaurantSchedules, paymentMethods, coupons, orderItems, food, users, selectReasons } from "../models/schema";
 import { eq, gte, lte, sql, or, and, isNull, isNotNull, gt, like, inArray } from "drizzle-orm";
 import { BadRequest } from "../Errors/BadRequest";
 import { ForbiddenError } from "../Errors/forbiddenError";
@@ -642,4 +642,37 @@ export const buildOrderUserAndTypeConditions = (req: Request): any[] => {
     return conditions;
 };
 
+// ==========================================
+// Helper: فلترة الطلبات الملغاة حسب من قام بالإلغاء (User vs Restaurant)
+// ==========================================
+/**
+ * Filters cancelled orders by who cancelled them:
+ * - cancelReasonType or canceledType: 'user' | 'restaurant'
+ */
+export const buildOrderCancellationConditions = (
+    req: Request,
+    options?: { enforceCancelledStatusIfFiltered?: boolean }
+): any[] => {
+    const conditions: any[] = [];
+    const query = req.query || {};
 
+    const rawType = (query.cancelReasonType || query.canceledType || query.cancelledType) as string | undefined;
+
+    if (rawType) {
+        const val = rawType.trim().toLowerCase();
+        if (val === "user" || val === "restaurant") {
+            if (options?.enforceCancelledStatusIfFiltered) {
+                conditions.push(eq(orders.status, "cancelled"));
+            }
+
+            conditions.push(
+                or(
+                    eq(orders.cancelReasonType, val),
+                    sql`EXISTS (SELECT 1 FROM select_reasons sr WHERE sr.id = ${orders.cancelReasonId} AND sr.type = ${val})`
+                )
+            );
+        }
+    }
+
+    return conditions;
+};
