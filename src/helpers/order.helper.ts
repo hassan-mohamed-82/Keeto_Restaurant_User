@@ -676,3 +676,114 @@ export const buildOrderCancellationConditions = (
 
     return conditions;
 };
+
+
+// ==========================================
+// Helper: فلترة الطلبات حسب حالة الطلب (Order Status)
+// ==========================================
+export const VALID_ORDER_STATUSES = [
+    "pending",
+    "accepted",
+    "preparing",
+    "out_for_delivery",
+    "delivered",
+    "cancelled",
+    "refund",
+    "failed",
+] as const;
+
+export type OrderStatus = (typeof VALID_ORDER_STATUSES)[number];
+
+export const normalizeOrderStatus = (val: string): string => {
+    if (!val || typeof val !== "string") return "";
+    const s = val.trim().toLowerCase().replace(/[- ]+/g, "_");
+    switch (s) {
+        case "pending":
+        case "معلق":
+        case "قيد_الانتظار":
+        case "جديد":
+            return "pending";
+
+        case "accepted":
+        case "مقبول":
+        case "تم_القبول":
+            return "accepted";
+
+        case "preparing":
+        case "قيد_التحضير":
+        case "تحضير":
+        case "جاري_التحضير":
+            return "preparing";
+
+        case "out_for_delivery":
+        case "outfordelivery":
+        case "out_delivery":
+        case "في_الطريق":
+        case "خرج_للتوصيل":
+            return "out_for_delivery";
+
+        case "delivered":
+        case "تم_التوصيل":
+        case "مكتمل":
+        case "مسلم":
+            return "delivered";
+
+        case "cancelled":
+        case "canceled":
+        case "ملغي":
+        case "ملغى":
+        case "تم_الإلغاء":
+        case "تم_الالغاء":
+            return "cancelled";
+
+        case "refund":
+        case "refunded":
+        case "مسترجع":
+            return "refund";
+
+        case "failed":
+        case "فاشل":
+            return "failed";
+
+        default:
+            return s;
+    }
+};
+
+/**
+ * Builds SQL conditions for filtering orders by status / orderStatus.
+ * Supports:
+ * - Query parameters: orderStatus, status, order_status, orderStatuses, order_statuses, and params.status
+ * - Multiple formats: single string, comma-separated ("pending,accepted"), JSON array ('["pending","accepted"]'), array of strings
+ * - Arabic / normalized status values
+ * - Optional fallbackStatus if no query parameter is provided (e.g. for getPendingOrders)
+ */
+export const buildOrderStatusConditions = (
+    req: Request,
+    fallbackStatus?: string
+): any[] => {
+    const conditions: any[] = [];
+    const query = req.query || {};
+
+    const rawValues = parseMultiFilterValues(query.orderStatus ?? query.status ?? (req.params as any)?.status);
+
+    let statuses = rawValues
+        .map((v) => normalizeOrderStatus(v))
+        .filter((v) => (VALID_ORDER_STATUSES as readonly string[]).includes(v));
+
+    // إذا لم يأتِ أي status في الـ query وكان هناك fallbackStatus ممرر (مثل "pending" في getPendingOrders)
+    if (statuses.length === 0 && fallbackStatus) {
+        const normalizedFallback = normalizeOrderStatus(fallbackStatus);
+        if ((VALID_ORDER_STATUSES as readonly string[]).includes(normalizedFallback)) {
+            statuses = [normalizedFallback];
+        }
+    }
+
+    if (statuses.length === 1) {
+        conditions.push(eq(orders.status, statuses[0] as any));
+    } else if (statuses.length > 1) {
+        conditions.push(inArray(orders.status, statuses as any));
+    }
+
+    return conditions;
+};
