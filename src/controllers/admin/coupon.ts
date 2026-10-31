@@ -22,7 +22,7 @@ export const createCoupon = async (req: Request, res: Response) => {
         usageLimit, perUserLimit,
         userUsageType,          // 'fixed' | 'unlimited'
         startDate, endDate, isActive,
-        foodIds, foods,
+        foodIds, foodsId,
     } = req.body;
 
     if (!code) throw new BadRequest("Coupon code is required");
@@ -59,7 +59,7 @@ export const createCoupon = async (req: Request, res: Response) => {
     const id = uuidv4();
 
     // Resolve foodIds: accept foodIds or foods array; null if empty or not provided
-    const rawFoodIds = foodIds !== undefined ? foodIds : foods;
+    const rawFoodIds = foodIds !== undefined ? foodIds : foodsId;
     let resolvedFoodIds: string[] | null = null;
     if (Array.isArray(rawFoodIds) && rawFoodIds.length > 0) {
         const filtered = rawFoodIds.map(String).filter(Boolean);
@@ -98,7 +98,6 @@ export const createCoupon = async (req: Request, res: Response) => {
         message: "Coupon created successfully for your restaurant",
         data: {
             id,
-            foodIds: resolvedFoodIds,
             foods: resolvedFoodIds,
         }
     }, 201);
@@ -201,7 +200,7 @@ export const updateCoupon = async (req: Request, res: Response) => {
         usageLimit, perUserLimit,
         userUsageType,          // 'fixed' | 'unlimited'
         startDate, endDate, isActive,
-        foodIds, foods,
+        foodIds, foodsId,
     } = req.body;
 
     const normalizedCode = code ? code.toUpperCase().trim() : existing.coupons.code;
@@ -253,8 +252,8 @@ export const updateCoupon = async (req: Request, res: Response) => {
     if (isActive !== undefined) updateData.isActive = isActive;
 
     // Update foodIds / foods if provided
-    if (foodIds !== undefined || foods !== undefined) {
-        const rawFoodIds = foodIds !== undefined ? foodIds : foods;
+    if (foodIds !== undefined || foodsId !== undefined) {
+        const rawFoodIds = foodIds !== undefined ? foodIds : foodsId;
         if (rawFoodIds === null) {
             updateData.foodIds = null;
         } else if (Array.isArray(rawFoodIds)) {
@@ -288,7 +287,7 @@ export const deleteCoupon = async (req: Request, res: Response) => {
 
     // حذف سجلات الاستخدام المرتبطة بالكوبون أولاً
     await db.delete(couponUsages).where(eq(couponUsages.couponId, id));
-    
+
     // حذف الكوبون نهائياً (وسيتم مسح علاقة المطعم تلقائياً بسبب CASCADE)
     await db.delete(coupons).where(eq(coupons.id, id));
 
@@ -311,7 +310,7 @@ export const toggleCouponStatus = async (req: Request, res: Response) => {
         .limit(1);
 
     if (!rawExisting) throw new NotFound("Coupon not found or unauthorized");
-    
+
     const existingCoupon = rawExisting.coupons;
     const newStatus = !existingCoupon.isActive;
 
