@@ -1,11 +1,31 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { coupons, couponUsages, couponRestaurants } from "../../models/schema";
+import { coupons, couponUsages, couponRestaurants, food } from "../../models/schema";
 import { eq, and, sql, inArray, or } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors/NotFound";
 import { v4 as uuidv4 } from "uuid";
+
+// Helper: parse foodIds JSON string or array and fetch food objects
+async function resolveFoods(foodIds: any): Promise<{ id: string; name: string; nameAr: string; nameFr: string }[]> {
+    if (!foodIds) return [];
+
+    let ids: string[] = [];
+    if (typeof foodIds === "string") {
+        try { ids = JSON.parse(foodIds); } catch { ids = []; }
+    } else if (Array.isArray(foodIds)) {
+        ids = foodIds.map(String);
+    }
+
+    ids = ids.filter(Boolean);
+    if (ids.length === 0) return [];
+
+    return db
+        .select({ id: food.id, name: food.name, nameAr: food.nameAr, nameFr: food.nameFr })
+        .from(food)
+        .where(inArray(food.id, ids));
+}
 
 // ========================================================
 // 1. Create Coupon (Automatically linked to logged-in restaurant)
@@ -125,12 +145,17 @@ export const getAllCoupons = async (req: Request, res: Response) => {
             )
         );
 
-    const allCoupons = rawCoupons.map(r => ({
-        ...r.coupons,
-        foods: r.coupons.foodIds ?? null,
-        usersCount: Number(r.usersCount || 0),
-        usedCount: Math.max(Number(r.coupons.usedCount || 0), Number(r.usagesCount || 0)),
-    }));
+    const allCoupons = await Promise.all(
+        rawCoupons.map(async r => {
+            const { foodIds, ...couponRest } = r.coupons;
+            return {
+                ...couponRest,
+                foods: await resolveFoods(foodIds),
+                usersCount: Number(r.usersCount || 0),
+                usedCount: Math.max(Number(r.coupons.usedCount || 0), Number(r.usagesCount || 0)),
+            };
+        })
+    );
 
     return SuccessResponse(res, { message: "Get all coupons success", data: allCoupons });
 };
@@ -164,9 +189,10 @@ export const getCouponById = async (req: Request, res: Response) => {
 
     if (!rawCoupon) throw new NotFound("Coupon not found");
 
+    const { foodIds, ...couponRest } = rawCoupon.coupons;
     const couponData = {
-        ...rawCoupon.coupons,
-        foods: rawCoupon.coupons.foodIds ?? null,
+        ...couponRest,
+        foods: await resolveFoods(foodIds),
         usersCount: Number(rawCoupon.usersCount || 0),
         usedCount: Math.max(Number(rawCoupon.coupons.usedCount || 0), Number(rawCoupon.usagesCount || 0)),
     };
