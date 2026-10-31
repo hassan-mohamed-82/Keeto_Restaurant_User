@@ -22,7 +22,7 @@ export const createCoupon = async (req: Request, res: Response) => {
         usageLimit, perUserLimit,
         userUsageType,          // 'fixed' | 'unlimited'
         startDate, endDate, isActive,
-        foodIds, foodsId,
+        foodsId,
     } = req.body;
 
     if (!code) throw new BadRequest("Coupon code is required");
@@ -59,10 +59,9 @@ export const createCoupon = async (req: Request, res: Response) => {
     const id = uuidv4();
 
     // Resolve foodIds: accept foodIds or foods array; null if empty or not provided
-    const rawFoodIds = foodIds !== undefined ? foodIds : foodsId;
     let resolvedFoodIds: string[] | null = null;
-    if (Array.isArray(rawFoodIds) && rawFoodIds.length > 0) {
-        const filtered = rawFoodIds.map(String).filter(Boolean);
+    if (Array.isArray(foodsId) && foodsId.length > 0) {
+        const filtered = foodsId.map(String).filter(Boolean);
         resolvedFoodIds = filtered.length > 0 ? filtered : null;
     }
 
@@ -200,7 +199,7 @@ export const updateCoupon = async (req: Request, res: Response) => {
         usageLimit, perUserLimit,
         userUsageType,          // 'fixed' | 'unlimited'
         startDate, endDate, isActive,
-        foodIds, foodsId,
+        foodsId,
     } = req.body;
 
     const normalizedCode = code ? code.toUpperCase().trim() : existing.coupons.code;
@@ -252,12 +251,11 @@ export const updateCoupon = async (req: Request, res: Response) => {
     if (isActive !== undefined) updateData.isActive = isActive;
 
     // Update foodIds / foods if provided
-    if (foodIds !== undefined || foodsId !== undefined) {
-        const rawFoodIds = foodIds !== undefined ? foodIds : foodsId;
-        if (rawFoodIds === null) {
+    if (foodsId !== undefined) {
+        if (foodsId === null) {
             updateData.foodIds = null;
-        } else if (Array.isArray(rawFoodIds)) {
-            const filtered = rawFoodIds.map(String).filter(Boolean);
+        } else if (Array.isArray(foodsId)) {
+            const filtered = foodsId.map(String).filter(Boolean);
             updateData.foodIds = filtered.length > 0 ? filtered : null;
         }
     }

@@ -26,7 +26,6 @@ export const createCouponSchema = z.object({
     endDate: z.string().optional().nullable(),
     isActive: z.boolean().optional(),
 
-    foodIds: z.array(z.string().trim().min(1)).optional().nullable(),
     foodsId: z.array(z.string().trim().min(1)).optional().nullable(),
 });
 
@@ -55,6 +54,5 @@ export const updateCouponSchema = z.object({
     endDate: z.string().optional().nullable(),
     isActive: z.boolean().optional(),
 
-    foodIds: z.array(z.string().trim().min(1)).optional().nullable(),
     foodsId: z.array(z.string().trim().min(1)).optional().nullable(),
 });
