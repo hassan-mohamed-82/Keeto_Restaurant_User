@@ -1004,7 +1004,8 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             .where(
                 and(
                     eq(userRestaurantPoints.userId, orderDetail.order.userId),
-                    eq(userRestaurantPoints.restaurantId, restaurantId)
+                    eq(userRestaurantPoints.restaurantId, restaurantId),
+                    excludeUnpaidVisaOrders(),
                 )
             );
         userTotalOrders = Number(userPoints?.totalOrders || 0);
