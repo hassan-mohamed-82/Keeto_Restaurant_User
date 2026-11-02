@@ -996,19 +996,32 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
     }
 
     // 5. حساب إجمالي عدد طلبات العميل في هذا المطعم
+    // let userTotalOrders = 0;
+    // if (orderDetail.order.userId && restaurantId) {
+    //     const [userPoints] = await db
+    //         .select({ totalOrders: userRestaurantPoints.totalOrders })
+    //         .from(userRestaurantPoints)
+    //         .where(
+    //             and(
+    //                 eq(userRestaurantPoints.userId, orderDetail.order.userId),
+    //                 eq(userRestaurantPoints.restaurantId, restaurantId)
+    //             )
+    //         );
+    //     userTotalOrders = Number(userPoints?.totalOrders || 0);
+    // }
     let userTotalOrders = 0;
     if (orderDetail.order.userId && restaurantId) {
-        const [userPoints] = await db
-            .select({ totalOrders: userRestaurantPoints.totalOrders })
-            .from(userRestaurantPoints)
+        const [userOrdersCount] = await db
+            .select({ totalOrders: sql<number>`COUNT(*)` })
+            .from(orders)
             .where(
                 and(
-                    eq(userRestaurantPoints.userId, orderDetail.order.userId),
-                    eq(userRestaurantPoints.restaurantId, restaurantId)
-                    // excludeUnpaidVisaOrders(),
+                    eq(orders.userId, orderDetail.order.userId),
+                    eq(orders.restaurantId, restaurantId),
+                    excludeUnpaidVisaOrders(),
                 )
             );
-        userTotalOrders = Number(userPoints?.totalOrders || 0);
+        userTotalOrders = Number(userOrdersCount?.totalOrders || 0);
     }
 
     // Fetch discount and coupon names for the detail view
