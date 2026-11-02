@@ -699,9 +699,9 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             phone: deliveryMen.phone,
         },
         paymentMethodData: {
-            id: sql<string | null>`(SELECT id FROM payment_methods WHERE id = ${orders.paymentMethod} LIMIT 1)`,
-            name: sql<string | null>`(SELECT name FROM payment_methods WHERE id = ${orders.paymentMethod} LIMIT 1)`,
-            nameAr: sql<string | null>`(SELECT name_ar FROM payment_methods WHERE id = ${orders.paymentMethod} LIMIT 1)`,
+            id: paymentMethods.id,
+            name: paymentMethods.name,
+            nameAr: paymentMethods.nameAr,
         },
     })
         .from(orders)
@@ -712,6 +712,7 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
         .leftJoin(addresses, eq(orders.addressId, addresses.id))
         .leftJoin(restaurantZoneDeliveryFees, eq(orders.zoneId, restaurantZoneDeliveryFees.id))
         .leftJoin(zones, eq(restaurantZoneDeliveryFees.zoneId, zones.id))
+        .leftJoin(paymentMethods, eq(orders.paymentMethod, paymentMethods.id))
         .where(eq(orders.id, id))
         .limit(1);
 
@@ -1003,8 +1004,8 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             .where(
                 and(
                     eq(userRestaurantPoints.userId, orderDetail.order.userId),
-                    eq(userRestaurantPoints.restaurantId, restaurantId),
-                    excludeUnpaidVisaOrders(),
+                    eq(userRestaurantPoints.restaurantId, restaurantId)
+                    // excludeUnpaidVisaOrders(),
                 )
             );
         userTotalOrders = Number(userPoints?.totalOrders || 0);
