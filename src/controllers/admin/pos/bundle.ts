@@ -1115,7 +1115,7 @@ export const getFoods = async (req: Request, res: Response) => {
 
     const lang = extractLang(req);
     const params = { ...req.query, ...req.body };
-    const { subcategory_id, search, name, nameAr, nameFr, status, all } = params;
+    const { subcategory_id, search, name, nameAr, nameFr, status, all = "true" } = params;
 
     const page = Math.max(1, parseInt(params.page as string) || 1);
     const limit = Math.max(1, Math.min(100, parseInt(params.limit as string) || 10));
