@@ -139,7 +139,7 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
             ? true
             : await (async () => {
                 const { checkUserPermission } = await import("../../middlewares/hasPermission");
-                return checkUserPermission(req.user!.id, "order", "filter" as any);
+                return checkUserPermission(req.user!.id, "order", "advanced_filter");
             })()
     );
     conditions.push(...dateConditions);
@@ -418,7 +418,7 @@ export const getOrdersByStatus = async (
             ? true
             : await (async () => {
                 const { checkUserPermission } = await import("../../middlewares/hasPermission");
-                return checkUserPermission(req.user!.id, "order", "filter" as any);
+                return checkUserPermission(req.user!.id, "order", "advanced_filter");
             })()
     );
     conditions.push(...dateConditions);
@@ -2065,7 +2065,7 @@ export const getallnumbersoforders = async (req: Request, res: Response) => {
             ? true
             : await (async () => {
                 const { checkUserPermission } = await import("../../middlewares/hasPermission");
-                return checkUserPermission(req.user!.id, "order", "filter" as any);
+                return checkUserPermission(req.user!.id, "order", "advanced_filter");
             })()
     );
     conditions.push(...dateConditions);

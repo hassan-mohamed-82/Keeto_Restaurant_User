@@ -1,11 +1,14 @@
 import { Request, Response } from 'express';
 import { db } from '../../models/connection'; // غير المسار حسب مكان ملف اتصال قاعدة البيانات عندك
 import { restaurantSettings, restaurantSchedules, restaurants, restaurantBusinessPlans } from '../../models/schema';
+import { admins } from '../../models/schema/admin/admin';
+import { sendEmail } from '../../utils/sendEmails';
 import { eq, and } from 'drizzle-orm';
 
 export const updateSettings = async (req: Request, res: Response): Promise<void> => {
   const restaurantId = req.user?.restaurantId || req.user?.id;
   const { settings, schedules } = req.body;
+  let temporaryClosureChanged: boolean | undefined;
 
   if (!restaurantId) {
     res.status(400).json({ success: false, message: "Restaurant id is not valid" });
@@ -65,7 +68,11 @@ export const updateSettings = async (req: Request, res: Response): Promise<void>
         if (settings.canEditOrder !== undefined) settingsData.canEditOrder = settings.canEditOrder;
         if (settings.isAlwaysOpen !== undefined) settingsData.isAlwaysOpen = settings.isAlwaysOpen;
         if (settings.isSameTimeEveryDay !== undefined) settingsData.isSameTimeEveryDay = settings.isSameTimeEveryDay;
-        if (settings.isTemporarilyClosed !== undefined) settingsData.isTemporarilyClosed = settings.isTemporarilyClosed;
+        if (settings.isTemporarilyClosed !== undefined) {
+          const targetIsTemporarilyClosed = settings.isTemporarilyClosed;
+          temporaryClosureChanged = Boolean(existingSettings[0]?.isTemporarilyClosed) !== targetIsTemporarilyClosed;
+          settingsData.isTemporarilyClosed = targetIsTemporarilyClosed;
+        }
 
         if (settings.isBusy !== undefined || settings.busy !== undefined) {
           const busyVal = settings.isBusy !== undefined ? settings.isBusy : settings.busy;
@@ -141,9 +148,61 @@ export const updateSettings = async (req: Request, res: Response): Promise<void>
       }
     });
 
+    let notificationWarning: string | undefined;
+    if (temporaryClosureChanged !== undefined) {
+      try {
+        const [[restaurant], superAdmins] = await Promise.all([
+          db
+            .select({ name: restaurants.name })
+            .from(restaurants)
+            .where(eq(restaurants.id, restaurantId))
+            .limit(1),
+          db
+            .select({ email: admins.email })
+            .from(admins)
+            .where(and(eq(admins.type, "super_admin"), eq(admins.status, "active"))),
+        ]);
+        const recipients = [...new Set(superAdmins.map(({ email }) => email.trim()).filter(Boolean))];
+
+        if (recipients.length === 0) {
+          notificationWarning = "No active super admin email recipients were found";
+          console.error(`⚠️ Restaurant status changed, but ${notificationWarning.toLowerCase()}.`);
+        } else {
+          const restaurantName = restaurant?.name || restaurantId;
+          const escapedRestaurantName = restaurantName
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+          const status = temporaryClosureChanged ? "temporarily closed" : "open";
+          const subject = `Restaurant ${temporaryClosureChanged ? "closed" : "open"}: ${restaurantName}`;
+          const emailHtml = `<p>Hello,</p><p><strong>${escapedRestaurantName}</strong> is now ${status}.</p>`;
+          const emailResults = await Promise.allSettled(
+            recipients.map((to) => sendEmail({ to, subject, html: emailHtml }))
+          );
+          const failedEmails = emailResults.filter((result) => result.status === "rejected");
+
+          emailResults.forEach((result, index) => {
+            if (result.status === "rejected") {
+              console.error(`❌ Failed to send restaurant status email to ${recipients[index]}:`, result.reason);
+            }
+          });
+
+          if (failedEmails.length > 0) {
+            notificationWarning = `Failed to send restaurant status email to ${failedEmails.length} super admin(s)`;
+          }
+        }
+      } catch (error) {
+        notificationWarning = "Unable to send restaurant status notification email";
+        console.error("❌ Failed to notify super admins about restaurant status change:", error);
+      }
+    }
+
     res.status(200).json({
       success: true,
-      message: "Update settings success"
+      message: "Update settings success",
+      ...(notificationWarning ? { notificationWarning } : {}),
     });
   } catch (error: any) {
     console.error("❌ Error updating settings:", error);

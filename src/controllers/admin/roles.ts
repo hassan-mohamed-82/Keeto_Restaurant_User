@@ -7,7 +7,7 @@ import { NotFound } from "../../Errors/NotFound";
 import { BadRequest } from "../../Errors/BadRequest";
 import { MODULES, ACTION_NAMES } from "../../types/constant";
 import { v4 as uuidv4 } from "uuid";
-import { Permission } from "../../types/custom";
+import { ActionName, ModuleName, Permission } from "../../types/custom";
 
 // Generate ID للـ Action
 const generateActionId = (): string => {
@@ -62,16 +62,39 @@ function formatLabel(str: string): string {
         .join(" ");
 }
 
+const getModuleActionOptions = (module: ModuleName): Array<{ action: ActionName; label: string }> => {
+    const moduleActions = module === "order"
+        ? ACTION_NAMES.filter((action) => action.toLowerCase() !== "filter")
+        : ACTION_NAMES;
+    const actions: Array<{ action: ActionName; label: string }> = moduleActions.map((action) => ({
+        action: action.toLowerCase() as ActionName,
+        label: action,
+    }));
+
+    if (module === "order") {
+        actions.push({ action: "advanced_filter", label: "Advanced Filter" });
+    }
+
+    if (module === "restaurantsetting") {
+        actions.push(
+            { action: "open", label: "Open Restaurant" },
+            { action: "close", label: "Close Restaurant" },
+        );
+    }
+
+    return actions;
+};
+
 // Get Admin Modules with Actions
 export const getAdminPermissions = async (req: Request, res: Response) => {
     try {
         const permissions = MODULES.map((module) => ({
             module,
             label: formatLabel(module),
-            actions: ACTION_NAMES.map((action) => ({
-                key: action.toLowerCase(),
-                label: action,
-                permission: `${module}.${action.toLowerCase()}`,
+            actions: getModuleActionOptions(module).map(({ action, label }) => ({
+                key: action,
+                label,
+                permission: `${module}.${action}`,
             })),
         }));
 
@@ -79,7 +102,7 @@ export const getAdminPermissions = async (req: Request, res: Response) => {
             success: true,
             data: {
                 modules: [...MODULES],
-                actions: [...ACTION_NAMES],
+                actions: [...ACTION_NAMES, "advanced_filter", "open", "close"],
                 permissions,
             },
         });
@@ -283,7 +306,7 @@ export const toggleRoleStatus = async (req: Request, res: Response) => {
 export const getAvailablePermissions = async (req: Request, res: Response) => {
     const permissions = MODULES.map((module) => ({
         module,
-        actions: ACTION_NAMES.map((action) => ({
+        actions: getModuleActionOptions(module).map(({ action }) => ({
             id: generateActionId(),
             action,
         })),
@@ -291,8 +314,7 @@ export const getAvailablePermissions = async (req: Request, res: Response) => {
 
     SuccessResponse(res, {
         modules: MODULES,
-        actions: ACTION_NAMES,
+        actions: [...ACTION_NAMES, "advanced_filter", "open", "close"],
         permissions,
     }, 200);
 };
-

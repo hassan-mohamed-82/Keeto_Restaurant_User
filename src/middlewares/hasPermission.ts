@@ -39,7 +39,10 @@ const ACTION_ALIASES: Record<string, string[]> = {
     update: ["update", "edit"],
     status: ["status"],
     delete: ["delete"],
-    filter: ["filter"],
+    filter: ["advanced_filter", "filter"],
+    advanced_filter: ["advanced_filter", "filter"],
+    open: ["open"],
+    close: ["close"],
 };
 
 const actionName = (a: any): string =>
@@ -167,6 +170,28 @@ export const hasPermission = (
             next(error);
         }
     };
+};
+
+export const hasRestaurantOpenClosePermission = (
+    req: Request,
+    res: Response,
+    next: NextFunction
+) => {
+    const isTemporarilyClosed = req.body?.settings?.isTemporarilyClosed;
+    if (isTemporarilyClosed === undefined) {
+        next();
+        return;
+    }
+
+    const action: ActionName = isTemporarilyClosed ? "close" : "open";
+    authorize(
+        req,
+        false,
+        perms => matchesPermission(perms, "restaurantsetting", action),
+        `You don't have permission to ${action} the restaurant`
+    )
+        .then(() => next())
+        .catch(next);
 };
 
 // ==========================================

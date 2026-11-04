@@ -17,6 +17,7 @@ export const updateSettingsSchema = z.object({
     settings: z.object({
         cashEnabled: z.boolean().optional(),
         enableOnlinePayment: z.boolean().optional(),
+        isTemporarilyClosed: z.boolean().optional(),
     }).passthrough().optional(),
     schedules: z.array(z.any()).optional(),
 }).superRefine((data, ctx) => {

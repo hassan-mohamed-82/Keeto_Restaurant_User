@@ -54,7 +54,15 @@ export interface ApiResponse<T = any> {
 // =======================
 // Permissions System
 // =======================
-export type ActionName = "create" | "read" | "update" | "delete" | "filter";
+export type ActionName =
+    | "create"
+    | "read"
+    | "update"
+    | "delete"
+    | "filter"
+    | "advanced_filter"
+    | "open"
+    | "close";
 
 export type ModuleName =
     | "users"
