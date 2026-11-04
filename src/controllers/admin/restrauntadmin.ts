@@ -172,7 +172,7 @@ export const updateStaff = async (req: Request, res: Response) => {
     if (branchId !== undefined) updateData.branchId = branchId || null;
     if (roleId !== undefined) updateData.roleId = roleId || null;
     if (permissions) updateData.permissions = permissions;
-    if (password) updateData.password = password
+    if (password) updateData.password = await bcrypt.hash(password, 10);
 
     // لو بيغير الإيميل، لازم نتأكد إنه مش مستخدم في أي حساب آخر
     if (email && email !== existingStaff[0].email) {
