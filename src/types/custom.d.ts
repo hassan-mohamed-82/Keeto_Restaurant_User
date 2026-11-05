@@ -115,7 +115,11 @@ export type ModuleName =
     | "delivery_man"
     | "delivery_man_accounts"
     | "socialmedia"
-    | "Videos";
+    | "Videos"
+    | "pricing";
+
+    
+
 
 export interface PermissionAction {
     id?: string;
