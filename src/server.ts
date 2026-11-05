@@ -16,6 +16,7 @@ import './config/redis';
 import swaggerUi from 'swagger-ui-express';
 import swaggerFile from './swagger-output.json';
 import { initNotificationCleanupCron } from "./services/initNotificationCleanupCron";
+import { initAutoDeliverCron } from "./services/autoDeliverCron";
 import { initSocket } from "./services/socket/socketService";
 // import { initAbandonedCartCron } from "./services/abandonedCartCron";
 
@@ -27,6 +28,7 @@ connectDB();
 initOrderNotificationCron();
 initOrderDelayAlertCron();
 initNotificationCleanupCron();
+initAutoDeliverCron();
 // initAbandonedCartCron();
 
 const httpServer: http.Server = http.createServer(app);

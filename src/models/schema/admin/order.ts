@@ -209,7 +209,9 @@ export const orders = mysqlTable("orders", {
 
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
     createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => ({
+    statusUpdatedIdx: index("idx_orders_status_updated").on(table.status, table.updatedAt),
+}));
 
 // ==========================================
 // 2. جدول أصناف الأوردر (Order Items Table)
