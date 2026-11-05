@@ -29,6 +29,7 @@ import {
     couponRestaurants,
     firstOrderDiscounts,
     shippingCompanies,
+    offers,
 } from "../../models/schema";
 import { eq, and, or, desc, inArray, sql, gte, lte, isNull, gt, isNotNull } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
@@ -191,6 +192,7 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
             couponCode: orders.couponCode,
             firstOrderDiscountId: orders.firstOrderDiscountId,
             offerId: orders.offerId,
+            isBundle: orders.isBundle,
             isPointsRedeemed: orders.isPointsRedeemed,
             redeemCode: orders.redeemCode,
             totalAmount: orders.totalAmount,
@@ -288,6 +290,8 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
             const { addressLat, addressLng, ...rest } = o;
             return {
                 ...rest,
+                isBundle: Boolean(o.isBundle),
+                offerId: o.offerId || null,
                 paymentMethod: pmDetails.id,
                 paymentMethodName: pmDetails.name,
                 paymentMethodNameAr: pmDetails.nameAr,
@@ -467,6 +471,7 @@ export const getOrdersByStatus = async (
             couponCode: orders.couponCode,
             firstOrderDiscountId: orders.firstOrderDiscountId,
             offerId: orders.offerId,
+            isBundle: orders.isBundle,
             isPointsRedeemed: orders.isPointsRedeemed,
             redeemCode: orders.redeemCode,
             totalAmount: orders.totalAmount,
@@ -564,6 +569,8 @@ export const getOrdersByStatus = async (
             const { addressLat, addressLng, ...rest } = o;
             return {
                 ...rest,
+                isBundle: Boolean(o.isBundle),
+                offerId: o.offerId || null,
                 paymentMethod: pmDetails.id,
                 paymentMethodName: pmDetails.name,
                 paymentMethodNameAr: pmDetails.nameAr,
@@ -1048,6 +1055,27 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
         if (coup) couponDetails = coup;
     }
 
+    let offerDetails: any = null;
+    if (orderDetail.order.offerId) {
+        try {
+            const [off] = await db
+                .select({
+                    id: offers.id,
+                    name: offers.name,
+                    nameAr: offers.nameAr,
+                    nameFr: offers.nameFr,
+                    price: offers.price,
+                    image: offers.image,
+                })
+                .from(offers)
+                .where(eq(offers.id, orderDetail.order.offerId))
+                .limit(1);
+            if (off) offerDetails = off;
+        } catch (e) {
+            console.error("Error fetching offer for order:", e);
+        }
+    }
+
     // 🟢 حل مشكلة فك تشفير الـ JSON لبيانات الـ Snapshot إذا رجعت كـ String من قاعدة البيانات
     let shippingAddressData: any = orderDetail.order.shippingAddress;
     if (typeof shippingAddressData === "string") {
@@ -1079,6 +1107,9 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             id: orderDetail.order.id,
             orderNumber: orderDetail.order.orderNumber,
             dailyOrderNumber: orderDetail.order.dailyOrderNumber, // ✅ الرقم التسلسلي اليومي
+            isBundle: Boolean(orderDetail.order.isBundle),
+            offerId: orderDetail.order.offerId ?? null,
+            offer: offerDetails,
             orderType: orderDetail.order.orderType,
             orderSource: orderDetail.order.orderSource,
             status: orderDetail.order.status,
