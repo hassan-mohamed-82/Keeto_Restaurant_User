@@ -76,7 +76,7 @@ const normalizeOfferInput = (obj: any) => {
         if (Array.isArray(incomingFoods)) {
             const rawParsedItems = incomingFoods.map((item: any) => {
                 if (typeof item === "string") {
-                    return { foodId: item, quantity: 1, variations: [] };
+                    return { foodId: item, quantity: 1, variations: [], addonIds: [] };
                 }
                 if (item && typeof item === "object") {
                     const foodId = String(item.foodId || item.food_id || item.id || "");
@@ -130,10 +130,25 @@ const normalizeOfferInput = (obj: any) => {
                         });
                     }
 
+                    // Extract addons
+                    const directAddonIds = parseStringOrArray(
+                        item.addonIds || item.addon_ids || item.addonsId || item.addonsIds || item.addons
+                    );
+                    let objectAddonIds: string[] = [];
+                    const rawAddonsObj = safeParseJson(item.addons);
+                    if (Array.isArray(rawAddonsObj)) {
+                        objectAddonIds = rawAddonsObj
+                            .map((a: any) => (typeof a === "object" && a !== null ? (a.id || a.addonId || a.addon_id) : a))
+                            .filter(Boolean)
+                            .map(String);
+                    }
+                    const normalizedAddonIds = Array.from(new Set([...directAddonIds, ...objectAddonIds]));
+
                     return {
                         foodId,
                         quantity,
                         variations: normalizedVariations,
+                        addonIds: normalizedAddonIds,
                     };
                 }
                 return item;
@@ -148,11 +163,13 @@ const normalizeOfferInput = (obj: any) => {
                         foodId: fid,
                         quantity: item.quantity,
                         variations: [...item.variations],
+                        addonIds: [...(item.addonIds || [])],
                     });
                 } else {
                     const existing = mergedFoodMap.get(fid)!;
                     existing.quantity = Math.max(existing.quantity, item.quantity);
                     existing.variations.push(...item.variations);
+                    existing.addonIds = Array.from(new Set([...(existing.addonIds || []), ...(item.addonIds || [])]));
                 }
             }
 
@@ -176,6 +193,7 @@ const normalizeOfferInput = (obj: any) => {
                     foodId: f.foodId,
                     quantity: f.quantity,
                     variations: Array.from(vMap.values()),
+                    addonIds: f.addonIds || [],
                 };
             });
         } else {
@@ -187,6 +205,7 @@ const normalizeOfferInput = (obj: any) => {
                     foodId: String(id),
                     quantity: 1,
                     variations: [],
+                    addonIds: [],
                 }));
             }
         }
@@ -245,7 +264,7 @@ export const offerVariationSchema = z.preprocess(
 export const offerFoodItemSchema = z.preprocess(
     (raw: any) => {
         if (typeof raw === "string") {
-            return { foodId: raw, quantity: 1, variations: [] };
+            return { foodId: raw, quantity: 1, variations: [], addonIds: [] };
         }
         return raw;
     },
@@ -275,6 +294,31 @@ export const offerFoodItemSchema = z.preprocess(
             }
             return [];
         }, z.array(offerVariationSchema)).optional().default([]),
+        addonIds: stringOrArraySchema.optional().default([]),
+        addon_ids: stringOrArraySchema.optional(),
+        addonsId: stringOrArraySchema.optional(),
+        addonsIds: stringOrArraySchema.optional(),
+        addons: z.any().optional(),
+    }).transform((val) => {
+        const rawAddons = [
+            ...(val.addonIds || []),
+            ...(val.addon_ids || []),
+            ...(val.addonsId || []),
+            ...(val.addonsIds || []),
+        ];
+        if (Array.isArray(val.addons)) {
+            const fromAddons = val.addons
+                .map((a: any) => (typeof a === "object" && a !== null ? (a.id || a.addonId || a.addon_id) : a))
+                .filter(Boolean)
+                .map(String);
+            rawAddons.push(...fromAddons);
+        }
+        return {
+            foodId: val.foodId,
+            quantity: val.quantity,
+            variations: val.variations,
+            addonIds: Array.from(new Set(rawAddons.map(String).filter(Boolean))),
+        };
     })
 );
 

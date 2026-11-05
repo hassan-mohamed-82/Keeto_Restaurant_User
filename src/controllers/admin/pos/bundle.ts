@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { db } from "../../../models/connection";
-import { offers, offerFoods, branches, food, foodVariations, variationOptions } from "../../../models/schema";
+import { offers, offerFoods, branches, food, foodVariations, variationOptions, addons } from "../../../models/schema";
 import { eq, and, desc, inArray, count, or, like, isNull, sql } from "drizzle-orm";
 import { SuccessResponse } from "../../../utils/response";
 import { BadRequest, NotFound } from "../../../Errors";
@@ -81,10 +81,15 @@ async function fetchAndEnrichOfferFoods(offerIds: string[], lang: Language = "en
         const variations = Array.isArray(parsedVars) ? parsedVars : [];
         const parsedOpts = deepParseJSON(r.optionIds);
         const optionIds = Array.isArray(parsedOpts) ? parsedOpts : [];
+        const parsedAddons = deepParseJSON((r as any).addonIds);
+        const addonIds = Array.isArray(parsedAddons)
+            ? parsedAddons.map(String).filter(Boolean)
+            : parseJsonArray((r as any).addonIds);
         return {
             ...r,
             variations,
             optionIds,
+            addonIds,
         };
     });
 
@@ -103,12 +108,14 @@ async function fetchAndEnrichOfferFoods(offerIds: string[], lang: Language = "en
                 quantity: r.quantity || 1,
                 variations: [...r.variations],
                 optionIds: [...r.optionIds],
+                addonIds: [...r.addonIds],
             });
         } else {
             const ex = foodMapForOffer.get(r.foodId)!;
             ex.quantity = Math.max(ex.quantity, r.quantity || 1);
             ex.variations.push(...r.variations);
             ex.optionIds = Array.from(new Set([...ex.optionIds, ...r.optionIds]));
+            ex.addonIds = Array.from(new Set([...ex.addonIds, ...r.addonIds]));
         }
     }
 
@@ -120,6 +127,11 @@ async function fetchAndEnrichOfferFoods(offerIds: string[], lang: Language = "en
     }
 
     const foodIds = Array.from(new Set(parsedRows.map((r) => r.foodId).filter(Boolean)));
+    const allAddonIds = Array.from(
+        new Set(
+            parsedRows.flatMap((r) => (Array.isArray(r.addonIds) ? r.addonIds : [])).map(String).filter(Boolean)
+        )
+    );
 
     // Collect all option IDs explicitly passed
     const allOptionIds = Array.from(
@@ -141,7 +153,7 @@ async function fetchAndEnrichOfferFoods(offerIds: string[], lang: Language = "en
         new Set(parsedRows.filter((r) => r.variations.length === 0).map((r) => r.foodId))
     );
 
-    const [foodList, optionList, defaultVarsList] = await Promise.all([
+    const [foodList, optionList, defaultVarsList, addonList] = await Promise.all([
         foodIds.length > 0
             ? db
                   .select({
@@ -151,6 +163,7 @@ async function fetchAndEnrichOfferFoods(offerIds: string[], lang: Language = "en
                       nameFr: food.nameFr,
                       price: food.price,
                       image: food.image,
+                      addonsId: food.addonsId,
                   })
                   .from(food)
                   .where(inArray(food.id, foodIds))
@@ -167,11 +180,22 @@ async function fetchAndEnrichOfferFoods(offerIds: string[], lang: Language = "en
                   .from(foodVariations)
                   .where(inArray(foodVariations.foodId, foodIdsWithEmptyVars))
             : Promise.resolve([]),
+        allAddonIds.length > 0
+            ? db
+                  .select()
+                  .from(addons)
+                  .where(inArray(addons.id, allAddonIds))
+            : Promise.resolve([]),
     ]);
 
     const foodMap = new Map<string, (typeof foodList)[0]>();
     for (const f of foodList) {
         foodMap.set(f.id, f);
+    }
+
+    const addonMap = new Map<string, (typeof addonList)[0]>();
+    for (const a of addonList) {
+        addonMap.set(a.id, a);
     }
 
     // Also fetch options for default variations
@@ -307,6 +331,29 @@ async function fetchAndEnrichOfferFoods(offerIds: string[], lang: Language = "en
             enrichedVariations = defaultVarsByFoodId.get(row.foodId) || [];
         }
 
+        const rawRowAddonIds = Array.isArray(row.addonIds) ? row.addonIds : [];
+        const enrichedAddons = rawRowAddonIds.map((addonId: string) => {
+            const addonInfo = addonMap.get(String(addonId));
+            return {
+                id: String(addonId),
+                name: addonInfo
+                    ? getLocalizedName(
+                          {
+                              name: addonInfo.name,
+                              nameAr: addonInfo.nameAr,
+                              nameFr: addonInfo.nameFr,
+                          },
+                          lang
+                      )
+                    : "",
+                nameAr: addonInfo?.nameAr || null,
+                nameFr: addonInfo?.nameFr || null,
+                price: addonInfo?.price || "0",
+                status: addonInfo?.status || "active",
+                stock_type: addonInfo?.stock_type || "unlimited",
+            };
+        });
+
         result.get(row.offerId)!.push({
             id: row.id,
             foodId: row.foodId,
@@ -317,6 +364,8 @@ async function fetchAndEnrichOfferFoods(offerIds: string[], lang: Language = "en
             image: foodItem?.image || null,
             quantity: row.quantity || 1,
             variations: enrichedVariations,
+            addons: enrichedAddons,
+            addonIds: rawRowAddonIds,
         });
     }
 
@@ -420,6 +469,8 @@ async function enrichOffersWithBranchesAndFoods<
                     image: f.image,
                     quantity: 1,
                     variations: [],
+                    addons: [],
+                    addonIds: [],
                 }));
         }
 
@@ -453,19 +504,21 @@ function consolidateFoodsAndVariations(
     foodId: string;
     quantity: number;
     variations: Array<{ variationId?: string | null; options: string[] }>;
+    addonIds: string[];
 }> {
     let rawItems: any[] = [];
     if (Array.isArray(foodsInput) && foodsInput.length > 0) {
         rawItems = foodsInput;
     } else {
         const rawIds = parseJsonArray(foodIdsInput);
-        rawItems = rawIds.map((fid) => ({ foodId: fid, quantity: 1, variations: [] }));
+        rawItems = rawIds.map((fid) => ({ foodId: fid, quantity: 1, variations: [], addonIds: [] }));
     }
 
     const mergedFoodsMap = new Map<string, {
         foodId: string;
         quantity: number;
         variations: Array<{ variationId?: string | null; options: string[] }>;
+        addonIds: string[];
     }>();
 
     for (const item of rawItems) {
@@ -475,17 +528,30 @@ function consolidateFoodsAndVariations(
 
         const qty = item.quantity !== undefined ? Number(item.quantity) || 1 : 1;
         const vars = Array.isArray(item.variations) ? item.variations : [];
+        const rawAddons = parseJsonArray(
+            item.addonIds || item.addon_ids || item.addonsId || item.addonsIds || item.addons
+        );
+        let objectAddonIds: string[] = [];
+        if (Array.isArray(item.addons)) {
+            objectAddonIds = item.addons
+                .map((a: any) => (typeof a === "object" && a !== null ? (a.id || a.addonId || a.addon_id) : a))
+                .filter(Boolean)
+                .map(String);
+        }
+        const itemAddonIds = Array.from(new Set([...rawAddons, ...objectAddonIds]));
 
         if (!mergedFoodsMap.has(fid)) {
             mergedFoodsMap.set(fid, {
                 foodId: fid,
                 quantity: qty,
                 variations: [...vars],
+                addonIds: itemAddonIds,
             });
         } else {
             const ex = mergedFoodsMap.get(fid)!;
             ex.quantity = Math.max(ex.quantity, qty);
             ex.variations.push(...vars);
+            ex.addonIds = Array.from(new Set([...ex.addonIds, ...itemAddonIds]));
         }
     }
 
@@ -505,6 +571,7 @@ function consolidateFoodsAndVariations(
             foodId: f.foodId,
             quantity: f.quantity,
             variations: Array.from(vMap.values()),
+            addonIds: f.addonIds,
         };
     });
 }
@@ -587,12 +654,16 @@ export const createOffer = async (req: Request, res: Response) => {
                     ).map(String).filter(Boolean)
                 )
             );
+            const flatAddons = Array.from(
+                new Set((Array.isArray(f.addonIds) ? f.addonIds : []).map(String).filter(Boolean))
+            );
             return {
                 id: uuidv4(),
                 offerId: id,
                 foodId: f.foodId,
                 variations: rawVars,
                 optionIds: flatOptions,
+                addonIds: flatAddons,
                 quantity: f.quantity || 1,
             };
         });
@@ -831,12 +902,16 @@ export const updateOffer = async (req: Request, res: Response) => {
                         ).map(String).filter(Boolean)
                     )
                 );
+                const flatAddons = Array.from(
+                    new Set((Array.isArray(f.addonIds) ? f.addonIds : []).map(String).filter(Boolean))
+                );
                 return {
                     id: uuidv4(),
                     offerId: id,
                     foodId: f.foodId,
                     variations: rawVars,
                     optionIds: flatOptions,
+                    addonIds: flatAddons,
                     quantity: f.quantity || 1,
                 };
             });
@@ -1057,6 +1132,8 @@ export const getOfferFoods = async (req: Request, res: Response) => {
                 image: f.image,
                 quantity: 1,
                 variations: [],
+                addons: [],
+                addonIds: [],
             }));
         }
     }
@@ -1173,6 +1250,7 @@ export const getFoods = async (req: Request, res: Response) => {
                       nameFr: food.nameFr,
                       price: food.price,
                       image: food.image,
+                      addonsId: food.addonsId,
                   })
                   .from(food)
                   .where(and(...conditions))
@@ -1185,6 +1263,7 @@ export const getFoods = async (req: Request, res: Response) => {
                       nameFr: food.nameFr,
                       price: food.price,
                       image: food.image,
+                      addonsId: food.addonsId,
                   })
                   .from(food)
                   .where(and(...conditions))
@@ -1212,6 +1291,40 @@ export const getFoods = async (req: Request, res: Response) => {
             optionsByVarId.set(opt.variationId, []);
         }
         optionsByVarId.get(opt.variationId)!.push(opt);
+    }
+
+    const allAddonIds = Array.from(
+        new Set(
+            foodList.flatMap((f) => parseJsonArray(f.addonsId)).filter(Boolean)
+        )
+    );
+
+    const addonsList = allAddonIds.length > 0
+        ? await db
+              .select({
+                  id: addons.id,
+                  name: addons.name,
+                  nameAr: addons.nameAr,
+                  nameFr: addons.nameFr,
+                  price: addons.price,
+                  status: addons.status,
+                  stock_type: addons.stock_type,
+              })
+              .from(addons)
+              .where(inArray(addons.id, allAddonIds))
+        : [];
+
+    const addonsMap = new Map<string, any>();
+    for (const a of addonsList) {
+        addonsMap.set(a.id, {
+            id: a.id,
+            name: getLocalizedName(a, lang),
+            nameAr: a.nameAr,
+            nameFr: a.nameFr,
+            price: a.price,
+            status: a.status,
+            stock_type: a.stock_type,
+        });
     }
 
     const variationsByFoodId = new Map<string, any[]>();
@@ -1242,13 +1355,23 @@ export const getFoods = async (req: Request, res: Response) => {
         });
     }
 
-    const formatted = foodList.map((f) => ({
-        id: f.id,
-        name: getLocalizedName(f, lang), 
-        price: f.price,
-        image: f.image,
-        variations: variationsByFoodId.get(f.id) || [],
-    }));
+    const formatted = foodList.map((f) => {
+        const foodAddonIds = parseJsonArray(f.addonsId);
+        const foodAddons = foodAddonIds
+            .map((aid) => addonsMap.get(aid))
+            .filter(Boolean);
+
+        return {
+            id: f.id,
+            name: getLocalizedName(f, lang), 
+            nameAr: f.nameAr,
+            nameFr: f.nameFr,
+            price: f.price,
+            image: f.image,
+            variations: variationsByFoodId.get(f.id) || [],
+            addons: foodAddons,
+        };
+    });
 
     return SuccessResponse(res, {
         message: "Foods fetched successfully",

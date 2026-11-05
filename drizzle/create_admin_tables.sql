@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS `offer_foods` (
     `food_id` char(36) NOT NULL,
     `variations` json NOT NULL,
     `option_ids` json NOT NULL,
+    `addon_ids` json NOT NULL,
     `quantity` int NOT NULL DEFAULT 1,
     `created_at` timestamp DEFAULT (now()),
     `updated_at` timestamp DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
@@ -97,10 +98,11 @@ CREATE TABLE IF NOT EXISTS `offer_foods` (
 );
 
 -- ==========================================================
--- Migration for existing databases: Add amount_type column
+-- Migration for existing databases: Add amount_type & addon_ids column
 -- ==========================================================
 -- ALTER TABLE `service_fees` ADD COLUMN `amount_type` ENUM('percentage', 'value') NOT NULL DEFAULT 'percentage' AFTER `amount`;
 -- ALTER TABLE `taxes` ADD COLUMN `amount_type` ENUM('percentage', 'value') NOT NULL DEFAULT 'percentage' AFTER `amount`;
+-- ALTER TABLE `offer_foods` ADD COLUMN `addon_ids` JSON NULL AFTER `option_ids`;
 
 
 
