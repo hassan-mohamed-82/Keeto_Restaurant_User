@@ -67,6 +67,7 @@ import {
     notifyAdmins,
 } from "../../services/socket/socketService";
 import { SOCKET_EVENTS } from "../../services/socket/socketEvents";
+import { changeOrderStatus } from "../../services/orderStatusService";
 
 export {
     resolveZoneFromCoords,
@@ -1233,12 +1234,14 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
 
     if (!status) throw new BadRequest("Status is required");
 
+    // ---------- Load + authorize ----------
     const [existingOrder] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
     if (!existingOrder) throw new NotFound("Order not found");
 
     if (existingOrder.restaurantId !== adminRestaurantId) throw new BadRequest("Unauthorized");
     if (adminBranchId && existingOrder.branchId !== adminBranchId) throw new BadRequest("Unauthorized");
 
+    // ---------- Delivery man ownership ----------
     let finalDeliveryManId: string | null = null;
     if (deliveryManId) {
         const [deliveryMan] = await db
@@ -1259,20 +1262,20 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
         finalDeliveryManId = deliveryMan.id;
     }
 
+    // ---------- Status flow validation ----------
     const currentStatus = existingOrder.status as string;
 
-    //const finalStatuses = ["delivered", "cancelled", "refund"];
     const finalStatuses = ["cancelled", "refund"];
     if (finalStatuses.includes(currentStatus)) {
         throw new BadRequest(`Order is already ${currentStatus} and cannot be changed`);
     }
 
     const statusFlowOrder: Record<string, number> = {
-        "pending": 1,
-        "accepted": 2,
-        "preparing": 3,
-        "out_for_delivery": 4,
-        "delivered": 5,
+        pending: 1,
+        accepted: 2,
+        preparing: 3,
+        out_for_delivery: 4,
+        delivered: 5,
     };
 
     if (statusFlowOrder[currentStatus] && statusFlowOrder[status]) {
@@ -1286,322 +1289,39 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
         throw new BadRequest(`Order is already ${currentStatus}`);
     }
 
-    let finalReasonId: string | null = null;
-    let finalReasonText: string | null = null;
+    // ---------- Cancel reason ----------
+    let cancel: { reasonId: string | null; reasonText: string | null } | undefined;
 
     if (status === "cancelled") {
-        const inputCustomReason = customReason as string | undefined;
+        const inputCustomReason = typeof customReason === "string" ? customReason.trim() : "";
 
         if (cancelReasonId) {
-            const [found] = await db.select().from(selectReasons)
+            const [found] = await db
+                .select()
+                .from(selectReasons)
                 .where(and(eq(selectReasons.id, cancelReasonId), eq(selectReasons.type, "restaurant")))
                 .limit(1);
             if (!found) throw new BadRequest("Invalid cancel reason for restaurant");
-            finalReasonId = found.id;
-            finalReasonText = (inputCustomReason && inputCustomReason.trim()) ? inputCustomReason.trim() : found.name;
-        } else if (inputCustomReason && typeof inputCustomReason === "string" && inputCustomReason.trim() !== "") {
-            finalReasonId = null;
-            finalReasonText = inputCustomReason.trim();
+            cancel = { reasonId: found.id, reasonText: inputCustomReason || found.name };
+        } else if (inputCustomReason) {
+            cancel = { reasonId: null, reasonText: inputCustomReason };
         } else {
             throw new BadRequest("Cancel reason or cancel reason ID is required when cancelling an order");
         }
     }
 
-    await db.transaction(async (tx) => {
-        // 1. تحديث حالة الطلب
-        const orderUpdatePayload: any = {
-            status: status,
-            cancelReasonId: status === "cancelled" ? finalReasonId : null,
-            cancelReason: status === "cancelled" ? finalReasonText : null,
-            cancelReasonType: status === "cancelled" ? "restaurant" : null,
-            updatedAt: new Date()
-        };
-
-        if (finalDeliveryManId) {
-            orderUpdatePayload.deliveryManId = finalDeliveryManId;
-        }
-
-        await tx.update(orders)
-            .set(orderUpdatePayload)
-            .where(eq(orders.id, orderId));
-
-        // ==========================================
-        // 💰 2. الـ Refund لمحفظة العميل (User Wallet) عند الإلغاء
-        // ==========================================
-        if (status === "cancelled" || status === "rejected") {
-            // البحث هل تم الدفع سابقاً بواسطة المحفظة
-            const [walletTx] = await tx.select().from(userWalletTransactions)
-                .where(and(
-                    eq(userWalletTransactions.reference, existingOrder.orderNumber),
-                    eq(userWalletTransactions.transactionType, "order_payment")
-                )).limit(1);
-
-            if (walletTx) {
-                const [userWallet] = await tx.select().from(userWallets)
-                    .where(eq(userWallets.userId, existingOrder.userId)).limit(1);
-
-                if (userWallet) {
-                    const balanceBefore = parseFloat(userWallet.balance ?? "0.00");
-                    const amountToRefund = parseFloat(existingOrder.totalAmount as string || "0.00");
-                    const newBalance = balanceBefore + amountToRefund;
-
-                    // تحديث رصيد محفظة العميل
-                    await tx.update(userWallets)
-                        .set({
-                            balance: newBalance.toFixed(2),
-                            updatedAt: new Date()
-                        })
-                        .where(eq(userWallets.id, userWallet.id));
-
-                    // إضافة حركة إرجاع الرصيد (Refund Transaction)
-                    await tx.insert(userWalletTransactions).values({
-                        id: uuidv4(),
-                        userId: existingOrder.userId,
-                        paymentMethodId: existingOrder.paymentMethod ?? null,
-                        type: "credit",
-                        transactionType: "refund",
-                        amount: amountToRefund.toFixed(2),
-                        balanceBefore: balanceBefore.toFixed(2),
-                        reference: existingOrder.orderNumber,
-                        status: "approved",
-                        createdAt: new Date()
-                    });
-                }
-            }
-
-        }
-
-        if (status === "delivered") {
-            await settleDeliveredOrder(orderId, tx);
-        } else if (status === "cancelled") {
-            await handleCancelledOrder({ orderId, cancelReasonType: "restaurant", tx });
-        }
-
-        // ==========================================
-        // ⭐ LOYALTY POINTS: إضافة نقاط المطعم عند التوصيل (DELIVERED)
-        // ==========================================
-        if (status === "delivered") {
-            // 1. جلب الوجبات والكميات المشتراة في الطلب
-            const items = await tx
-                .select({ foodId: orderItems.foodId, quantity: orderItems.quantity })
-                .from(orderItems)
-                .where(eq(orderItems.orderId, orderId));
-
-            if (items.length > 0) {
-                const foodIds = items.map(i => i.foodId);
-
-                // 2. جلب النقاط الخاصة بكل وجبة مباشرة من جدول الـ food
-                const foodPoints = await tx
-                    .select({ id: food.id, points: food.points })
-                    .from(food)
-                    .where(inArray(food.id, foodIds));
-
-                const foodPointsMap = new Map(foodPoints.map(f => [f.id, f.points ?? 0]));
-
-                // 3. حساب إجمالي النقاط (نقاط الوجبة × الكمية)
-                let totalPointsEarned = 0;
-                for (const item of items) {
-                    const pointsPerItem = foodPointsMap.get(item.foodId) ?? 0;
-                    totalPointsEarned += pointsPerItem * item.quantity;
-                }
-
-                // 4. إضافة النقاط لرصيد المستخدم إذا كانت أكبر من صفر
-                if (totalPointsEarned > 0) {
-                    let [userPointRecord] = await tx
-                        .select()
-                        .from(userRestaurantPoints)
-                        .where(
-                            and(
-                                eq(userRestaurantPoints.userId, existingOrder.userId),
-                                eq(userRestaurantPoints.restaurantId, existingOrder.restaurantId)
-                            )
-                        )
-                        .limit(1);
-
-                    // إنشاء سجل نقاط للمستخدم في هذا المطعم إذا لم يكن موجوداً من قبل
-                    if (!userPointRecord) {
-                        const newPointId = uuidv4();
-                        await tx.insert(userRestaurantPoints).values({
-                            id: newPointId,
-                            userId: existingOrder.userId,
-                            restaurantId: existingOrder.restaurantId,
-                            points: 0,
-                        });
-                        [userPointRecord] = await tx
-                            .select()
-                            .from(userRestaurantPoints)
-                            .where(eq(userRestaurantPoints.id, newPointId))
-                            .limit(1);
-                    }
-
-                    const pointsBefore = userPointRecord.points ?? 0;
-                    const pointsAfter = pointsBefore + totalPointsEarned;
-
-                    // تحديث الرصيد التراكمي
-                    await tx
-                        .update(userRestaurantPoints)
-                        .set({ points: pointsAfter, updatedAt: new Date() })
-                        .where(eq(userRestaurantPoints.id, userPointRecord.id));
-
-                    // تسجيل عملية كسب النقاط في جدول السجل Transactions
-                    await tx.insert(userPointsTransactions).values({
-                        id: uuidv4(),
-                        userId: existingOrder.userId,
-                        restaurantId: existingOrder.restaurantId,
-                        type: "earn",
-                        points: totalPointsEarned,
-                        balanceBefore: pointsBefore,
-                        balanceAfter: pointsAfter,
-                        orderId: orderId,
-                        note: `Earned ${totalPointsEarned} points from order #${existingOrder.orderNumber}`,
-                        createdAt: new Date(),
-                    });
-                }
-            }
-        }
+    // ---------- Delegate to shared service ----------
+    const result = await changeOrderStatus({
+        orderId,
+        status,
+        expectedCurrentStatuses: [currentStatus], // guards against concurrent changes (e.g. the cron)
+        deliveryManId: finalDeliveryManId,
+        cancel,
+        source: "admin",
     });
 
-    // ==========================================
-    // 4. إرسال الإشعارات للعميل
-    // ==========================================
-    let messageBody = `Your order ${existingOrder.dailyOrderNumber} is now ${status}.`;
-    if (status === "cancelled") {
-        messageBody = `Your order ${existingOrder.dailyOrderNumber} was cancelled. Reason: ${finalReasonText || "Not specified"}`;
-    }
-
-    await sendPushNotification({
-        recipientType: "user",
-        recipientId: existingOrder.userId,
-        branchId: existingOrder.branchId || null,
-        title: "Order Update",
-        body: messageBody,
-        data: {
-            restaurantId: existingOrder.restaurantId,
-            branchId: existingOrder.branchId || null,
-            orderId: existingOrder.id,
-            orderNumber: existingOrder.orderNumber,
-            dailyOrderNumber: existingOrder.dailyOrderNumber,
-            status: status,
-            type: "ORDER_STATUS_UPDATE"
-        }
-    });
-
-    // ==========================================
-    // 5. إرسال إشعار لمندوب التوصيل (Delivery Man)
-    // ==========================================
-    const orderType = existingOrder.orderType || (existingOrder as any).type;
-    const targetDeliveryManId = finalDeliveryManId || existingOrder.deliveryManId;
-
-    if (orderType === "delivery" && targetDeliveryManId && (status === "out_for_delivery" || finalDeliveryManId)) {
-        await sendPushNotification({
-            recipientType: "delivery_man",
-            recipientId: targetDeliveryManId,
-            branchId: existingOrder.branchId || null,
-            title: status === "out_for_delivery" ? "طلب خارج للتوصيل" : "طلب جديد مُسند إليك",
-            body: status === "out_for_delivery"
-                ? `الطلب رقم #${existingOrder.dailyOrderNumber || existingOrder.orderNumber} أصبح خارجاً للتوصيل ومُسند إليك.`
-                : `تم إسناد الطلب رقم #${existingOrder.dailyOrderNumber || existingOrder.orderNumber} إليك.`,
-            data: {
-                restaurantId: existingOrder.restaurantId,
-                branchId: existingOrder.branchId || null,
-                orderId: existingOrder.id,
-                orderNumber: existingOrder.orderNumber,
-                dailyOrderNumber: existingOrder.dailyOrderNumber,
-                status: status,
-                type: status === "out_for_delivery" ? "ORDER_OUT_FOR_DELIVERY" : "ORDER_ASSIGNED",
-            },
-        });
-    }
-
-    // ==========================================
-    // 6. التوزيع التلقائي لشركة الشحن أو تحرير المندوب (Shipping & Dispatch Integration)
-    // ==========================================
-    // D9: Fire-and-forget dispatchOrder when order moves to 'accepted' and orderType is delivery
-    if (status === "accepted" && orderType === "delivery" && !finalDeliveryManId && !existingOrder.deliveryManId) {
-        // فحص مسبق: التحقق أولاً هل الأوردر نفسه يحمل shippingCompanyId أو هل المطعم مسجل لديه شركة شحن في الإعدادات
-        let targetShippingCompanyId = existingOrder.shippingCompanyId;
-
-        if (!targetShippingCompanyId && existingOrder.restaurantId) {
-            const [settings] = await db
-                .select({ shippingCompanyId: restaurantSettings.shippingCompanyId })
-                .from(restaurantSettings)
-                .where(eq(restaurantSettings.restaurantId, existingOrder.restaurantId))
-                .limit(1);
-
-            targetShippingCompanyId = settings?.shippingCompanyId || null;
-        }
-
-        // الدخول فقط والبدء بالتوزيع إذا كان للأوردر أو للمطعم شركة شحن
-        if (targetShippingCompanyId) {
-            const [company] = await db
-                .select({
-                    id: shippingCompanies.id,
-                    name: shippingCompanies.name,
-                    status: shippingCompanies.status,
-                })
-                .from(shippingCompanies)
-                .where(eq(shippingCompanies.id, targetShippingCompanyId))
-                .limit(1);
-
-            if (company && company.status === "active") {
-                // ربط شركة الشحن بالأوردر إذا لم تكن مسجلة مسبقاً
-                if (!existingOrder.shippingCompanyId) {
-                    await db
-                        .update(orders)
-                        .set({
-                            shippingCompanyId: targetShippingCompanyId,
-                            shippingStatus: "pending_dispatch",
-                            updatedAt: new Date(),
-                        })
-                        .where(eq(orders.id, orderId));
-                }
-
-                // D9: Fire-and-forget dispatchOrder
-                dispatchOrder(orderId).catch((err) => {
-                    console.error(`[dispatchOrder:fire-and-forget] failed for order ${orderId} (Company: ${company.name}):`, err);
-                });
-            } else {
-                console.warn(`[dispatchOrder] Shipping company ${targetShippingCompanyId} for restaurant ${existingOrder.restaurantId} is inactive or not found`);
-                await db
-                    .update(orders)
-                    .set({
-                        shippingCompanyId: targetShippingCompanyId,
-                        shippingStatus: "manual_required",
-                        shippingFailReason: "company_inactive",
-                        updatedAt: new Date(),
-                    })
-                    .where(eq(orders.id, orderId));
-            }
-        }
-    }
-
-    // Release delivery man activeOrdersCount when order completes or cancels
-    if (["delivered", "cancelled", "refund"].includes(status) && targetDeliveryManId) {
-        releaseCourierForOrder(orderId, targetDeliveryManId).catch((err) => {
-            console.error(`[releaseCourierForOrder] failed for order ${orderId}:`, err);
-        });
-    }
-
-    // 7. إرسال تحديثات الحالة الحية عبر الـ WebSockets (Real-time Live UI)
-    const statusPayload = {
-        orderId: existingOrder.id,
-        orderNumber: existingOrder.orderNumber,
-        dailyOrderNumber: existingOrder.dailyOrderNumber,
-        status: status,
-        updatedAt: new Date(),
-    };
-
-    if (existingOrder.restaurantId) {
-        notifyRestaurant(existingOrder.restaurantId, SOCKET_EVENTS.ORDER_STATUS_CHANGED, statusPayload);
-    }
-    notifyOrderTracking(existingOrder.id, SOCKET_EVENTS.ORDER_STATUS_CHANGED, statusPayload);
-    notifyAdmins(SOCKET_EVENTS.ORDER_STATUS_CHANGED, statusPayload);
-
-    if (existingOrder.shippingCompanyId) {
-        notifyShippingCompany(existingOrder.shippingCompanyId, SOCKET_EVENTS.ORDER_STATUS_CHANGED, statusPayload);
-    }
-    if (targetDeliveryManId) {
-        notifyDeliveryMan(targetDeliveryManId, SOCKET_EVENTS.ORDER_STATUS_CHANGED, statusPayload);
+    if (!result.changed) {
+        throw new BadRequest("Order status was changed by someone else. Please refresh and try again.");
     }
 
     return SuccessResponse(res, { message: `Order status successfully updated to ${status}` });

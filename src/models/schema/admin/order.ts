@@ -207,10 +207,15 @@ export const orders = mysqlTable("orders", {
     pickedUpAt: timestamp("picked_up_at"),
     deliveredAt: timestamp("delivered_at"),
 
+    // وقت آخر تغيير لحالة الأوردر (status فقط)، بمعزل عن أي تعديلات أخرى.
+    // يستخدمه الـ Cron لمعرفة كم مضى على دخول الأوردر حالته الحالية.
+    statusChangedAt: timestamp("status_changed_at"),
+
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
     createdAt: timestamp("created_at").defaultNow(),
 }, (table) => ({
-    statusUpdatedIdx: index("idx_orders_status_updated").on(table.status, table.updatedAt),
+    // يستخدمه الـ Cron للبحث في الأوردرات النشطة حسب وقت دخول الحالة
+    statusChangedIdx: index("idx_orders_status_changed").on(table.status, table.statusChangedAt),
 }));
 
 // ==========================================
