@@ -47,7 +47,7 @@ router.get("/delivered", hasPermission("order", "read", true), validate(getResta
 router.get("/cancelled", hasPermission("order", "read", true), validate(getRestaurantOrdersQuerySchema, "query"), catchAsync(getCancelledOrders));
 router.get("/refund", hasPermission("order", "read", true), validate(getRestaurantOrdersQuerySchema, "query"), catchAsync(getRefundOrders));
 
-// ✅ تقرير شامل للطلبات والمبيعات بصيغة PDF - يحتاج صلاحية read + التحقق من الفرع
+// ✅ بون تقرير الفواتير والمبيعات (Thermal Receipt) - يحتاج صلاحية read + التحقق من الفرع
 router.get("/report-pdf", hasPermission("order", "read", true), validate(getRestaurantOrdersQuerySchema, "query"), catchAsync(generateOrdersReportPDF));
 
 // ✅ تفاصيل أوردر بالـ ID - يحتاج صلاحية read + التحقق من الفرع
