@@ -1965,7 +1965,11 @@ export const generateOrdersReportPDF = async (req: Request, res: Response) => {
         .where(and(...conditions))
         .orderBy(desc(orders.createdAt));
 
-    // 6. بناء وتوليد التقرير بصيغة PDF
+    // 6. تحديد اللغة المطلوبة (الافتراضي عربي إلا لو تم إرسال lang=en)
+    const langParam = ((req.query?.lang as string) || "").trim().toLowerCase();
+    const lang: "ar" | "en" = langParam === "en" ? "en" : "ar";
+
+    // 7. بناء وتوليد التقرير بصيغة PDF
     await buildOrdersReportPDF({
         res,
         restaurant,
@@ -1986,6 +1990,7 @@ export const generateOrdersReportPDF = async (req: Request, res: Response) => {
         },
         orders: rawOrders,
         generatedBy: (req.user as any)?.name || (req.user as any)?.email || (req.user as any)?.type || "Admin",
+        lang,
     });
 };
 

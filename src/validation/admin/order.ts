@@ -66,6 +66,7 @@ export const getRestaurantOrdersQuerySchema = z
         date: z.string().optional(),
         orderType: stringOrArray,
         search: z.string().optional(),
+        lang: z.string().optional(),
     })
     .passthrough();
 
