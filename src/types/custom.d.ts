@@ -117,7 +117,7 @@ export type ModuleName =
     | "socialmedia"
     | "Videos"
     | "pricing"
-     "order_list_amount";
+    |"order_list_amount";
 
 
 
