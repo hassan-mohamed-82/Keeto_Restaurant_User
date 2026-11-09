@@ -11,35 +11,60 @@ export function convertArabicDigitsToWestern(str: string): string {
     return str.replace(/[٠-٩]/g, d => ARABIC_DIGITS_MAP[d] || d);
 }
 
-const swapBrackets = (s: string) =>
-    s.replace(/[()\[\]{}<>]/g, c => ({ "(": ")", ")": "(", "[": "]", "]": "[", "{": "}", "}": "{", "<": ">", ">": "<" }[c]!));
+const BRACKET_MAP: Record<string, string> = {
+    "(": ")", ")": "(", "[": "]", "]": "[", "{": "}", "}": "{",
+};
+
+type Tok = { text: string; kind: "ar" | "ltr" | "neutral" };
+
+function tokenize(str: string): Tok[] {
+    // split into: spaces / brackets / punctuation / words
+    const parts = str.match(/\s+|[()\[\]{}]|[:،,.؛]|[^\s()\[\]{}:،,.؛]+/g) || [];
+    return parts.map(p => {
+        if (/^\s+$/.test(p)) return { text: p, kind: "neutral" as const };
+        if (BRACKET_MAP[p]) return { text: p, kind: "neutral" as const };
+        if (/^[:،,.؛]$/.test(p)) return { text: p, kind: "neutral" as const };
+        return { text: p, kind: hasArabic(p) ? ("ar" as const) : ("ltr" as const) };
+    });
+}
 
 /**
- * fontkit already reverses the letters inside each Arabic word,
- * so we only need to reverse the WORD ORDER of the line.
- * LTR chunks (numbers, latin, currency) keep their internal order.
+ * Visual reordering for PDFKit + fontkit (fontkit reverses letters inside Arabic words,
+ * so we reverse token ORDER, keep LTR chunks (numbers/latin) intact, and mirror brackets).
  */
 export function fixArabicText(text: string | null | undefined): string {
     if (!text) return "";
     const str = convertArabicDigitsToWestern(String(text));
     if (!hasArabic(str)) return str;
 
-    // Group consecutive tokens: Arabic tokens together, non-Arabic tokens together
-    const groups: { ltr: boolean; tokens: string[] }[] = [];
-    for (const token of str.split(" ")) {
-        if (token === "") continue;
-        const ltr = !hasArabic(token);
-        const last = groups[groups.length - 1];
-        if (last && last.ltr === ltr) last.tokens.push(token);
-        else groups.push({ ltr, tokens: [token] });
+    const tokens = tokenize(str);
+
+    // Merge consecutive LTR tokens (with neutral spaces/dots between them) into one chunk
+    const merged: Tok[] = [];
+    for (let i = 0; i < tokens.length; i++) {
+        const t = tokens[i];
+        if (t.kind === "ltr") {
+            let chunk = t.text;
+            let j = i + 1;
+            while (j < tokens.length) {
+                const n = tokens[j];
+                const next = tokens[j + 1];
+                if (n.kind === "ltr") { chunk += n.text; j++; }
+                else if (n.kind === "neutral" && /^[\s.,]$/.test(n.text) && next && next.kind === "ltr") {
+                    chunk += n.text + next.text; j += 2;
+                } else if (n.kind === "neutral" && n.text === "%" ) { chunk += n.text; j++; }
+                else break;
+            }
+            merged.push({ text: chunk, kind: "ltr" });
+            i = j - 1;
+        } else {
+            merged.push(t);
+        }
     }
 
-    return groups
+    // Reverse order; mirror brackets; LTR chunks stay as they are
+    return merged
         .reverse()
-        .map(g =>
-            g.ltr
-                ? g.tokens.join(" ")                                  // keep numbers/latin order
-                : g.tokens.reverse().map(swapBrackets).join(" ")      // reverse Arabic word order
-        )
-        .join(" ");
+        .map(t => (BRACKET_MAP[t.text] ? BRACKET_MAP[t.text] : t.text))
+        .join("");
 }
