@@ -108,6 +108,11 @@ async function refundWalletIfPaid(tx: Tx, order: OrderRow) {
 async function awardLoyaltyPoints(tx: Tx, order: OrderRow, now: Date, noteSuffix?: string) {
     if (!order.userId || !order.restaurantId) return;
 
+    // إذا كان الطلب ناتجاً عن استبدال نقاط (Redeemed Points Order)، لا يتم منح نقاط جديدة للعميل
+    if (order.isPointsRedeemed || (order.redeemCode && order.redeemCode.trim() !== "")) {
+        return;
+    }
+
     const items = await tx
         .select({ foodId: orderItems.foodId, quantity: orderItems.quantity })
         .from(orderItems)
