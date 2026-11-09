@@ -68,6 +68,12 @@ import {
 } from "../../services/socket/socketService";
 import { SOCKET_EVENTS } from "../../services/socket/socketEvents";
 import { changeOrderStatus } from "../../services/orderStatusService";
+import {
+    buildOrdersReportPDF,
+    ORDER_STATUS_LABELS,
+    ORDER_TYPE_LABELS,
+    ORDER_SOURCE_LABELS,
+} from "../../services/ordersReportPdfService";
 
 export {
     resolveZoneFromCoords,
@@ -1765,6 +1771,222 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
     doc.fontSize(8).text('Powered by keeto', { align: 'center' });
 
     doc.end();
+};
+
+// ==========================================
+// إنشاء تقرير شامل للطلبات والمبيعات بصيغة PDF
+// ==========================================
+export const generateOrdersReportPDF = async (req: Request, res: Response) => {
+    if (!req.user) {
+        throw new UnauthorizedError("Not authenticated");
+    }
+
+    const adminRestaurantId = req.user.restaurantId || req.user.id;
+    const adminBranchId = req.user.branchId;
+
+    if (!adminRestaurantId) {
+        throw new BadRequest("Restaurant ID not found");
+    }
+
+    // 1. جلب بيانات المطعم
+    const [restaurant] = await db
+        .select({
+            id: restaurants.id,
+            name: restaurants.name,
+            nameAr: restaurants.nameAr,
+            logo: restaurants.logo,
+            ownerPhone: restaurants.ownerPhone,
+            address: restaurants.address,
+            addressAr: restaurants.addressAr,
+        })
+        .from(restaurants)
+        .where(eq(restaurants.id, adminRestaurantId))
+        .limit(1);
+
+    if (!restaurant) throw new NotFound("Restaurant not found");
+
+    // 2. جلب جميع فروع المطعم
+    const allBranches = await db
+        .select({ id: branches.id, name: branches.name, nameAr: branches.nameAr })
+        .from(branches)
+        .where(eq(branches.restaurantId, adminRestaurantId));
+
+    // 3. بناء شروط الاستعلام مطابقة تماماً لـ getRestaurantOrders
+    const conditions: any[] = [
+        eq(orders.restaurantId, adminRestaurantId),
+        excludeUnpaidVisaOrders(),
+    ];
+
+    const queryBranchId = (req.query?.branchId as string)?.trim();
+    const filterBranchId = adminBranchId || (queryBranchId && queryBranchId !== "null" && queryBranchId !== "undefined" ? queryBranchId : undefined);
+
+    if (filterBranchId) {
+        conditions.push(eq(orders.branchId, filterBranchId));
+    }
+
+    const source = ((req.query?.source || req.query?.orderSource) as string)?.trim();
+    if (source && source !== "null" && source !== "undefined") {
+        conditions.push(eq(orders.orderSource, source as any));
+    }
+
+    const zoneId = (req.query?.zoneId as string)?.trim();
+    if (zoneId && zoneId !== "null" && zoneId !== "undefined") {
+        conditions.push(
+            or(
+                eq(orders.zoneId, zoneId),
+                eq(restaurantZoneDeliveryFees.zoneId, zoneId),
+                eq(zones.id, zoneId)
+            )
+        );
+    }
+
+    const cityId = (req.query?.cityId as string)?.trim();
+    if (cityId && cityId !== "null" && cityId !== "undefined") {
+        conditions.push(eq(zones.cityId, cityId));
+    }
+
+    const dateConditions = await buildOrderDateConditions(
+        req,
+        adminRestaurantId,
+        req.user.type === "owner" || req.user.type === "branch_manager"
+            ? true
+            : await (async () => {
+                const { checkUserPermission } = await import("../../middlewares/hasPermission");
+                return checkUserPermission(req.user!.id, "order", "advanced_filter");
+            })()
+    );
+    conditions.push(...dateConditions);
+
+    const discountAndPaymentConditions = buildOrderDiscountAndPaymentConditions(req);
+    conditions.push(...discountAndPaymentConditions);
+
+    const userAndTypeConditions = buildOrderUserAndTypeConditions(req);
+    conditions.push(...userAndTypeConditions);
+
+    const statusConditions = buildOrderStatusConditions(req);
+    conditions.push(...statusConditions);
+
+    const cancellationConditions = buildOrderCancellationConditions(req, {
+        enforceCancelledStatusIfFiltered: true,
+    });
+    conditions.push(...cancellationConditions);
+
+    // 4. استخراج أوصاف الفلاتر المطبقة بالعربية والإنجليزية
+    let branchLabel = `All Branches (${allBranches.length})`;
+    let branchLabelAr = `جميع الفروع (${allBranches.length})`;
+    if (filterBranchId) {
+        const foundBranch = allBranches.find(b => b.id === filterBranchId);
+        branchLabel = foundBranch?.name || filterBranchId;
+        branchLabelAr = foundBranch?.nameAr || foundBranch?.name || filterBranchId;
+    }
+
+    let dateRangeLabel = "Current Active Shift";
+    let dateRangeLabelAr = "الشيفت النشط لليوم الحالي";
+    if (req.query?.startDate || req.query?.endDate) {
+        const s = req.query?.startDate ? String(req.query.startDate) : "Start";
+        const e = req.query?.endDate ? String(req.query.endDate) : "Now";
+        dateRangeLabel = `${s} to ${e}`;
+        dateRangeLabelAr = `من: ${s} إلى: ${e}`;
+    } else if (req.query?.date) {
+        dateRangeLabel = `Date: ${req.query.date}`;
+        dateRangeLabelAr = `يوم: ${req.query.date}`;
+    }
+
+    const rawStatus = (req.query?.status || req.query?.orderStatus) as string | string[] | undefined;
+    let statusLabel = "All Statuses";
+    let statusLabelAr = "جميع الحالات";
+    if (rawStatus) {
+        const statusArr = Array.isArray(rawStatus) ? rawStatus : String(rawStatus).split(",").map(s => s.trim()).filter(Boolean);
+        if (statusArr.length > 0 && !statusArr.includes("all")) {
+            statusLabel = statusArr.map(s => ORDER_STATUS_LABELS[s]?.en || s).join(", ");
+            statusLabelAr = statusArr.map(s => ORDER_STATUS_LABELS[s]?.ar || s).join("، ");
+        }
+    }
+
+    const rawPm = (req.query?.paymentMethod || req.query?.payment_method || req.query?.paymentMethods) as string | string[] | undefined;
+    let paymentMethodLabel = "All Payment Methods";
+    let paymentMethodLabelAr = "جميع طرق الدفع";
+    if (rawPm) {
+        const pmArr = Array.isArray(rawPm) ? rawPm : String(rawPm).split(",").map(p => p.trim()).filter(Boolean);
+        if (pmArr.length > 0 && !pmArr.includes("all")) {
+            paymentMethodLabel = pmArr.join(", ");
+            paymentMethodLabelAr = pmArr.join("، ");
+        }
+    }
+
+    const rawOrderType = req.query?.orderType as string | string[] | undefined;
+    let orderTypeLabel = "All Order Types";
+    let orderTypeLabelAr = "جميع أنواع الطلبات";
+    if (rawOrderType) {
+        const otArr = Array.isArray(rawOrderType) ? rawOrderType : String(rawOrderType).split(",").map(t => t.trim()).filter(Boolean);
+        if (otArr.length > 0 && !otArr.includes("all")) {
+            orderTypeLabel = otArr.map(t => ORDER_TYPE_LABELS[t]?.en || t).join(", ");
+            orderTypeLabelAr = otArr.map(t => ORDER_TYPE_LABELS[t]?.ar || t).join("، ");
+        }
+    }
+
+    let orderSourceLabel = "All Sources";
+    let orderSourceLabelAr = "جميع المصادر";
+    if (source && source !== "all") {
+        orderSourceLabel = ORDER_SOURCE_LABELS[source]?.en || source;
+        orderSourceLabelAr = ORDER_SOURCE_LABELS[source]?.ar || source;
+    }
+
+    // 5. جلب بيانات الأوردرات المطابقة
+    const rawOrders = await db
+        .select({
+            id: orders.id,
+            orderNumber: orders.orderNumber,
+            dailyOrderNumber: orders.dailyOrderNumber,
+            customerName: users.name,
+            customerPhone: users.phone,
+            branchId: orders.branchId,
+            branchName: branches.name,
+            branchNameAr: branches.nameAr,
+            orderType: orders.orderType,
+            orderSource: orders.orderSource,
+            paymentMethod: orders.paymentMethod,
+            paymentMethodName: paymentMethods.name,
+            paymentMethodNameAr: paymentMethods.nameAr,
+            subtotal: orders.subtotal,
+            deliveryFee: orders.deliveryFee,
+            serviceFee: orders.serviceFee,
+            discountAmount: orders.discountAmount,
+            totalAmount: orders.totalAmount,
+            status: orders.status,
+            createdAt: orders.createdAt,
+        })
+        .from(orders)
+        .leftJoin(users, eq(orders.userId, users.id))
+        .leftJoin(branches, eq(orders.branchId, branches.id))
+        .leftJoin(restaurantZoneDeliveryFees, eq(orders.zoneId, restaurantZoneDeliveryFees.id))
+        .leftJoin(zones, or(eq(restaurantZoneDeliveryFees.zoneId, zones.id), eq(orders.zoneId, zones.id)))
+        .leftJoin(paymentMethods, eq(orders.paymentMethod, paymentMethods.id))
+        .where(and(...conditions))
+        .orderBy(desc(orders.createdAt));
+
+    // 6. بناء وتوليد التقرير بصيغة PDF
+    await buildOrdersReportPDF({
+        res,
+        restaurant,
+        filters: {
+            branchLabel,
+            branchLabelAr,
+            dateRangeLabel,
+            dateRangeLabelAr,
+            statusLabel,
+            statusLabelAr,
+            paymentMethodLabel,
+            paymentMethodLabelAr,
+            orderTypeLabel,
+            orderTypeLabelAr,
+            orderSourceLabel,
+            orderSourceLabelAr,
+            searchLabel: req.query?.search ? String(req.query.search) : undefined,
+        },
+        orders: rawOrders,
+        generatedBy: (req.user as any)?.name || (req.user as any)?.email || (req.user as any)?.type || "Admin",
+    });
 };
 
 export const getallnumbersoforders = async (req: Request, res: Response) => {

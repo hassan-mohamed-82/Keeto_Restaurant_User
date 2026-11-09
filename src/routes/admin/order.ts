@@ -16,6 +16,7 @@ import {
     getReasons,
     getRefundOrders,
     generateOrderInvoicePDF,
+    generateOrdersReportPDF,
     getallnumbersoforders,
     assignDelivery,
     selectDeliveryMan,
@@ -45,6 +46,9 @@ router.get("/out-for-delivery", hasPermission("order", "read", true), validate(g
 router.get("/delivered", hasPermission("order", "read", true), validate(getRestaurantOrdersQuerySchema, "query"), catchAsync(getDeliveredOrders));
 router.get("/cancelled", hasPermission("order", "read", true), validate(getRestaurantOrdersQuerySchema, "query"), catchAsync(getCancelledOrders));
 router.get("/refund", hasPermission("order", "read", true), validate(getRestaurantOrdersQuerySchema, "query"), catchAsync(getRefundOrders));
+
+// ✅ تقرير شامل للطلبات والمبيعات بصيغة PDF - يحتاج صلاحية read + التحقق من الفرع
+router.get("/report-pdf", hasPermission("order", "read", true), validate(getRestaurantOrdersQuerySchema, "query"), catchAsync(generateOrdersReportPDF));
 
 // ✅ تفاصيل أوردر بالـ ID - يحتاج صلاحية read + التحقق من الفرع
 router.get("/:id", hasPermission("order", "read", true), catchAsync(getRestaurantOrderById));
