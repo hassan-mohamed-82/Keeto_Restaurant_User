@@ -1,1 +1,1 @@
-export { default } from "./pos/bundles";
+export { default } from "../pos/bundles";

@@ -1,1 +1,1 @@
-export { default } from "./pos/shifts";
+export { default } from "../pos/shifts";
