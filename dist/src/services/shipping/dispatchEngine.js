@@ -36,44 +36,197 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.REDIS_ALIVE_KEY_PREFIX = exports.REDIS_GEO_KEY = void 0;
 exports.updateCourierRedisLocation = updateCourierRedisLocation;
 exports.removeCourierFromRedis = removeCourierFromRedis;
+exports.releaseCourierForOrder = releaseCourierForOrder;
+exports.assignCourierToOrder = assignCourierToOrder;
 exports.dispatchOrder = dispatchOrder;
 exports.rejectOrderByCourier = rejectOrderByCourier;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
-const turf = __importStar(require("@turf/turf"));
+const uuid_1 = require("uuid");
 const redis_1 = __importDefault(require("../../config/redis"));
+const turf = __importStar(require("@turf/turf"));
 const socketService_1 = require("../socket/socketService");
-/**
- * 1. Redis Courier Location Tracking Helpers
- */
-async function updateCourierRedisLocation(courierId, lat, lng, companyId) {
+const socketEvents_1 = require("../socket/socketEvents");
+// -------------------------------------------------------------
+// Redis Key Patterns & Helpers
+// -------------------------------------------------------------
+exports.REDIS_GEO_KEY = "couriers:geo";
+exports.REDIS_ALIVE_KEY_PREFIX = "courier:alive:";
+async function updateCourierRedisLocation(courierId, lat, lng) {
     try {
-        await redis_1.default.geoadd("couriers:geo", lng, lat, courierId);
-        await redis_1.default.set(`courier:alive:${courierId}`, "1", "EX", 60);
-        if (companyId) {
-            await redis_1.default.set(`courier:company:${courierId}`, companyId, "EX", 300);
-        }
+        await redis_1.default.geoadd(exports.REDIS_GEO_KEY, lng, lat, courierId);
+        await redis_1.default.set(`${exports.REDIS_ALIVE_KEY_PREFIX}${courierId}`, "1", "EX", 60);
     }
     catch (err) {
-        console.warn("⚠️ Redis GEO update warning:", err.message);
+        console.error("Redis geoadd/alive error for courier:", courierId, err);
     }
 }
 async function removeCourierFromRedis(courierId) {
     try {
-        await redis_1.default.zrem("couriers:geo", courierId);
-        await redis_1.default.del(`courier:alive:${courierId}`);
+        await redis_1.default.zrem(exports.REDIS_GEO_KEY, courierId);
+        await redis_1.default.del(`${exports.REDIS_ALIVE_KEY_PREFIX}${courierId}`);
     }
     catch (err) {
-        console.warn("⚠️ Redis remove warning:", err.message);
+        console.error("Redis zrem error for courier:", courierId, err);
     }
 }
+// Phase 6: Release courier on delivered / cancelled / manual unassign
+async function releaseCourierForOrder(orderId, courierId) {
+    try {
+        await connection_1.db
+            .update(schema_1.deliveryMen)
+            .set({
+            activeOrdersCount: (0, drizzle_orm_1.sql) `GREATEST(0, ${schema_1.deliveryMen.activeOrdersCount} - 1)`,
+        })
+            .where((0, drizzle_orm_1.eq)(schema_1.deliveryMen.id, courierId));
+    }
+    catch (err) {
+        console.error("Error releasing courier orders count:", err);
+    }
+}
+// Timezone-aware hour/minute formatter (D7)
+function getLocalDayAndTime(timeZone = process.env.APP_TIMEZONE || "Africa/Cairo") {
+    const now = new Date();
+    const formatter = new Intl.DateTimeFormat("en-US", {
+        timeZone,
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        weekday: "short",
+        hour12: false,
+    });
+    const parts = formatter.formatToParts(now);
+    const partMap = new Map(parts.map((p) => [p.type, p.value]));
+    const hour = parseInt(partMap.get("hour") || "0", 10);
+    const minute = parseInt(partMap.get("minute") || "0", 10);
+    const second = parseInt(partMap.get("second") || "0", 10);
+    const timeMinutes = hour * 60 + minute;
+    const timeStr = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:${String(second).padStart(2, "0")}`;
+    const weekdayShort = partMap.get("weekday");
+    const dayMap = {
+        Sun: 0,
+        Mon: 1,
+        Tue: 2,
+        Wed: 3,
+        Thu: 4,
+        Fri: 5,
+        Sat: 6,
+    };
+    const dayOfWeek = weekdayShort && dayMap[weekdayShort] !== undefined ? dayMap[weekdayShort] : now.getDay();
+    return { dayOfWeek, timeStr, timeMinutes };
+}
+// D7: Check shift including overnight shifts (from > to)
+function isTimeInShift(shiftFrom, shiftTo, currentMinutes) {
+    const parseTime = (t) => {
+        const [h, m] = t.split(":").map(Number);
+        return h * 60 + (m || 0);
+    };
+    const fromMin = parseTime(shiftFrom);
+    const toMin = parseTime(shiftTo);
+    if (fromMin <= toMin) {
+        return currentMinutes >= fromMin && currentMinutes <= toMin;
+    }
+    // Overnight shift: e.g. 22:00 to 06:00
+    return currentMinutes >= fromMin || currentMinutes <= toMin;
+}
+// -------------------------------------------------------------
+// Shared Assign Function (Step 8 Atomic Assign)
+// -------------------------------------------------------------
+async function assignCourierToOrder(orderId, courierId, companyId, attemptNumber = 1) {
+    return await connection_1.db.transaction(async (tx) => {
+        // Fetch courier with row lock to check activeOrdersCount vs maxActiveOrders
+        const [courier] = await tx
+            .select()
+            .from(schema_1.deliveryMen)
+            .where((0, drizzle_orm_1.eq)(schema_1.deliveryMen.id, courierId))
+            .limit(1);
+        if (!courier || courier.isDeleted || !courier.isActive) {
+            return { success: false };
+        }
+        const [company] = await tx
+            .select({ maxActiveOrders: schema_1.shippingCompanies.maxActiveOrders })
+            .from(schema_1.shippingCompanies)
+            .where((0, drizzle_orm_1.eq)(schema_1.shippingCompanies.id, companyId))
+            .limit(1);
+        const maxActive = company?.maxActiveOrders ?? 3;
+        if (courier.activeOrdersCount >= maxActive) {
+            return { success: false };
+        }
+        // Update order
+        await tx
+            .update(schema_1.orders)
+            .set({
+            shippingCompanyId: companyId,
+            deliveryManId: courierId,
+            shippingStatus: "assigned",
+            shippingFailReason: null,
+            dispatchAttempts: attemptNumber,
+            shippingAssignedAt: new Date(),
+            updatedAt: new Date(),
+        })
+            .where((0, drizzle_orm_1.eq)(schema_1.orders.id, orderId));
+        // Increment activeOrdersCount atomically
+        await tx
+            .update(schema_1.deliveryMen)
+            .set({
+            activeOrdersCount: (0, drizzle_orm_1.sql) `${schema_1.deliveryMen.activeOrdersCount} + 1`,
+        })
+            .where((0, drizzle_orm_1.eq)(schema_1.deliveryMen.id, courierId));
+        // Insert assignment audit log
+        await tx.insert(schema_1.dispatchAssignments).values({
+            id: (0, uuid_1.v4)(),
+            orderId,
+            shippingCompanyId: companyId,
+            deliveryManId: courierId,
+            attemptNumber,
+            status: "active",
+        });
+        return { success: true, courier };
+    });
+}
 /**
- * 2. المحرك الرئيسي لتوزيع الطلبات (dispatchOrder)
+ * Main Auto-Dispatch Engine
  */
 async function dispatchOrder(orderId) {
+    // Acquire Redis mutex lock per order to prevent concurrent dispatches
+    const lockKey = `lock:dispatch:${orderId}`;
+    let lockAcquired = false;
+    try {
+        const lockRes = await redis_1.default.set(lockKey, "1", "EX", 15, "NX");
+        lockAcquired = lockRes === "OK";
+    }
+    catch {
+        // Continue if Redis fails
+        lockAcquired = true;
+    }
+    if (!lockAcquired) {
+        return {
+            success: false,
+            orderId,
+            shippingStatus: "manual_required",
+            message: "Dispatch already running for this order",
+        };
+    }
+    try {
+        return await executeDispatch(orderId);
+    }
+    finally {
+        try {
+            await redis_1.default.del(lockKey);
+        }
+        catch {
+            // Ignore unlock errors
+        }
+    }
+}
+async function executeDispatch(orderId) {
+    // -------------------------------------------------------------
+    // Fetch order, restaurant, branch, and settings
+    // -------------------------------------------------------------
     const [orderData] = await connection_1.db
         .select({
         order: schema_1.orders,
@@ -92,7 +245,7 @@ async function dispatchOrder(orderId) {
     }
     const { order, restaurant, branch, settings } = orderData;
     // -------------------------------------------------------------
-    // الخطوة 1: فحص هل المطعم مرتبط بشركة شحن؟ (restaurantSettings.shippingCompanyId)
+    // Step 1: Restaurant linked to a company? (D3: restaurantSettings.shippingCompanyId only)
     // -------------------------------------------------------------
     const companyId = settings?.shippingCompanyId || order.shippingCompanyId;
     if (!companyId) {
@@ -104,22 +257,27 @@ async function dispatchOrder(orderId) {
             updatedAt: new Date(),
         })
             .where((0, drizzle_orm_1.eq)(schema_1.orders.id, orderId));
-        (0, socketService_1.notifyShippingCompany)("superadmin", "order:manual_required", {
+        (0, socketService_1.notifyRestaurant)(order.restaurantId, socketEvents_1.SOCKET_EVENTS.ORDER_MANUAL_REQUIRED, {
             orderId,
             orderNumber: order.orderNumber,
             reason: "no_company",
-            restaurantId: order.restaurantId,
+            message: "No shipping company is linked to restaurant",
+        });
+        (0, socketService_1.notifyAdmins)(socketEvents_1.SOCKET_EVENTS.ORDER_MANUAL_REQUIRED, {
+            orderId,
+            orderNumber: order.orderNumber,
+            reason: "no_company",
         });
         return {
             success: false,
             orderId,
             shippingStatus: "manual_required",
             reason: "no_company",
-            message: "Restaurant has no shipping company assigned",
+            message: "Restaurant is not linked to any shipping company",
         };
     }
     // -------------------------------------------------------------
-    // الخطوة 2: فحص هل شركة الشحن نشطة؟ (company.status === 'active')
+    // Step 2: Company active?
     // -------------------------------------------------------------
     const [company] = await connection_1.db
         .select()
@@ -136,7 +294,12 @@ async function dispatchOrder(orderId) {
             updatedAt: new Date(),
         })
             .where((0, drizzle_orm_1.eq)(schema_1.orders.id, orderId));
-        (0, socketService_1.notifyShippingCompany)(companyId, "order:manual_required", {
+        (0, socketService_1.notifyShippingCompany)(companyId, socketEvents_1.SOCKET_EVENTS.ORDER_MANUAL_REQUIRED, {
+            orderId,
+            orderNumber: order.orderNumber,
+            reason: "company_inactive",
+        });
+        (0, socketService_1.notifyAdmins)(socketEvents_1.SOCKET_EVENTS.ORDER_MANUAL_REQUIRED, {
             orderId,
             orderNumber: order.orderNumber,
             reason: "company_inactive",
@@ -150,7 +313,7 @@ async function dispatchOrder(orderId) {
         };
     }
     // -------------------------------------------------------------
-    // الخطوة 3: التحقق من عنوان العميل ومناطق الشركة (Point-in-Polygon)
+    // Step 3: Customer point inside a company zone?
     // -------------------------------------------------------------
     const shippingAddress = order.shippingAddress;
     let customerLat = shippingAddress?.lat ? parseFloat(shippingAddress.lat) : NaN;
@@ -158,9 +321,9 @@ async function dispatchOrder(orderId) {
     if (isNaN(customerLat) || isNaN(customerLng)) {
         if (order.addressId) {
             const [addr] = await connection_1.db
-                .select({ lat: (0, drizzle_orm_1.sql) `lat`, lng: (0, drizzle_orm_1.sql) `lng` })
-                .from((0, drizzle_orm_1.sql) `addresses`)
-                .where((0, drizzle_orm_1.eq)((0, drizzle_orm_1.sql) `id`, order.addressId))
+                .select({ lat: schema_1.addresses.lat, lng: schema_1.addresses.lng })
+                .from(schema_1.addresses)
+                .where((0, drizzle_orm_1.eq)(schema_1.addresses.id, order.addressId))
                 .limit(1);
             if (addr?.lat && addr?.lng) {
                 customerLat = parseFloat(addr.lat);
@@ -174,15 +337,31 @@ async function dispatchOrder(orderId) {
             .set({
             shippingCompanyId: companyId,
             shippingStatus: "manual_required",
-            shippingFailReason: "out_of_zone",
+            shippingFailReason: "no_coordinates",
             updatedAt: new Date(),
         })
             .where((0, drizzle_orm_1.eq)(schema_1.orders.id, orderId));
+        (0, socketService_1.notifyShippingCompany)(companyId, socketEvents_1.SOCKET_EVENTS.ORDER_MANUAL_REQUIRED, {
+            orderId,
+            orderNumber: order.orderNumber,
+            reason: "no_coordinates",
+            message: "Customer delivery coordinates are missing",
+        });
+        (0, socketService_1.notifyRestaurant)(order.restaurantId, socketEvents_1.SOCKET_EVENTS.ORDER_MANUAL_REQUIRED, {
+            orderId,
+            orderNumber: order.orderNumber,
+            reason: "no_coordinates",
+        });
+        (0, socketService_1.notifyAdmins)(socketEvents_1.SOCKET_EVENTS.ORDER_MANUAL_REQUIRED, {
+            orderId,
+            orderNumber: order.orderNumber,
+            reason: "no_coordinates",
+        });
         return {
             success: false,
             orderId,
             shippingStatus: "manual_required",
-            reason: "out_of_zone",
+            reason: "no_coordinates",
             message: "Customer delivery coordinates are missing or invalid",
         };
     }
@@ -193,22 +372,32 @@ async function dispatchOrder(orderId) {
     const customerPoint = turf.point([customerLng, customerLat]);
     let matchedZoneId = null;
     for (const zone of companyZones) {
-        if (zone.coordinates && Array.isArray(zone.coordinates) && zone.coordinates.length >= 3) {
+        let coords = zone.coordinates;
+        if (typeof coords === "string") {
             try {
-                const ring = zone.coordinates.map((c) => [c.lng, c.lat]);
-                if (ring[0][0] !== ring[ring.length - 1][0] ||
-                    ring[0][1] !== ring[ring.length - 1][1]) {
-                    ring.push(ring[0]);
-                }
-                const poly = turf.polygon([ring]);
-                if (turf.booleanPointInPolygon(customerPoint, poly)) {
-                    matchedZoneId = zone.id;
-                    break;
-                }
+                coords = JSON.parse(coords);
             }
-            catch (err) {
-                // Ignore polygon parsing error
+            catch {
+                coords = null;
             }
+        }
+        if (!coords || !Array.isArray(coords) || coords.length < 3)
+            continue;
+        try {
+            const polygonCoords = coords.map((c) => [parseFloat(c.lng), parseFloat(c.lat)]);
+            const first = polygonCoords[0];
+            const last = polygonCoords[polygonCoords.length - 1];
+            if (first[0] !== last[0] || first[1] !== last[1]) {
+                polygonCoords.push(first);
+            }
+            const poly = turf.polygon([polygonCoords]);
+            if (turf.booleanPointInPolygon(customerPoint, poly)) {
+                matchedZoneId = zone.id;
+                break;
+            }
+        }
+        catch {
+            // Ignore malformed polygon
         }
     }
     if (!matchedZoneId) {
@@ -221,25 +410,36 @@ async function dispatchOrder(orderId) {
             updatedAt: new Date(),
         })
             .where((0, drizzle_orm_1.eq)(schema_1.orders.id, orderId));
-        (0, socketService_1.notifyShippingCompany)(companyId, "order:manual_required", {
+        (0, socketService_1.notifyShippingCompany)(companyId, socketEvents_1.SOCKET_EVENTS.ORDER_MANUAL_REQUIRED, {
             orderId,
             orderNumber: order.orderNumber,
             reason: "out_of_zone",
-            message: "Customer address is out of company delivery zones",
+            message: "Customer location is outside all company zones",
+        });
+        (0, socketService_1.notifyRestaurant)(order.restaurantId, socketEvents_1.SOCKET_EVENTS.ORDER_MANUAL_REQUIRED, {
+            orderId,
+            orderNumber: order.orderNumber,
+            reason: "out_of_zone",
+        });
+        (0, socketService_1.notifyAdmins)(socketEvents_1.SOCKET_EVENTS.ORDER_MANUAL_REQUIRED, {
+            orderId,
+            orderNumber: order.orderNumber,
+            reason: "out_of_zone",
         });
         return {
             success: false,
             orderId,
             shippingStatus: "manual_required",
             reason: "out_of_zone",
-            message: "Customer delivery address is outside all shipping company zones",
+            message: "Customer address does not fall inside any active company zone",
         };
     }
     // -------------------------------------------------------------
-    // الخطوة 4: فحص عدد محاولات التوزيع السابقة < maxAttempts
+    // Step 4: Attempts < maxAttempts?
     // -------------------------------------------------------------
+    const maxAttempts = company.maxAttempts ?? 3;
     const currentAttempts = order.dispatchAttempts || 0;
-    if (currentAttempts >= company.maxAttempts) {
+    if (currentAttempts >= maxAttempts) {
         await connection_1.db
             .update(schema_1.orders)
             .set({
@@ -249,116 +449,175 @@ async function dispatchOrder(orderId) {
             updatedAt: new Date(),
         })
             .where((0, drizzle_orm_1.eq)(schema_1.orders.id, orderId));
-        (0, socketService_1.notifyShippingCompany)(companyId, "order:manual_required", {
+        (0, socketService_1.notifyShippingCompany)(companyId, socketEvents_1.SOCKET_EVENTS.ORDER_MANUAL_REQUIRED, {
             orderId,
             orderNumber: order.orderNumber,
             reason: "max_attempts",
-            attempts: currentAttempts,
+            message: `Reached maximum dispatch attempts (${maxAttempts})`,
         });
         return {
             success: false,
             orderId,
             shippingStatus: "manual_required",
             reason: "max_attempts",
-            message: `Order reached max dispatch attempts (${company.maxAttempts})`,
+            message: `Order reached max dispatch attempts limit of ${maxAttempts}`,
         };
     }
     // -------------------------------------------------------------
-    // الخطوة 5: إحداثيات الفرع والبحث الجغرافي (Redis GEOSEARCH)
+    // Step 5: Redis GEOSEARCH couriers within maxSearchRadius of BRANCH
     // -------------------------------------------------------------
-    let branchLat = branch?.lat ? parseFloat(branch.lat) : NaN;
-    let branchLng = branch?.lng ? parseFloat(branch.lng) : NaN;
+    const branchLat = branch?.lat ? parseFloat(branch.lat) : NaN;
+    const branchLng = branch?.lng ? parseFloat(branch.lng) : NaN;
     if (isNaN(branchLat) || isNaN(branchLng)) {
-        if (restaurant?.lat && restaurant?.lng) {
-            branchLat = parseFloat(restaurant.lat);
-            branchLng = parseFloat(restaurant.lng);
-        }
+        await connection_1.db
+            .update(schema_1.orders)
+            .set({
+            shippingCompanyId: companyId,
+            shippingStatus: "manual_required",
+            shippingFailReason: "no_coordinates",
+            updatedAt: new Date(),
+        })
+            .where((0, drizzle_orm_1.eq)(schema_1.orders.id, orderId));
+        return {
+            success: false,
+            orderId,
+            shippingStatus: "manual_required",
+            reason: "no_coordinates",
+            message: "Restaurant branch coordinates are missing or invalid",
+        };
     }
-    if (isNaN(branchLat) || isNaN(branchLng)) {
-        throw new Error("Restaurant / Branch GPS coordinates are missing");
-    }
-    const maxRadiusKm = parseFloat(company.maxSearchRadius) || 10;
-    let nearbyCourierIdsWithDist = new Map();
+    const maxRadiusKm = parseFloat(String(company.maxSearchRadius ?? 10));
+    const nearbyCourierIdsWithDist = new Map();
     try {
-        const redisResults = await redis_1.default.call("GEOSEARCH", "couriers:geo", "FROMLONLAT", branchLng, branchLat, "BYRADIUS", maxRadiusKm, "KM", "ASC", "WITHDIST");
-        if (Array.isArray(redisResults)) {
-            for (const item of redisResults) {
-                if (Array.isArray(item)) {
-                    const courierId = String(item[0]);
-                    const distKm = parseFloat(item[1]);
-                    nearbyCourierIdsWithDist.set(courierId, distKm);
+        const rawResults = (await redis_1.default.geosearch(exports.REDIS_GEO_KEY, "FROMLONLAT", branchLng, branchLat, "BYRADIUS", maxRadiusKm, "km", "WITHDIST", "ASC"));
+        if (Array.isArray(rawResults)) {
+            for (const item of rawResults) {
+                if (Array.isArray(item) && item.length >= 2) {
+                    const cId = item[0];
+                    const dist = parseFloat(item[1]);
+                    if (!isNaN(dist)) {
+                        nearbyCourierIdsWithDist.set(cId, dist);
+                    }
                 }
             }
         }
     }
     catch (err) {
-        console.warn("⚠️ Redis GEOSEARCH fallback to MySQL/Turf:", err.message);
+        console.warn("Redis GEOSEARCH failed, falling back to MySQL coordinates:", err);
     }
     // -------------------------------------------------------------
-    // الخطوة 6: فلترة المناديب المؤهلين (MySQL Filtering)
+    // Step 6: Filter couriers (MySQL)
     // -------------------------------------------------------------
+    // Couriers who previously rejected this order
     const previousRejections = await connection_1.db
         .select({ deliveryManId: schema_1.dispatchAssignments.deliveryManId })
         .from(schema_1.dispatchAssignments)
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.dispatchAssignments.orderId, orderId), (0, drizzle_orm_1.eq)(schema_1.dispatchAssignments.status, "rejected")));
     const rejectedCourierIds = new Set(previousRejections.map((r) => r.deliveryManId));
+    // Couriers of this company with activeOrdersCount < maxActiveOrders
     const couriers = await connection_1.db
         .select()
         .from(schema_1.deliveryMen)
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.deliveryMen.shippingCompanyId, companyId), (0, drizzle_orm_1.eq)(schema_1.deliveryMen.isActive, true), (0, drizzle_orm_1.eq)(schema_1.deliveryMen.isDeleted, false), (0, drizzle_orm_1.eq)(schema_1.deliveryMen.isOnline, true), (0, drizzle_orm_1.sql) `${schema_1.deliveryMen.activeOrdersCount} < ${company.maxActiveOrders}`));
-    const now = new Date();
-    const currentDayOfWeek = now.getDay();
-    const currentTimeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:00`;
-    const eligibleCouriers = [];
+    if (couriers.length === 0) {
+        await connection_1.db
+            .update(schema_1.orders)
+            .set({
+            shippingCompanyId: companyId,
+            shippingStatus: "manual_required",
+            shippingFailReason: "no_courier",
+            dispatchAttempts: currentAttempts + 1,
+            updatedAt: new Date(),
+        })
+            .where((0, drizzle_orm_1.eq)(schema_1.orders.id, orderId));
+        (0, socketService_1.notifyShippingCompany)(companyId, socketEvents_1.SOCKET_EVENTS.ORDER_MANUAL_REQUIRED, {
+            orderId,
+            orderNumber: order.orderNumber,
+            reason: "no_courier",
+            message: "No online couriers found for shipping company",
+        });
+        return {
+            success: false,
+            orderId,
+            shippingStatus: "manual_required",
+            reason: "no_courier",
+            message: "No available online couriers found",
+        };
+    }
+    // Batch query zones and shifts to prevent N+1 queries (Phase 6 requirement)
+    const courierIds = couriers.map((c) => c.id);
+    const [allCourierZones, allCourierShifts] = await Promise.all([
+        connection_1.db
+            .select({
+            deliveryManId: schema_1.deliveryManZones.deliveryManId,
+            zoneId: schema_1.deliveryManZones.zoneId,
+        })
+            .from(schema_1.deliveryManZones)
+            .where((0, drizzle_orm_1.inArray)(schema_1.deliveryManZones.deliveryManId, courierIds)),
+        connection_1.db
+            .select()
+            .from(schema_1.deliveryManShifts)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.deliveryManShifts.deliveryManId, courierIds), (0, drizzle_orm_1.eq)(schema_1.deliveryManShifts.status, "active"))),
+    ]);
+    const courierZonesMap = new Map();
+    for (const z of allCourierZones) {
+        if (!courierZonesMap.has(z.deliveryManId)) {
+            courierZonesMap.set(z.deliveryManId, new Set());
+        }
+        courierZonesMap.get(z.deliveryManId).add(z.zoneId);
+    }
+    const courierShiftsMap = new Map();
+    for (const s of allCourierShifts) {
+        if (!courierShiftsMap.has(s.deliveryManId)) {
+            courierShiftsMap.set(s.deliveryManId, []);
+        }
+        courierShiftsMap.get(s.deliveryManId).push(s);
+    }
+    const { dayOfWeek, timeMinutes } = getLocalDayAndTime();
     const branchPoint = turf.point([branchLng, branchLat]);
+    const eligibleCouriers = [];
     for (const c of couriers) {
+        // Did not reject this order
         if (rejectedCourierIds.has(c.id)) {
             continue;
         }
+        // Alive key check (fresh heartbeat in Redis OR online in DB with coordinates)
         try {
-            const isAlive = await redis_1.default.get(`courier:alive:${c.id}`);
-            if (isAlive === null && nearbyCourierIdsWithDist.size > 0 && !c.currentLat) {
+            const isAlive = await redis_1.default.get(`${exports.REDIS_ALIVE_KEY_PREFIX}${c.id}`);
+            if (!isAlive && (!c.isOnline || !c.currentLat || !c.currentLng)) {
+                // Couriers without an alive key or DB location are skipped
                 continue;
             }
         }
         catch {
-            // Ignore Redis connectivity issues
+            // Redis error fallback: continue
         }
-        const courierZones = await connection_1.db
-            .select({ zoneId: schema_1.deliveryManZones.zoneId })
-            .from(schema_1.deliveryManZones)
-            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.deliveryManZones.deliveryManId, c.id), (0, drizzle_orm_1.eq)(schema_1.deliveryManZones.zoneId, matchedZoneId)))
-            .limit(1);
-        if (courierZones.length === 0) {
-            const anyCourierZones = await connection_1.db
-                .select({ id: schema_1.deliveryManZones.id })
-                .from(schema_1.deliveryManZones)
-                .where((0, drizzle_orm_1.eq)(schema_1.deliveryManZones.deliveryManId, c.id))
-                .limit(1);
-            if (anyCourierZones.length > 0) {
+        // Zone check: allZones === true OR has zone in delivery_man_zones (D5)
+        if (!c.allZones) {
+            const zonesSet = courierZonesMap.get(c.id);
+            if (!zonesSet || !zonesSet.has(matchedZoneId)) {
                 continue;
             }
         }
-        if (c.workType === "restaurant_shift") {
-            const validShift = await connection_1.db
-                .select()
-                .from(schema_1.deliveryManShifts)
-                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.deliveryManShifts.deliveryManId, c.id), (0, drizzle_orm_1.eq)(schema_1.deliveryManShifts.restaurantId, order.restaurantId), (0, drizzle_orm_1.eq)(schema_1.deliveryManShifts.dayOfWeek, currentDayOfWeek), (0, drizzle_orm_1.eq)(schema_1.deliveryManShifts.status, "active"), (0, drizzle_orm_1.sql) `${schema_1.deliveryManShifts.from} <= ${currentTimeStr}`, (0, drizzle_orm_1.sql) `${schema_1.deliveryManShifts.to} >= ${currentTimeStr}`))
-                .limit(1);
-            if (validShift.length === 0) {
+        // deliveryType check: outsource OR (restaurant for this restaurant AND inside shift window)
+        if (c.deliveryType === "restaurant") {
+            const shifts = courierShiftsMap.get(c.id) || [];
+            const activeShift = shifts.find((s) => s.restaurantId === order.restaurantId &&
+                s.dayOfWeek === dayOfWeek &&
+                isTimeInShift(s.from, s.to, timeMinutes));
+            if (!activeShift) {
                 continue;
             }
         }
+        // Distance calculation
         let distanceKm = nearbyCourierIdsWithDist.get(c.id);
-        if (distanceKm === undefined) {
-            if (c.currentLat && c.currentLng) {
-                const cLat = parseFloat(c.currentLat);
-                const cLng = parseFloat(c.currentLng);
-                if (!isNaN(cLat) && !isNaN(cLng)) {
-                    distanceKm = turf.distance(branchPoint, turf.point([cLng, cLat]), {
-                        units: "kilometers",
-                    });
-                }
+        if (distanceKm === undefined && c.currentLat && c.currentLng) {
+            const cLat = parseFloat(c.currentLat);
+            const cLng = parseFloat(c.currentLng);
+            if (!isNaN(cLat) && !isNaN(cLng)) {
+                distanceKm = turf.distance(branchPoint, turf.point([cLng, cLat]), {
+                    units: "kilometers",
+                });
             }
         }
         if (distanceKm !== undefined && distanceKm <= maxRadiusKm) {
@@ -368,9 +627,6 @@ async function dispatchOrder(orderId) {
             });
         }
     }
-    // -------------------------------------------------------------
-    // الخطوة 7: الترتيب (الأقل أوردرات نشطة أولاً، ثم الأقرب مسافة)
-    // -------------------------------------------------------------
     if (eligibleCouriers.length === 0) {
         await connection_1.db
             .update(schema_1.orders)
@@ -382,11 +638,11 @@ async function dispatchOrder(orderId) {
             updatedAt: new Date(),
         })
             .where((0, drizzle_orm_1.eq)(schema_1.orders.id, orderId));
-        (0, socketService_1.notifyShippingCompany)(companyId, "order:manual_required", {
+        (0, socketService_1.notifyShippingCompany)(companyId, socketEvents_1.SOCKET_EVENTS.ORDER_MANUAL_REQUIRED, {
             orderId,
             orderNumber: order.orderNumber,
             reason: "no_courier",
-            message: "No available couriers in shift/zone right now",
+            message: "No available couriers match shift/zone/distance criteria",
         });
         return {
             success: false,
@@ -396,111 +652,135 @@ async function dispatchOrder(orderId) {
             message: "No available courier matches criteria nearby",
         };
     }
+    // -------------------------------------------------------------
+    // Step 7: Sort order per Decision D1
+    // D1: distanceKm ASC, tie-break activeOrdersCount ASC (closest first!)
+    // -------------------------------------------------------------
     eligibleCouriers.sort((a, b) => {
-        if (a.courier.activeOrdersCount !== b.courier.activeOrdersCount) {
-            return a.courier.activeOrdersCount - b.courier.activeOrdersCount;
+        if (a.distanceKm !== b.distanceKm) {
+            return a.distanceKm - b.distanceKm;
         }
-        return a.distanceKm - b.distanceKm;
+        return a.courier.activeOrdersCount - b.courier.activeOrdersCount;
     });
-    const chosen = eligibleCouriers[0];
+    // -------------------------------------------------------------
+    // Step 8: Atomic Assignment (try candidates in sorted order)
+    // -------------------------------------------------------------
     const newAttemptNumber = currentAttempts + 1;
-    // -------------------------------------------------------------
-    // الخطوة 8: إسناد الطلب وتسجيل العملية وتحديث العدادات
-    // -------------------------------------------------------------
-    await connection_1.db.transaction(async (tx) => {
-        await tx
+    let assignedCourier = null;
+    let assignedDistance = 0;
+    for (const candidate of eligibleCouriers) {
+        const assignRes = await assignCourierToOrder(orderId, candidate.courier.id, companyId, newAttemptNumber);
+        if (assignRes.success) {
+            assignedCourier = assignRes.courier;
+            assignedDistance = candidate.distanceKm;
+            break;
+        }
+    }
+    if (!assignedCourier) {
+        await connection_1.db
             .update(schema_1.orders)
             .set({
             shippingCompanyId: companyId,
-            deliveryManId: chosen.courier.id,
-            shippingStatus: "assigned",
-            shippingFailReason: null,
+            shippingStatus: "manual_required",
+            shippingFailReason: "no_courier",
             dispatchAttempts: newAttemptNumber,
             updatedAt: new Date(),
         })
             .where((0, drizzle_orm_1.eq)(schema_1.orders.id, orderId));
-        await tx
-            .update(schema_1.deliveryMen)
-            .set({
-            activeOrdersCount: (0, drizzle_orm_1.sql) `${schema_1.deliveryMen.activeOrdersCount} + 1`,
-        })
-            .where((0, drizzle_orm_1.eq)(schema_1.deliveryMen.id, chosen.courier.id));
-        await tx.insert(schema_1.dispatchAssignments).values({
+        (0, socketService_1.notifyShippingCompany)(companyId, socketEvents_1.SOCKET_EVENTS.ORDER_MANUAL_REQUIRED, {
             orderId,
-            shippingCompanyId: companyId,
-            deliveryManId: chosen.courier.id,
-            attemptNumber: newAttemptNumber,
-            status: "active",
+            orderNumber: order.orderNumber,
+            reason: "no_courier",
         });
-    });
-    (0, socketService_1.notifyDeliveryMan)(chosen.courier.id, "order:assigned", {
+        return {
+            success: false,
+            orderId,
+            shippingStatus: "manual_required",
+            reason: "no_courier",
+            message: "All couriers became busy during atomic assignment",
+        };
+    }
+    // -------------------------------------------------------------
+    // Send Real-time Socket.IO Notifications
+    // -------------------------------------------------------------
+    (0, socketService_1.notifyDeliveryMan)(assignedCourier.id, socketEvents_1.SOCKET_EVENTS.COURIER_ASSIGNED, {
         orderId,
         orderNumber: order.orderNumber,
         restaurantName: restaurant?.name,
         branchName: branch?.name,
         branchAddress: branch?.address,
-        distanceKm: chosen.distanceKm,
+        distanceKm: assignedDistance,
     });
-    (0, socketService_1.notifyShippingCompany)(companyId, "order:assigned", {
+    (0, socketService_1.notifyShippingCompany)(companyId, socketEvents_1.SOCKET_EVENTS.ORDER_ASSIGNED, {
         orderId,
         orderNumber: order.orderNumber,
-        deliveryManId: chosen.courier.id,
-        deliveryManName: chosen.courier.name,
-        distanceKm: chosen.distanceKm,
+        deliveryManId: assignedCourier.id,
+        deliveryManName: assignedCourier.name,
+        distanceKm: assignedDistance,
     });
-    (0, socketService_1.notifyOrderTracking)(orderId, "order:courier_assigned", {
-        deliveryManId: chosen.courier.id,
-        deliveryManName: chosen.courier.name,
-        deliveryManPhone: chosen.courier.phone,
+    (0, socketService_1.notifyOrderTracking)(orderId, socketEvents_1.SOCKET_EVENTS.ORDER_COURIER_ASSIGNED, {
+        deliveryManId: assignedCourier.id,
+        deliveryManName: assignedCourier.name,
+        deliveryManPhone: assignedCourier.phone,
     });
     return {
         success: true,
         orderId,
         shippingStatus: "assigned",
         deliveryMan: {
-            id: chosen.courier.id,
-            name: chosen.courier.name,
-            phone: chosen.courier.phone,
-            distanceKm: chosen.distanceKm,
+            id: assignedCourier.id,
+            name: assignedCourier.name,
+            phone: assignedCourier.phone,
+            distanceKm: assignedDistance,
         },
-        message: `Order successfully assigned to courier ${chosen.courier.name}`,
+        message: `Order successfully assigned to courier ${assignedCourier.name}`,
     };
 }
 /**
- * 3. دالة رفض المندوب للطلب مع السبب الإجباري وإعادة التوزيع التلقائي
+ * Courier Reject with mandatory reason and re-dispatch
  */
 async function rejectOrderByCourier(orderId, courierId, rejectReason) {
     if (!rejectReason || rejectReason.trim() === "") {
         throw new Error("Reject reason is mandatory");
     }
-    const [order] = await connection_1.db
-        .select()
-        .from(schema_1.orders)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orders.id, orderId), (0, drizzle_orm_1.eq)(schema_1.orders.deliveryManId, courierId)))
-        .limit(1);
-    if (!order) {
-        throw new Error("Order not found or not currently assigned to this courier");
-    }
-    await connection_1.db
-        .update(schema_1.dispatchAssignments)
-        .set({
-        status: "rejected",
-        rejectReason: rejectReason.trim(),
-        respondedAt: new Date(),
-    })
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.dispatchAssignments.orderId, orderId), (0, drizzle_orm_1.eq)(schema_1.dispatchAssignments.deliveryManId, courierId), (0, drizzle_orm_1.eq)(schema_1.dispatchAssignments.status, "active")));
-    await connection_1.db
-        .update(schema_1.deliveryMen)
-        .set({
-        activeOrdersCount: (0, drizzle_orm_1.sql) `GREATEST(0, ${schema_1.deliveryMen.activeOrdersCount} - 1)`,
-    })
-        .where((0, drizzle_orm_1.eq)(schema_1.deliveryMen.id, courierId));
-    await connection_1.db
-        .update(schema_1.orders)
-        .set({
-        deliveryManId: null,
-        shippingStatus: "pending_dispatch",
-    })
-        .where((0, drizzle_orm_1.eq)(schema_1.orders.id, orderId));
+    // Must be transactional and only valid if shippingStatus is assigned
+    await connection_1.db.transaction(async (tx) => {
+        const [order] = await tx
+            .select()
+            .from(schema_1.orders)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orders.id, orderId), (0, drizzle_orm_1.eq)(schema_1.orders.deliveryManId, courierId)))
+            .limit(1);
+        if (!order) {
+            throw new Error("Order not found or not currently assigned to this courier");
+        }
+        if (order.shippingStatus !== "assigned") {
+            throw new Error(`Cannot reject order in shippingStatus "${order.shippingStatus}"`);
+        }
+        // 1. Update assignment to rejected
+        await tx
+            .update(schema_1.dispatchAssignments)
+            .set({
+            status: "rejected",
+            rejectReason: rejectReason.trim(),
+            respondedAt: new Date(),
+        })
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.dispatchAssignments.orderId, orderId), (0, drizzle_orm_1.eq)(schema_1.dispatchAssignments.deliveryManId, courierId), (0, drizzle_orm_1.eq)(schema_1.dispatchAssignments.status, "active")));
+        // 2. Decrement active orders count
+        await tx
+            .update(schema_1.deliveryMen)
+            .set({
+            activeOrdersCount: (0, drizzle_orm_1.sql) `GREATEST(0, ${schema_1.deliveryMen.activeOrdersCount} - 1)`,
+        })
+            .where((0, drizzle_orm_1.eq)(schema_1.deliveryMen.id, courierId));
+        // 3. Reset order deliveryManId
+        await tx
+            .update(schema_1.orders)
+            .set({
+            deliveryManId: null,
+            shippingStatus: "pending_dispatch",
+        })
+            .where((0, drizzle_orm_1.eq)(schema_1.orders.id, orderId));
+    });
+    // Re-dispatch excluding this courier
     return await dispatchOrder(orderId);
 }

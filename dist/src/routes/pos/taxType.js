@@ -1,10 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const catchAsync_1 = require("../../../utils/catchAsync");
-const validation_1 = require("../../../middlewares/validation");
-const taxType_1 = require("../../../validation/admin/taxType");
-const taxType_2 = require("../../../controllers/admin/pos/taxType");
+const catchAsync_1 = require("../../utils/catchAsync");
+const validation_1 = require("../../middlewares/validation");
+const taxType_1 = require("../../validation/admin/taxType");
+const taxType_2 = require("../../controllers/pos/taxType");
 const router = (0, express_1.Router)();
 // Show TaxType (automatically scoped to req.user.restaurantId)
 router.get("/", (0, catchAsync_1.catchAsync)(taxType_2.getTaxType));

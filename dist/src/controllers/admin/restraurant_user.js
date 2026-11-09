@@ -10,17 +10,65 @@ const Errors_1 = require("../../Errors");
 const handleImages_1 = require("../../utils/handleImages");
 const order_helper_1 = require("../../helpers/order.helper");
 // =======================================================
-// 1. Get Restaurant Users (Supports ?status=active/blocked)
+// 1. Get Restaurant Users (Supports ?status=active/blocked, filters, search & pagination)
 // =======================================================
 const getRestaurantUsers = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id || req.user?.branchId;
     if (!restaurantId) {
         throw new BadRequest_1.BadRequest("Restaurant ID is required");
     }
+    const { status, search, phone, name, email, startDate, endDate, totalSpending, page, limit, sortBy, sortOrder, } = req.query;
     const conditions = [
         (0, drizzle_orm_1.eq)(schema_1.restaurant_users.restaurantId, restaurantId)
     ];
-    const data = await connection_1.db.select({
+    // 1. Status Filter (active / blocked)
+    if (status) {
+        conditions.push((0, drizzle_orm_1.eq)(schema_1.restaurant_users.status, status));
+    }
+    // 2. Search by Phone, Name, Email
+    if (search) {
+        const searchPattern = `%${search}%`;
+        conditions.push((0, drizzle_orm_1.or)((0, drizzle_orm_1.like)(schema_1.users.name, searchPattern), (0, drizzle_orm_1.like)(schema_1.users.phone, searchPattern), (0, drizzle_orm_1.like)(schema_1.users.email, searchPattern)));
+    }
+    if (phone) {
+        conditions.push((0, drizzle_orm_1.like)(schema_1.users.phone, `%${phone}%`));
+    }
+    if (name) {
+        conditions.push((0, drizzle_orm_1.like)(schema_1.users.name, `%${name}%`));
+    }
+    if (email) {
+        conditions.push((0, drizzle_orm_1.like)(schema_1.users.email, `%${email}%`));
+    }
+    // 3. Date Filter (restaurant_users.createdAt)
+    if (startDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        conditions.push((0, drizzle_orm_1.gte)(schema_1.restaurant_users.createdAt, start));
+    }
+    if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        conditions.push((0, drizzle_orm_1.lte)(schema_1.restaurant_users.createdAt, end));
+    }
+    // 4. Order Conditions for totalSpendings calculation
+    const orderConditions = [
+        (0, drizzle_orm_1.eq)(schema_1.orders.userId, schema_1.users.id),
+        (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, schema_1.restaurant_users.restaurantId),
+        (0, drizzle_orm_1.ne)(schema_1.orders.status, "cancelled"),
+        (0, order_helper_1.excludeUnpaidVisaOrders)(),
+    ];
+    // 5. Total Spending Search (Having Condition)
+    const havingConditions = [];
+    if (totalSpending !== undefined && totalSpending !== "") {
+        havingConditions.push((0, drizzle_orm_1.sql) `COALESCE(SUM(${schema_1.orders.totalAmount}), 0) >= ${Number(totalSpending)}`);
+    }
+    // 6. Pagination Setup
+    const pageNum = page ? Math.max(1, parseInt(page, 10) || 1) : 1;
+    const limitNum = limit ? Math.max(1, parseInt(limit, 10) || 20) : 20;
+    const offset = (pageNum - 1) * limitNum;
+    // 7. Base Query with totalSpendings
+    let query = connection_1.db
+        .select({
         id: schema_1.restaurant_users.id,
         userId: schema_1.users.id,
         name: schema_1.users.name,
@@ -29,6 +77,7 @@ const getRestaurantUsers = async (req, res) => {
         photo: schema_1.users.photo,
         points: (0, drizzle_orm_1.sql) `COALESCE(${schema_1.userRestaurantPoints.points}, 0)`,
         totalOrders: (0, drizzle_orm_1.sql) `COALESCE(${schema_1.userRestaurantPoints.totalOrders}, 0)`,
+        totalSpendings: (0, drizzle_orm_1.sql) `COALESCE(SUM(${schema_1.orders.totalAmount}), 0)`,
         status: schema_1.restaurant_users.status,
         userStatus: schema_1.users.status,
         createdAt: schema_1.restaurant_users.createdAt,
@@ -42,8 +91,68 @@ const getRestaurantUsers = async (req, res) => {
         .innerJoin(schema_1.users, (0, drizzle_orm_1.eq)(schema_1.restaurant_users.userId, schema_1.users.id))
         .innerJoin(schema_1.restaurants, (0, drizzle_orm_1.eq)(schema_1.restaurant_users.restaurantId, schema_1.restaurants.id))
         .leftJoin(schema_1.userRestaurantPoints, (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.userRestaurantPoints.userId, schema_1.users.id), (0, drizzle_orm_1.eq)(schema_1.userRestaurantPoints.restaurantId, schema_1.restaurant_users.restaurantId)))
-        .where((0, drizzle_orm_1.and)(...conditions));
-    return (0, response_1.SuccessResponse)(res, { message: "Restaurant users fetched successfully", data }, 200);
+        .leftJoin(schema_1.orders, (0, drizzle_orm_1.and)(...orderConditions))
+        .where((0, drizzle_orm_1.and)(...conditions))
+        .groupBy(schema_1.restaurant_users.id, schema_1.users.id, schema_1.users.name, schema_1.users.phone, schema_1.users.email, schema_1.users.photo, schema_1.users.status, schema_1.userRestaurantPoints.points, schema_1.userRestaurantPoints.totalOrders, schema_1.restaurant_users.status, schema_1.restaurant_users.createdAt, schema_1.restaurant_users.updatedAt, schema_1.restaurants.id, schema_1.restaurants.name)
+        .$dynamic();
+    if (havingConditions.length > 0) {
+        query = query.having((0, drizzle_orm_1.and)(...havingConditions));
+    }
+    // Sorting
+    const sortField = (sortBy || "createdAt").toLowerCase().trim();
+    const isAsc = (sortOrder || "desc").toLowerCase().trim() === "asc";
+    if (sortField === "totalspending" || sortField === "totalspendings") {
+        query = query.orderBy(isAsc ? (0, drizzle_orm_1.sql) `COALESCE(SUM(${schema_1.orders.totalAmount}), 0) ASC` : (0, drizzle_orm_1.sql) `COALESCE(SUM(${schema_1.orders.totalAmount}), 0) DESC`);
+    }
+    else if (sortField === "points") {
+        query = query.orderBy(isAsc ? (0, drizzle_orm_1.sql) `COALESCE(${schema_1.userRestaurantPoints.points}, 0) ASC` : (0, drizzle_orm_1.sql) `COALESCE(${schema_1.userRestaurantPoints.points}, 0) DESC`);
+    }
+    else if (sortField === "totalorders") {
+        query = query.orderBy(isAsc ? (0, drizzle_orm_1.sql) `COALESCE(${schema_1.userRestaurantPoints.totalOrders}, 0) ASC` : (0, drizzle_orm_1.sql) `COALESCE(${schema_1.userRestaurantPoints.totalOrders}, 0) DESC`);
+    }
+    else if (sortField === "name") {
+        query = query.orderBy(isAsc ? schema_1.users.name : (0, drizzle_orm_1.desc)(schema_1.users.name));
+    }
+    else {
+        query = query.orderBy(isAsc ? schema_1.restaurant_users.createdAt : (0, drizzle_orm_1.desc)(schema_1.restaurant_users.createdAt));
+    }
+    // 8. Count query for total
+    let total = 0;
+    if (havingConditions.length > 0) {
+        const countQuery = connection_1.db
+            .select({ id: schema_1.restaurant_users.id })
+            .from(schema_1.restaurant_users)
+            .innerJoin(schema_1.users, (0, drizzle_orm_1.eq)(schema_1.restaurant_users.userId, schema_1.users.id))
+            .leftJoin(schema_1.orders, (0, drizzle_orm_1.and)(...orderConditions))
+            .where((0, drizzle_orm_1.and)(...conditions))
+            .groupBy(schema_1.restaurant_users.id)
+            .having((0, drizzle_orm_1.and)(...havingConditions));
+        const countRows = await countQuery;
+        total = countRows.length;
+    }
+    else {
+        const countResult = await connection_1.db
+            .select({ total: (0, drizzle_orm_1.sql) `count(distinct ${schema_1.restaurant_users.id})` })
+            .from(schema_1.restaurant_users)
+            .innerJoin(schema_1.users, (0, drizzle_orm_1.eq)(schema_1.restaurant_users.userId, schema_1.users.id))
+            .where((0, drizzle_orm_1.and)(...conditions));
+        total = Number(countResult[0]?.total || 0);
+    }
+    // Apply pagination
+    if (limitNum) {
+        query = query.limit(limitNum).offset(offset);
+    }
+    const data = await query;
+    return (0, response_1.SuccessResponse)(res, {
+        message: "Restaurant users fetched successfully",
+        data,
+        pagination: {
+            page: pageNum,
+            limit: limitNum || total,
+            total,
+            totalPages: limitNum ? Math.ceil(total / limitNum) : 1,
+        }
+    }, 200);
 };
 exports.getRestaurantUsers = getRestaurantUsers;
 // =======================================================

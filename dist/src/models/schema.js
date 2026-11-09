@@ -92,3 +92,8 @@ __exportStar(require("./schema/admin/printer"), exports);
 __exportStar(require("./schema/admin/paymentTransactions"), exports);
 __exportStar(require("./schema/admin/adminFcmTokens"), exports);
 __exportStar(require("./schema/admin/shippingCompany"), exports);
+__exportStar(require("./schema/admin/firstOrderDiscount"), exports);
+__exportStar(require("./schema/admin/platformPaymentGateways"), exports);
+__exportStar(require("./schema/admin/videos"), exports);
+__exportStar(require("./schema/admin/pushedNotification"), exports);
+__exportStar(require("./schema/admin/restaurantDomains"), exports);

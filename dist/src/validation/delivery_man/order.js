@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deliveryManUpdateOrderStatusSchema = exports.deliveryManOrderHistoryQuerySchema = exports.deliveryManAssignedOrdersQuerySchema = void 0;
+exports.rejectOrderSchema = exports.deliveryManUpdateOrderStatusSchema = exports.deliveryManOrderHistoryQuerySchema = exports.deliveryManAssignedOrdersQuerySchema = void 0;
 const zod_1 = require("zod");
 exports.deliveryManAssignedOrdersQuerySchema = zod_1.z.object({
     orderId: zod_1.z.string().optional(),
@@ -17,4 +17,7 @@ exports.deliveryManUpdateOrderStatusSchema = zod_1.z.object({
     status: zod_1.z.literal("delivered", {
         errorMap: () => ({ message: "Delivery man can only update order status to 'delivered'" }),
     }),
+});
+exports.rejectOrderSchema = zod_1.z.object({
+    reason: zod_1.z.string().min(1, "Reject reason is mandatory").max(500),
 });

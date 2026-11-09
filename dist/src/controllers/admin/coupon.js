@@ -8,6 +8,30 @@ const response_1 = require("../../utils/response");
 const BadRequest_1 = require("../../Errors/BadRequest");
 const NotFound_1 = require("../../Errors/NotFound");
 const uuid_1 = require("uuid");
+// Helper: parse foodIds JSON string or array and fetch food objects
+async function resolveFoods(foodIds) {
+    if (!foodIds)
+        return [];
+    let ids = [];
+    if (typeof foodIds === "string") {
+        try {
+            ids = JSON.parse(foodIds);
+        }
+        catch {
+            ids = [];
+        }
+    }
+    else if (Array.isArray(foodIds)) {
+        ids = foodIds.map(String);
+    }
+    ids = ids.filter(Boolean);
+    if (ids.length === 0)
+        return [];
+    return connection_1.db
+        .select({ id: schema_1.food.id, name: schema_1.food.name, nameAr: schema_1.food.nameAr, nameFr: schema_1.food.nameFr })
+        .from(schema_1.food)
+        .where((0, drizzle_orm_1.inArray)(schema_1.food.id, ids));
+}
 // ========================================================
 // 1. Create Coupon (Automatically linked to logged-in restaurant)
 // ========================================================
@@ -17,7 +41,7 @@ const createCoupon = async (req, res) => {
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Unauthorized");
     const { code, name, nameAr, nameFr, discountType, discountValue, maxDiscount, minOrderAmount, usageLimit, perUserLimit, userUsageType, // 'fixed' | 'unlimited'
-    startDate, endDate, isActive } = req.body;
+    startDate, endDate, isActive, foodsId, } = req.body;
     if (!code)
         throw new BadRequest_1.BadRequest("Coupon code is required");
     if (!name)
@@ -41,6 +65,12 @@ const createCoupon = async (req, res) => {
         throw new BadRequest_1.BadRequest("Coupon code already exists in your restaurant, please choose another");
     }
     const id = (0, uuid_1.v4)();
+    // Resolve foodIds: accept foodIds or foods array; null if empty or not provided
+    let resolvedFoodIds = null;
+    if (Array.isArray(foodsId) && foodsId.length > 0) {
+        const filtered = foodsId.map(String).filter(Boolean);
+        resolvedFoodIds = filtered.length > 0 ? filtered : null;
+    }
     // 1. حفظ الكوبون الرئيسي في جدول الكوبونات (isGlobal = false تلقائياً للمطاعم)
     await connection_1.db.insert(schema_1.coupons).values({
         id,
@@ -59,6 +89,7 @@ const createCoupon = async (req, res) => {
         endDate: endDate ? new Date(endDate) : null,
         isActive: isActive !== undefined ? isActive : true,
         isGlobal: false,
+        foodIds: resolvedFoodIds,
     });
     // 2. ربط الكوبون بالمطعم الحالي تلقائياً في جدول الربط
     await connection_1.db.insert(schema_1.couponRestaurants).values({
@@ -66,7 +97,13 @@ const createCoupon = async (req, res) => {
         couponId: id,
         restaurantId: restaurantId,
     });
-    return (0, response_1.SuccessResponse)(res, { message: "Coupon created successfully for your restaurant", data: { id } }, 201);
+    return (0, response_1.SuccessResponse)(res, {
+        message: "Coupon created successfully for your restaurant",
+        data: {
+            id,
+            foods: resolvedFoodIds,
+        }
+    }, 201);
 };
 exports.createCoupon = createCoupon;
 // ========================================================
@@ -78,11 +115,23 @@ const getAllCoupons = async (req, res) => {
         throw new BadRequest_1.BadRequest("Unauthorized");
     // جلب الكوبونات الخاصة بالمطعم بالإضافة إلى أي كوبون Global نشط في السيستم
     const rawCoupons = await connection_1.db
-        .selectDistinct({ coupons: schema_1.coupons })
+        .selectDistinct({
+        coupons: schema_1.coupons,
+        usersCount: (0, drizzle_orm_1.sql) `(SELECT COUNT(DISTINCT ${schema_1.couponUsages.userId}) FROM ${schema_1.couponUsages} WHERE ${schema_1.couponUsages.couponId} = ${schema_1.coupons.id})`,
+        usagesCount: (0, drizzle_orm_1.sql) `(SELECT COUNT(*) FROM ${schema_1.couponUsages} WHERE ${schema_1.couponUsages.couponId} = ${schema_1.coupons.id})`
+    })
         .from(schema_1.coupons)
         .leftJoin(schema_1.couponRestaurants, (0, drizzle_orm_1.eq)(schema_1.coupons.id, schema_1.couponRestaurants.couponId))
         .where((0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.couponRestaurants.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.coupons.isGlobal, true)));
-    const allCoupons = rawCoupons.map(r => r.coupons);
+    const allCoupons = await Promise.all(rawCoupons.map(async (r) => {
+        const { foodIds, ...couponRest } = r.coupons;
+        return {
+            ...couponRest,
+            foods: await resolveFoods(foodIds),
+            usersCount: Number(r.usersCount || 0),
+            usedCount: Math.max(Number(r.coupons.usedCount || 0), Number(r.usagesCount || 0)),
+        };
+    }));
     return (0, response_1.SuccessResponse)(res, { message: "Get all coupons success", data: allCoupons });
 };
 exports.getAllCoupons = getAllCoupons;
@@ -95,14 +144,25 @@ const getCouponById = async (req, res) => {
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Unauthorized");
     const [rawCoupon] = await connection_1.db
-        .selectDistinct({ coupons: schema_1.coupons })
+        .selectDistinct({
+        coupons: schema_1.coupons,
+        usersCount: (0, drizzle_orm_1.sql) `(SELECT COUNT(DISTINCT ${schema_1.couponUsages.userId}) FROM ${schema_1.couponUsages} WHERE ${schema_1.couponUsages.couponId} = ${schema_1.coupons.id})`,
+        usagesCount: (0, drizzle_orm_1.sql) `(SELECT COUNT(*) FROM ${schema_1.couponUsages} WHERE ${schema_1.couponUsages.couponId} = ${schema_1.coupons.id})`
+    })
         .from(schema_1.coupons)
         .leftJoin(schema_1.couponRestaurants, (0, drizzle_orm_1.eq)(schema_1.coupons.id, schema_1.couponRestaurants.couponId))
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.coupons.id, id), (0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.couponRestaurants.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.coupons.isGlobal, true))))
         .limit(1);
     if (!rawCoupon)
         throw new NotFound_1.NotFound("Coupon not found");
-    return (0, response_1.SuccessResponse)(res, { message: "Get coupon success", data: rawCoupon.coupons });
+    const { foodIds, ...couponRest } = rawCoupon.coupons;
+    const couponData = {
+        ...couponRest,
+        foods: await resolveFoods(foodIds),
+        usersCount: Number(rawCoupon.usersCount || 0),
+        usedCount: Math.max(Number(rawCoupon.coupons.usedCount || 0), Number(rawCoupon.usagesCount || 0)),
+    };
+    return (0, response_1.SuccessResponse)(res, { message: "Get coupon success", data: couponData });
 };
 exports.getCouponById = getCouponById;
 // ========================================================
@@ -123,7 +183,7 @@ const updateCoupon = async (req, res) => {
     if (!existing)
         throw new NotFound_1.NotFound("Coupon not found or you don't have permission to edit it");
     const { code, name, nameAr, nameFr, discountType, discountValue, maxDiscount, minOrderAmount, usageLimit, perUserLimit, userUsageType, // 'fixed' | 'unlimited'
-    startDate, endDate, isActive } = req.body;
+    startDate, endDate, isActive, foodsId, } = req.body;
     const normalizedCode = code ? code.toUpperCase().trim() : existing.coupons.code;
     // فحص الاسم المتكرر عند تعديل الكود لمنع تضاربه داخل نفس المطعم
     if (code && normalizedCode !== existing.coupons.code) {
@@ -179,6 +239,16 @@ const updateCoupon = async (req, res) => {
         updateData.endDate = endDate ? new Date(endDate) : null;
     if (isActive !== undefined)
         updateData.isActive = isActive;
+    // Update foodIds / foods if provided
+    if (foodsId !== undefined) {
+        if (foodsId === null) {
+            updateData.foodIds = null;
+        }
+        else if (Array.isArray(foodsId)) {
+            const filtered = foodsId.map(String).filter(Boolean);
+            updateData.foodIds = filtered.length > 0 ? filtered : null;
+        }
+    }
     await connection_1.db.update(schema_1.coupons).set(updateData).where((0, drizzle_orm_1.eq)(schema_1.coupons.id, id));
     return (0, response_1.SuccessResponse)(res, { message: "Coupon updated successfully" });
 };
@@ -241,9 +311,11 @@ exports.toggleCouponStatus = toggleCouponStatus;
 //     couponCode: string,
 //     userId: string,
 //     restaurantId: string,
-//     subtotal: number
+//     subtotal: number,
+//     cartFoodIds?: string[]
 // ): Promise<{ discountAmount: number; coupon: typeof coupons.$inferSelect }> => {
 //     const now = new Date();
+// 
 //     // فحص الكود: نبحث عنه إما أن يكون Global لكل السيستم أو مخصص ومربوط بالمطعم الحالي للطلب
 //     const [rawCoupon] = await db
 //         .selectDistinct({ coupons: coupons })
@@ -259,16 +331,21 @@ exports.toggleCouponStatus = toggleCouponStatus;
 //             )
 //         )
 //         .limit(1);
+// 
 //     if (!rawCoupon) throw new BadRequest("Invalid coupon code for this restaurant");
 //     const coupon = rawCoupon.coupons;
+//     
 //     if (!coupon.isActive) throw new BadRequest("This coupon is no longer active");
 //     if (coupon.startDate && now < coupon.startDate) throw new BadRequest("This coupon is not yet valid");
 //     if (coupon.endDate && now > coupon.endDate) throw new BadRequest("This coupon has expired");
+// 
 //     const minOrder = parseFloat(coupon.minOrderAmount as string);
 //     if (subtotal < minOrder)
 //         throw new BadRequest(`Minimum order amount to use this coupon is ${minOrder}`);
+// 
 //     if (coupon.usageLimit !== null && (coupon.usedCount ?? 0) >= coupon.usageLimit)
 //         throw new BadRequest("This coupon has reached its usage limit");
+// 
 //     if (coupon.perUserLimit !== null) {
 //         const rows = await db
 //             .select({ count: sql<number>`COUNT(*)` })
@@ -277,11 +354,23 @@ exports.toggleCouponStatus = toggleCouponStatus;
 //                 eq(couponUsages.couponId, coupon.id),
 //                 eq(couponUsages.userId, userId)
 //             ));
+// 
 //         const userUsageCount = Number(rows[0]?.count ?? 0);
 //         if (userUsageCount >= coupon.perUserLimit)
 //             throw new BadRequest("You have already used this coupon the maximum number of times");
 //     }
+// 
+//     // Food restriction check: if foodIds is specified and non-empty, cart must contain at least one of them
+//     if (coupon.foodIds && Array.isArray(coupon.foodIds) && coupon.foodIds.length > 0) {
+//         const foods = cartFoodIds || [];
+//         const hasEligibleFood = foods.some(fId => coupon.foodIds!.includes(fId));
+//         if (!hasEligibleFood) {
+//             throw new BadRequest("This coupon is only valid for specific items that are not in your cart");
+//         }
+//     }
+// 
 //     let discountAmount = 0;
+// 
 //     if (coupon.discountType === "free_delivery") {
 //         discountAmount = 0;
 //     } else if (coupon.discountType === "percentage") {
@@ -293,37 +382,11 @@ exports.toggleCouponStatus = toggleCouponStatus;
 //         discountAmount = parseFloat(coupon.discountValue as string);
 //         if (discountAmount > subtotal) discountAmount = subtotal;
 //     }
+// 
 //     return { discountAmount: parseFloat(discountAmount.toFixed(2)), coupon };
 // };
-// // ========================================================
-// // 8. Validate Coupon Endpoint (Used by Customers App)
-// // ========================================================
-// export const validateCouponEndpoint = async (req: Request, res: Response) => {
-//     const { code, subtotal, restaurantId } = req.body;
-//     const userId = req.user?.id; 
-//     if (!code) throw new BadRequest("Coupon code is required");
-//     if (!subtotal) throw new BadRequest("Subtotal is required");
-//     if (!restaurantId) throw new BadRequest("Restaurant ID is required");
-//     if (!userId) throw new BadRequest("Unauthorized");
-//     const { discountAmount, coupon } = await validateCoupon(
-//         code,
-//         userId,
-//         restaurantId,
-//         parseFloat(subtotal)
-//     );
-//     return SuccessResponse(res, {
-//         message: "Coupon is valid",
-//         data: {
-//             code: coupon.code,
-//             name: coupon.name,
-//             discountType: coupon.discountType,
-//             discountValue: coupon.discountValue,
-//             discountAmount,
-//         }
-//     });
-// };
 // ========================================================
-// 9. Get Coupon Usage History
+// 8. Get Coupon Usage History
 // ========================================================
 const getCouponUsages = async (req, res) => {
     const { id } = req.params;

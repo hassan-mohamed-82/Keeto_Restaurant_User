@@ -37,13 +37,20 @@ exports.getFreeDeliveryOffer = getFreeDeliveryOffer;
 // ==========================================
 const upsertFreeDeliveryOffer = async (req, res) => {
     const restaurantId = getAdminRestaurantId(req);
-    const { status, minOrderAmount, startDate, endDate } = req.body;
+    const { status, minOrderAmount, maxOrdersPerUser, startDate, endDate } = req.body;
     if (status && !["active", "inactive"].includes(status)) {
         throw new BadRequest_1.BadRequest("Status must be 'active' or 'inactive'");
     }
     const minAmount = minOrderAmount !== undefined ? parseFloat(String(minOrderAmount)) : 0;
     if (isNaN(minAmount) || minAmount < 0) {
         throw new BadRequest_1.BadRequest("minOrderAmount must be a non-negative number");
+    }
+    let parsedMaxOrdersPerUser = null;
+    if (maxOrdersPerUser !== undefined && maxOrdersPerUser !== null) {
+        parsedMaxOrdersPerUser = parseInt(String(maxOrdersPerUser), 10);
+        if (isNaN(parsedMaxOrdersPerUser) || parsedMaxOrdersPerUser < 1) {
+            throw new BadRequest_1.BadRequest("maxOrdersPerUser must be an integer >= 1");
+        }
     }
     let parsedStartDate = null;
     let parsedEndDate = null;
@@ -74,6 +81,7 @@ const upsertFreeDeliveryOffer = async (req, res) => {
             .set({
             status: status || existing.status,
             minOrderAmount: minAmount.toFixed(2),
+            maxOrdersPerUser: maxOrdersPerUser !== undefined ? parsedMaxOrdersPerUser : existing.maxOrdersPerUser,
             startDate: startDate !== undefined ? parsedStartDate : existing.startDate,
             endDate: endDate !== undefined ? parsedEndDate : existing.endDate,
             updatedAt: new Date(),
@@ -86,6 +94,7 @@ const upsertFreeDeliveryOffer = async (req, res) => {
             restaurantId,
             status: status || "active",
             minOrderAmount: minAmount.toFixed(2),
+            maxOrdersPerUser: parsedMaxOrdersPerUser,
             startDate: parsedStartDate,
             endDate: parsedEndDate,
         });

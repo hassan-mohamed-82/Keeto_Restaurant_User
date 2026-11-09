@@ -57,23 +57,39 @@ function formatLabel(str) {
         .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
         .join(" ");
 }
+const getModuleActionOptions = (module) => {
+    const moduleActions = module === "order"
+        ? constant_1.ACTION_NAMES.filter((action) => action.toLowerCase() !== "filter")
+        : constant_1.ACTION_NAMES;
+    const actions = moduleActions.map((action) => ({
+        action: action.toLowerCase(),
+        label: action,
+    }));
+    if (module === "order") {
+        actions.push({ action: "advanced_filter", label: "Advanced Filter" });
+    }
+    if (module === "restaurantsetting") {
+        actions.push({ action: "open", label: "Open Restaurant" }, { action: "close", label: "Close Restaurant" });
+    }
+    return actions;
+};
 // Get Admin Modules with Actions
 const getAdminPermissions = async (req, res) => {
     try {
         const permissions = constant_1.MODULES.map((module) => ({
             module,
             label: formatLabel(module),
-            actions: constant_1.ACTION_NAMES.map((action) => ({
-                key: action.toLowerCase(),
-                label: action,
-                permission: `${module}.${action.toLowerCase()}`,
+            actions: getModuleActionOptions(module).map(({ action, label }) => ({
+                key: action,
+                label,
+                permission: `${module}.${action}`,
             })),
         }));
         return res.status(200).json({
             success: true,
             data: {
                 modules: [...constant_1.MODULES],
-                actions: [...constant_1.ACTION_NAMES],
+                actions: [...constant_1.ACTION_NAMES, "advanced_filter", "open", "close"],
                 permissions,
             },
         });
@@ -252,14 +268,14 @@ exports.toggleRoleStatus = toggleRoleStatus;
 const getAvailablePermissions = async (req, res) => {
     const permissions = constant_1.MODULES.map((module) => ({
         module,
-        actions: constant_1.ACTION_NAMES.map((action) => ({
+        actions: getModuleActionOptions(module).map(({ action }) => ({
             id: generateActionId(),
             action,
         })),
     }));
     (0, response_1.SuccessResponse)(res, {
         modules: constant_1.MODULES,
-        actions: constant_1.ACTION_NAMES,
+        actions: [...constant_1.ACTION_NAMES, "advanced_filter", "open", "close"],
         permissions,
     }, 200);
 };

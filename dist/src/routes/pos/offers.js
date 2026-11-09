@@ -1,10 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const catchAsync_1 = require("../../../utils/catchAsync");
-const validation_1 = require("../../../middlewares/validation");
-const foodOffer_1 = require("../../../validation/admin/foodOffer");
-const offer_1 = require("../../../controllers/admin/pos/offer");
+const catchAsync_1 = require("../../utils/catchAsync");
+const validation_1 = require("../../middlewares/validation");
+const foodOffer_1 = require("../../validation/admin/foodOffer");
+const offer_1 = require("../../controllers/pos/offer");
 const router = (0, express_1.Router)();
 // ==========================================
 // 1. View Offers List (where offer_price IS NOT NULL)

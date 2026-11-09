@@ -5,7 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.firestore = exports.messaging = exports.ADMIN_PROJECT = void 0;
+exports.firestore = exports.messaging = exports.DELIVERY_PROJECT = exports.ADMIN_PROJECT = void 0;
 exports.getMessaging = getMessaging;
 // const serviceAccount = {
 //   projectId: process.env.FIREBASE_PROJECT_ID,
@@ -90,9 +90,11 @@ const firebase_admin_1 = __importDefault(require("firebase-admin"));
 const PROJECTS = {
     primary: "FIREBASE",
     secondary: "FIREBASE2",
+    delivery: "FIREBASE_DELIVERY",
 };
 // المشروع اللي فيه تطبيقات الأدمن (Android + iOS)
 exports.ADMIN_PROJECT = "primary";
+exports.DELIVERY_PROJECT = "delivery";
 function getApp(key) {
     const existing = firebase_admin_1.default.apps.find((a) => a?.name === key);
     if (existing)

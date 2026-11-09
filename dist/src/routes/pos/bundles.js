@@ -1,10 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const catchAsync_1 = require("../../../utils/catchAsync");
-const validation_1 = require("../../../middlewares/validation");
-const offers_1 = require("../../../validation/admin/offers");
-const bundle_1 = require("../../../controllers/admin/pos/bundle");
+const catchAsync_1 = require("../../utils/catchAsync");
+const validation_1 = require("../../middlewares/validation");
+const offers_1 = require("../../validation/admin/offers");
+const bundle_1 = require("../../controllers/pos/bundle");
 const router = (0, express_1.Router)();
 router.post("/", (0, validation_1.validate)(offers_1.createOfferSchema), (0, catchAsync_1.catchAsync)(bundle_1.createOffer));
 router.get("/", (0, catchAsync_1.catchAsync)(bundle_1.getAllOffers));

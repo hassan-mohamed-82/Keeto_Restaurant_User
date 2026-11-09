@@ -135,7 +135,7 @@ exports.getStaffById = getStaffById;
 const updateStaff = async (req, res) => {
     const { id } = req.params;
     const restaurantId = (req.user?.restaurantId || req.user?.id);
-    const { name, email, phoneNumber, branchId, type, roleId, permissions } = req.body;
+    const { name, email, phoneNumber, branchId, type, roleId, permissions, password } = req.body;
     const existingStaff = await connection_1.db.select().from(schema_1.restrauntadmin)
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.restrauntadmin.id, id), (0, drizzle_orm_1.eq)(schema_1.restrauntadmin.restaurantId, restaurantId))).limit(1);
     if (!existingStaff[0])
@@ -161,6 +161,8 @@ const updateStaff = async (req, res) => {
         updateData.roleId = roleId || null;
     if (permissions)
         updateData.permissions = permissions;
+    if (password)
+        updateData.password = await bcrypt_1.default.hash(password, 10);
     // لو بيغير الإيميل، لازم نتأكد إنه مش مستخدم في أي حساب آخر
     if (email && email !== existingStaff[0].email) {
         const emailExists = await connection_1.db.select().from(schema_1.restrauntadmin).where((0, drizzle_orm_1.eq)(schema_1.restrauntadmin.email, email.trim())).limit(1);

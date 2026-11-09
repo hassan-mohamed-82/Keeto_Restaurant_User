@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.reportVisa = exports.getVisaReport = exports.getDashboardReports = exports.getMyInvoices = exports.downloadSavedInvoicePDF = exports.getOrdersByPaymentMethod = exports.getMyRestaurantReport = void 0;
+exports.getFoodReport = exports.getDeliveryManReport = exports.reportVisa = exports.getVisaReport = exports.getDashboardReports = exports.getMyInvoices = exports.downloadSavedInvoicePDF = exports.getOrdersByPaymentMethod = exports.getMyRestaurantReport = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -15,6 +15,7 @@ const fs_1 = __importDefault(require("fs"));
 const invoices_1 = require("../../models/schema/admin/invoices");
 const response_1 = require("../../utils/response");
 const order_helper_1 = require("../../helpers/order.helper");
+const foodConditions_1 = require("../../helpers/foodConditions");
 const getMyRestaurantReport = async (req, res) => {
     if (!req.user)
         throw new Errors_1.UnauthorizedError("Unauthenticated");
@@ -506,7 +507,6 @@ const downloadSavedInvoicePDF = async (req, res) => {
     doc.end();
 };
 exports.downloadSavedInvoicePDF = downloadSavedInvoicePDF;
-// controllers/restaurant/RestaurantInvoiceController.ts
 const getMyInvoices = async (req, res) => {
     if (!req.user)
         throw new Errors_1.UnauthorizedError("Unauthenticated");
@@ -539,10 +539,13 @@ const getDashboardReports = async (req, res) => {
         end.setHours(23, 59, 59, 999);
         conditions.push((0, drizzle_orm_1.lte)(schema_1.orders.createdAt, end));
     }
-    if (branchId)
+    // Branch filter: query param takes priority; fall back to user's assigned branch
+    if (branchId) {
         conditions.push((0, drizzle_orm_1.eq)(schema_1.orders.branchId, branchId));
-    if (req.user.branchId)
+    }
+    else if (req.user.branchId) {
         conditions.push((0, drizzle_orm_1.eq)(schema_1.orders.branchId, req.user.branchId));
+    }
     // 2. سحب بيانات الطلبات الأساسية مع الـ Joins المطابقة للـ Schemas
     const rawOrders = await connection_1.db
         .select({
@@ -550,8 +553,11 @@ const getDashboardReports = async (req, res) => {
         status: schema_1.orders.status,
         totalAmount: schema_1.orders.totalAmount,
         subtotal: schema_1.orders.subtotal,
-        discountAmount: schema_1.orders.discountAmount,
+        discountAmount: (0, drizzle_orm_1.sql) `COALESCE(${schema_1.orders.discountAmount}, '0.00')`,
+        discountId: schema_1.orders.discountId,
+        discountSource: schema_1.orders.discountSource,
         couponCode: schema_1.orders.couponCode,
+        couponId: schema_1.orders.couponId,
         orderSource: schema_1.orders.orderSource,
         createdAt: schema_1.orders.createdAt,
         cancelReasonType: (0, drizzle_orm_1.sql) `COALESCE(${schema_1.orders.cancelReasonType}, ${schema_1.selectReasons.type})`,
@@ -626,18 +632,27 @@ const getDashboardReports = async (req, res) => {
             else
                 otherCancellations++;
         }
-        // تحليل الكوبونات
-        if (o.couponCode && o.status !== "cancelled") {
-            const revenueBefore = amount + disc;
-            if (!couponAnalysis[o.couponCode])
-                couponAnalysis[o.couponCode] = { before: 0, after: 0 };
-            couponAnalysis[o.couponCode].before += revenueBefore;
-            couponAnalysis[o.couponCode].after += amount;
-            const discountPct = revenueBefore > 0 ? ((disc / revenueBefore) * 100).toFixed(0) : "0";
+        // تحليل الخصومات والكوبونات (لأي طلب فيه خصم — سواء كوبون أو خصم مباشر)
+        const hasDiscount = disc > 0 || Boolean(o.discountId) || Boolean(o.couponId) || Boolean(o.couponCode);
+        if (hasDiscount && o.status !== "cancelled" && o.status !== "refund") {
+            // إذا discountAmount = 0 لكن في discountId، نحسب الخصم من الفرق
+            const effectiveDisc = disc > 0 ? disc : sub - amount > 0 ? sub - amount : 0;
+            const revenueBefore = amount + effectiveDisc;
+            const discountPct = revenueBefore > 0 && effectiveDisc > 0 ? ((effectiveDisc / revenueBefore) * 100).toFixed(0) : "0";
             if (!discountEffectivenessMap[discountPct])
                 discountEffectivenessMap[discountPct] = { revenue: 0, count: 0 };
             discountEffectivenessMap[discountPct].revenue += amount;
             discountEffectivenessMap[discountPct].count++;
+        }
+        // تحليل الكوبونات (revenue before/after per coupon code or couponId)
+        const couponKey = o.couponCode || (o.couponId ? `coupon:${o.couponId}` : null);
+        if (couponKey && o.status !== "cancelled" && o.status !== "refund") {
+            const effectiveDisc2 = disc > 0 ? disc : sub - amount > 0 ? sub - amount : 0;
+            const revenueBefore = amount + effectiveDisc2;
+            if (!couponAnalysis[couponKey])
+                couponAnalysis[couponKey] = { before: 0, after: 0 };
+            couponAnalysis[couponKey].before += revenueBefore;
+            couponAnalysis[couponKey].after += amount;
         }
     }
     // ==========================================
@@ -720,6 +735,21 @@ const getDashboardReports = async (req, res) => {
         avgRating = (sum / ratings.length).toFixed(2);
     }
     // ==========================================
+    // إجمالي مستخدمي / عملاء المطعم (Total Users)
+    // ==========================================
+    const [resUsersRow] = await connection_1.db
+        .select({ total: (0, drizzle_orm_1.sql) `count(distinct ${schema_1.restaurant_users.userId})` })
+        .from(schema_1.restaurant_users)
+        .where((0, drizzle_orm_1.eq)(schema_1.restaurant_users.restaurantId, restaurantId));
+    let totalUsers = Number(resUsersRow?.total || 0);
+    if (totalUsers === 0) {
+        const [ordersUsersRow] = await connection_1.db
+            .select({ total: (0, drizzle_orm_1.sql) `count(distinct ${schema_1.orders.userId})` })
+            .from(schema_1.orders)
+            .where((0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId));
+        totalUsers = Number(ordersUsersRow?.total || 0);
+    }
+    // ==========================================
     // إرسال الـ Response
     // ==========================================
     return res.status(200).json({
@@ -730,7 +760,9 @@ const getDashboardReports = async (req, res) => {
                 totalRevenue: totalRevenue.toFixed(2),
                 numberOfOrders,
                 averageOrderValue: numberOfOrders > 0 ? (totalRevenue / numberOfOrders).toFixed(2) : "0.00",
+                totalUsers,
             },
+            totalUsers,
             peakHours: Object.entries(peakHoursObj).map(([hour, orders]) => ({ hour, orders })),
             peakDays: Object.entries(peakDaysObj).map(([day, rev]) => ({ day, revenue: rev.toFixed(2) })),
             topProducts,
@@ -833,6 +865,8 @@ const getVisaReport = async (req, res) => {
         paymentTransactionId: schema_1.orders.paymentTransactionId,
         orderSource: schema_1.orders.orderSource,
         orderType: schema_1.orders.orderType,
+        paymentGateway: schema_1.orders.paymentGateway,
+        paymentGatewayType: schema_1.orders.paymentGatewayType,
         // بيانات العميل
         userId: schema_1.orders.userId,
         userName: (0, drizzle_orm_1.sql) `COALESCE(${schema_1.users.name}, 'Guest')`,
@@ -893,8 +927,8 @@ const getVisaReport = async (req, res) => {
         return {
             ...order,
             visaStatus,
-            gatewayType,
-            gatewayName,
+            gatewayType: order.paymentGatewayType || gatewayType,
+            gatewayName: order.paymentGateway || gatewayName,
             subtotal: parseFloat(order.subtotal || "0").toFixed(2),
             deliveryFee: parseFloat(order.deliveryFee || "0").toFixed(2),
             serviceFee: parseFloat(order.serviceFee || "0").toFixed(2),
@@ -936,3 +970,711 @@ const getVisaReport = async (req, res) => {
 };
 exports.getVisaReport = getVisaReport;
 exports.reportVisa = exports.getVisaReport;
+const getDeliveryManReport = async (req, res) => {
+    if (!req.user)
+        throw new Errors_1.UnauthorizedError("Unauthenticated");
+    const restaurantId = req.user.restaurantId || req.user.id;
+    if (!restaurantId)
+        throw new BadRequest_1.BadRequest("Restaurant ID not found");
+    const { deliveryManId, branchId, startDate, endDate, status, paymentMethod, search, page, limit, } = req.query;
+    const conditions = [
+        (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId),
+        (0, drizzle_orm_1.eq)(schema_1.orders.orderType, "delivery"),
+        (0, order_helper_1.excludeUnpaidVisaOrders)(),
+    ];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const defaultStart = startDate ? new Date(startDate) : today;
+    const defaultEnd = endDate ? new Date(endDate) : new Date(today);
+    defaultEnd.setHours(23, 59, 59, 999);
+    conditions.push((0, drizzle_orm_1.gte)(schema_1.orders.createdAt, defaultStart));
+    conditions.push((0, drizzle_orm_1.lte)(schema_1.orders.createdAt, defaultEnd));
+    if (branchId)
+        conditions.push((0, drizzle_orm_1.eq)(schema_1.orders.branchId, branchId));
+    if (req.user.branchId)
+        conditions.push((0, drizzle_orm_1.eq)(schema_1.orders.branchId, req.user.branchId));
+    if (deliveryManId && deliveryManId !== "all") {
+        conditions.push((0, drizzle_orm_1.eq)(schema_1.orders.deliveryManId, deliveryManId));
+    }
+    if (status && status !== "all") {
+        conditions.push((0, drizzle_orm_1.eq)(schema_1.orders.status, status));
+    }
+    if (search) {
+        const searchPattern = `%${search.trim()}%`;
+        conditions.push((0, drizzle_orm_1.or)((0, drizzle_orm_1.like)(schema_1.orders.orderNumber, searchPattern), (0, drizzle_orm_1.like)(schema_1.users.name, searchPattern), (0, drizzle_orm_1.like)(schema_1.users.phone, searchPattern), (0, drizzle_orm_1.like)(schema_1.deliveryMen.name, searchPattern), (0, drizzle_orm_1.like)(schema_1.deliveryMen.phone, searchPattern)));
+    }
+    if (paymentMethod && paymentMethod !== "all") {
+        const pm = paymentMethod.toLowerCase().trim();
+        if (pm === "cash" || pm === "cash_on_delivery") {
+            conditions.push((0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.orders.paymentMethod, "cash"), (0, drizzle_orm_1.eq)(schema_1.orders.paymentMethod, "cash_on_delivery"), (0, drizzle_orm_1.like)(schema_1.paymentMethods.name, "%cash%"), (0, drizzle_orm_1.like)(schema_1.paymentMethods.nameAr, "%استلام%"), (0, drizzle_orm_1.like)(schema_1.paymentMethods.nameAr, "%كاش%")));
+        }
+        else if (pm === "visa" || pm === "card" || pm === "online") {
+            conditions.push((0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.orders.paymentMethod, "visa"), (0, drizzle_orm_1.like)(schema_1.paymentMethods.name, "%visa%"), (0, drizzle_orm_1.like)(schema_1.paymentMethods.name, "%card%"), (0, drizzle_orm_1.like)(schema_1.paymentMethods.nameAr, "%فيزا%"), (0, drizzle_orm_1.like)(schema_1.paymentMethods.nameAr, "%بطاقة%")));
+        }
+        else {
+            conditions.push((0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.orders.paymentMethod, paymentMethod), (0, drizzle_orm_1.like)(schema_1.paymentMethods.name, `%${paymentMethod}%`), (0, drizzle_orm_1.like)(schema_1.paymentMethods.nameAr, `%${paymentMethod}%`)));
+        }
+    }
+    const orderList = await connection_1.db
+        .select({
+        orderId: schema_1.orders.id,
+        orderNumber: schema_1.orders.orderNumber,
+        dailyOrderNumber: schema_1.orders.dailyOrderNumber,
+        status: schema_1.orders.status,
+        orderType: schema_1.orders.orderType,
+        orderSource: schema_1.orders.orderSource,
+        userId: schema_1.orders.userId,
+        customerName: (0, drizzle_orm_1.sql) `COALESCE(${schema_1.users.name}, 'Guest')`,
+        customerPhone: (0, drizzle_orm_1.sql) `COALESCE(${schema_1.users.phone}, 'N/A')`,
+        deliveryManId: schema_1.orders.deliveryManId,
+        deliveryManName: (0, drizzle_orm_1.sql) `${schema_1.deliveryMen.name}`,
+        deliveryManPhone: (0, drizzle_orm_1.sql) `${schema_1.deliveryMen.phone}`,
+        deliveryManImage: (0, drizzle_orm_1.sql) `${schema_1.deliveryMen.image}`,
+        branchId: schema_1.orders.branchId,
+        branchName: schema_1.branches.name,
+        branchNameAr: schema_1.branches.nameAr,
+        paymentMethodId: schema_1.orders.paymentMethod,
+        paymentMethodName: schema_1.paymentMethods.name,
+        paymentMethodNameAr: schema_1.paymentMethods.nameAr,
+        paymentStatus: schema_1.orders.paymentStatus,
+        isCashCollected: schema_1.orders.isCashCollected,
+        cashCollectedAt: schema_1.orders.cashCollectedAt,
+        cashCollectedBy: schema_1.orders.cashCollectedBy,
+        subtotal: schema_1.orders.subtotal,
+        deliveryFee: schema_1.orders.deliveryFee,
+        serviceFee: schema_1.orders.serviceFee,
+        appCommission: schema_1.orders.appCommission,
+        discountAmount: schema_1.orders.discountAmount,
+        totalAmount: schema_1.orders.totalAmount,
+        shippingAddress: schema_1.orders.shippingAddress,
+        note: schema_1.orders.note,
+        createdAt: schema_1.orders.createdAt,
+        updatedAt: schema_1.orders.updatedAt,
+    })
+        .from(schema_1.orders)
+        .leftJoin(schema_1.deliveryMen, (0, drizzle_orm_1.eq)(schema_1.orders.deliveryManId, schema_1.deliveryMen.id))
+        .leftJoin(schema_1.users, (0, drizzle_orm_1.eq)(schema_1.orders.userId, schema_1.users.id))
+        .leftJoin(schema_1.branches, (0, drizzle_orm_1.eq)(schema_1.orders.branchId, schema_1.branches.id))
+        .leftJoin(schema_1.paymentMethods, (0, drizzle_orm_1.eq)(schema_1.orders.paymentMethod, schema_1.paymentMethods.id))
+        .where((0, drizzle_orm_1.and)(...conditions))
+        .orderBy((0, drizzle_orm_1.desc)(schema_1.orders.createdAt));
+    const checkPaymentType = (name, nameAr, raw) => {
+        const n = (name || "").toLowerCase();
+        const nar = (nameAr || "");
+        const r = (raw || "").toLowerCase();
+        const isCash = n.includes("cash") || nar.includes("استلام") || nar.includes("كاش") || r.includes("cash") || r.includes("استلام");
+        const isWallet = n.includes("wallet") || nar.includes("محفظ") || r.includes("wallet");
+        const isVisa = !isCash && !isWallet;
+        return { isCash, isVisa, isWallet };
+    };
+    let totalOrders = 0;
+    let totalDeliveredOrders = 0;
+    let totalOutForDeliveryOrders = 0;
+    let totalPendingOrders = 0;
+    let totalCancelledOrders = 0;
+    let totalAmount = 0;
+    let deliveredAmount = 0;
+    let totalCash = 0;
+    let totalCashOrders = 0;
+    let totalVisa = 0;
+    let totalVisaOrders = 0;
+    let totalWallet = 0;
+    let totalWalletOrders = 0;
+    let cashOnHand = 0;
+    let cashCollected = 0;
+    const deliveryMenMap = new Map();
+    const formattedOrders = orderList.map(order => {
+        totalOrders++;
+        const amount = parseFloat(order.totalAmount || "0");
+        const { isCash, isVisa, isWallet } = checkPaymentType(order.paymentMethodName, order.paymentMethodNameAr, order.paymentMethodId);
+        const isDelivered = order.status === "delivered";
+        const isCashCollected = Boolean(order.isCashCollected);
+        totalAmount += amount;
+        if (order.status === "delivered") {
+            totalDeliveredOrders++;
+            deliveredAmount += amount;
+            if (isCash) {
+                totalCash += amount;
+                totalCashOrders++;
+                if (isCashCollected) {
+                    cashCollected += amount;
+                }
+                else {
+                    cashOnHand += amount;
+                }
+            }
+            else if (isVisa) {
+                totalVisa += amount;
+                totalVisaOrders++;
+            }
+            else if (isWallet) {
+                totalWallet += amount;
+                totalWalletOrders++;
+            }
+        }
+        else if (order.status === "out_for_delivery") {
+            totalOutForDeliveryOrders++;
+        }
+        else if (order.status === "cancelled" || order.status === "failed" || order.status === "refund") {
+            totalCancelledOrders++;
+        }
+        else {
+            totalPendingOrders++;
+        }
+        const dmId = order.deliveryManId || "unassigned";
+        const dmName = order.deliveryManName || "Unassigned";
+        const dmPhone = order.deliveryManPhone || null;
+        const dmImage = order.deliveryManImage || null;
+        if (!deliveryMenMap.has(dmId)) {
+            deliveryMenMap.set(dmId, {
+                deliveryManId: dmId,
+                deliveryManName: dmName,
+                deliveryManPhone: dmPhone,
+                deliveryManImage: dmImage,
+                totalOrders: 0,
+                deliveredOrdersCount: 0,
+                outForDeliveryOrdersCount: 0,
+                totalAmount: 0,
+                deliveredAmount: 0,
+                totalCash: 0,
+                totalVisa: 0,
+                cashOnHand: 0,
+                cashCollected: 0,
+                ordersCountByStatus: {},
+            });
+        }
+        const dmGroup = deliveryMenMap.get(dmId);
+        dmGroup.totalOrders++;
+        dmGroup.totalAmount += amount;
+        dmGroup.ordersCountByStatus[order.status || "unknown"] = (dmGroup.ordersCountByStatus[order.status || "unknown"] || 0) + 1;
+        if (isDelivered) {
+            dmGroup.deliveredOrdersCount++;
+            dmGroup.deliveredAmount += amount;
+            if (isCash) {
+                dmGroup.totalCash += amount;
+                if (isCashCollected) {
+                    dmGroup.cashCollected += amount;
+                }
+                else {
+                    dmGroup.cashOnHand += amount;
+                }
+            }
+            else if (isVisa) {
+                dmGroup.totalVisa += amount;
+            }
+        }
+        else if (order.status === "out_for_delivery") {
+            dmGroup.outForDeliveryOrdersCount++;
+        }
+        return {
+            ...order,
+            paymentType: isCash ? "cash" : isVisa ? "visa" : "wallet",
+            isCash,
+            isVisa,
+            isWallet,
+            isCashCollected,
+            subtotal: parseFloat(order.subtotal || "0").toFixed(2),
+            deliveryFee: parseFloat(order.deliveryFee || "0").toFixed(2),
+            serviceFee: parseFloat(order.serviceFee || "0").toFixed(2),
+            appCommission: parseFloat(order.appCommission || "0").toFixed(2),
+            discountAmount: parseFloat(order.discountAmount || "0").toFixed(2),
+            totalAmount: amount.toFixed(2),
+        };
+    });
+    const deliveryMenBreakdown = Array.from(deliveryMenMap.values()).map(dm => ({
+        ...dm,
+        totalAmount: dm.totalAmount.toFixed(2),
+        deliveredAmount: dm.deliveredAmount.toFixed(2),
+        totalCash: dm.totalCash.toFixed(2),
+        totalVisa: dm.totalVisa.toFixed(2),
+        cashOnHand: dm.cashOnHand.toFixed(2),
+        cashCollected: dm.cashCollected.toFixed(2),
+        cashWithDeliveryMan: dm.cashOnHand.toFixed(2),
+    }));
+    let paginatedOrders = formattedOrders;
+    let paginationInfo = null;
+    if (page && limit) {
+        const pageNum = Math.max(1, parseInt(page, 10) || 1);
+        const limitNum = Math.max(1, parseInt(limit, 10) || 20);
+        const startIndex = (pageNum - 1) * limitNum;
+        paginatedOrders = formattedOrders.slice(startIndex, startIndex + limitNum);
+        paginationInfo = {
+            page: pageNum,
+            limit: limitNum,
+            totalPages: Math.ceil(formattedOrders.length / limitNum),
+            totalOrders: formattedOrders.length,
+        };
+    }
+    return (0, response_1.SuccessResponse)(res, {
+        message: "Delivery man report retrieved successfully",
+        summary: {
+            totalOrders,
+            totalDeliveredOrders,
+            totalOutForDeliveryOrders,
+            totalPendingOrders,
+            totalCancelledOrders,
+            totalAmount: totalAmount.toFixed(2),
+            deliveredAmount: deliveredAmount.toFixed(2),
+            totalCash: totalCash.toFixed(2),
+            totalVisa: totalVisa.toFixed(2),
+            totalWallet: totalWallet.toFixed(2),
+            cashOnHand: cashOnHand.toFixed(2),
+            cashWithDeliveryMan: cashOnHand.toFixed(2),
+            cashCollected: cashCollected.toFixed(2),
+            totalCashOrders,
+            totalVisaOrders,
+            totalWalletOrders,
+        },
+        deliveryMen: deliveryMenBreakdown,
+        orders: paginatedOrders,
+        ...(paginationInfo ? { pagination: paginationInfo } : {}),
+    });
+};
+exports.getDeliveryManReport = getDeliveryManReport;
+// =============================================
+// Food & Variations Sales Report API
+// =============================================
+const getFoodReport = async (req, res) => {
+    if (!req.user)
+        throw new Errors_1.UnauthorizedError("Unauthenticated");
+    const restaurantId = req.user.restaurantId || req.user.id;
+    if (!restaurantId)
+        throw new BadRequest_1.BadRequest("Restaurant ID not found");
+    const { startDate, endDate, branchId, status, search, categoryId, arrangedType, sortOrder, sort, sortBy, onlySold, page, limit, } = req.query;
+    // 1. تحديد النطاق الزمني (الافتراضي هو اليوم الحالي)
+    const now = new Date();
+    let start;
+    let end;
+    let isDefaultToday = false;
+    if (startDate && endDate) {
+        start = new Date(startDate);
+        start.setUTCHours(0, 0, 0, 0);
+        end = new Date(endDate);
+        end.setUTCHours(23, 59, 59, 999);
+    }
+    else if (startDate) {
+        start = new Date(startDate);
+        start.setUTCHours(0, 0, 0, 0);
+        end = new Date(startDate);
+        end.setUTCHours(23, 59, 59, 999);
+    }
+    else if (endDate) {
+        end = new Date(endDate);
+        end.setUTCHours(23, 59, 59, 999);
+        start = new Date(endDate);
+        start.setUTCHours(0, 0, 0, 0);
+    }
+    else {
+        isDefaultToday = true;
+        start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+        end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
+    }
+    // 2. شروط الطلبات
+    const orderConditions = [
+        (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId),
+        (0, order_helper_1.excludeUnpaidVisaOrders)(),
+        (0, drizzle_orm_1.gte)(schema_1.orders.createdAt, start),
+        (0, drizzle_orm_1.lte)(schema_1.orders.createdAt, end),
+    ];
+    if (branchId)
+        orderConditions.push((0, drizzle_orm_1.eq)(schema_1.orders.branchId, branchId));
+    if (req.user.branchId)
+        orderConditions.push((0, drizzle_orm_1.eq)(schema_1.orders.branchId, req.user.branchId));
+    if (status) {
+        orderConditions.push((0, drizzle_orm_1.eq)(schema_1.orders.status, status));
+    }
+    else {
+        orderConditions.push((0, drizzle_orm_1.and)((0, drizzle_orm_1.ne)(schema_1.orders.status, "cancelled"), (0, drizzle_orm_1.ne)(schema_1.orders.status, "refund"), (0, drizzle_orm_1.ne)(schema_1.orders.status, "failed")));
+    }
+    // 3. جلب الطلبات المطابقة للشروط
+    const matchedOrders = await connection_1.db
+        .select({ id: schema_1.orders.id })
+        .from(schema_1.orders)
+        .where((0, drizzle_orm_1.and)(...orderConditions));
+    const orderIds = matchedOrders.map(o => o.id);
+    let orderItemsList = [];
+    if (orderIds.length > 0) {
+        const batchSize = 500;
+        for (let i = 0; i < orderIds.length; i += batchSize) {
+            const batch = orderIds.slice(i, i + batchSize);
+            const items = await connection_1.db
+                .select({
+                id: schema_1.orderItems.id,
+                orderId: schema_1.orderItems.orderId,
+                foodId: schema_1.orderItems.foodId,
+                quantity: schema_1.orderItems.quantity,
+                basePrice: schema_1.orderItems.basePrice,
+                variationsPrice: schema_1.orderItems.variationsPrice,
+                totalPrice: schema_1.orderItems.totalPrice,
+                variations: schema_1.orderItems.variations,
+            })
+                .from(schema_1.orderItems)
+                .where((0, drizzle_orm_1.inArray)(schema_1.orderItems.orderId, batch));
+            orderItemsList.push(...items);
+        }
+    }
+    // 4. جلب وجبات المطعم
+    const foodConditions = [
+        (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId),
+        foodConditions_1.activeFoodCondition,
+    ];
+    if (categoryId)
+        foodConditions.push((0, drizzle_orm_1.eq)(schema_1.food.categoryid, categoryId));
+    if (search) {
+        foodConditions.push((0, drizzle_orm_1.or)((0, drizzle_orm_1.like)(schema_1.food.name, `%${search}%`), (0, drizzle_orm_1.like)(schema_1.food.nameAr, `%${search}%`)));
+    }
+    const foodsList = await connection_1.db
+        .select({
+        id: schema_1.food.id,
+        name: schema_1.food.name,
+        nameAr: schema_1.food.nameAr,
+        nameFr: schema_1.food.nameFr,
+        price: schema_1.food.price,
+        image: schema_1.food.image,
+        categoryid: schema_1.food.categoryid,
+        categoryName: schema_1.categories.name,
+        categoryNameAr: schema_1.categories.nameAr,
+        status: schema_1.food.status,
+    })
+        .from(schema_1.food)
+        .leftJoin(schema_1.categories, (0, drizzle_orm_1.eq)(schema_1.food.categoryid, schema_1.categories.id))
+        .where((0, drizzle_orm_1.and)(...foodConditions));
+    // في حال بيع وجبات كانت محذوفة مؤخراً أو غير متواجدة في القائمة بدون فلاتر بحث
+    const currentFoodIds = new Set(foodsList.map(f => f.id));
+    if (!search && !categoryId) {
+        const missingFoodIds = [...new Set(orderItemsList.map(i => i.foodId))].filter(id => !currentFoodIds.has(id));
+        if (missingFoodIds.length > 0) {
+            const missingFoods = await connection_1.db
+                .select({
+                id: schema_1.food.id,
+                name: schema_1.food.name,
+                nameAr: schema_1.food.nameAr,
+                nameFr: schema_1.food.nameFr,
+                price: schema_1.food.price,
+                image: schema_1.food.image,
+                categoryid: schema_1.food.categoryid,
+                categoryName: schema_1.categories.name,
+                categoryNameAr: schema_1.categories.nameAr,
+                status: schema_1.food.status,
+            })
+                .from(schema_1.food)
+                .leftJoin(schema_1.categories, (0, drizzle_orm_1.eq)(schema_1.food.categoryid, schema_1.categories.id))
+                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId), (0, drizzle_orm_1.inArray)(schema_1.food.id, missingFoodIds)));
+            foodsList.push(...missingFoods);
+        }
+    }
+    const allFoodIds = foodsList.map(f => f.id);
+    let dbVariations = [];
+    let dbOptions = [];
+    if (allFoodIds.length > 0) {
+        dbVariations = await connection_1.db
+            .select()
+            .from(schema_1.foodVariations)
+            .where((0, drizzle_orm_1.inArray)(schema_1.foodVariations.foodId, allFoodIds));
+        const varIds = dbVariations.map(v => v.id);
+        if (varIds.length > 0) {
+            dbOptions = await connection_1.db
+                .select()
+                .from(schema_1.variationOptions)
+                .where((0, drizzle_orm_1.inArray)(schema_1.variationOptions.variationId, varIds));
+        }
+    }
+    // 5. تهيئة خريطة الوجبات مع الفارييشنز والأوبشنز
+    const foodMap = new Map();
+    for (const f of foodsList) {
+        foodMap.set(f.id, {
+            foodId: f.id,
+            foodName: f.name,
+            foodNameAr: f.nameAr,
+            foodNameFr: f.nameFr,
+            image: f.image,
+            category: {
+                id: f.categoryid,
+                name: f.categoryName,
+                nameAr: f.categoryNameAr,
+            },
+            basePrice: parseFloat(f.price || "0").toFixed(2),
+            status: f.status,
+            totalSold: 0,
+            totalSoldQuantity: 0,
+            totalOrdersCount: 0,
+            totalRevenue: 0,
+            soldWithoutVariations: 0,
+            soldWithVariations: 0,
+            distinctOrders: new Set(),
+            variationsMap: new Map(),
+            optionsMap: new Map(),
+            optionsByNameMap: new Map(),
+        });
+    }
+    // ربط الـ Variations بكل وجبة
+    for (const v of dbVariations) {
+        const foodEntry = foodMap.get(v.foodId);
+        if (!foodEntry)
+            continue;
+        const varObj = {
+            variationId: v.id,
+            variationName: v.name,
+            variationNameAr: v.nameAr,
+            variationNameFr: v.nameFr,
+            selectionType: v.selectionType,
+            isRequired: v.isRequired,
+            totalVariationSoldCount: 0,
+            options: [],
+        };
+        foodEntry.variationsMap.set(v.id, varObj);
+    }
+    // ربط الـ Options بكل Variation
+    for (const o of dbOptions) {
+        for (const foodEntry of foodMap.values()) {
+            const varObj = foodEntry.variationsMap.get(o.variationId);
+            if (varObj) {
+                const optObj = {
+                    optionId: o.id,
+                    optionName: o.optionName,
+                    optionNameAr: o.optionNameAr,
+                    optionNameFr: o.optionNameFr,
+                    additionalPrice: parseFloat(o.additionalPrice || "0").toFixed(2),
+                    soldCount: 0,
+                    totalRevenue: 0,
+                };
+                varObj.options.push(optObj);
+                foodEntry.optionsMap.set(o.id, optObj);
+                if (o.optionName) {
+                    foodEntry.optionsByNameMap.set(o.optionName.trim().toLowerCase(), optObj);
+                }
+                if (o.optionNameAr) {
+                    foodEntry.optionsByNameMap.set(o.optionNameAr.trim().toLowerCase(), optObj);
+                }
+            }
+        }
+    }
+    // دالة مساعدة لفك تشفير Variations بأمان
+    const parseItemVariations = (raw) => {
+        if (!raw)
+            return [];
+        let parsed = raw;
+        if (typeof parsed === "string") {
+            try {
+                parsed = JSON.parse(parsed);
+                if (typeof parsed === "string") {
+                    parsed = JSON.parse(parsed);
+                }
+            }
+            catch {
+                return [];
+            }
+        }
+        if (Array.isArray(parsed))
+            return parsed;
+        if (parsed && typeof parsed === "object") {
+            if (Array.isArray(parsed.variations))
+                return parsed.variations;
+            return Object.values(parsed);
+        }
+        return [];
+    };
+    // 6. حساب المبيعات لكل وجبة وكل خيار
+    for (const item of orderItemsList) {
+        const foodEntry = foodMap.get(item.foodId);
+        if (!foodEntry)
+            continue;
+        const qty = Math.max(1, item.quantity || 1);
+        const itemTotal = parseFloat(item.totalPrice || "0");
+        foodEntry.totalSold += qty;
+        foodEntry.totalSoldQuantity += qty;
+        foodEntry.totalRevenue += itemTotal;
+        foodEntry.distinctOrders.add(item.orderId);
+        const parsedVars = parseItemVariations(item.variations);
+        if (parsedVars.length === 0) {
+            foodEntry.soldWithoutVariations += qty;
+        }
+        else {
+            foodEntry.soldWithVariations += qty;
+            for (const pv of parsedVars) {
+                const optId = pv.optionId || pv.option_id || pv.id || (pv.option && pv.option.id);
+                const varId = pv.variationId || pv.variation_id || (pv.variation && pv.variation.id);
+                const optName = (pv.optionName || pv.name || pv.value || "").trim();
+                const optNameAr = pv.optionNameAr || pv.nameAr || pv.valueAr || "";
+                const optPrice = parseFloat(pv.additionalPrice || pv.price || pv.amount || "0");
+                let matchedOpt = optId ? foodEntry.optionsMap.get(optId) : null;
+                if (!matchedOpt && optName) {
+                    matchedOpt = foodEntry.optionsByNameMap.get(optName.toLowerCase());
+                }
+                if (matchedOpt) {
+                    matchedOpt.soldCount += qty;
+                    matchedOpt.totalRevenue += (qty * parseFloat(matchedOpt.additionalPrice || "0"));
+                    if (varId && foodEntry.variationsMap.has(varId)) {
+                        foodEntry.variationsMap.get(varId).totalVariationSoldCount += qty;
+                    }
+                    else {
+                        for (const vObj of foodEntry.variationsMap.values()) {
+                            if (vObj.options.some((o) => o.optionId === matchedOpt.optionId)) {
+                                vObj.totalVariationSoldCount += qty;
+                                break;
+                            }
+                        }
+                    }
+                }
+                else if (optName || optId) {
+                    let targetVar = varId ? foodEntry.variationsMap.get(varId) : null;
+                    if (!targetVar) {
+                        const fallbackVarName = pv.variationName || pv.name || "Custom Options";
+                        for (const vObj of foodEntry.variationsMap.values()) {
+                            if (vObj.variationName.toLowerCase() === fallbackVarName.toLowerCase()) {
+                                targetVar = vObj;
+                                break;
+                            }
+                        }
+                        if (!targetVar) {
+                            targetVar = {
+                                variationId: varId || "other",
+                                variationName: fallbackVarName,
+                                variationNameAr: pv.variationNameAr || fallbackVarName,
+                                variationNameFr: pv.variationNameFr || fallbackVarName,
+                                selectionType: null,
+                                isRequired: false,
+                                totalVariationSoldCount: 0,
+                                options: [],
+                            };
+                            foodEntry.variationsMap.set(targetVar.variationId, targetVar);
+                        }
+                    }
+                    const newOpt = {
+                        optionId: optId || `custom-${optName}`,
+                        optionName: optName || "Unnamed Option",
+                        optionNameAr: optNameAr || null,
+                        optionNameFr: pv.optionNameFr || null,
+                        additionalPrice: optPrice.toFixed(2),
+                        soldCount: qty,
+                        totalRevenue: qty * optPrice,
+                    };
+                    targetVar.options.push(newOpt);
+                    targetVar.totalVariationSoldCount += qty;
+                    if (optId)
+                        foodEntry.optionsMap.set(optId, newOpt);
+                    if (optName)
+                        foodEntry.optionsByNameMap.set(optName.toLowerCase(), newOpt);
+                }
+            }
+        }
+    }
+    // 7. صياغة النتيجة وترتيب الـ Options
+    let formattedFoods = Array.from(foodMap.values()).map(f => {
+        const variations = Array.from(f.variationsMap.values()).map((v) => {
+            const sortedOptions = [...v.options].sort((a, b) => b.soldCount - a.soldCount);
+            return {
+                variationId: v.variationId,
+                variationName: v.variationName,
+                variationNameAr: v.variationNameAr,
+                variationNameFr: v.variationNameFr,
+                selectionType: v.selectionType,
+                isRequired: v.isRequired,
+                totalVariationSoldCount: v.totalVariationSoldCount,
+                options: sortedOptions.map((opt) => ({
+                    optionId: opt.optionId,
+                    optionName: opt.optionName,
+                    optionNameAr: opt.optionNameAr,
+                    optionNameFr: opt.optionNameFr,
+                    additionalPrice: opt.additionalPrice,
+                    soldCount: opt.soldCount,
+                    totalRevenue: opt.totalRevenue.toFixed(2),
+                })),
+            };
+        });
+        return {
+            foodId: f.foodId,
+            foodName: f.foodName,
+            foodNameAr: f.foodNameAr,
+            foodNameFr: f.foodNameFr,
+            image: f.image,
+            category: f.category,
+            basePrice: f.basePrice,
+            status: f.status,
+            totalSold: f.totalSold,
+            totalSoldQuantity: f.totalSoldQuantity,
+            totalOrdersCount: f.distinctOrders.size,
+            totalRevenue: f.totalRevenue.toFixed(2),
+            soldWithoutVariations: f.soldWithoutVariations,
+            soldWithVariations: f.soldWithVariations,
+            variations,
+        };
+    });
+    // فلترة الأكلات المباعة فقط إذا طُلب ذلك
+    if (onlySold === "true" || onlySold === "1") {
+        formattedFoods = formattedFoods.filter(f => f.totalSoldQuantity > 0);
+    }
+    // 8. الترتيب (Arranged Type: ASC or DESC)
+    const arrangement = (arrangedType || sortOrder || sort || "desc").toLowerCase().trim();
+    const isAsc = arrangement === "asc" || arrangement === "ascn" || arrangement === "ascending";
+    const sortField = (sortBy || "totalSold").toLowerCase().trim();
+    formattedFoods.sort((a, b) => {
+        let diff = 0;
+        if (sortField === "totalrevenue" || sortField === "revenue") {
+            diff = parseFloat(a.totalRevenue) - parseFloat(b.totalRevenue);
+        }
+        else if (sortField === "name" || sortField === "foodname") {
+            diff = a.foodName.localeCompare(b.foodName);
+        }
+        else if (sortField === "totalorders" || sortField === "orders") {
+            diff = a.totalOrdersCount - b.totalOrdersCount;
+        }
+        else {
+            diff = a.totalSoldQuantity - b.totalSoldQuantity;
+        }
+        return isAsc ? diff : -diff;
+    });
+    // 9. ملخص كلي
+    let overallSoldQuantity = 0;
+    let overallRevenue = 0;
+    let foodsWithSalesCount = 0;
+    const overallOrdersSet = new Set();
+    for (const item of orderItemsList) {
+        overallOrdersSet.add(item.orderId);
+    }
+    for (const f of formattedFoods) {
+        overallSoldQuantity += f.totalSoldQuantity;
+        overallRevenue += parseFloat(f.totalRevenue);
+        if (f.totalSoldQuantity > 0)
+            foodsWithSalesCount++;
+    }
+    // 10. الترقيم (Pagination)
+    let paginatedFoods = formattedFoods;
+    let paginationInfo = null;
+    if (page && limit) {
+        const pageNum = Math.max(1, parseInt(page, 10) || 1);
+        const limitNum = Math.max(1, parseInt(limit, 10) || 20);
+        const startIndex = (pageNum - 1) * limitNum;
+        paginatedFoods = formattedFoods.slice(startIndex, startIndex + limitNum);
+        paginationInfo = {
+            page: pageNum,
+            limit: limitNum,
+            totalPages: Math.ceil(formattedFoods.length / limitNum),
+            totalItems: formattedFoods.length,
+        };
+    }
+    return (0, response_1.SuccessResponse)(res, {
+        message: "Food report retrieved successfully",
+        dateRange: {
+            startDate: start.toISOString(),
+            endDate: end.toISOString(),
+            isDefaultToday,
+        },
+        filter: {
+            branchId: (branchId || req.user.branchId) || null,
+            arrangedType: isAsc ? "asc" : "desc",
+            sortBy: sortField,
+            status: status || "all_non_cancelled",
+        },
+        summary: {
+            totalFoodsCount: formattedFoods.length,
+            foodsWithSalesCount,
+            totalSoldQuantity: overallSoldQuantity,
+            totalRevenue: overallRevenue.toFixed(2),
+            totalOrdersCount: overallOrdersSet.size,
+        },
+        foods: paginatedFoods,
+        ...(paginationInfo ? { pagination: paginationInfo } : {}),
+    });
+};
+exports.getFoodReport = getFoodReport;

@@ -10,6 +10,10 @@ const schema_1 = require("../../schema");
 const address_1 = require("../user/address");
 const selectReasons_1 = require("./selectReasons");
 const delivery_man_1 = require("./delivery_man");
+const shippingCompany_1 = require("./shippingCompany");
+// ==========================================
+// 1. جدول الطلبات (Orders Table)
+// ==========================================
 exports.orders = (0, mysql_core_1.mysqlTable)("orders", {
     id: (0, mysql_core_1.char)("id", { length: 36 }).primaryKey().default((0, drizzle_orm_1.sql) `(UUID())`),
     orderNumber: (0, mysql_core_1.varchar)("order_number", { length: 20 }).notNull().unique(),
@@ -45,10 +49,11 @@ exports.orders = (0, mysql_core_1.mysqlTable)("orders", {
     discountAmount: (0, mysql_core_1.decimal)("discount_amount", { precision: 10, scale: 2 }).default("0.00"),
     discountType: (0, mysql_core_1.mysqlEnum)("discount_type", ["percentage", "fixed_amount"]),
     discountValue: (0, mysql_core_1.decimal)("discount_value", { precision: 10, scale: 2 }),
-    discountSource: (0, mysql_core_1.mysqlEnum)("discount_source", ["food_level", "restaurant_discount", "global_discount", "coupon"]),
+    discountSource: (0, mysql_core_1.mysqlEnum)("discount_source", ["food_level", "restaurant_discount", "global_discount", "coupon", "first_order_discount"]),
     couponId: (0, mysql_core_1.char)("coupon_id", { length: 36 })
         .references(() => schema_1.coupons.id, { onDelete: "set null" }),
     couponCode: (0, mysql_core_1.varchar)("coupon_code", { length: 50 }),
+    firstOrderDiscountId: (0, mysql_core_1.char)("first_order_discount_id", { length: 36 }),
     // ---------------------------------
     totalAmount: (0, mysql_core_1.decimal)("total_amount", { precision: 10, scale: 2 }).notNull(),
     status: (0, mysql_core_1.mysqlEnum)("status", [
@@ -73,7 +78,9 @@ exports.orders = (0, mysql_core_1.mysqlTable)("orders", {
     note: (0, mysql_core_1.text)("note"),
     deliveryManId: (0, mysql_core_1.char)("delivery_man_id", { length: 36 })
         .references(() => delivery_man_1.deliveryMen.id),
-    shippingCompanyId: (0, mysql_core_1.char)("shipping_company_id", { length: 36 }),
+    shippingCompanyId: (0, mysql_core_1.char)("shipping_company_id", { length: 36 })
+        .references(() => shippingCompany_1.shippingCompanies.id, { onDelete: "set null" }),
+    // حالة الشحن والتوزيع التلقائي
     shippingStatus: (0, mysql_core_1.mysqlEnum)("shipping_status", [
         "pending_dispatch",
         "assigned",
@@ -81,19 +88,21 @@ exports.orders = (0, mysql_core_1.mysqlTable)("orders", {
         "delivered",
         "manual_required"
     ]).default("pending_dispatch"),
+    // سبب الفشل في التوزيع التلقائي (في حالة تحولها لـ manual_required)
     shippingFailReason: (0, mysql_core_1.mysqlEnum)("shipping_fail_reason", [
         "no_company",
         "company_inactive",
         "out_of_zone",
         "no_courier",
-        "max_attempts"
+        "max_attempts",
+        "no_coordinates"
     ]),
     dispatchAttempts: (0, mysql_core_1.int)("dispatch_attempts").default(0).notNull(),
     // تحصيل الكاش من مندوب التوصيل وتوريده لخزينة المطعم
     isCashCollected: (0, mysql_core_1.boolean)("is_cash_collected").default(false),
     cashCollectedAt: (0, mysql_core_1.timestamp)("cash_collected_at"),
     cashCollectedBy: (0, mysql_core_1.char)("cash_collected_by", { length: 36 }),
-    dailyOrderNumber: (0, mysql_core_1.int)("daily_order_number").default(1),
+    dailyOrderNumber: (0, mysql_core_1.int)("daily_order_number"),
     rating: (0, mysql_core_1.int)("rating"),
     ratingComment: (0, mysql_core_1.text)("rating_comment"),
     // 🟢 2. حفظ لقطة ثابته من بيانات العنوان وقت الأوردر (Address Snapshot)
@@ -103,23 +112,36 @@ exports.orders = (0, mysql_core_1.mysqlTable)("orders", {
     isDelayEmailSent: (0, mysql_core_1.boolean)("is_delay_email_sent").default(false),
     offerId: (0, mysql_core_1.char)("offer_id", { length: 36 })
         .references(() => schema_1.offers.id, { onDelete: "set null" }),
-    // Unified payment gateway columns (supports both Kashier and Paymob)
+    isBundle: (0, mysql_core_1.boolean)("is_bundle").default(false),
+    // Unified payment gateway columns (supports Kashier, Paymob, and Geidea)
+    paymentGateway: (0, mysql_core_1.mysqlEnum)("payment_gateway", ["kashier", "paymob", "geidea"]),
     paymentGatewayType: (0, mysql_core_1.mysqlEnum)("payment_gateway_type", ["SYSTEM", "CUSTOM"]),
-    paymentGateway: (0, mysql_core_1.mysqlEnum)("payment_gateway", ["kashier", "paymob"]),
-    paymentOrderId: (0, mysql_core_1.varchar)("payment_order_id", { length: 150 }), // رقم البوابة: Kashier orderId / Paymob order.id
-    paymentTransactionId: (0, mysql_core_1.varchar)("payment_transaction_id", { length: 150 }), // رقم العملية: Kashier transactionId / Paymob id
+    paymentOrderId: (0, mysql_core_1.varchar)("payment_order_id", { length: 150 }), // رقم البوابة: Kashier orderId / Paymob order.id / Geidea orderId
+    paymentTransactionId: (0, mysql_core_1.varchar)("payment_transaction_id", { length: 150 }), // رقم العملية: Kashier transactionId / Paymob id / Geidea transactionId
     paymentStatus: (0, mysql_core_1.mysqlEnum)("payment_status", ["pending_payment", "paid", "payment_failed"]),
     paymentFailureReason: (0, mysql_core_1.text)("payment_failure_reason"), // سبب آخر فشل لسرعة العرض في تفاصيل الأوردر
+    paymentIssueNotifiedAt: (0, mysql_core_1.timestamp)("payment_issue_notified_at"),
+    paymentIssueType: (0, mysql_core_1.varchar)("payment_issue_type", { length: 30 }),
+    // Phase 1: Shipping timestamps for performance/reports
+    shippingAssignedAt: (0, mysql_core_1.timestamp)("shipping_assigned_at"),
+    pickedUpAt: (0, mysql_core_1.timestamp)("picked_up_at"),
+    deliveredAt: (0, mysql_core_1.timestamp)("delivered_at"),
+    // وقت آخر تغيير لحالة الأوردر (status فقط)، بمعزل عن أي تعديلات أخرى.
+    // يستخدمه الـ Cron لمعرفة كم مضى على دخول الأوردر حالته الحالية.
+    statusChangedAt: (0, mysql_core_1.timestamp)("status_changed_at"),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow().onUpdateNow(),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
-});
+}, (table) => ({
+    // يستخدمه الـ Cron للبحث في الأوردرات النشطة حسب وقت دخول الحالة
+    statusChangedIdx: (0, mysql_core_1.index)("idx_orders_status_changed").on(table.status, table.statusChangedAt),
+}));
 // ==========================================
-// 3. جدول أصناف الأوردر (Order Items)
+// 2. جدول أصناف الأوردر (Order Items Table)
 // ==========================================
 exports.orderItems = (0, mysql_core_1.mysqlTable)("order_items", {
     id: (0, mysql_core_1.char)("id", { length: 36 }).primaryKey().default((0, drizzle_orm_1.sql) `(UUID())`),
     orderId: (0, mysql_core_1.char)("order_id", { length: 36 })
-        .references(() => exports.orders.id)
+        .references(() => exports.orders.id, { onDelete: "cascade" })
         .notNull(),
     foodId: (0, mysql_core_1.char)("food_id", { length: 36 })
         .references(() => food_1.food.id)
@@ -130,7 +152,6 @@ exports.orderItems = (0, mysql_core_1.mysqlTable)("order_items", {
     addonsPrice: (0, mysql_core_1.decimal)("addons_price", { precision: 10, scale: 2 }).default("0.00"),
     totalPrice: (0, mysql_core_1.decimal)("total_price", { precision: 10, scale: 2 }).notNull(),
     variations: (0, mysql_core_1.json)("variations"),
-    // 🔥 addons المختارة لحظة الطلب
     addons: (0, mysql_core_1.json)("addons"),
     note: (0, mysql_core_1.text)("note"),
 });

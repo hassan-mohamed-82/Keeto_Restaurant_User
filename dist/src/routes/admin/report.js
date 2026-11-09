@@ -13,6 +13,11 @@ router.get("/payment-method", (0, catchAsync_1.catchAsync)(Report_1.getOrdersByP
 // تقرير الفيزا (جميع طلبات الفيزا نجاح وفشل افتراضياً، مع إمكانية الفلترة بـ success أو failed)
 // GET /report/visa?status=success|failed&startDate=...&endDate=...&branchId=...
 router.get("/visa", (0, validation_1.validate)(report_1.reportVisaQuerySchema, "query"), (0, catchAsync_1.catchAsync)(Report_1.getVisaReport));
+// GET /report/delivery-man?deliveryManId=...&startDate=...&endDate=...&branchId=...&status=...
+router.get("/delivery-man", (0, validation_1.validate)(report_1.deliveryManReportQuerySchema, "query"), (0, catchAsync_1.catchAsync)(Report_1.getDeliveryManReport));
+// تقرير مبيعات الأكلات وخيارات الفارييشن (Food & Variations Sales Report)
+// GET /report/food?startDate=...&endDate=...&branchId=...&arrangedType=desc|asc|ascn
+router.get("/food", (0, validation_1.validate)(report_1.foodReportQuerySchema, "query"), (0, catchAsync_1.catchAsync)(Report_1.getFoodReport));
 // تحميل كشف حساب المطعم كـ PDF
 //GET /report/my-restaurant/invoice?startDate=2026-01-01&endDate=2026-05-19
 router.get("/my-restaurant/:invoiceId/invoice", (0, catchAsync_1.catchAsync)(Report_1.downloadSavedInvoicePDF));

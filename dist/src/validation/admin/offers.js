@@ -77,7 +77,7 @@ const normalizeOfferInput = (obj) => {
         if (Array.isArray(incomingFoods)) {
             const rawParsedItems = incomingFoods.map((item) => {
                 if (typeof item === "string") {
-                    return { foodId: item, quantity: 1, variations: [] };
+                    return { foodId: item, quantity: 1, variations: [], addonIds: [] };
                 }
                 if (item && typeof item === "object") {
                     const foodId = String(item.foodId || item.food_id || item.id || "");
@@ -123,10 +123,22 @@ const normalizeOfferInput = (obj) => {
                             options: directOptions,
                         });
                     }
+                    // Extract addons
+                    const directAddonIds = (0, exports.parseStringOrArray)(item.addonIds || item.addon_ids || item.addonsId || item.addonsIds || item.addons);
+                    let objectAddonIds = [];
+                    const rawAddonsObj = safeParseJson(item.addons);
+                    if (Array.isArray(rawAddonsObj)) {
+                        objectAddonIds = rawAddonsObj
+                            .map((a) => (typeof a === "object" && a !== null ? (a.id || a.addonId || a.addon_id) : a))
+                            .filter(Boolean)
+                            .map(String);
+                    }
+                    const normalizedAddonIds = Array.from(new Set([...directAddonIds, ...objectAddonIds]));
                     return {
                         foodId,
                         quantity,
                         variations: normalizedVariations,
+                        addonIds: normalizedAddonIds,
                     };
                 }
                 return item;
@@ -140,12 +152,14 @@ const normalizeOfferInput = (obj) => {
                         foodId: fid,
                         quantity: item.quantity,
                         variations: [...item.variations],
+                        addonIds: [...(item.addonIds || [])],
                     });
                 }
                 else {
                     const existing = mergedFoodMap.get(fid);
                     existing.quantity = Math.max(existing.quantity, item.quantity);
                     existing.variations.push(...item.variations);
+                    existing.addonIds = Array.from(new Set([...(existing.addonIds || []), ...(item.addonIds || [])]));
                 }
             }
             // Consolidate variations with the same variationId under each food
@@ -169,6 +183,7 @@ const normalizeOfferInput = (obj) => {
                     foodId: f.foodId,
                     quantity: f.quantity,
                     variations: Array.from(vMap.values()),
+                    addonIds: f.addonIds || [],
                 };
             });
         }
@@ -181,6 +196,7 @@ const normalizeOfferInput = (obj) => {
                     foodId: String(id),
                     quantity: 1,
                     variations: [],
+                    addonIds: [],
                 }));
             }
         }
@@ -231,7 +247,7 @@ exports.offerVariationSchema = zod_1.z.preprocess((raw) => {
 }));
 exports.offerFoodItemSchema = zod_1.z.preprocess((raw) => {
     if (typeof raw === "string") {
-        return { foodId: raw, quantity: 1, variations: [] };
+        return { foodId: raw, quantity: 1, variations: [], addonIds: [] };
     }
     return raw;
 }, zod_1.z.object({
@@ -259,6 +275,31 @@ exports.offerFoodItemSchema = zod_1.z.preprocess((raw) => {
         }
         return [];
     }, zod_1.z.array(exports.offerVariationSchema)).optional().default([]),
+    addonIds: stringOrArraySchema.optional().default([]),
+    addon_ids: stringOrArraySchema.optional(),
+    addonsId: stringOrArraySchema.optional(),
+    addonsIds: stringOrArraySchema.optional(),
+    addons: zod_1.z.any().optional(),
+}).transform((val) => {
+    const rawAddons = [
+        ...(val.addonIds || []),
+        ...(val.addon_ids || []),
+        ...(val.addonsId || []),
+        ...(val.addonsIds || []),
+    ];
+    if (Array.isArray(val.addons)) {
+        const fromAddons = val.addons
+            .map((a) => (typeof a === "object" && a !== null ? (a.id || a.addonId || a.addon_id) : a))
+            .filter(Boolean)
+            .map(String);
+        rawAddons.push(...fromAddons);
+    }
+    return {
+        foodId: val.foodId,
+        quantity: val.quantity,
+        variations: val.variations,
+        addonIds: Array.from(new Set(rawAddons.map(String).filter(Boolean))),
+    };
 }));
 exports.createOfferSchema = zod_1.z.preprocess(normalizeOfferInput, zod_1.z.object({
     name: zod_1.z.string({ required_error: "Offer name is required" }).min(1, "Offer name is required").max(255, "Name cannot exceed 255 characters"),

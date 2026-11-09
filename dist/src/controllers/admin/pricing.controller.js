@@ -982,15 +982,30 @@ const upsertProductChannelPricing = async (req, res) => {
             const statusVal = entry.branchPriceStatus === "inactive" || entry.status === "inactive"
                 ? "inactive"
                 : "active";
-            for (const targetBranchId of targetBranches) {
-                for (const module of targetModules) {
-                    await (0, pricing_overrides_1.upsertFoodPricingOverride)(tx, {
-                        foodId,
-                        branchId: targetBranchId,
-                        serviceModule: module,
-                        price: priceVal,
-                        status: statusVal,
-                    });
+            const isAllBranches = targetBranches.length === 1 && targetBranches[0] === null;
+            const isAllModules = targetModules.length === 1 && targetModules[0] === null;
+            if (isAllBranches && isAllModules) {
+                // 1. Update Base Price directly in food table
+                await tx
+                    .update(schema_1.food)
+                    .set({ price: priceVal, updatedAt: new Date() })
+                    .where((0, drizzle_orm_1.eq)(schema_1.food.id, foodId));
+                // 2. Remove ALL old pricing overrides (all branches & all modules) so the new price applies everywhere
+                await tx
+                    .delete(schema_1.foodPricingOverrides)
+                    .where((0, drizzle_orm_1.eq)(schema_1.foodPricingOverrides.foodId, foodId));
+            }
+            else {
+                for (const targetBranchId of targetBranches) {
+                    for (const module of targetModules) {
+                        await (0, pricing_overrides_1.upsertFoodPricingOverride)(tx, {
+                            foodId,
+                            branchId: targetBranchId,
+                            serviceModule: module,
+                            price: priceVal,
+                            status: statusVal,
+                        });
+                    }
                 }
             }
         }
@@ -1049,15 +1064,30 @@ const upsertVariantChannelPricing = async (req, res) => {
             const statusVal = entry.branchPriceStatus === "inactive" || entry.status === "inactive"
                 ? "inactive"
                 : "active";
-            for (const targetBranchId of targetBranches) {
-                for (const module of targetModules) {
-                    await (0, pricing_overrides_1.upsertVariantPricingOverride)(tx, {
-                        variantId,
-                        branchId: targetBranchId,
-                        serviceModule: module,
-                        price: priceVal,
-                        status: statusVal,
-                    });
+            const isAllBranches = targetBranches.length === 1 && targetBranches[0] === null;
+            const isAllModules = targetModules.length === 1 && targetModules[0] === null;
+            if (isAllBranches && isAllModules) {
+                // 1. Update Base Additional Price directly in variation_options table
+                await tx
+                    .update(schema_1.variationOptions)
+                    .set({ additionalPrice: priceVal, updatedAt: new Date() })
+                    .where((0, drizzle_orm_1.eq)(schema_1.variationOptions.id, variantId));
+                // 2. Remove ALL old pricing overrides (all branches & all modules) so the new price applies everywhere
+                await tx
+                    .delete(schema_1.variantPricingOverrides)
+                    .where((0, drizzle_orm_1.eq)(schema_1.variantPricingOverrides.variantId, variantId));
+            }
+            else {
+                for (const targetBranchId of targetBranches) {
+                    for (const module of targetModules) {
+                        await (0, pricing_overrides_1.upsertVariantPricingOverride)(tx, {
+                            variantId,
+                            branchId: targetBranchId,
+                            serviceModule: module,
+                            price: priceVal,
+                            status: statusVal,
+                        });
+                    }
                 }
             }
         }

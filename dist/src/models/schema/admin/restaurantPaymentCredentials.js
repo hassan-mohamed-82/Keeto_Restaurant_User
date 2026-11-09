@@ -5,20 +5,25 @@ const mysql_core_1 = require("drizzle-orm/mysql-core");
 const drizzle_orm_1 = require("drizzle-orm");
 const restaurants_1 = require("./restaurants");
 // ==========================================
-// 3. تعريف الجدول باستخدام الـ Type المعرّف
+// 2. تعريف الجدول باستخدام الـ Type المعرّف
 // ==========================================
 exports.restaurantPaymentCredentials = (0, mysql_core_1.mysqlTable)("restaurant_payment_credentials", {
     id: (0, mysql_core_1.char)("id", { length: 36 }).primaryKey().default((0, drizzle_orm_1.sql) `(UUID())`),
     restaurantId: (0, mysql_core_1.char)("restaurant_id", { length: 36 })
         .notNull()
         .references(() => restaurants_1.restaurants.id, { onDelete: "cascade" }),
-    provider: (0, mysql_core_1.mysqlEnum)("provider", ["PAYMOB"]).notNull(),
+    provider: (0, mysql_core_1.mysqlEnum)("provider", ["PAYMOB", "KASHIER", "GEIDEA"]).notNull(),
     title: (0, mysql_core_1.varchar)("title", { length: 255 }).notNull(),
     environment: (0, mysql_core_1.mysqlEnum)("environment", ["LIVE", "TEST"]).default("LIVE"),
-    // 💡 استخدام Type المخصص هنا بدل Generic Record
+    // 💡 استخدام Type المخصص هنا لدعم Paymob و Kashier و Geidea
     credentials: (0, mysql_core_1.json)("credentials").$type().notNull(),
+    // 💡 إعدادات عمولة الفيزا للبوابة المخصصة (Custom Gateway Commission)
+    percentageValue: (0, mysql_core_1.decimal)("percentage_value", { precision: 10, scale: 2 }).default("0.00"),
+    fixedValue: (0, mysql_core_1.decimal)("fixed_value", { precision: 10, scale: 2 }).default("0.00"),
+    tax: (0, mysql_core_1.decimal)("tax", { precision: 10, scale: 2 }).default("0.00"),
     logoUrl: (0, mysql_core_1.varchar)("logo_url", { length: 500 }),
     isActive: (0, mysql_core_1.boolean)("is_active").default(true),
+    isDefault: (0, mysql_core_1.boolean)("is_default").default(false),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow().onUpdateNow(),
 });

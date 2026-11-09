@@ -4,5 +4,5 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.default = void 0;
-var tax_1 = require("./pos/tax");
+var tax_1 = require("../pos/tax");
 Object.defineProperty(exports, "default", { enumerable: true, get: function () { return __importDefault(tax_1).default; } });

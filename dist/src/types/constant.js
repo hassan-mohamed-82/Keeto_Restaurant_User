@@ -18,6 +18,7 @@ exports.MODULES = [
     "foodLocks",
     "recommendedFood",
     "pointsProducts",
+    "pricing",
     // ─── Orders ───────────────────────────────────────────
     "order",
     "pointsOrders",

@@ -521,6 +521,14 @@ const sendPushNotification = async (params) => {
             for (const adm of admins)
                 add(adm.fcmToken, firebase_1.ADMIN_PROJECT);
         }
+        else if (recipientType === "delivery_man") {
+            const [deliveryMan] = await connection_1.db
+                .select({ fcmToken: schema_1.deliveryMen.fcmToken })
+                .from(schema_1.deliveryMen)
+                .where((0, drizzle_orm_1.eq)(schema_1.deliveryMen.id, recipientId))
+                .limit(1);
+            add(deliveryMan?.fcmToken, firebase_1.DELIVERY_PROJECT);
+        }
         // 3. الإرسال مجمّع حسب المشروع
         if (records.length === 0) {
             console.log(`[FCM] Skipped push: No FCM token found for ${recipientType} ${recipientId}`);
@@ -560,6 +568,7 @@ const sendPushNotification = async (params) => {
                         await connection_1.db.delete(schema_1.adminFcmTokens).where((0, drizzle_orm_1.eq)(schema_1.adminFcmTokens.fcmToken, dead));
                         await connection_1.db.update(schema_1.restaurants).set({ fcmToken: null }).where((0, drizzle_orm_1.eq)(schema_1.restaurants.fcmToken, dead));
                         await connection_1.db.update(schema_1.users).set({ fcmToken: null }).where((0, drizzle_orm_1.eq)(schema_1.users.fcmToken, dead));
+                        await connection_1.db.update(schema_1.deliveryMen).set({ fcmToken: null }).where((0, drizzle_orm_1.eq)(schema_1.deliveryMen.fcmToken, dead));
                     }
                     else {
                         // مشكلة إعدادات (زي mismatched-credential): متمسحش، سجّل بس

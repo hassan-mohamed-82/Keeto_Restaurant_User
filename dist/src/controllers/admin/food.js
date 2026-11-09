@@ -370,11 +370,11 @@ const updateFood = async (req, res) => {
     if (!restaurantId) {
         throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
     }
-    // ✅ تأكد إن الأكلة تخص نفس الريستورانت
+    // ✅ تأكد إن الأكلة تخص نفس الريستورانت وغير محذوفة
     const existingFood = await connection_1.db
         .select()
         .from(schema_1.food)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.id, id), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId)))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.id, id), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId), foodConditions_1.activeFoodCondition))
         .limit(1);
     if (!existingFood[0]) {
         throw new NotFound_1.NotFound("Food not found or you don't have permission to edit it");
@@ -665,7 +665,7 @@ const deleteFood = async (req, res) => {
     const [existingFood] = await connection_1.db
         .select({ id: schema_1.food.id, status: schema_1.food.status, deletedAt: schema_1.food.deletedAt })
         .from(schema_1.food)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.id, id), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId)))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.id, id), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId), foodConditions_1.activeFoodCondition))
         .limit(1);
     if (!existingFood) {
         throw new NotFound_1.NotFound("Food not found or you don't have permission to delete it");
@@ -809,7 +809,7 @@ const toggleVariationStatus = async (req, res) => {
         throw new BadRequest_1.BadRequest("Status must be a boolean");
     const existingVariation = await connection_1.db.select({ id: schema_1.foodVariations.id })
         .from(schema_1.foodVariations)
-        .innerJoin(schema_1.food, (0, drizzle_orm_1.eq)(schema_1.foodVariations.foodId, schema_1.food.id))
+        .innerJoin(schema_1.food, (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.foodVariations.foodId, schema_1.food.id), foodConditions_1.activeFoodCondition))
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.foodVariations.id, id), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId)))
         .limit(1);
     if (!existingVariation[0])
@@ -834,7 +834,7 @@ const toggleVariationOptionStatus = async (req, res) => {
     const existingOption = await connection_1.db.select({ id: schema_1.variationOptions.id })
         .from(schema_1.variationOptions)
         .innerJoin(schema_1.foodVariations, (0, drizzle_orm_1.eq)(schema_1.variationOptions.variationId, schema_1.foodVariations.id))
-        .innerJoin(schema_1.food, (0, drizzle_orm_1.eq)(schema_1.foodVariations.foodId, schema_1.food.id))
+        .innerJoin(schema_1.food, (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.foodVariations.foodId, schema_1.food.id), foodConditions_1.activeFoodCondition))
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.variationOptions.id, id), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId)))
         .limit(1);
     if (!existingOption[0])
@@ -868,7 +868,7 @@ const changeFoodStatus = async (req, res) => {
         subcategoryid: schema_1.food.subcategoryid,
     })
         .from(schema_1.food)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.id, id), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId)))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.id, id), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId), foodConditions_1.activeFoodCondition))
         .limit(1);
     if (!existingFood)
         throw new NotFound_1.NotFound("Food not found or does not belong to you");
@@ -965,7 +965,7 @@ const toggleFoodOutOfStock = async (req, res) => {
     const [existingFood] = await connection_1.db
         .select({ id: schema_1.food.id, isOutOfStock: schema_1.food.isOutOfStock, subcategoryid: schema_1.food.subcategoryid })
         .from(schema_1.food)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.id, id), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId)))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.id, id), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId), foodConditions_1.activeFoodCondition))
         .limit(1);
     if (!existingFood)
         throw new NotFound_1.NotFound("Food not found or does not belong to you");
@@ -1054,7 +1054,7 @@ async function recomputeSubcategoryGlobalStatus(subcategoryId, restaurantId) {
     const allFoods = await connection_1.db
         .select({ status: schema_1.food.status, isOutOfStock: schema_1.food.isOutOfStock })
         .from(schema_1.food)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.subcategoryid, subcategoryId), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId)));
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.subcategoryid, subcategoryId), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId), foodConditions_1.activeFoodCondition));
     if (allFoods.length === 0)
         return;
     const allOOS = allFoods.every((f) => f.isOutOfStock);
@@ -1078,7 +1078,7 @@ async function recomputeSubcategoryBranchStatus(subcategoryId, branchId, restaur
     const allFoods = await connection_1.db
         .select({ id: schema_1.food.id, status: schema_1.food.status, isOutOfStock: schema_1.food.isOutOfStock })
         .from(schema_1.food)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.subcategoryid, subcategoryId), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId)));
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.subcategoryid, subcategoryId), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId), foodConditions_1.activeFoodCondition));
     if (allFoods.length === 0)
         return;
     const foodIds = allFoods.map((f) => f.id);
@@ -1204,7 +1204,7 @@ const getOutOfStockFoods = async (req, res) => {
             .from(schema_1.branchMenuItems)
             .innerJoin(schema_1.food, (0, drizzle_orm_1.eq)(schema_1.branchMenuItems.foodId, schema_1.food.id))
             .leftJoin(schema_1.categories, (0, drizzle_orm_1.eq)(schema_1.food.categoryid, schema_1.categories.id))
-            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.branchId, branchId), (0, drizzle_orm_1.or)(
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.branchId, branchId), foodConditions_1.activeFoodCondition, (0, drizzle_orm_1.or)(
         // Limited stock exhausted
         (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.stockType, "limited"), (0, drizzle_orm_1.lte)(schema_1.branchMenuItems.stockQty, 0)), 
         // Manually marked as inactive in this branch
@@ -1285,7 +1285,7 @@ const getOutOfStockFoods = async (req, res) => {
         .from(schema_1.food)
         .leftJoin(schema_1.categories, (0, drizzle_orm_1.eq)(schema_1.food.categoryid, schema_1.categories.id))
         .leftJoin(schema_1.subcategories, (0, drizzle_orm_1.eq)(schema_1.food.subcategoryid, schema_1.subcategories.id))
-        .where((0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId));
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId), foodConditions_1.activeFoodCondition));
     if (rawFoods.length === 0) {
         return (0, response_1.SuccessResponse)(res, {
             message: "Get out-of-stock foods success",

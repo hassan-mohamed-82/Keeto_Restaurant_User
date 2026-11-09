@@ -1,10 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const catchAsync_1 = require("../../../utils/catchAsync");
-const validation_1 = require("../../../middlewares/validation");
-const hallTable_1 = require("../../../validation/admin/pos/hallTable");
-const hallTable_2 = require("../../../controllers/admin/pos/hallTable");
+const catchAsync_1 = require("../../utils/catchAsync");
+const validation_1 = require("../../middlewares/validation");
+const hallTable_1 = require("../../validation/pos/hallTable");
+const hallTable_2 = require("../../controllers/pos/hallTable");
 const router = (0, express_1.Router)();
 router.post("/", (0, validation_1.validate)(hallTable_1.createHallTableSchema), (0, catchAsync_1.catchAsync)(hallTable_2.createHallTable));
 router.get("/", (0, validation_1.validate)(hallTable_1.hallTableQuerySchema, "query"), (0, catchAsync_1.catchAsync)(hallTable_2.getAllHallTables));

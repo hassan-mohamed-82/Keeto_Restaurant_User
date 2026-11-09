@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.logoutDeliveryMan = exports.loginDeliveryMan = void 0;
+exports.updateFcmToken = exports.logoutDeliveryMan = exports.loginDeliveryMan = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -76,6 +76,13 @@ async function _processLogin(res, deliveryMan, password, fcmToken) {
             branchNameAr = branch.nameAr;
         }
     }
+    // Save FCM token (only after all checks passed)
+    if (fcmToken && typeof fcmToken === "string" && fcmToken.trim()) {
+        await connection_1.db
+            .update(schema_1.deliveryMen)
+            .set({ fcmToken: fcmToken.trim() })
+            .where((0, drizzle_orm_1.eq)(schema_1.deliveryMen.id, deliveryMan.id));
+    }
     // Generate token
     const token = (0, jwt_1.generateDeliveryManToken)({
         id: deliveryMan.id,
@@ -106,12 +113,34 @@ async function _processLogin(res, deliveryMan, password, fcmToken) {
 // POST /delivery-man/auth/logout
 // ==========================================
 const logoutDeliveryMan = async (req, res) => {
-    // Stateless JWT: logout is handled client-side.
-    // Optionally clear FCM token if provided.
     const deliveryManId = req.user?.id;
     if (!deliveryManId)
         throw new Errors_1.UnauthorizedError("Not authenticated");
-    // Token is invalidated client-side. Return success.
+    // JWT is stateless and is discarded client-side.
+    // Clear the FCM token so this device stops receiving pushes after logout.
+    await connection_1.db
+        .update(schema_1.deliveryMen)
+        .set({ fcmToken: null })
+        .where((0, drizzle_orm_1.eq)(schema_1.deliveryMen.id, deliveryManId));
     return (0, response_1.SuccessResponse)(res, { message: "Logged out successfully" });
 };
 exports.logoutDeliveryMan = logoutDeliveryMan;
+// ==========================================
+// POST /delivery-man/auth/fcm-token
+// Called by the app when Firebase refreshes the token (onTokenRefresh)
+// ==========================================
+const updateFcmToken = async (req, res) => {
+    const deliveryManId = req.user?.id;
+    if (!deliveryManId)
+        throw new Errors_1.UnauthorizedError("Not authenticated");
+    const { fcmToken } = req.body;
+    if (!fcmToken || typeof fcmToken !== "string" || !fcmToken.trim()) {
+        throw new BadRequest_1.BadRequest("fcmToken is required");
+    }
+    await connection_1.db
+        .update(schema_1.deliveryMen)
+        .set({ fcmToken: fcmToken.trim() })
+        .where((0, drizzle_orm_1.eq)(schema_1.deliveryMen.id, deliveryManId));
+    return (0, response_1.SuccessResponse)(res, { message: "FCM token updated successfully" });
+};
+exports.updateFcmToken = updateFcmToken;

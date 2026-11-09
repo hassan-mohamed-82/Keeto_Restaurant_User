@@ -13,6 +13,7 @@ const BadRequest_1 = require("../../Errors/BadRequest");
 const uuid_1 = require("uuid");
 const redis_1 = __importDefault(require("../../config/redis"));
 const handleImages_1 = require("../../utils/handleImages");
+const foodConditions_1 = require("../../helpers/foodConditions");
 const createSubcategory = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) {
@@ -374,7 +375,7 @@ const updateBranchSubcategoryStatus = async (req, res) => {
         status: schema_1.food.status, // الحالة العامة في جدول food
     })
         .from(schema_1.food)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.subcategoryid, subcategoryId), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId)));
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.subcategoryid, subcategoryId), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId), foodConditions_1.activeFoodCondition));
     if (subcategoryFoods.length > 0) {
         const foodIds = subcategoryFoods.map((f) => f.id);
         const existingBranchItems = await connection_1.db
@@ -607,7 +608,7 @@ const updateBranchSubcategoryOutOfStock = async (req, res) => {
         subcategoryName = sub.name;
     }
     // بناء شروط البحث عن المنتجات
-    const foodConditions = [(0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId)];
+    const foodConditions = [(0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId), foodConditions_1.activeFoodCondition];
     if (subcategoryId)
         foodConditions.push((0, drizzle_orm_1.eq)(schema_1.food.subcategoryid, subcategoryId));
     const targetFoods = await connection_1.db

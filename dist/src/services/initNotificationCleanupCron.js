@@ -26,7 +26,7 @@ function initNotificationCleanupCron() {
                 const idsToDelete = await connection_1.db
                     .select({ id: schema_1.notifications.id })
                     .from(schema_1.notifications)
-                    .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.notifications.isRead, true), (0, drizzle_orm_1.lte)(schema_1.notifications.createdAt, oneDayAgo)))
+                    .where((0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.notifications.isRead, true), (0, drizzle_orm_1.lte)(schema_1.notifications.createdAt, oneDayAgo)))
                     .limit(BATCH_SIZE);
                 // إذا لم يتبق أي إشعارات تنطبق عليها الشروط، ننهي الـ Loop
                 if (idsToDelete.length === 0) {

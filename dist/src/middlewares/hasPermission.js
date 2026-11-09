@@ -1,14 +1,6 @@
 "use strict";
-// import { Request, Response, NextFunction } from "express";
-// import { db } from "../models/connection";
-// import { restrauntadmin } from "../models/schema";
-// import { role_restaurant } from "../models/schema/admin/role_restaurant";
-// import { eq } from "drizzle-orm";
-// import { UnauthorizedError } from "../Errors";
-// import { ForbiddenError } from "../Errors/forbiddenError";
-// import { ModuleName, ActionName, Permission } from "../types/custom";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.checkUserPermission = exports.hasAllPermissions = exports.hasAnyPermission = exports.hasPermission = void 0;
+exports.checkUserPermission = exports.hasAllPermissions = exports.hasAnyPermission = exports.hasRestaurantOpenClosePermission = exports.hasPermission = void 0;
 const connection_1 = require("../models/connection");
 const schema_1 = require("../models/schema");
 const role_restaurant_1 = require("../models/schema/admin/role_restaurant");
@@ -49,7 +41,10 @@ const ACTION_ALIASES = {
     update: ["update", "edit"],
     status: ["status"],
     delete: ["delete"],
-    filter: ["filter"],
+    filter: ["advanced_filter", "filter"],
+    advanced_filter: ["advanced_filter", "filter"],
+    open: ["open"],
+    close: ["close"],
 };
 const actionName = (a) => ((typeof a === "string" ? a : a?.action) || "").toLowerCase();
 const matchesPermission = (allPermissions, module, action) => {
@@ -144,6 +139,18 @@ const hasPermission = (module, action, checkBranch = false) => {
     };
 };
 exports.hasPermission = hasPermission;
+const hasRestaurantOpenClosePermission = (req, res, next) => {
+    const isTemporarilyClosed = req.body?.settings?.isTemporarilyClosed;
+    if (isTemporarilyClosed === undefined) {
+        next();
+        return;
+    }
+    const action = isTemporarilyClosed ? "close" : "open";
+    authorize(req, false, perms => matchesPermission(perms, "restaurantsetting", action), `You don't have permission to ${action} the restaurant`)
+        .then(() => next())
+        .catch(next);
+};
+exports.hasRestaurantOpenClosePermission = hasRestaurantOpenClosePermission;
 // ==========================================
 // hasAnyPermission (OR)
 // ==========================================

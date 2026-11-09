@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateOrderStatusToDelivered = exports.getOrderHistory = exports.getAssignedOrders = void 0;
+exports.rejectOrderCourierEndpoint = exports.updateOrderStatusToDelivered = exports.markOrderDelivered = exports.markOrderPickedUp = exports.getOrderHistory = exports.getAssignedOrders = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -11,6 +11,9 @@ const NotFound_1 = require("../../Errors/NotFound");
 const order_helper_1 = require("../../helpers/order.helper");
 const notifications_1 = require("../../utils/notifications");
 const restaurantWalletService_1 = require("../../services/restaurantWalletService");
+const dispatchEngine_1 = require("../../services/shipping/dispatchEngine");
+const socketService_1 = require("../../services/socket/socketService");
+const socketEvents_1 = require("../../services/socket/socketEvents");
 // ==========================================
 // GET /delivery-man/orders/assigned
 // Get all active orders assigned to this delivery man
@@ -21,8 +24,6 @@ const getAssignedOrders = async (req, res) => {
         throw new Errors_1.UnauthorizedError("Unauthenticated");
     const deliveryManId = req.user.id;
     const restaurantId = req.user.restaurantId;
-    if (!restaurantId)
-        throw new BadRequest_1.BadRequest("Restaurant ID missing");
     const { orderId } = req.query;
     const activeStatuses = ["pending", "accepted", "preparing", "out_for_delivery"];
     // If orderId is provided, return full details of that specific order
@@ -33,6 +34,7 @@ const getAssignedOrders = async (req, res) => {
             orderNumber: schema_1.orders.orderNumber,
             dailyOrderNumber: schema_1.orders.dailyOrderNumber,
             status: schema_1.orders.status,
+            shippingStatus: schema_1.orders.shippingStatus,
             orderType: schema_1.orders.orderType,
             orderSource: schema_1.orders.orderSource,
             subtotal: schema_1.orders.subtotal,
@@ -50,6 +52,10 @@ const getAssignedOrders = async (req, res) => {
             isCashCollected: schema_1.orders.isCashCollected,
             cashCollectedAt: schema_1.orders.cashCollectedAt,
             deliveryManId: schema_1.orders.deliveryManId,
+            shippingCompanyId: schema_1.orders.shippingCompanyId,
+            shippingAssignedAt: schema_1.orders.shippingAssignedAt,
+            pickedUpAt: schema_1.orders.pickedUpAt,
+            deliveredAt: schema_1.orders.deliveredAt,
             durationOrderPreparing: schema_1.orders.durationOrderPreparing,
             cancelReason: schema_1.orders.cancelReason,
             cancelReasonType: schema_1.orders.cancelReasonType,
@@ -63,7 +69,7 @@ const getAssignedOrders = async (req, res) => {
             .from(schema_1.orders)
             .leftJoin(schema_1.users, (0, drizzle_orm_1.eq)(schema_1.orders.userId, schema_1.users.id))
             .leftJoin(schema_1.paymentMethods, (0, drizzle_orm_1.eq)(schema_1.orders.paymentMethod, schema_1.paymentMethods.id))
-            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orders.id, orderId), (0, drizzle_orm_1.eq)(schema_1.orders.deliveryManId, deliveryManId), (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId), (0, order_helper_1.excludeUnpaidVisaOrders)()))
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orders.id, orderId), (0, drizzle_orm_1.eq)(schema_1.orders.deliveryManId, deliveryManId), restaurantId ? (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId) : undefined, (0, order_helper_1.excludeUnpaidVisaOrders)()))
             .limit(1);
         if (!order)
             throw new NotFound_1.NotFound("Order not found or not assigned to you");
@@ -103,13 +109,18 @@ const getAssignedOrders = async (req, res) => {
         orderNumber: schema_1.orders.orderNumber,
         dailyOrderNumber: schema_1.orders.dailyOrderNumber,
         status: schema_1.orders.status,
+        shippingStatus: schema_1.orders.shippingStatus,
         orderType: schema_1.orders.orderType,
         totalAmount: schema_1.orders.totalAmount,
+        deliveryFee: schema_1.orders.deliveryFee,
         paymentMethod: schema_1.orders.paymentMethod,
         paymentMethodName: schema_1.paymentMethods.name,
         paymentMethodNameAr: schema_1.paymentMethods.nameAr,
         note: schema_1.orders.note,
         shippingAddress: schema_1.orders.shippingAddress,
+        shippingCompanyId: schema_1.orders.shippingCompanyId,
+        shippingAssignedAt: schema_1.orders.shippingAssignedAt,
+        pickedUpAt: schema_1.orders.pickedUpAt,
         durationOrderPreparing: schema_1.orders.durationOrderPreparing,
         // Customer info
         customerId: schema_1.users.id,
@@ -120,7 +131,7 @@ const getAssignedOrders = async (req, res) => {
         .from(schema_1.orders)
         .leftJoin(schema_1.users, (0, drizzle_orm_1.eq)(schema_1.orders.userId, schema_1.users.id))
         .leftJoin(schema_1.paymentMethods, (0, drizzle_orm_1.eq)(schema_1.orders.paymentMethod, schema_1.paymentMethods.id))
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orders.deliveryManId, deliveryManId), (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.orders.orderType, "delivery"), (0, drizzle_orm_1.inArray)(schema_1.orders.status, [...activeStatuses]), (0, order_helper_1.excludeUnpaidVisaOrders)()))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orders.deliveryManId, deliveryManId), restaurantId ? (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId) : undefined, (0, drizzle_orm_1.eq)(schema_1.orders.orderType, "delivery"), (0, drizzle_orm_1.inArray)(schema_1.orders.status, [...activeStatuses]), (0, order_helper_1.excludeUnpaidVisaOrders)()))
         .orderBy((0, drizzle_orm_1.desc)(schema_1.orders.createdAt));
     return (0, response_1.SuccessResponse)(res, {
         message: "Assigned orders fetched successfully",
@@ -141,8 +152,6 @@ const getOrderHistory = async (req, res) => {
         throw new Errors_1.UnauthorizedError("Unauthenticated");
     const deliveryManId = req.user.id;
     const restaurantId = req.user.restaurantId;
-    if (!restaurantId)
-        throw new BadRequest_1.BadRequest("Restaurant ID missing");
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
     const offset = (page - 1) * limit;
@@ -155,11 +164,11 @@ const getOrderHistory = async (req, res) => {
         : [...historyStatuses];
     const conditions = [
         (0, drizzle_orm_1.eq)(schema_1.orders.deliveryManId, deliveryManId),
-        (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId),
+        restaurantId ? (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId) : undefined,
         (0, drizzle_orm_1.eq)(schema_1.orders.orderType, "delivery"),
         (0, drizzle_orm_1.inArray)(schema_1.orders.status, targetStatuses),
         (0, order_helper_1.excludeUnpaidVisaOrders)(),
-    ];
+    ].filter(Boolean);
     if (startDate) {
         conditions.push((0, drizzle_orm_1.gte)(schema_1.orders.createdAt, new Date(startDate)));
     }
@@ -174,6 +183,7 @@ const getOrderHistory = async (req, res) => {
         orderNumber: schema_1.orders.orderNumber,
         dailyOrderNumber: schema_1.orders.dailyOrderNumber,
         status: schema_1.orders.status,
+        shippingStatus: schema_1.orders.shippingStatus,
         orderType: schema_1.orders.orderType,
         totalAmount: schema_1.orders.totalAmount,
         deliveryFee: schema_1.orders.deliveryFee,
@@ -184,6 +194,8 @@ const getOrderHistory = async (req, res) => {
         cashCollectedAt: schema_1.orders.cashCollectedAt,
         cancelReason: schema_1.orders.cancelReason,
         shippingAddress: schema_1.orders.shippingAddress,
+        pickedUpAt: schema_1.orders.pickedUpAt,
+        deliveredAt: schema_1.orders.deliveredAt,
         // Customer info
         customerId: schema_1.users.id,
         customerName: schema_1.users.name,
@@ -211,69 +223,203 @@ const getOrderHistory = async (req, res) => {
 };
 exports.getOrderHistory = getOrderHistory;
 // ==========================================
-// PATCH /delivery-man/orders/:orderId/status
-// Delivery man can ONLY set status to "delivered"
+// POST /delivery-man/orders/:orderId/picked-up
+// Delivery man marks the order as picked up from the restaurant/branch
 // ==========================================
-const updateOrderStatusToDelivered = async (req, res) => {
+const markOrderPickedUp = async (req, res) => {
     if (!req.user)
         throw new Errors_1.UnauthorizedError("Unauthenticated");
     const deliveryManId = req.user.id;
-    const restaurantId = req.user.restaurantId;
-    if (!restaurantId)
-        throw new BadRequest_1.BadRequest("Restaurant ID missing");
     const { orderId } = req.params;
-    const { status } = req.body;
-    // Delivery man can only mark as delivered
-    if (status !== "delivered") {
-        throw new BadRequest_1.BadRequest("Delivery man can only update order status to 'delivered'");
+    const [order] = await connection_1.db
+        .select()
+        .from(schema_1.orders)
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orders.id, orderId), (0, drizzle_orm_1.eq)(schema_1.orders.deliveryManId, deliveryManId), req.user.restaurantId ? (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, req.user.restaurantId) : undefined))
+        .limit(1);
+    if (!order) {
+        throw new NotFound_1.NotFound("Order not found or not assigned to you");
     }
-    // Fetch order and verify ownership
+    if (order.status === "out_for_delivery" || order.shippingStatus === "picked_up") {
+        throw new BadRequest_1.BadRequest("Order has already been picked up");
+    }
+    if (["delivered", "cancelled", "refund", "failed"].includes(order.status)) {
+        throw new BadRequest_1.BadRequest(`Order is already ${order.status} and cannot be picked up`);
+    }
+    const now = new Date();
+    await connection_1.db
+        .update(schema_1.orders)
+        .set({
+        shippingStatus: "picked_up",
+        pickedUpAt: now,
+        status: "out_for_delivery",
+        updatedAt: now,
+    })
+        .where((0, drizzle_orm_1.eq)(schema_1.orders.id, orderId));
+    if (order.shippingCompanyId) {
+        (0, socketService_1.notifyShippingCompany)(order.shippingCompanyId, socketEvents_1.SOCKET_EVENTS.ORDER_STATUS_CHANGED, {
+            orderId,
+            shippingStatus: "picked_up",
+            updatedAt: now,
+        });
+    }
+    (0, socketService_1.notifyOrderTracking)(orderId, socketEvents_1.SOCKET_EVENTS.ORDER_PICKED_UP, {
+        orderId,
+        courierId: deliveryManId,
+        pickedUpAt: now,
+    });
+    if (order.userId) {
+        await (0, notifications_1.sendPushNotification)({
+            recipientType: "user",
+            recipientId: order.userId,
+            branchId: order.branchId || null,
+            title: "Order Picked Up",
+            body: `Your order #${order.dailyOrderNumber || order.orderNumber} is picked up and on the way!`,
+            data: {
+                restaurantId: order.restaurantId,
+                branchId: order.branchId || null,
+                orderId: order.id,
+                orderNumber: order.orderNumber,
+                dailyOrderNumber: order.dailyOrderNumber,
+                status: "out_for_delivery",
+                shippingStatus: "picked_up",
+                type: "ORDER_STATUS_UPDATE",
+            },
+        });
+    }
+    return (0, response_1.SuccessResponse)(res, {
+        message: "Order marked as picked up successfully",
+    });
+};
+exports.markOrderPickedUp = markOrderPickedUp;
+// ==========================================
+// POST /delivery-man/orders/:orderId/delivered
+// Delivery man marks the order as delivered
+// ==========================================
+const markOrderDelivered = async (req, res) => {
+    if (!req.user)
+        throw new Errors_1.UnauthorizedError("Unauthenticated");
+    const deliveryManId = req.user.id;
+    const { orderId } = req.params;
     const [existingOrder] = await connection_1.db
         .select()
         .from(schema_1.orders)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orders.id, orderId), (0, drizzle_orm_1.eq)(schema_1.orders.deliveryManId, deliveryManId), (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId)))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orders.id, orderId), (0, drizzle_orm_1.eq)(schema_1.orders.deliveryManId, deliveryManId), req.user.restaurantId ? (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, req.user.restaurantId) : undefined))
         .limit(1);
     if (!existingOrder)
         throw new NotFound_1.NotFound("Order not found or not assigned to you");
     const currentStatus = existingOrder.status;
-    // Only allow transitioning from out_for_delivery
-    if (currentStatus === "delivered") {
+    if (currentStatus === "delivered" || existingOrder.shippingStatus === "delivered") {
         throw new BadRequest_1.BadRequest("Order is already delivered");
     }
     if (["cancelled", "refund", "failed"].includes(currentStatus)) {
         throw new BadRequest_1.BadRequest(`Order is already ${currentStatus} and cannot be changed`);
     }
-    if (currentStatus !== "out_for_delivery") {
-        throw new BadRequest_1.BadRequest(`Cannot mark order as delivered from status '${currentStatus}'. Order must be 'out_for_delivery' first.`);
-    }
-    // Update order status and trigger settlement
+    const now = new Date();
     await connection_1.db.transaction(async (tx) => {
+        // 1. Update order status and shipping status
         await tx
             .update(schema_1.orders)
-            .set({ status: "delivered", updatedAt: new Date() })
+            .set({
+            status: "delivered",
+            shippingStatus: "delivered",
+            deliveredAt: now,
+            updatedAt: now,
+        })
             .where((0, drizzle_orm_1.eq)(schema_1.orders.id, orderId));
-        // Settle financial accounts (restaurant wallet, etc.)
+        // 2. Decrement courier activeOrdersCount
+        await tx
+            .update(schema_1.deliveryMen)
+            .set({
+            activeOrdersCount: (0, drizzle_orm_1.sql) `GREATEST(0, ${schema_1.deliveryMen.activeOrdersCount} - 1)`,
+        })
+            .where((0, drizzle_orm_1.eq)(schema_1.deliveryMen.id, deliveryManId));
+        // 3. Mark dispatch assignment completed
+        await tx
+            .update(schema_1.dispatchAssignments)
+            .set({
+            status: "completed",
+            respondedAt: now,
+        })
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.dispatchAssignments.orderId, orderId), (0, drizzle_orm_1.eq)(schema_1.dispatchAssignments.deliveryManId, deliveryManId), (0, drizzle_orm_1.eq)(schema_1.dispatchAssignments.status, "active")));
+        // 4. Settle restaurant earnings via shared service
         await (0, restaurantWalletService_1.settleDeliveredOrder)(orderId, tx);
     });
-    // Send push notification to customer
-    await (0, notifications_1.sendPushNotification)({
-        recipientType: "user",
-        recipientId: existingOrder.userId,
-        branchId: existingOrder.branchId || null,
-        title: "Order Delivered",
-        body: `Your order #${existingOrder.dailyOrderNumber} has been delivered successfully!`,
-        data: {
-            restaurantId: existingOrder.restaurantId,
-            branchId: existingOrder.branchId || null,
-            orderId: existingOrder.id,
-            orderNumber: existingOrder.orderNumber,
-            dailyOrderNumber: existingOrder.dailyOrderNumber,
-            status: "delivered",
-            type: "ORDER_STATUS_UPDATE",
-        },
+    if (existingOrder.shippingCompanyId) {
+        (0, socketService_1.notifyShippingCompany)(existingOrder.shippingCompanyId, socketEvents_1.SOCKET_EVENTS.ORDER_STATUS_CHANGED, {
+            orderId,
+            shippingStatus: "delivered",
+            updatedAt: now,
+        });
+    }
+    (0, socketService_1.notifyOrderTracking)(orderId, socketEvents_1.SOCKET_EVENTS.ORDER_DELIVERED, {
+        orderId,
+        courierId: deliveryManId,
+        deliveredAt: now,
     });
+    if (existingOrder.userId) {
+        await (0, notifications_1.sendPushNotification)({
+            recipientType: "user",
+            recipientId: existingOrder.userId,
+            branchId: existingOrder.branchId || null,
+            title: "Order Delivered",
+            body: `Your order #${existingOrder.dailyOrderNumber || existingOrder.orderNumber} has been delivered successfully!`,
+            data: {
+                restaurantId: existingOrder.restaurantId,
+                branchId: existingOrder.branchId || null,
+                orderId: existingOrder.id,
+                orderNumber: existingOrder.orderNumber,
+                dailyOrderNumber: existingOrder.dailyOrderNumber,
+                status: "delivered",
+                shippingStatus: "delivered",
+                type: "ORDER_STATUS_UPDATE",
+            },
+        });
+    }
     return (0, response_1.SuccessResponse)(res, {
         message: "Order has been marked as delivered successfully",
     });
 };
+exports.markOrderDelivered = markOrderDelivered;
+// ==========================================
+// PATCH /delivery-man/orders/:orderId/status
+// Backward compatibility wrapper for delivery man setting delivered status
+// ==========================================
+const updateOrderStatusToDelivered = async (req, res) => {
+    const { status } = req.body;
+    if (status !== "delivered") {
+        throw new BadRequest_1.BadRequest("Delivery man can only update order status to 'delivered'");
+    }
+    return (0, exports.markOrderDelivered)(req, res);
+};
 exports.updateOrderStatusToDelivered = updateOrderStatusToDelivered;
+// ==========================================
+// POST /delivery-man/orders/:orderId/reject
+// Delivery man rejects an assigned order with mandatory reason
+// ==========================================
+const rejectOrderCourierEndpoint = async (req, res) => {
+    if (!req.user)
+        throw new Errors_1.UnauthorizedError("Unauthenticated");
+    const deliveryManId = req.user.id;
+    const { orderId } = req.params;
+    const { reason } = req.body;
+    if (!reason || reason.trim() === "") {
+        throw new BadRequest_1.BadRequest("Reject reason is mandatory");
+    }
+    const [order] = await connection_1.db
+        .select()
+        .from(schema_1.orders)
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.orders.id, orderId), (0, drizzle_orm_1.eq)(schema_1.orders.deliveryManId, deliveryManId)))
+        .limit(1);
+    if (!order) {
+        throw new NotFound_1.NotFound("Order not found or not assigned to you");
+    }
+    if (order.status === "delivered" || order.status === "cancelled") {
+        throw new BadRequest_1.BadRequest(`Cannot reject order that is already ${order.status}`);
+    }
+    const result = await (0, dispatchEngine_1.rejectOrderByCourier)(orderId, deliveryManId, reason);
+    return (0, response_1.SuccessResponse)(res, {
+        message: "Order rejected and re-dispatch initiated",
+        data: result,
+    });
+};
+exports.rejectOrderCourierEndpoint = rejectOrderCourierEndpoint;

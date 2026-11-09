@@ -16,6 +16,7 @@ const discount_1 = require("../../utils/discount");
 const userBlockCheck_1 = require("../../utils/userBlockCheck");
 const restaurantFeatures_1 = require("./restaurantFeatures");
 const restaurantWalletService_1 = require("../../services/restaurantWalletService");
+const dispatchEngine_1 = require("../../services/shipping/dispatchEngine");
 // 👇 1. دالة تظبيط الوقت لتوقيت مصر عشان نص الإشعار
 const formatToEgyptTime = (date) => {
     return new Intl.DateTimeFormat("ar-EG", {
@@ -370,6 +371,15 @@ const checkout = async (req, res) => {
                 .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.couponUsages.couponId, coupon.id), (0, drizzle_orm_1.eq)(schema_1.couponUsages.userId, userId)));
             if (usages[0].count >= coupon.perUserLimit)
                 throw new BadRequest_1.BadRequest("You have reached the usage limit for this coupon");
+        }
+        // Food restriction check: coupon only applies if at least one eligible food is in the cart
+        const couponFoodIds = coupon.foodIds;
+        if (couponFoodIds && couponFoodIds.length > 0) {
+            const cartFoodIds = userCart.map(ci => ci.foodId).filter(Boolean);
+            const hasEligibleFood = cartFoodIds.some(fId => couponFoodIds.includes(fId));
+            if (!hasEligibleFood) {
+                throw new BadRequest_1.BadRequest("This coupon is only valid for specific items that are not in your cart");
+            }
         }
         const value = parseFloat(coupon.discountValue);
         if (coupon.discountType === "free_delivery") {
@@ -957,6 +967,12 @@ const cancelOrder = async (req, res) => {
         }
         await (0, restaurantWalletService_1.handleCancelledOrder)({ orderId, cancelReasonType: "user", tx });
     });
+    // Release courier's activeOrdersCount if a delivery man was already assigned
+    if (order.deliveryManId) {
+        (0, dispatchEngine_1.releaseCourierForOrder)(orderId, order.deliveryManId).catch((err) => {
+            console.error(`[releaseCourierForOrder] failed on user cancel for order ${orderId}:`, err);
+        });
+    }
     return (0, response_1.SuccessResponse)(res, { message: "Order cancelled successfully" });
 };
 exports.cancelOrder = cancelOrder;

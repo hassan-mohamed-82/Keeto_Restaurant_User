@@ -1,15 +1,41 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getSettingsByRestaurantId = exports.updateSettings = void 0;
+exports.getBusyStatus = exports.updateBusyStatus = exports.getSettingsByRestaurantId = exports.updateSettings = void 0;
 const connection_1 = require("../../models/connection"); // غير المسار حسب مكان ملف اتصال قاعدة البيانات عندك
 const schema_1 = require("../../models/schema");
+const admin_1 = require("../../models/schema/admin/admin");
+const sendEmails_1 = require("../../utils/sendEmails");
 const drizzle_orm_1 = require("drizzle-orm");
 const updateSettings = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     const { settings, schedules } = req.body;
+    let temporaryClosureChanged;
     if (!restaurantId) {
         res.status(400).json({ success: false, message: "Restaurant id is not valid" });
         return;
+    }
+    // 🛡️ Both-off guard: run BEFORE the transaction to avoid double-response issues.
+    // If cashEnabled or enableOnlinePayment is being changed, check the merged result
+    // against existing DB values so we catch the case where one is already false.
+    if (settings && (settings.cashEnabled !== undefined || settings.enableOnlinePayment !== undefined)) {
+        const [currentSettings] = await connection_1.db
+            .select({ cashEnabled: schema_1.restaurantSettings.cashEnabled, enableOnlinePayment: schema_1.restaurantSettings.enableOnlinePayment })
+            .from(schema_1.restaurantSettings)
+            .where((0, drizzle_orm_1.eq)(schema_1.restaurantSettings.restaurantId, restaurantId))
+            .limit(1);
+        const resolvedCashEnabled = settings.cashEnabled !== undefined
+            ? Boolean(settings.cashEnabled)
+            : (currentSettings?.cashEnabled ?? true);
+        const resolvedOnlinePayment = settings.enableOnlinePayment !== undefined
+            ? Boolean(settings.enableOnlinePayment)
+            : (currentSettings?.enableOnlinePayment ?? false);
+        if (resolvedCashEnabled === false && resolvedOnlinePayment === false) {
+            res.status(400).json({
+                success: false,
+                message: "At least one payment method must be active. You cannot disable both cash and online payment at the same time.",
+            });
+            return;
+        }
     }
     try {
         // بدأ الـ Transaction
@@ -48,8 +74,21 @@ const updateSettings = async (req, res) => {
                     settingsData.isAlwaysOpen = settings.isAlwaysOpen;
                 if (settings.isSameTimeEveryDay !== undefined)
                     settingsData.isSameTimeEveryDay = settings.isSameTimeEveryDay;
-                if (settings.isTemporarilyClosed !== undefined)
-                    settingsData.isTemporarilyClosed = settings.isTemporarilyClosed;
+                if (settings.isTemporarilyClosed !== undefined) {
+                    const targetIsTemporarilyClosed = settings.isTemporarilyClosed;
+                    temporaryClosureChanged = Boolean(existingSettings[0]?.isTemporarilyClosed) !== targetIsTemporarilyClosed;
+                    settingsData.isTemporarilyClosed = targetIsTemporarilyClosed;
+                }
+                if (settings.isBusy !== undefined || settings.busy !== undefined) {
+                    const busyVal = settings.isBusy !== undefined ? settings.isBusy : settings.busy;
+                    settingsData.isBusy = Boolean(busyVal);
+                }
+                // ✅ cashEnabled — toggle cash payment on/off per restaurant
+                if (settings.cashEnabled !== undefined)
+                    settingsData.cashEnabled = Boolean(settings.cashEnabled);
+                // ✅ enableOnlinePayment
+                if (settings.enableOnlinePayment !== undefined)
+                    settingsData.enableOnlinePayment = Boolean(settings.enableOnlinePayment);
                 // Other fields
                 if (settings.productView !== undefined || settings.productview !== undefined) {
                     const val = (settings.productView ?? settings.productview);
@@ -124,9 +163,57 @@ const updateSettings = async (req, res) => {
                 }
             }
         });
+        let notificationWarning;
+        if (temporaryClosureChanged !== undefined) {
+            try {
+                const [[restaurant], superAdmins] = await Promise.all([
+                    connection_1.db
+                        .select({ name: schema_1.restaurants.name })
+                        .from(schema_1.restaurants)
+                        .where((0, drizzle_orm_1.eq)(schema_1.restaurants.id, restaurantId))
+                        .limit(1),
+                    connection_1.db
+                        .select({ email: admin_1.admins.email })
+                        .from(admin_1.admins)
+                        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(admin_1.admins.type, "super_admin"), (0, drizzle_orm_1.eq)(admin_1.admins.status, "active"))),
+                ]);
+                const recipients = [...new Set(superAdmins.map(({ email }) => email.trim()).filter(Boolean))];
+                if (recipients.length === 0) {
+                    notificationWarning = "No active super admin email recipients were found";
+                    console.error(`⚠️ Restaurant status changed, but ${notificationWarning.toLowerCase()}.`);
+                }
+                else {
+                    const restaurantName = restaurant?.name || restaurantId;
+                    const escapedRestaurantName = restaurantName
+                        .replace(/&/g, "&amp;")
+                        .replace(/</g, "&lt;")
+                        .replace(/>/g, "&gt;")
+                        .replace(/"/g, "&quot;")
+                        .replace(/'/g, "&#39;");
+                    const status = temporaryClosureChanged ? "temporarily closed" : "open";
+                    const subject = `Restaurant ${temporaryClosureChanged ? "closed" : "open"}: ${restaurantName}`;
+                    const emailHtml = `<p>Hello,</p><p><strong>${escapedRestaurantName}</strong> is now ${status}.</p>`;
+                    const emailResults = await Promise.allSettled(recipients.map((to) => (0, sendEmails_1.sendEmail)({ to, subject, html: emailHtml })));
+                    const failedEmails = emailResults.filter((result) => result.status === "rejected");
+                    emailResults.forEach((result, index) => {
+                        if (result.status === "rejected") {
+                            console.error(`❌ Failed to send restaurant status email to ${recipients[index]}:`, result.reason);
+                        }
+                    });
+                    if (failedEmails.length > 0) {
+                        notificationWarning = `Failed to send restaurant status email to ${failedEmails.length} super admin(s)`;
+                    }
+                }
+            }
+            catch (error) {
+                notificationWarning = "Unable to send restaurant status notification email";
+                console.error("❌ Failed to notify super admins about restaurant status change:", error);
+            }
+        }
         res.status(200).json({
             success: true,
-            message: "Update settings success"
+            message: "Update settings success",
+            ...(notificationWarning ? { notificationWarning } : {}),
         });
     }
     catch (error) {
@@ -154,12 +241,107 @@ const getSettingsByRestaurantId = async (req, res) => {
         const newSettings = await connection_1.db.select().from(schema_1.restaurantSettings).where((0, drizzle_orm_1.eq)(schema_1.restaurantSettings.restaurantId, restaurantId)).limit(1);
         settingsResult = newSettings[0];
     }
+    const isBusy = Boolean(settingsResult?.isBusy);
     res.status(200).json({
         success: true,
         data: {
             settings: settingsResult,
-            schedules: schedules || []
+            schedules: schedules || [],
+            busyStatus: isBusy ? "busy" : "available",
         }
     });
 };
 exports.getSettingsByRestaurantId = getSettingsByRestaurantId;
+const updateBusyStatus = async (req, res) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId) {
+        res.status(400).json({ success: false, message: "Restaurant id is required" });
+        return;
+    }
+    // 1. Verify restaurant has an active MyKeeto plan
+    const [mykeetoPlan] = await connection_1.db
+        .select()
+        .from(schema_1.restaurantBusinessPlans)
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.restaurantBusinessPlans.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.restaurantBusinessPlans.platformType, "mykeeto")))
+        .limit(1);
+    if (!mykeetoPlan || mykeetoPlan.mykeetoStatus === "inactive") {
+        res.status(400).json({
+            success: false,
+            message: "This feature is only available for restaurants subscribed to the active MyKeeto plan"
+        });
+        return;
+    }
+    // 2. Determine target busy status
+    let targetIsBusy;
+    if (req.body.isBusy !== undefined) {
+        targetIsBusy = Boolean(req.body.isBusy);
+    }
+    else if (req.body.busy !== undefined) {
+        targetIsBusy = Boolean(req.body.busy);
+    }
+    else if (req.body.status !== undefined) {
+        targetIsBusy = req.body.status === "busy";
+    }
+    else {
+        res.status(400).json({ success: false, message: "isBusy or status is required" });
+        return;
+    }
+    // 3. Update restaurantSettings
+    const existingSettings = await connection_1.db
+        .select()
+        .from(schema_1.restaurantSettings)
+        .where((0, drizzle_orm_1.eq)(schema_1.restaurantSettings.restaurantId, restaurantId))
+        .limit(1);
+    if (existingSettings.length > 0) {
+        await connection_1.db
+            .update(schema_1.restaurantSettings)
+            .set({ isBusy: targetIsBusy })
+            .where((0, drizzle_orm_1.eq)(schema_1.restaurantSettings.restaurantId, restaurantId));
+    }
+    else {
+        await connection_1.db
+            .insert(schema_1.restaurantSettings)
+            .values({ restaurantId, isBusy: targetIsBusy });
+    }
+    res.status(200).json({
+        success: true,
+        message: `Restaurant status updated to ${targetIsBusy ? "busy" : "available"} successfully`,
+        data: {
+            restaurantId,
+            isBusy: targetIsBusy,
+            busyStatus: targetIsBusy ? "busy" : "available",
+            status: targetIsBusy ? "busy" : "available"
+        }
+    });
+};
+exports.updateBusyStatus = updateBusyStatus;
+const getBusyStatus = async (req, res) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId) {
+        res.status(400).json({ success: false, message: "Restaurant id is required" });
+        return;
+    }
+    const [settings] = await connection_1.db
+        .select({ isBusy: schema_1.restaurantSettings.isBusy })
+        .from(schema_1.restaurantSettings)
+        .where((0, drizzle_orm_1.eq)(schema_1.restaurantSettings.restaurantId, restaurantId))
+        .limit(1);
+    const [mykeetoPlan] = await connection_1.db
+        .select()
+        .from(schema_1.restaurantBusinessPlans)
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.restaurantBusinessPlans.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.restaurantBusinessPlans.platformType, "mykeeto")))
+        .limit(1);
+    const isBusy = Boolean(settings?.isBusy);
+    const hasMykeetoPlan = Boolean(mykeetoPlan && mykeetoPlan.mykeetoStatus === "active");
+    res.status(200).json({
+        success: true,
+        data: {
+            restaurantId,
+            isBusy,
+            busyStatus: isBusy ? "busy" : "available",
+            status: isBusy ? "busy" : "available",
+            hasMykeetoPlan
+        }
+    });
+};
+exports.getBusyStatus = getBusyStatus;

@@ -1,0 +1,12 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const videos_1 = require("../../controllers/admin/videos");
+const validation_1 = require("../../middlewares/validation");
+const catchAsync_1 = require("../../utils/catchAsync");
+const videos_2 = require("../../validation/admin/videos");
+const hasPermission_1 = require("../../middlewares/hasPermission");
+const router = (0, express_1.Router)();
+router.get("/", (0, hasPermission_1.hasPermission)("Videos", "read"), (0, validation_1.validate)(videos_2.getVideosQuerySchema, "query"), (0, catchAsync_1.catchAsync)(videos_1.getVideos));
+router.get("/:id", (0, hasPermission_1.hasPermission)("Videos", "read"), (0, validation_1.validate)(videos_2.videoIdParamSchema, "params"), (0, catchAsync_1.catchAsync)(videos_1.getVideoById));
+exports.default = router;

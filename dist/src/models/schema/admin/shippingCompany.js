@@ -66,7 +66,6 @@ exports.shippingZones = (0, mysql_core_1.mysqlTable)("shipping_zones", {
 });
 // =========================================================================
 // 4. شفتات المندوب لخدمة مطعم معين (Delivery Man Shifts)
-// للمناديب من نوع: workType = 'restaurant_shift'
 // =========================================================================
 exports.deliveryManShifts = (0, mysql_core_1.mysqlTable)("delivery_man_shifts", {
     id: (0, mysql_core_1.char)("id", { length: 36 }).primaryKey().default((0, drizzle_orm_1.sql) `(UUID())`),

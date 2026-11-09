@@ -200,6 +200,22 @@ exports.getPendingOrders = getPendingOrders;
 // ==========================================
 // إسناد طلبات لعامل توصيل
 // ==========================================
+// ==========================================
+// مساعد تحديد نوع الدفع (كاش أم فيزا / إلكتروني)
+// ==========================================
+const checkIsCash = (name, nameAr, raw) => {
+    if (!name && !nameAr && !raw)
+        return true;
+    const n = (name || "").toLowerCase();
+    const nar = (nameAr || "");
+    const r = (raw || "").toLowerCase();
+    return (n.includes("cash") ||
+        nar.includes("استلام") ||
+        nar.includes("كاش") ||
+        nar.includes("نقدا") ||
+        r.includes("cash") ||
+        r.includes("استلام"));
+};
 /**
  * POST /delivery-men/assign-orders
  * body: { deliveryManId: string, orderIds: string[] }
@@ -222,8 +238,17 @@ const assignOrdersToDeliveryMan = async (req, res) => {
     // 2. التحقق من أن كل الطلبات موجودة وقابلة للإسناد (pending/accepted/preparing)
     const assignableStatuses = ["pending", "accepted", "preparing"];
     const eligibleOrders = await connection_1.db
-        .select({ id: schema_1.orders.id, orderNumber: schema_1.orders.orderNumber, status: schema_1.orders.status })
+        .select({
+        id: schema_1.orders.id,
+        orderNumber: schema_1.orders.orderNumber,
+        status: schema_1.orders.status,
+        totalAmount: schema_1.orders.totalAmount,
+        paymentMethod: schema_1.orders.paymentMethod,
+        paymentMethodName: schema_1.paymentMethods.name,
+        paymentMethodNameAr: schema_1.paymentMethods.nameAr,
+    })
         .from(schema_1.orders)
+        .leftJoin(schema_1.paymentMethods, (0, drizzle_orm_1.eq)(schema_1.orders.paymentMethod, schema_1.paymentMethods.id))
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.orders.id, orderIds), (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.orders.orderType, "delivery"), (0, drizzle_orm_1.inArray)(schema_1.orders.status, [...assignableStatuses])));
     if (eligibleOrders.length !== orderIds.length) {
         const foundIds = new Set(eligibleOrders.map(o => o.id));
@@ -248,13 +273,46 @@ const assignOrdersToDeliveryMan = async (req, res) => {
             type: "ORDER_OUT_FOR_DELIVERY",
         },
     });
+    let totalOrdersCash = 0;
+    let totalOrdersVisa = 0;
+    let totalCashAmount = 0;
+    let totalVisaAmount = 0;
+    const formattedAssignedOrders = eligibleOrders.map(order => {
+        const isCash = checkIsCash(order.paymentMethodName, order.paymentMethodNameAr, order.paymentMethod);
+        const amount = parseFloat(order.totalAmount || "0");
+        if (isCash) {
+            totalOrdersCash++;
+            totalCashAmount += amount;
+        }
+        else {
+            totalOrdersVisa++;
+            totalVisaAmount += amount;
+        }
+        return {
+            id: order.id,
+            orderNumber: order.orderNumber,
+            status: "out_for_delivery",
+            totalAmount: order.totalAmount,
+            paymentMethod: order.paymentMethod,
+            paymentMethodName: order.paymentMethodName,
+            paymentMethodNameAr: order.paymentMethodNameAr,
+            isCash,
+            paymentType: isCash ? "cash" : "visa",
+        };
+    });
     return (0, response_1.SuccessResponse)(res, {
         message: `Successfully assigned ${eligibleOrders.length} order(s) to ${existingDeliveryMan.name}`,
         data: {
             deliveryManId,
             deliveryManName: existingDeliveryMan.name,
             assignedOrdersCount: eligibleOrders.length,
-            assignedOrders: eligibleOrders,
+            totalOrdersCash,
+            totalOrdersVisa,
+            totalCashOrders: totalOrdersCash,
+            totalVisaOrders: totalOrdersVisa,
+            totalCashAmount: totalCashAmount.toFixed(2),
+            totalVisaAmount: totalVisaAmount.toFixed(2),
+            assignedOrders: formattedAssignedOrders,
         },
     });
 };
@@ -265,7 +323,7 @@ exports.assignOrdersToDeliveryMan = assignOrdersToDeliveryMan;
 /**
  * GET /delivery-men/assigned-orders
  * يجلب كل عمال التوصيل مع الطلبات المسندة لكل منهم
- * + إجمالي عدد الطلبات + إجمالي المبلغ لكل عامل
+ * + إجمالي عدد الطلبات + إجمالي طلبات الكاش والفيزا + إجمالي المبالغ لكل عامل
  */
 const getDeliveryMenWithOrders = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
@@ -293,6 +351,16 @@ const getDeliveryMenWithOrders = async (req, res) => {
         return (0, response_1.SuccessResponse)(res, {
             message: "No delivery men found",
             total: 0,
+            summary: {
+                totalOrders: 0,
+                totalOrdersCash: 0,
+                totalOrdersVisa: 0,
+                totalCashOrders: 0,
+                totalVisaOrders: 0,
+                totalAmount: "0.00",
+                totalCashAmount: "0.00",
+                totalVisaAmount: "0.00",
+            },
             data: [],
         });
     }
@@ -310,6 +378,8 @@ const getDeliveryMenWithOrders = async (req, res) => {
         subtotal: schema_1.orders.subtotal,
         deliveryFee: schema_1.orders.deliveryFee,
         paymentMethod: schema_1.orders.paymentMethod,
+        paymentMethodName: schema_1.paymentMethods.name,
+        paymentMethodNameAr: schema_1.paymentMethods.nameAr,
         note: schema_1.orders.note,
         shippingAddress: schema_1.orders.shippingAddress,
         deliveryManId: schema_1.orders.deliveryManId,
@@ -321,6 +391,7 @@ const getDeliveryMenWithOrders = async (req, res) => {
     })
         .from(schema_1.orders)
         .leftJoin(schema_1.users, (0, drizzle_orm_1.eq)(schema_1.orders.userId, schema_1.users.id))
+        .leftJoin(schema_1.paymentMethods, (0, drizzle_orm_1.eq)(schema_1.orders.paymentMethod, schema_1.paymentMethods.id))
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.orders.deliveryManId, deliveryMenIds), (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.orders.orderType, "delivery"), (0, drizzle_orm_1.inArray)(schema_1.orders.status, [...activeStatuses]), 
     // ✅ إخفاء طلبات الفيزا المعلقة أو الفاشلة
     (0, order_helper_1.excludeUnpaidVisaOrders)()))
@@ -334,19 +405,74 @@ const getDeliveryMenWithOrders = async (req, res) => {
         ordersMap.get(dmId).push(order);
     }
     // 4. تجميع النتيجة النهائية
+    let overallOrders = 0;
+    let overallOrdersCash = 0;
+    let overallOrdersVisa = 0;
+    let overallAmount = 0;
+    let overallCashAmount = 0;
+    let overallVisaAmount = 0;
     const result = allDeliveryMen.map(dm => {
         const dmOrders = ordersMap.get(dm.id) ?? [];
-        const totalAmount = dmOrders.reduce((sum, o) => sum + parseFloat(o.totalAmount ?? "0"), 0);
+        let totalAmount = 0;
+        let totalOrdersCash = 0;
+        let totalOrdersVisa = 0;
+        let totalCashAmount = 0;
+        let totalVisaAmount = 0;
+        const formattedOrders = dmOrders.map(o => {
+            const isCash = checkIsCash(o.paymentMethodName, o.paymentMethodNameAr, o.paymentMethod);
+            const amt = parseFloat(o.totalAmount ?? "0");
+            totalAmount += amt;
+            if (isCash) {
+                totalOrdersCash++;
+                totalCashAmount += amt;
+            }
+            else {
+                totalOrdersVisa++;
+                totalVisaAmount += amt;
+            }
+            return {
+                ...o,
+                isCash,
+                paymentType: isCash ? "cash" : "visa",
+                paymentMethodDisplay: {
+                    id: o.paymentMethod,
+                    name: o.paymentMethodName || (isCash ? "Cash on Delivery" : "Visa / Online Card"),
+                    nameAr: o.paymentMethodNameAr || (isCash ? "الدفع عند الاستلام" : "فيزا / بطاقة إلكترونية"),
+                },
+            };
+        });
+        overallOrders += formattedOrders.length;
+        overallOrdersCash += totalOrdersCash;
+        overallOrdersVisa += totalOrdersVisa;
+        overallAmount += totalAmount;
+        overallCashAmount += totalCashAmount;
+        overallVisaAmount += totalVisaAmount;
         return {
             ...dm,
-            totalOrders: dmOrders.length,
+            totalOrders: formattedOrders.length,
+            totalOrdersCash,
+            totalOrdersVisa,
+            totalCashOrders: totalOrdersCash,
+            totalVisaOrders: totalOrdersVisa,
             totalAmount: totalAmount.toFixed(2),
-            orders: dmOrders,
+            totalCashAmount: totalCashAmount.toFixed(2),
+            totalVisaAmount: totalVisaAmount.toFixed(2),
+            orders: formattedOrders,
         };
     });
     return (0, response_1.SuccessResponse)(res, {
         message: "Delivery men with assigned orders fetched successfully",
         total: result.length,
+        summary: {
+            totalOrders: overallOrders,
+            totalOrdersCash: overallOrdersCash,
+            totalOrdersVisa: overallOrdersVisa,
+            totalCashOrders: overallOrdersCash,
+            totalVisaOrders: overallOrdersVisa,
+            totalAmount: overallAmount.toFixed(2),
+            totalCashAmount: overallCashAmount.toFixed(2),
+            totalVisaAmount: overallVisaAmount.toFixed(2),
+        },
         data: result,
     });
 };

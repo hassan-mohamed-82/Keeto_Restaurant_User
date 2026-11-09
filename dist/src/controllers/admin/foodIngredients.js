@@ -7,6 +7,7 @@ const drizzle_orm_1 = require("drizzle-orm");
 const BadRequest_1 = require("../../Errors/BadRequest");
 const NotFound_1 = require("../../Errors/NotFound");
 const response_1 = require("../../utils/response");
+const foodConditions_1 = require("../../helpers/foodConditions");
 // =========================================================
 // 🍳 إدارة الوصفة (Recipe / Food Ingredients)
 // =========================================================
@@ -18,8 +19,8 @@ const assignIngredientsToFood = async (req, res) => {
         throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
     if (!Array.isArray(ingredientsList))
         throw new BadRequest_1.BadRequest("ingredientsList must be an array");
-    // 1. التأكد من وجود الوجبة وتبعيتا للمطعم
-    const existingFood = await connection_1.db.select().from(schema_1.food).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.id, id), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId))).limit(1);
+    // 1. التأكد من وجود الوجبة وتبعيتا للمطعم وغير محذوفة
+    const existingFood = await connection_1.db.select().from(schema_1.food).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.id, id), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId), foodConditions_1.activeFoodCondition)).limit(1);
     if (!existingFood[0])
         throw new NotFound_1.NotFound("Food not found or does not belong to you");
     if (ingredientsList.length > 0) {
@@ -54,7 +55,7 @@ const getFoodRecipe = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
-    const existingFood = await connection_1.db.select().from(schema_1.food).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.id, id), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId))).limit(1);
+    const existingFood = await connection_1.db.select().from(schema_1.food).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.id, id), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId), foodConditions_1.activeFoodCondition)).limit(1);
     if (!existingFood[0])
         throw new NotFound_1.NotFound("Food not found");
     const recipe = await connection_1.db.select({

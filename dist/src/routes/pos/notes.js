@@ -1,10 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const catchAsync_1 = require("../../../utils/catchAsync");
-const validation_1 = require("../../../middlewares/validation");
-const notes_1 = require("../../../validation/admin/notes");
-const notes_2 = require("../../../controllers/admin/pos/notes");
+const catchAsync_1 = require("../../utils/catchAsync");
+const validation_1 = require("../../middlewares/validation");
+const notes_1 = require("../../validation/admin/notes");
+const notes_2 = require("../../controllers/pos/notes");
 const router = (0, express_1.Router)();
 // Assign / unassign note group to food
 router.post("/assign-food", (0, validation_1.validate)(notes_1.assignNoteGroupToFoodSchema), (0, catchAsync_1.catchAsync)(notes_2.assignNoteGroupToFood));
