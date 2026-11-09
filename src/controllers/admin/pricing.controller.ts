@@ -382,8 +382,8 @@ export const getMenuWithDynamicPricing = async (req: Request, res: Response) => 
 
 
     const foodConditions = [
-        eq(food.restaurantid, restaurantId),
-        eq(food.status, "active"),
+        eq(food.restaurantid, restaurantId)
+        // eq(food.status, "active"),
     ];
 
     if (subcategoryId) {
