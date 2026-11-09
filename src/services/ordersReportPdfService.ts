@@ -396,7 +396,7 @@ export async function buildOrdersReportPDF(options: GenerateOrdersReportPDFOptio
 
         if (isAr) {
             // Arabic Layout: Label (Right), Value (Left)
-            const valWidth = 105;
+            const valWidth = 125;
             const lblWidth = printableWidth - valWidth;
 
             const fixedLabel = fixArabicText(label);
@@ -668,7 +668,7 @@ export async function buildOrdersReportPDF(options: GenerateOrdersReportPDFOptio
                 for (const [, bPm] of b.paymentMethods) {
                     const pmShare = b.totalAmount > 0 ? ((bPm.total / b.totalAmount) * 100).toFixed(0) : "0";
                     const pmTitle = bPm.nameAr || bPm.name;
-                    drawRow(`  • ${pmTitle}:`, `${bPm.count} طلب | ${formatNum(bPm.total)} ${currency} (${pmShare}%)`, false, 8.5, true);
+                    drawRow(`  • ${pmTitle} (${bPm.count} طلب):`, `${formatNum(bPm.total)} ${currency} (${pmShare}%)`, false, 8.5, true);
                 }
             }
 
@@ -684,7 +684,7 @@ export async function buildOrdersReportPDF(options: GenerateOrdersReportPDFOptio
 
                 for (const [otKey, otVal] of b.orderTypes) {
                     const otInfo = ORDER_TYPE_LABELS[otKey] || { en: otKey, ar: otKey };
-                    drawRow(`  • ${otInfo.ar}:`, `${otVal.count} طلب | ${formatNum(otVal.total)} ${currency}`, false, 8.5, true);
+                    drawRow(`  • ${otInfo.ar} (${otVal.count} طلب):`, `${formatNum(otVal.total)} ${currency}`, false, 8.5, true);
                 }
             }
         } else {
@@ -703,7 +703,8 @@ export async function buildOrdersReportPDF(options: GenerateOrdersReportPDFOptio
 
                 for (const [, bPm] of b.paymentMethods) {
                     const pmShare = b.totalAmount > 0 ? ((bPm.total / b.totalAmount) * 100).toFixed(0) : "0";
-                    drawRow(`  • ${bPm.name || bPm.nameAr}:`, `${bPm.count} orders | ${formatNum(bPm.total)} ${currency} (${pmShare}%)`, false, 8.5, true);
+                    const pmTitle = bPm.name || bPm.nameAr;
+                    drawRow(`  • ${pmTitle} (${bPm.count} orders):`, `${formatNum(bPm.total)} ${currency} (${pmShare}%)`, false, 8.5, true);
                 }
             }
 
@@ -719,7 +720,7 @@ export async function buildOrdersReportPDF(options: GenerateOrdersReportPDFOptio
 
                 for (const [otKey, otVal] of b.orderTypes) {
                     const otInfo = ORDER_TYPE_LABELS[otKey] || { en: otKey, ar: otKey };
-                    drawRow(`  • ${otInfo.en}:`, `${otVal.count} orders | ${formatNum(otVal.total)} ${currency}`, false, 8.5, true);
+                    drawRow(`  • ${otInfo.en} (${otVal.count} orders):`, `${formatNum(otVal.total)} ${currency}`, false, 8.5, true);
                 }
             }
         }
