@@ -85,9 +85,9 @@ export interface GenerateOrdersReportPDFOptions {
 // Label Dictionaries & Translations
 // ==========================================
 export const ORDER_TYPE_LABELS: Record<string, { en: string; ar: string }> = {
-    delivery: { en: "Delivery", ar: "توصيل" },
-    takeaway: { en: "Takeaway", ar: "استلام من المطعم" },
-    dine_in: { en: "Dine-in", ar: "صالة" },
+    delivery: { en: "Delivery", ar: "ديليفري" },
+    takeaway: { en: "Takeaway", ar: "تيك اواي" },
+    dine_in: { en: "Dine-in", ar: "صال" },
 };
 
 export const ORDER_STATUS_LABELS: Record<string, { en: string; ar: string }> = {
