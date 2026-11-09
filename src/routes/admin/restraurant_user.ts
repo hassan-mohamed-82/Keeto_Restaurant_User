@@ -10,6 +10,7 @@ import {
     deleteRestaurantUser,
     getRestaurantUserById,
     getRestaurantUserStats,
+    getRestaurantUserPointsTransactions,
 } from "../../controllers/admin/restraurant_user";
 
 const router = Router();
@@ -17,6 +18,7 @@ const router = Router();
 router.get("/blocked", catchAsync(getBlockedRestaurantUsers));
 router.get("/", validate(getRestaurantUsersQuerySchema, "query"), catchAsync(getRestaurantUsers));
 router.get("/:id/stats", validate(getUserStatsParamsSchema, "params"), catchAsync(getRestaurantUserStats));
+router.get("/:id/points-transactions", catchAsync(getRestaurantUserPointsTransactions));
 router.get("/:id", catchAsync(getRestaurantUserById));
 router.put("/:id", catchAsync(updateRestaurantUser));
 router.delete("/:id", catchAsync(deleteRestaurantUser));

@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { users, restaurant_users, restaurants, userRestaurantPoints, orders, orderItems, food } from "../../models/schema";
+import { users, restaurant_users, restaurants, userRestaurantPoints, userPointsTransactions, orders, orderItems, food } from "../../models/schema";
 import { eq, and, or, sql, desc, inArray, like, gte, lte, ne } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
@@ -543,4 +543,80 @@ export const getRestaurantUserStats = async (req: Request, res: Response) => {
             recentOrders: recentOrderRows,
         },
     }, 200);
+};
+
+// =======================================================
+// 7. Get User Points Transactions (for a specific user in this restaurant)
+// GET /:id/points-transactions?type=earn|redeem|manual_adjust&page=1&limit=20
+// =======================================================
+export const getRestaurantUserPointsTransactions = async (req: Request, res: Response) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId) throw new BadRequest("Restaurant ID is required");
+
+    const { id: userId } = req.params;
+    const { type, page = "1", limit = "20" } = req.query;
+
+    const pageNum = Math.max(1, parseInt(page as string, 10));
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit as string, 10)));
+    const offset = (pageNum - 1) * limitNum;
+
+    // التحقق أن المستخدم فعلاً عميل لهذا المطعم
+    const [userRecord] = await db
+        .select({ id: users.id, name: users.name, phone: users.phone })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+    if (!userRecord) throw new NotFound("User not found");
+
+    // رصيد النقاط الحالي
+    const [pointsRecord] = await db
+        .select({ points: userRestaurantPoints.points })
+        .from(userRestaurantPoints)
+        .where(
+            and(
+                eq(userRestaurantPoints.userId, userId),
+                eq(userRestaurantPoints.restaurantId, restaurantId)
+            )
+        )
+        .limit(1);
+
+    // بناء الشروط
+    const conditions: any[] = [
+        eq(userPointsTransactions.userId, userId),
+        eq(userPointsTransactions.restaurantId, restaurantId),
+    ];
+
+    if (type && ["earn", "redeem", "manual_adjust"].includes(type as string)) {
+        conditions.push(eq(userPointsTransactions.type, type as any));
+    }
+
+    const transactions = await db
+        .select({
+            id: userPointsTransactions.id,
+            type: userPointsTransactions.type,
+            points: userPointsTransactions.points,
+            balanceBefore: userPointsTransactions.balanceBefore,
+            balanceAfter: userPointsTransactions.balanceAfter,
+            orderId: userPointsTransactions.orderId,
+            note: userPointsTransactions.note,
+            createdAt: userPointsTransactions.createdAt,
+        })
+        .from(userPointsTransactions)
+        .where(and(...conditions))
+        .orderBy(desc(userPointsTransactions.createdAt))
+        .limit(limitNum)
+        .offset(offset);
+
+    return SuccessResponse(res, {
+        message: "User points transactions fetched successfully",
+        data: {
+            user: userRecord,
+            currentPoints: pointsRecord?.points ?? 0,
+            transactions,
+        },
+        meta: {
+            page: pageNum,
+            limit: limitNum,
+        },
+    });
 };
