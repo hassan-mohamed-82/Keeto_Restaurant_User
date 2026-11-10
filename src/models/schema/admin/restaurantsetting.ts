@@ -11,6 +11,33 @@ import {
   timestamp
 } from "drizzle-orm/mysql-core";
 
+// ==========================================
+// إعدادات صفحة "اطلب الآن" (Order Now Settings)
+// ==========================================
+export interface OrderNowSetting {
+  hotline: boolean;
+  branches: boolean;
+  name: boolean;
+  orderNow: boolean;
+  eMenu: boolean;
+  socialMedia: boolean;
+  menuPdf: boolean;
+  iosIcon: boolean;
+  androidIcon: boolean;
+}
+
+export const defaultOrderNowSetting: OrderNowSetting = {
+  hotline: true,
+  branches: true,
+  name: true,
+  orderNow: true,
+  eMenu: true,
+  socialMedia: true,
+  menuPdf: true,
+  iosIcon: true,
+  androidIcon: true,
+};
+
 // 1. جدول الإعدادات العامة
 export const restaurantSettings = mysqlTable("restaurant_settings", {
   id: int("id").autoincrement().primaryKey(),
@@ -85,8 +112,14 @@ export const restaurantSettings = mysqlTable("restaurant_settings", {
   gatewayAutoSwitchTriggeredAt: timestamp("gateway_auto_switch_triggered_at"),
   // العداد التراكمي للسيرفيس فيز أثناء تشغيل بوابة CUSTOM لمقارنتها بالـ Threshold
   customGatewayAccumulatedFees: decimal("custom_gateway_accumulated_fees", { precision: 10, scale: 2 }).default("0.00"),
-});
 
+  // ==========================================
+  // إعدادات صفحة "اطلب الآن" (Order Now Settings)
+  // ==========================================
+  orderNowSetting: json("order_now_setting")
+    .$type<OrderNowSetting>()
+    .default(defaultOrderNowSetting),
+});
 
 // 2. جدول مواعيد العمل (يدعم الفترات المتعددة)
 export const restaurantSchedules = mysqlTable("restaurant_schedules", {

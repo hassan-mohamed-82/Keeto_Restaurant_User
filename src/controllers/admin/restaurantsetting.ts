@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { db } from '../../models/connection'; // غير المسار حسب مكان ملف اتصال قاعدة البيانات عندك
-import { restaurantSettings, restaurantSchedules, restaurants, restaurantBusinessPlans } from '../../models/schema';
+import { restaurantSettings, restaurantSchedules, restaurants, restaurantBusinessPlans, OrderNowSetting, defaultOrderNowSetting } from '../../models/schema';
 import { admins } from '../../models/schema/admin/admin';
 import { sendEmail } from '../../utils/sendEmails';
 import { eq, and } from 'drizzle-orm';
@@ -109,6 +109,23 @@ export const updateSettings = async (req: Request, res: Response): Promise<void>
         if (settings.repeatNotificationDuration !== undefined) settingsData.repeatNotificationDuration = settings.repeatNotificationDuration;
         if (settings.repeatNotificationStatuses !== undefined) settingsData.repeatNotificationStatuses = settings.repeatNotificationStatuses;
         if (settings.resetDailyOrderNumberTime !== undefined) settingsData.resetDailyOrderNumberTime = settings.resetDailyOrderNumberTime;
+
+        // ✅ orderNowSetting — toggle order-now elements on/off (hotline, branches, name, orderNow, eMenu, socialMedia, menuPdf, iosIcon, androidIcon)
+        const incomingOrderNow = settings.orderNowSetting ?? settings.orderNowSettings;
+        if (incomingOrderNow !== undefined && typeof incomingOrderNow === 'object' && incomingOrderNow !== null) {
+          const currentOrderNow = (existingSettings[0]?.orderNowSetting as OrderNowSetting | undefined) || defaultOrderNowSetting;
+          settingsData.orderNowSetting = {
+            hotline: incomingOrderNow.hotline !== undefined ? Boolean(incomingOrderNow.hotline) : (currentOrderNow.hotline ?? true),
+            branches: incomingOrderNow.branches !== undefined ? Boolean(incomingOrderNow.branches) : (currentOrderNow.branches ?? true),
+            name: incomingOrderNow.name !== undefined ? Boolean(incomingOrderNow.name) : (currentOrderNow.name ?? true),
+            orderNow: incomingOrderNow.orderNow !== undefined ? Boolean(incomingOrderNow.orderNow) : (currentOrderNow.orderNow ?? true),
+            eMenu: incomingOrderNow.eMenu !== undefined ? Boolean(incomingOrderNow.eMenu) : (currentOrderNow.eMenu ?? true),
+            socialMedia: incomingOrderNow.socialMedia !== undefined ? Boolean(incomingOrderNow.socialMedia) : (currentOrderNow.socialMedia ?? true),
+            menuPdf: incomingOrderNow.menuPdf !== undefined ? Boolean(incomingOrderNow.menuPdf) : (currentOrderNow.menuPdf ?? true),
+            iosIcon: incomingOrderNow.iosIcon !== undefined ? Boolean(incomingOrderNow.iosIcon) : (currentOrderNow.iosIcon ?? true),
+            androidIcon: incomingOrderNow.androidIcon !== undefined ? Boolean(incomingOrderNow.androidIcon) : (currentOrderNow.androidIcon ?? true),
+          };
+        }
 
         if (existingSettings.length > 0) {
           // ✅ Update existing settings
@@ -229,17 +246,28 @@ export const getSettingsByRestaurantId = async (req: Request, res: Response): Pr
 
   // لو مفيش إعدادات خالص للمطعم ده، هنكريتله إعدادات افتراضية
   if (!settingsResult) {
-    await db.insert(restaurantSettings).values({ restaurantId });
+    await db.insert(restaurantSettings).values({ restaurantId, orderNowSetting: defaultOrderNowSetting });
     const newSettings = await db.select().from(restaurantSettings).where(eq(restaurantSettings.restaurantId, restaurantId)).limit(1);
     settingsResult = newSettings[0];
   }
 
-  const isBusy = Boolean(settingsResult?.isBusy);
+  // ✅ ضمان إرجاع كامل كائن orderNowSetting بالقيم الافتراضية (true) حتى لو كان null في قاعدة البيانات
+  const resolvedOrderNowSetting: OrderNowSetting = {
+    ...defaultOrderNowSetting,
+    ...((settingsResult?.orderNowSetting as any) || {}),
+  };
+
+  const finalSettings = {
+    ...settingsResult,
+    orderNowSetting: resolvedOrderNowSetting,
+  };
+
+  const isBusy = Boolean(finalSettings?.isBusy);
 
   res.status(200).json({
     success: true,
     data: {
-      settings: settingsResult,
+      settings: finalSettings,
       schedules: schedules || [],
       busyStatus: isBusy ? "busy" : "available",
     }
