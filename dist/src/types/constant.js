@@ -22,6 +22,7 @@ exports.MODULES = [
     // ─── Orders ───────────────────────────────────────────
     "order",
     "pointsOrders",
+    "order_list_amount",
     // ─── Branches & Zones ─────────────────────────────────
     "branches",
     "branchemenu",

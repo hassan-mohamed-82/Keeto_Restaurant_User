@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getRestaurantUserStats = exports.getRestaurantUserById = exports.deleteRestaurantUser = exports.updateRestaurantUser = exports.getBlockedRestaurantUsers = exports.getRestaurantUsers = void 0;
+exports.getRestaurantUserPointsTransactions = exports.getRestaurantUserStats = exports.getRestaurantUserById = exports.deleteRestaurantUser = exports.updateRestaurantUser = exports.getBlockedRestaurantUsers = exports.getRestaurantUsers = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -417,3 +417,68 @@ const getRestaurantUserStats = async (req, res) => {
     }, 200);
 };
 exports.getRestaurantUserStats = getRestaurantUserStats;
+// =======================================================
+// 7. Get User Points Transactions (for a specific user in this restaurant)
+// GET /:id/points-transactions?type=earn|redeem|manual_adjust&page=1&limit=20
+// =======================================================
+const getRestaurantUserPointsTransactions = async (req, res) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId)
+        throw new BadRequest_1.BadRequest("Restaurant ID is required");
+    const { id: userId } = req.params;
+    const { type, page = "1", limit = "20" } = req.query;
+    const pageNum = Math.max(1, parseInt(page, 10));
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
+    const offset = (pageNum - 1) * limitNum;
+    // التحقق أن المستخدم فعلاً عميل لهذا المطعم
+    const [userRecord] = await connection_1.db
+        .select({ id: schema_1.users.id, name: schema_1.users.name, phone: schema_1.users.phone })
+        .from(schema_1.users)
+        .where((0, drizzle_orm_1.eq)(schema_1.users.id, userId))
+        .limit(1);
+    if (!userRecord)
+        throw new Errors_1.NotFound("User not found");
+    // رصيد النقاط الحالي
+    const [pointsRecord] = await connection_1.db
+        .select({ points: schema_1.userRestaurantPoints.points })
+        .from(schema_1.userRestaurantPoints)
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.userRestaurantPoints.userId, userId), (0, drizzle_orm_1.eq)(schema_1.userRestaurantPoints.restaurantId, restaurantId)))
+        .limit(1);
+    // بناء الشروط
+    const conditions = [
+        (0, drizzle_orm_1.eq)(schema_1.userPointsTransactions.userId, userId),
+        (0, drizzle_orm_1.eq)(schema_1.userPointsTransactions.restaurantId, restaurantId),
+    ];
+    if (type && ["earn", "redeem", "manual_adjust"].includes(type)) {
+        conditions.push((0, drizzle_orm_1.eq)(schema_1.userPointsTransactions.type, type));
+    }
+    const transactions = await connection_1.db
+        .select({
+        id: schema_1.userPointsTransactions.id,
+        type: schema_1.userPointsTransactions.type,
+        points: schema_1.userPointsTransactions.points,
+        balanceBefore: schema_1.userPointsTransactions.balanceBefore,
+        balanceAfter: schema_1.userPointsTransactions.balanceAfter,
+        orderId: schema_1.userPointsTransactions.orderId,
+        note: schema_1.userPointsTransactions.note,
+        createdAt: schema_1.userPointsTransactions.createdAt,
+    })
+        .from(schema_1.userPointsTransactions)
+        .where((0, drizzle_orm_1.and)(...conditions))
+        .orderBy((0, drizzle_orm_1.desc)(schema_1.userPointsTransactions.createdAt))
+        .limit(limitNum)
+        .offset(offset);
+    return (0, response_1.SuccessResponse)(res, {
+        message: "User points transactions fetched successfully",
+        data: {
+            user: userRecord,
+            currentPoints: pointsRecord?.points ?? 0,
+            transactions,
+        },
+        meta: {
+            page: pageNum,
+            limit: limitNum,
+        },
+    });
+};
+exports.getRestaurantUserPointsTransactions = getRestaurantUserPointsTransactions;

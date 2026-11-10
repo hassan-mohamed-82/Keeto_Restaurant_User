@@ -64,5 +64,6 @@ exports.getRestaurantOrdersQuerySchema = zod_1.z
     date: zod_1.z.string().optional(),
     orderType: stringOrArray,
     search: zod_1.z.string().optional(),
+    lang: zod_1.z.string().optional(),
 })
     .passthrough();

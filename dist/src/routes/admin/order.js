@@ -23,6 +23,8 @@ router.get("/out-for-delivery", (0, hasPermission_1.hasPermission)("order", "rea
 router.get("/delivered", (0, hasPermission_1.hasPermission)("order", "read", true), (0, validation_1.validate)(order_1.getRestaurantOrdersQuerySchema, "query"), (0, catchAsync_1.catchAsync)(order_2.getDeliveredOrders));
 router.get("/cancelled", (0, hasPermission_1.hasPermission)("order", "read", true), (0, validation_1.validate)(order_1.getRestaurantOrdersQuerySchema, "query"), (0, catchAsync_1.catchAsync)(order_2.getCancelledOrders));
 router.get("/refund", (0, hasPermission_1.hasPermission)("order", "read", true), (0, validation_1.validate)(order_1.getRestaurantOrdersQuerySchema, "query"), (0, catchAsync_1.catchAsync)(order_2.getRefundOrders));
+// ✅ بون تقرير الفواتير والمبيعات (Thermal Receipt) - يحتاج صلاحية read + التحقق من الفرع
+router.get("/report-pdf", (0, hasPermission_1.hasPermission)("order", "read", true), (0, validation_1.validate)(order_1.getRestaurantOrdersQuerySchema, "query"), (0, catchAsync_1.catchAsync)(order_2.generateOrdersReportPDF));
 // ✅ تفاصيل أوردر بالـ ID - يحتاج صلاحية read + التحقق من الفرع
 router.get("/:id", (0, hasPermission_1.hasPermission)("order", "read", true), (0, catchAsync_1.catchAsync)(order_2.getRestaurantOrderById));
 // ✅ تحميل الفاتورة (Receipt PDF) للأوردر

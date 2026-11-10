@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.transferOrderBranch = exports.getSelectBranches = exports.getSelectData = exports.selectDeliveryMan = exports.assignDelivery = exports.getallnumbersoforders = exports.generateOrderInvoicePDF = exports.getReasons = exports.setOrderPreparingDuration = exports.updateOrderStatus = exports.getRestaurantOrderById = exports.getRefundOrders = exports.getCancelledOrders = exports.getDeliveredOrders = exports.getOutForDeliveryOrders = exports.getPreparingOrders = exports.getAcceptedOrders = exports.getPendingOrders = exports.getOrdersByStatus = exports.getRestaurantOrders = exports.buildOrderCancellationConditions = exports.buildOrderUserAndTypeConditions = exports.buildOrderDateConditions = exports.getRestaurantShiftStartTime = exports.haversineKm = exports.isPointInPolygon = exports.parseAndNormalizeCoordinates = exports.resolveZoneFromCoords = void 0;
+exports.transferOrderBranch = exports.getSelectBranches = exports.getSelectData = exports.selectDeliveryMan = exports.assignDelivery = exports.getallnumbersoforders = exports.generateOrdersReportPDF = exports.generateOrderInvoicePDF = exports.getReasons = exports.setOrderPreparingDuration = exports.updateOrderStatus = exports.getRestaurantOrderById = exports.getRefundOrders = exports.getCancelledOrders = exports.getDeliveredOrders = exports.getOutForDeliveryOrders = exports.getPreparingOrders = exports.getAcceptedOrders = exports.getPendingOrders = exports.getOrdersByStatus = exports.getRestaurantOrders = exports.buildOrderCancellationConditions = exports.buildOrderUserAndTypeConditions = exports.buildOrderDateConditions = exports.getRestaurantShiftStartTime = exports.haversineKm = exports.isPointInPolygon = exports.parseAndNormalizeCoordinates = exports.resolveZoneFromCoords = void 0;
 const pdfkit_1 = __importDefault(require("pdfkit"));
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
@@ -62,6 +62,7 @@ Object.defineProperty(exports, "buildOrderDateConditions", { enumerable: true, g
 Object.defineProperty(exports, "buildOrderUserAndTypeConditions", { enumerable: true, get: function () { return order_helper_1.buildOrderUserAndTypeConditions; } });
 Object.defineProperty(exports, "buildOrderCancellationConditions", { enumerable: true, get: function () { return order_helper_1.buildOrderCancellationConditions; } });
 const orderStatusService_1 = require("../../services/orderStatusService");
+const ordersReportPdfService_1 = require("../../services/ordersReportPdfService");
 // ==========================================
 // 3. API Endpoints
 // ==========================================
@@ -1567,6 +1568,194 @@ const generateOrderInvoicePDF = async (req, res) => {
     doc.end();
 };
 exports.generateOrderInvoicePDF = generateOrderInvoicePDF;
+// ==========================================
+// إنشاء تقرير شامل للطلبات والمبيعات بصيغة PDF
+// ==========================================
+const generateOrdersReportPDF = async (req, res) => {
+    if (!req.user) {
+        throw new Errors_1.UnauthorizedError("Not authenticated");
+    }
+    const adminRestaurantId = req.user.restaurantId || req.user.id;
+    const adminBranchId = req.user.branchId;
+    if (!adminRestaurantId) {
+        throw new BadRequest_1.BadRequest("Restaurant ID not found");
+    }
+    // 1. جلب بيانات المطعم
+    const [restaurant] = await connection_1.db
+        .select({
+        id: schema_1.restaurants.id,
+        name: schema_1.restaurants.name,
+        nameAr: schema_1.restaurants.nameAr,
+        logo: schema_1.restaurants.logo,
+        ownerPhone: schema_1.restaurants.ownerPhone,
+        address: schema_1.restaurants.address,
+        addressAr: schema_1.restaurants.addressAr,
+    })
+        .from(schema_1.restaurants)
+        .where((0, drizzle_orm_1.eq)(schema_1.restaurants.id, adminRestaurantId))
+        .limit(1);
+    if (!restaurant)
+        throw new NotFound_1.NotFound("Restaurant not found");
+    // 2. جلب جميع فروع المطعم
+    const allBranches = await connection_1.db
+        .select({ id: schema_1.branches.id, name: schema_1.branches.name, nameAr: schema_1.branches.nameAr })
+        .from(schema_1.branches)
+        .where((0, drizzle_orm_1.eq)(schema_1.branches.restaurantId, adminRestaurantId));
+    // 3. بناء شروط الاستعلام مطابقة تماماً لـ getRestaurantOrders
+    const conditions = [
+        (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, adminRestaurantId),
+        (0, order_helper_1.excludeUnpaidVisaOrders)(),
+    ];
+    const queryBranchId = req.query?.branchId?.trim();
+    const filterBranchId = adminBranchId || (queryBranchId && queryBranchId !== "null" && queryBranchId !== "undefined" ? queryBranchId : undefined);
+    if (filterBranchId) {
+        conditions.push((0, drizzle_orm_1.eq)(schema_1.orders.branchId, filterBranchId));
+    }
+    const source = (req.query?.source || req.query?.orderSource)?.trim();
+    if (source && source !== "null" && source !== "undefined") {
+        conditions.push((0, drizzle_orm_1.eq)(schema_1.orders.orderSource, source));
+    }
+    const zoneId = req.query?.zoneId?.trim();
+    if (zoneId && zoneId !== "null" && zoneId !== "undefined") {
+        conditions.push((0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.orders.zoneId, zoneId), (0, drizzle_orm_1.eq)(schema_1.restaurantZoneDeliveryFees.zoneId, zoneId), (0, drizzle_orm_1.eq)(schema_1.zones.id, zoneId)));
+    }
+    const cityId = req.query?.cityId?.trim();
+    if (cityId && cityId !== "null" && cityId !== "undefined") {
+        conditions.push((0, drizzle_orm_1.eq)(schema_1.zones.cityId, cityId));
+    }
+    const dateConditions = await (0, order_helper_1.buildOrderDateConditions)(req, adminRestaurantId, req.user.type === "owner" || req.user.type === "branch_manager"
+        ? true
+        : await (async () => {
+            const { checkUserPermission } = await Promise.resolve().then(() => __importStar(require("../../middlewares/hasPermission")));
+            return checkUserPermission(req.user.id, "order", "advanced_filter");
+        })());
+    conditions.push(...dateConditions);
+    const discountAndPaymentConditions = (0, order_helper_1.buildOrderDiscountAndPaymentConditions)(req);
+    conditions.push(...discountAndPaymentConditions);
+    const userAndTypeConditions = (0, order_helper_1.buildOrderUserAndTypeConditions)(req);
+    conditions.push(...userAndTypeConditions);
+    const statusConditions = (0, order_helper_1.buildOrderStatusConditions)(req);
+    conditions.push(...statusConditions);
+    const cancellationConditions = (0, order_helper_1.buildOrderCancellationConditions)(req, {
+        enforceCancelledStatusIfFiltered: true,
+    });
+    conditions.push(...cancellationConditions);
+    // 4. استخراج أوصاف الفلاتر المطبقة بالعربية والإنجليزية
+    let branchLabel = `All Branches (${allBranches.length})`;
+    let branchLabelAr = `جميع الفروع (${allBranches.length})`;
+    if (filterBranchId) {
+        const foundBranch = allBranches.find(b => b.id === filterBranchId);
+        branchLabel = foundBranch?.name || filterBranchId;
+        branchLabelAr = foundBranch?.nameAr || foundBranch?.name || filterBranchId;
+    }
+    let dateRangeLabel = "Current Active Shift";
+    let dateRangeLabelAr = "الشيفت النشط لليوم الحالي";
+    if (req.query?.startDate || req.query?.endDate) {
+        const s = req.query?.startDate ? String(req.query.startDate) : "Start";
+        const e = req.query?.endDate ? String(req.query.endDate) : "Now";
+        dateRangeLabel = `${s} to ${e}`;
+        dateRangeLabelAr = `من: ${s} إلى: ${e}`;
+    }
+    else if (req.query?.date) {
+        dateRangeLabel = `Date: ${req.query.date}`;
+        dateRangeLabelAr = `يوم: ${req.query.date}`;
+    }
+    const rawStatus = (req.query?.status || req.query?.orderStatus);
+    let statusLabel = "All Statuses";
+    let statusLabelAr = "جميع الحالات";
+    if (rawStatus) {
+        const statusArr = Array.isArray(rawStatus) ? rawStatus : String(rawStatus).split(",").map(s => s.trim()).filter(Boolean);
+        if (statusArr.length > 0 && !statusArr.includes("all")) {
+            statusLabel = statusArr.map(s => ordersReportPdfService_1.ORDER_STATUS_LABELS[s]?.en || s).join(", ");
+            statusLabelAr = statusArr.map(s => ordersReportPdfService_1.ORDER_STATUS_LABELS[s]?.ar || s).join("، ");
+        }
+    }
+    const rawPm = (req.query?.paymentMethod || req.query?.payment_method || req.query?.paymentMethods);
+    let paymentMethodLabel = "All Payment Methods";
+    let paymentMethodLabelAr = "جميع طرق الدفع";
+    if (rawPm) {
+        const pmArr = Array.isArray(rawPm) ? rawPm : String(rawPm).split(",").map(p => p.trim()).filter(Boolean);
+        if (pmArr.length > 0 && !pmArr.includes("all")) {
+            paymentMethodLabel = pmArr.join(", ");
+            paymentMethodLabelAr = pmArr.join("، ");
+        }
+    }
+    const rawOrderType = req.query?.orderType;
+    let orderTypeLabel = "All Order Types";
+    let orderTypeLabelAr = "جميع أنواع الطلبات";
+    if (rawOrderType) {
+        const otArr = Array.isArray(rawOrderType) ? rawOrderType : String(rawOrderType).split(",").map(t => t.trim()).filter(Boolean);
+        if (otArr.length > 0 && !otArr.includes("all")) {
+            orderTypeLabel = otArr.map(t => ordersReportPdfService_1.ORDER_TYPE_LABELS[t]?.en || t).join(", ");
+            orderTypeLabelAr = otArr.map(t => ordersReportPdfService_1.ORDER_TYPE_LABELS[t]?.ar || t).join("، ");
+        }
+    }
+    let orderSourceLabel = "All Sources";
+    let orderSourceLabelAr = "جميع المصادر";
+    if (source && source !== "all") {
+        orderSourceLabel = ordersReportPdfService_1.ORDER_SOURCE_LABELS[source]?.en || source;
+        orderSourceLabelAr = ordersReportPdfService_1.ORDER_SOURCE_LABELS[source]?.ar || source;
+    }
+    // 5. جلب بيانات الأوردرات المطابقة
+    const rawOrders = await connection_1.db
+        .select({
+        id: schema_1.orders.id,
+        orderNumber: schema_1.orders.orderNumber,
+        dailyOrderNumber: schema_1.orders.dailyOrderNumber,
+        customerName: schema_1.users.name,
+        customerPhone: schema_1.users.phone,
+        branchId: schema_1.orders.branchId,
+        branchName: schema_1.branches.name,
+        branchNameAr: schema_1.branches.nameAr,
+        orderType: schema_1.orders.orderType,
+        orderSource: schema_1.orders.orderSource,
+        paymentMethod: schema_1.orders.paymentMethod,
+        paymentMethodName: schema_1.paymentMethods.name,
+        paymentMethodNameAr: schema_1.paymentMethods.nameAr,
+        subtotal: schema_1.orders.subtotal,
+        deliveryFee: schema_1.orders.deliveryFee,
+        serviceFee: schema_1.orders.serviceFee,
+        discountAmount: schema_1.orders.discountAmount,
+        totalAmount: schema_1.orders.totalAmount,
+        status: schema_1.orders.status,
+        createdAt: schema_1.orders.createdAt,
+    })
+        .from(schema_1.orders)
+        .leftJoin(schema_1.users, (0, drizzle_orm_1.eq)(schema_1.orders.userId, schema_1.users.id))
+        .leftJoin(schema_1.branches, (0, drizzle_orm_1.eq)(schema_1.orders.branchId, schema_1.branches.id))
+        .leftJoin(schema_1.restaurantZoneDeliveryFees, (0, drizzle_orm_1.eq)(schema_1.orders.zoneId, schema_1.restaurantZoneDeliveryFees.id))
+        .leftJoin(schema_1.zones, (0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.restaurantZoneDeliveryFees.zoneId, schema_1.zones.id), (0, drizzle_orm_1.eq)(schema_1.orders.zoneId, schema_1.zones.id)))
+        .leftJoin(schema_1.paymentMethods, (0, drizzle_orm_1.eq)(schema_1.orders.paymentMethod, schema_1.paymentMethods.id))
+        .where((0, drizzle_orm_1.and)(...conditions))
+        .orderBy((0, drizzle_orm_1.desc)(schema_1.orders.createdAt));
+    // 6. تحديد اللغة المطلوبة (الافتراضي عربي إلا لو تم إرسال lang=en)
+    const langParam = (req.query?.lang || "").trim().toLowerCase();
+    const lang = langParam === "en" ? "en" : "ar";
+    // 7. بناء وتوليد التقرير بصيغة PDF
+    await (0, ordersReportPdfService_1.buildOrdersReportPDF)({
+        res,
+        restaurant,
+        filters: {
+            branchLabel,
+            branchLabelAr,
+            dateRangeLabel,
+            dateRangeLabelAr,
+            statusLabel,
+            statusLabelAr,
+            paymentMethodLabel,
+            paymentMethodLabelAr,
+            orderTypeLabel,
+            orderTypeLabelAr,
+            orderSourceLabel,
+            orderSourceLabelAr,
+            searchLabel: req.query?.search ? String(req.query.search) : undefined,
+        },
+        orders: rawOrders,
+        generatedBy: req.user?.name || req.user?.email || req.user?.type || "Admin",
+        lang,
+    });
+};
+exports.generateOrdersReportPDF = generateOrdersReportPDF;
 const getallnumbersoforders = async (req, res) => {
     const adminRestaurantId = req.user?.restaurantId || req.user?.id;
     const adminBranchId = req.user?.branchId; // لو Null يبقى ده المالك

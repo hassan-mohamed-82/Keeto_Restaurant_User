@@ -314,8 +314,8 @@ const getMenuWithDynamicPricing = async (req, res) => {
     const singleBranchId = isSingleBranch ? branchIds[0] : null;
     const singleModule = isSingleModule ? serviceModules[0] : undefined;
     const foodConditions = [
-        (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId),
-        (0, drizzle_orm_1.eq)(schema_1.food.status, "active"),
+        (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId)
+        // eq(food.status, "active"),
     ];
     if (subcategoryId) {
         foodConditions.push((0, drizzle_orm_1.eq)(schema_1.food.subcategoryid, subcategoryId));

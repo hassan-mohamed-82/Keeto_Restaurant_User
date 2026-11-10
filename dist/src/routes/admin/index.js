@@ -45,27 +45,23 @@ const delivery_man_1 = __importDefault(require("./delivery_man"));
 const recommendedFood_1 = __importDefault(require("./recommendedFood"));
 const freeDeliveryOffer_1 = __importDefault(require("./freeDeliveryOffer"));
 const pricing_1 = __importDefault(require("./pricing"));
-const shifts_1 = __importDefault(require("../pos/shifts"));
-const serviceFees_1 = __importDefault(require("../pos/serviceFees"));
-const tax_1 = __importDefault(require("../pos/tax"));
-const bundles_1 = __importDefault(require("../pos/bundles"));
-const taxType_1 = __importDefault(require("../pos/taxType"));
-const notes_1 = __importDefault(require("../pos/notes"));
-const notesItems_1 = __importDefault(require("../pos/notesItems"));
-const offers_1 = __importDefault(require("../pos/offers"));
 const orderDelayAlert_1 = __importDefault(require("./orderDelayAlert"));
-const suppliers_1 = __importDefault(require("../pos/suppliers"));
-const stores_1 = __importDefault(require("../pos/stores"));
-const storeMen_1 = __importDefault(require("../pos/storeMen"));
-const captainOrders_1 = __importDefault(require("../pos/captainOrders"));
-const cashierMen_1 = __importDefault(require("../pos/cashierMen"));
-const halls_1 = __importDefault(require("../pos/halls"));
-const hallTables_1 = __importDefault(require("../pos/hallTables"));
 const printer_1 = __importDefault(require("./printer"));
 const paymentTransactions_1 = __importDefault(require("./paymentTransactions"));
 const firstOrderDiscount_1 = __importDefault(require("./firstOrderDiscount"));
 const videos_1 = __importDefault(require("./videos"));
 const pushedNotification_1 = __importDefault(require("./pushedNotification"));
+const serviceFees_1 = __importDefault(require("../admin/serviceFees"));
+const tax_1 = __importDefault(require("../admin/tax"));
+const bundles_1 = __importDefault(require("../admin/bundles"));
+const taxType_1 = __importDefault(require("../admin/taxType"));
+const suppliers_1 = __importDefault(require("../admin/suppliers"));
+const stores_1 = __importDefault(require("../admin/stores"));
+const storeMen_1 = __importDefault(require("../admin/storeMen"));
+const captainOrders_1 = __importDefault(require("../admin/captainOrders"));
+const cashierMen_1 = __importDefault(require("../admin/cashierMen"));
+const halls_1 = __importDefault(require("../admin/halls"));
+const hallTables_1 = __importDefault(require("../admin/hallTables"));
 const router = (0, express_1.Router)();
 router.use("/auth", auth_1.default);
 // ضفنا الـ Underscore هنا 👇
@@ -109,53 +105,21 @@ router.use("/delivery-men", delivery_man_1.default);
 router.use("/recommended-foods", recommendedFood_1.default);
 router.use("/free-delivery", freeDeliveryOffer_1.default);
 router.use("/pricing", pricing_1.default);
-router.use("/shifts", shifts_1.default);
 router.use("/order-delay-alerts", orderDelayAlert_1.default);
 router.use("/printers", printer_1.default);
 router.use("/payment-transactions", paymentTransactions_1.default);
 router.use("/first-order-discounts", firstOrderDiscount_1.default);
 router.use("/videos", videos_1.default);
 router.use("/pushed-notifications", pushedNotification_1.default);
-// POS Routes
-router.use("/pos/shifts", shifts_1.default);
 router.use("/service-fees", serviceFees_1.default);
-router.use("/pos/service-fees", serviceFees_1.default);
-router.use("/taxes", tax_1.default);
-router.use("/pos/taxes", tax_1.default);
 router.use("/tax", tax_1.default);
-router.use("/pos/tax", tax_1.default);
 router.use("/bundles", bundles_1.default);
-router.use("/pos/bundles", bundles_1.default);
 router.use("/tax-type", taxType_1.default);
-router.use("/pos/tax-type", taxType_1.default);
-router.use("/tax-types", taxType_1.default);
-router.use("/pos/tax-types", taxType_1.default);
-router.use("/notes", notes_1.default);
-router.use("/pos/notes", notes_1.default);
-router.use("/notes-items", notesItems_1.default);
-router.use("/pos/notes-items", notesItems_1.default);
-router.use("/note-items", notesItems_1.default);
-router.use("/pos/note-items", notesItems_1.default);
-router.use("/pos/offers", offers_1.default);
-// Suppliers Routes
 router.use("/suppliers", suppliers_1.default);
-router.use("/pos/suppliers", suppliers_1.default);
-// Stores Routes
 router.use("/stores", stores_1.default);
-router.use("/pos/stores", stores_1.default);
-// Store Men Routes
 router.use("/store-men", storeMen_1.default);
-router.use("/pos/store-men", storeMen_1.default);
-// Captain Orders Routes
 router.use("/captain-orders", captainOrders_1.default);
-router.use("/pos/captain-orders", captainOrders_1.default);
-// Cashier Men Routes
 router.use("/cashier-men", cashierMen_1.default);
-router.use("/pos/cashier-men", cashierMen_1.default);
-// Halls Routes
 router.use("/halls", halls_1.default);
-router.use("/pos/halls", halls_1.default);
-// Hall Tables Routes
 router.use("/hall-tables", hallTables_1.default);
-router.use("/pos/hall-tables", hallTables_1.default);
 exports.default = router;
