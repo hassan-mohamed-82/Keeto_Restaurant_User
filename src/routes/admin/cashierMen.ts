@@ -14,7 +14,7 @@ import {
     updateCashierMan,
     deleteCashierMan,
     toggleCashierManStatus,
-} from "../../controllers/pos/cashierMan";
+} from "../../controllers/admin/cashierMan";
 
 const router = Router();
 

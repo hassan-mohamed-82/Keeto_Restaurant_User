@@ -14,7 +14,7 @@ import {
     updateHall,
     deleteHall,
     toggleHallStatus,
-} from "../../controllers/pos/hall";
+} from "../../controllers/admin/hall";
 
 const router = Router();
 

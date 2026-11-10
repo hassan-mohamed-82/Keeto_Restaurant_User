@@ -13,7 +13,7 @@ import {
     updateSupplier,
     deleteSupplier,
     toggleSupplierStatus,
-} from "../../controllers/pos/supplier";
+} from "../../controllers/admin/supplier";
 
 const router = Router();
 

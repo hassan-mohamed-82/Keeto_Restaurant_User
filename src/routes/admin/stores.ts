@@ -14,7 +14,7 @@ import {
     updateStore,
     deleteStore,
     toggleStoreStatus,
-} from "../../controllers/pos/store";
+} from "../../controllers/admin/store";
 
 const router = Router();
 

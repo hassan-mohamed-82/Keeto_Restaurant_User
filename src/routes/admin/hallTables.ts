@@ -15,7 +15,7 @@ import {
     deleteHallTable,
     toggleHallTableStatus,
     toggleHallTableOccupied,
-} from "../../controllers/pos/hallTable";
+} from "../../controllers/admin/hallTable";
 
 const router = Router();
 

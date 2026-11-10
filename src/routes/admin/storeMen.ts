@@ -14,7 +14,7 @@ import {
     updateStoreMan,
     deleteStoreMan,
     toggleStoreManStatus,
-} from "../../controllers/pos/storeMan";
+} from "../../controllers/admin/storeMan";
 
 const router = Router();
 

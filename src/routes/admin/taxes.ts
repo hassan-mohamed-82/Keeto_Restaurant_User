@@ -1,1 +1,1 @@
-export { default } from "../pos/tax";
+export { default } from "./tax";

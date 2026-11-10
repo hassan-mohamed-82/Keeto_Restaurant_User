@@ -4,7 +4,7 @@ import { Request, Response, NextFunction, RequestHandler } from "express";
 import { UnauthorizedError } from "../Errors";
 
 // 🔄 1. إضافة الأدوار الجديدة "owner" و "staff" هنا لتتعرف عليها الـ TypeScript
-type Role = "subadmin" | "branch_manager" | "owner" | "staff";
+type Role = "subadmin" | "branch_manager" | "owner" | "staff" | "cashier";
 
 export const authorizeRoles = (...roles: Role[]): RequestHandler => {
   return (req: Request, res: Response, next: NextFunction) => {

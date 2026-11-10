@@ -5,7 +5,7 @@ import { upsertTaxTypeSchema } from "../../validation/admin/taxType";
 import {
     getTaxType,
     upsertTaxType,
-} from "../../controllers/pos/taxType";
+} from "../../controllers/admin/taxType";
 
 const router = Router();
 

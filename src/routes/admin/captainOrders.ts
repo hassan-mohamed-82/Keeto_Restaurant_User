@@ -16,7 +16,7 @@ import {
     updateCaptainOrder,
     deleteCaptainOrder,
     toggleCaptainOrderStatus,
-} from "../../controllers/pos/captainOrder";
+} from "../../controllers/admin/captainOrder";
 
 const router = Router();
 

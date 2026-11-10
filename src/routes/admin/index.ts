@@ -2,9 +2,6 @@ import { Router } from "express";
 import AdmiRouter from "./admin";
 import authRouter from "./auth";
 import RolesRouter from "./roles";
-import CountryRouter from "./country";
-import CityRouter from "./city";
-import ZoneRouter from "./zone";
 import SubcategoryRouter from "./subcategory";
 import AddonRouter from "./addon";
 import FoodRouter from "./food";
@@ -17,7 +14,6 @@ import OrderRouter from "./order"
 import IngredientsRouter from "./ingredients"
 import IngredientCategoryRouter from "./IngredientCategory";
 import restaurantZoneDeliveryFeesRouter from "./restaurantZoneDeliveryFees";
-import user_walletsRouter from "./userWallets";
 import ImageRouter from "./image";
 import RatingRouter from "./rating";
 import DiscountRouter from "./discount";
@@ -44,27 +40,25 @@ import DeliveryManRouter from "./delivery_man";
 import RecommendedFoodRouter from "./recommendedFood";
 import FreeDeliveryOfferRouter from "./freeDeliveryOffer";
 import PricingRouter from "./pricing";
-import ShiftsRouter from "../pos/shifts";
-import ServiceFeesRouter from "../pos/serviceFees";
-import TaxRouter from "../pos/tax";
-import BundleRouter from "../pos/bundles";
-import TaxTypeRouter from "../pos/taxType";
-import NotesRouter from "../pos/notes";
-import NotesItemsRouter from "../pos/notesItems";
-import OfferRouter from "../pos/offers";
 import OrderDelayAlertRouter from "./orderDelayAlert";
-import SupplierRouter from "../pos/suppliers";
-import StoreRouter from "../pos/stores";
-import StoreManRouter from "../pos/storeMen";
-import CaptainOrderRouter from "../pos/captainOrders";
-import CashierManRouter from "../pos/cashierMen";
-import HallRouter from "../pos/halls";
-import HallTableRouter from "../pos/hallTables";
 import PrinterRouter from "./printer";
 import paymentTransactionsRouter from "./paymentTransactions";
 import FirstOrderDiscountRouter from "./firstOrderDiscount";
 import videosRouter from "./videos";
 import PushedNotificationRouter from "./pushedNotification";
+
+import ServiceFeesRouter from "../admin/serviceFees";
+import TaxRouter from "../admin/tax";
+import BundleRouter from "../admin/bundles";
+import TaxTypeRouter from "../admin/taxType";
+import SupplierRouter from "../admin/suppliers";
+import StoreRouter from "../admin/stores";
+import StoreManRouter from "../admin/storeMen";
+import CaptainOrderRouter from "../admin/captainOrders";
+import CashierManRouter from "../admin/cashierMen";
+import HallRouter from "../admin/halls";
+import HallTableRouter from "../admin/hallTables";
+
 const router = Router();
 
 router.use("/auth", authRouter);
@@ -111,12 +105,25 @@ router.use("/delivery-men", DeliveryManRouter);
 router.use("/recommended-foods", RecommendedFoodRouter);
 router.use("/free-delivery", FreeDeliveryOfferRouter);
 router.use("/pricing", PricingRouter);
-router.use("/shifts", ShiftsRouter);
 router.use("/order-delay-alerts", OrderDelayAlertRouter);
 router.use("/printers", PrinterRouter);
 router.use("/payment-transactions", paymentTransactionsRouter);
 router.use("/first-order-discounts", FirstOrderDiscountRouter);
 router.use("/videos", videosRouter);
 router.use("/pushed-notifications", PushedNotificationRouter);
+
+
+
+router.use("/service-fees", ServiceFeesRouter);
+router.use("/tax", TaxRouter);
+router.use("/bundles", BundleRouter);
+router.use("/tax-type", TaxTypeRouter);
+router.use("/suppliers", SupplierRouter);
+router.use("/stores", StoreRouter);
+router.use("/store-men", StoreManRouter);
+router.use("/captain-orders", CaptainOrderRouter);
+router.use("/cashier-men", CashierManRouter);
+router.use("/halls", HallRouter);
+router.use("/hall-tables", HallTableRouter);
 
 export default router;
