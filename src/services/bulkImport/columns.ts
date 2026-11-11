@@ -116,12 +116,12 @@ export const FOOD_COLUMNS = {
     allergen_ingredients: { header: "allergen_ingredients", type: "longText", required: false, width: 24, note: "Optional. Allergen ingredients." },
     is_Halal: { header: "is_Halal", type: "boolean", required: false, width: 10, note: "Optional. yes or no. Default: no." },
     startTime: {
-        header: "startTime", type: "time", required: true, width: 11,
-        note: "Required. Time the food becomes available, 24-hour HH:mm (e.g. 09:00).",
+        header: "startTime", type: "time", required: false, width: 11,
+        note: "Optional. Time the food becomes available, 24-hour HH:mm (e.g. 09:00).",
     },
     endTime: {
-        header: "endTime", type: "time", required: true, width: 11,
-        note: "Required. Time the food stops being available, 24-hour HH:mm (e.g. 23:30).",
+        header: "endTime", type: "time", required: false, width: 11,
+        note: "Optional. Time the food stops being available, 24-hour HH:mm (e.g. 23:30).",
     },
     search_tags: {
         header: "search_tags", type: "text", required: false, width: 24, maxLength: DB_LIMITS.varchar255,

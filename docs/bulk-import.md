@@ -70,7 +70,7 @@ Dropdowns (Excel data validation) are on `category`, `subcategory` (suggestions 
 | `foodtype` | | `veg` \| `non-veg` (default `veg`) |
 | `Nutrition`, `allergen_ingredients` | | Text |
 | `is_Halal`, `isOutOfStock` | | `yes` \| `no` (default `no`) |
-| `startTime`, `endTime` | yes | 24-hour `HH:mm`. Excel time cells, `9:30 PM` and Arabic-Indic digits are accepted; stored as `HH:mm` |
+| `startTime`, `endTime` | | 24-hour `HH:mm`. Excel time cells, `9:30 PM` and Arabic-Indic digits are accepted; stored as `HH:mm` |
 | `search_tags` | | Max 255 characters |
 | `price` | yes | Number greater than 0, `.` as decimal separator, stored with 2 decimals |
 | `discount_type` | | `percentage` \| `amount` (default `percentage`) |

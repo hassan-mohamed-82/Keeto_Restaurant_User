@@ -92,8 +92,6 @@ const FOOD_FIELD_COLUMN = {
     description: "description",
     image: "image",
     categoryid: "category",
-    startTime: "startTime",
-    endTime: "endTime",
     price: "price",
 } as const satisfies Record<FoodRequiredField, keyof FoodColumns>;
 
@@ -494,8 +492,6 @@ class ImportValidator {
             category &&
             v.name !== null &&
             v.description !== null &&
-            v.startTime !== null &&
-            v.endTime !== null &&
             v.price !== null
         ) {
             const planned: PlannedFood = {

@@ -174,7 +174,7 @@ function addInstructionsSheet(workbook: ExcelJS.Workbook, lookups: TemplateLooku
     addLine("• A food's subcategory must belong to the food's category. It can be an existing subcategory or one added in the Subcategories sheet of this file.");
     addLine("• Rows that already exist (same category + name for this restaurant) are skipped and listed as skipped. They are not duplicated.");
     addLine("• The same category + name twice in the file is an error.");
-    addLine("• Required columns have an orange header: Subcategories: category, name. Foods: category, name, description, startTime, endTime, price. Variations: food, variationName, optionName.");
+    addLine("• Required columns have an orange header: Subcategories: category, name. Foods: category, name, description, price. Variations: food, variationName, optionName.");
     addLine("• Times use the 24-hour format HH:mm, e.g. 09:00 or 23:30. Excel time cells are accepted too.");
     addLine("• Images are optional. Paste an image URL starting with http:// or https://, or leave the cell empty.");
     addLine("• yes / no columns: is_Halal, isOutOfStock, isRequired.");

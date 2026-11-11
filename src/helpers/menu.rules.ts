@@ -90,8 +90,6 @@ export const FOOD_REQUIRED_FIELDS = [
     "description",
     "image",
     "categoryid",
-    "startTime",
-    "endTime",
     "price",
 ] as const;
 export type FoodRequiredField = (typeof FOOD_REQUIRED_FIELDS)[number];

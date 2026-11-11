@@ -64,7 +64,7 @@ export const createFood = async (req: Request, res: Response) => {
         const incomingAddons = req.body.addonsId ?? req.body.addons ?? req.body.addonIds ?? req.body['addonsId[]'] ?? req.body['addons[]'];
 
         // 1. التحقق من الحقول المطلوبة (الصورة مطلوبة هنا، واختيارية في الـ bulk import)
-        if (getMissingFoodFields({ name, description, image, categoryid, startTime, endTime, price }, { requireImage: true }).length > 0) {
+        if (getMissingFoodFields({ name, description, image, categoryid, price }, { requireImage: true }).length > 0) {
             throw new BadRequest(MENU_MESSAGES.foodRequiredFields);
         }
 

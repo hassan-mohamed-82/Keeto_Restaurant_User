@@ -43,8 +43,8 @@ export const food = mysqlTable("food", {
         .references(() => noteGroups.id, { onDelete: "set null" }),
     discountId: char("discount_id", { length: 36 })
         .references(() => discountGroups.id, { onDelete: "set null" }),
-    startTime: varchar("start_time", { length: 255 }).notNull(),
-    endTime: varchar("end_time", { length: 255 }).notNull(),
+    startTime: varchar("start_time", { length: 255 }),
+    endTime: varchar("end_time", { length: 255 }),
 
     search_tags: varchar("search_tags", { length: 255 }),
 

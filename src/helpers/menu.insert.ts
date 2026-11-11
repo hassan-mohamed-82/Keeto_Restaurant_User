@@ -129,8 +129,8 @@ export interface FoodInsertData {
     is_Halal?: boolean | null;
     /** Already validated addon ids that belong to the restaurant. */
     addonsIds: string[];
-    startTime: string;
-    endTime: string;
+    startTime?: string | null;
+    endTime?: string | null;
     search_tags?: string | null;
     /** Decimal as a string, e.g. "12.50". */
     price: string;
@@ -175,8 +175,8 @@ export async function insertFood(
         allergen_ingredients: data.allergen_ingredients || null,
         is_Halal: data.is_Halal ?? FOOD_DEFAULTS.isHalal,
         addonsId: data.addonsIds,
-        startTime: data.startTime,
-        endTime: data.endTime,
+        startTime: data.startTime || null,
+        endTime: data.endTime || null,
         search_tags: data.search_tags || null,
         price: data.price,
         discount_type: data.discount_type || FOOD_DEFAULTS.discountType,
