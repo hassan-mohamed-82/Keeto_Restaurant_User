@@ -360,12 +360,19 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
         })
     );
 
-    // ✅ حساب الـ Summary: إجمالي عدد الأوردرات وإجمالي القيمة بناءً على نفس الفلتر
+    // ✅ حساب الـ Summary: إجمالي عدد الأوردرات وإجمالي القيمة والخصم بناءً على نفس الفلتر
+    const totalDiscount = restaurantOrders
+        .reduce((sum, o) => sum + parseFloat(((o as any).discount?.discountAmount as string) ?? "0"), 0);
+    const totalAmountBeforeDiscount = restaurantOrders
+        .reduce((sum, o) => sum + parseFloat((o.totalAmount as string) ?? "0"), 0) + totalDiscount;
+    const totalAmountAfterDiscount = restaurantOrders
+        .reduce((sum, o) => sum + parseFloat((o.totalAmount as string) ?? "0"), 0);
+
     const summary = {
         totalOrders: restaurantOrders.length,
-        totalAmount: restaurantOrders
-            .reduce((sum, o) => sum + parseFloat((o.totalAmount as string) ?? "0"), 0)
-            .toFixed(2),
+        totalDiscount: totalDiscount.toFixed(2),
+        totalAmount: totalAmountBeforeDiscount.toFixed(2),
+        totalAmountAfterDiscount: totalAmountAfterDiscount.toFixed(2),
     };
 
     return SuccessResponse(res, { message: "Get orders success", summary, data: restaurantOrders });
@@ -639,12 +646,19 @@ export const getOrdersByStatus = async (
         })
     );
 
-    // ✅ حساب الـ Summary: إجمالي عدد الأوردرات وإجمالي القيمة بناءً على نفس الفلتر
+    // ✅ حساب الـ Summary: إجمالي عدد الأوردرات وإجمالي القيمة والخصم بناءً على نفس الفلتر
+    const totalDiscountByStatus = result
+        .reduce((sum, o) => sum + parseFloat(((o as any).discount?.discountAmount as string) ?? "0"), 0);
+    const totalAmountBeforeDiscountByStatus = result
+        .reduce((sum, o) => sum + parseFloat((o.totalAmount as string) ?? "0"), 0) + totalDiscountByStatus;
+    const totalAmountAfterDiscountByStatus = result
+        .reduce((sum, o) => sum + parseFloat((o.totalAmount as string) ?? "0"), 0);
+
     const summary = {
         totalOrders: result.length,
-        totalAmount: result
-            .reduce((sum, o) => sum + parseFloat((o.totalAmount as string) ?? "0"), 0)
-            .toFixed(2),
+        totalDiscount: totalDiscountByStatus.toFixed(2),
+        totalAmount: totalAmountBeforeDiscountByStatus.toFixed(2),
+        totalAmountAfterDiscount: totalAmountAfterDiscountByStatus.toFixed(2),
     };
 
     return SuccessResponse(res, { message: `Get ${status} orders success`, summary, data: result });
