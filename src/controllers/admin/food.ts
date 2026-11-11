@@ -33,6 +33,12 @@ import { v4 as uuidv4 } from "uuid";
 import { saveBase64Image, handleImageUpdate } from "../../utils/handleImages";
 import { activeFoodCondition } from "../../helpers/foodConditions";
 import { upsertFoodPricingOverride, upsertVariantPricingOverride } from "../../helpers/pricing.overrides";
+import {
+    MENU_MESSAGES,
+    blocksActiveFoodUnderInactiveSubcategory,
+    getMissingFoodFields,
+} from "../../helpers/menu.rules";
+import { insertFood } from "../../helpers/menu.insert";
 
 // =============================================
 // CREATE Food
@@ -57,14 +63,14 @@ export const createFood = async (req: Request, res: Response) => {
 
         const incomingAddons = req.body.addonsId ?? req.body.addons ?? req.body.addonIds ?? req.body['addonsId[]'] ?? req.body['addons[]'];
 
-        // 1. التحقق من الحقول المطلوبة
-        if (!name || !description || !image || !categoryid || !startTime || !endTime || !price) {
-            throw new BadRequest("Missing required fields");
+        // 1. التحقق من الحقول المطلوبة (الصورة مطلوبة هنا، واختيارية في الـ bulk import)
+        if (getMissingFoodFields({ name, description, image, categoryid, startTime, endTime, price }, { requireImage: true }).length > 0) {
+            throw new BadRequest(MENU_MESSAGES.foodRequiredFields);
         }
 
         // 2. التحقق من وجود العلاقات
         const existingCategory = await db.select().from(categories).where(eq(categories.id, categoryid)).limit(1);
-        if (!existingCategory[0]) throw new BadRequest("Category not found");
+        if (!existingCategory[0]) throw new BadRequest(MENU_MESSAGES.categoryNotFound);
 
         if (subcategoryid) {
             const existingSub = await db
@@ -72,14 +78,11 @@ export const createFood = async (req: Request, res: Response) => {
                 .from(subcategories)
                 .where(eq(subcategories.id, subcategoryid))
                 .limit(1);
-            if (!existingSub[0]) throw new BadRequest("Subcategory not found");
+            if (!existingSub[0]) throw new BadRequest(MENU_MESSAGES.subcategoryNotFound);
 
             // ✅ Block creating an active food under an inactive subcategory
-            const incomingStatus = status || "active";
-            if (incomingStatus === "active" && existingSub[0].status === "inactive") {
-                throw new BadRequest(
-                    "Cannot create an active food under an inactive subcategory. Please activate the subcategory first."
-                );
+            if (blocksActiveFoodUnderInactiveSubcategory(status, existingSub[0].status)) {
+                throw new BadRequest(MENU_MESSAGES.activeFoodUnderInactiveSubcategory);
             }
         }
 
@@ -116,7 +119,7 @@ export const createFood = async (req: Request, res: Response) => {
                 ));
 
             if (existingAddons.length !== finalAddonsIds.length) {
-                throw new BadRequest("One or more Addon IDs are invalid");
+                throw new BadRequest(MENU_MESSAGES.foodAddonsInvalid);
             }
         }
 
@@ -126,88 +129,30 @@ export const createFood = async (req: Request, res: Response) => {
             imageUrl = await saveBase64Image(image, req, "foods");
         }
 
-        const foodId = uuidv4();
-
         // 5. بدء المعاملة (Transaction) لحفظ البيانات
-        await db.transaction(async (tx) => {
-            await tx.insert(food).values({
-                id: foodId,
+        // الـ insert نفسه (الأكلة + variations + options + branchMenuItems) في helper مشترك مع الـ bulk import
+        const foodId = await db.transaction((tx) =>
+            insertFood(tx, restaurantId, {
                 name, nameAr, nameFr,
                 description, descriptionAr, descriptionFr,
                 image: imageUrl,
-                restaurantid: restaurantId,
                 categoryid,
-                subcategoryid: subcategoryid || null,
-                foodtype: foodtype || "veg",
-                Nutrition: Nutrition || null,
-                allergen_ingredients: allergen_ingredients || null,
-                is_Halal: is_Halal ?? false,
-                addonsId: finalAddonsIds, // ✅ حفظ المصفوفة النظيفة
-                startTime, endTime, search_tags: search_tags || null,
-                price, discount_type: discount_type || "percentage",
-                discount_value: discount_value || null,
-                Maximum_Purchase: Maximum_Purchase || null,
-                stock_type: stock_type || "unlimited", status: status || "active",
-                isOutOfStock: isOutOfStock ?? false,
-                points: points ?? 0,
-            });
-
-            // إدخال الخيارات (Variations) إن وجدت
-            if (variations && Array.isArray(variations) && variations.length > 0) {
-                for (const variation of variations) {
-                    const variationId = uuidv4();
-
-                    await tx.insert(foodVariations).values({
-                        id: variationId,
-                        foodId,
-                        name: variation.name, nameAr: variation.nameAr, nameFr: variation.nameFr,
-                        isRequired: variation.isRequired ?? false,
-                        selectionType: variation.selectionType || "single",
-                        min: variation.min || null, max: variation.max || null,
-                    });
-
-                    if (variation.options && Array.isArray(variation.options)) {
-                        const optionsToInsert = variation.options.map((option: any) => ({
-                            variationId,
-                            optionName: option.optionName, optionNameAr: option.optionNameAr, optionNameFr: option.optionNameFr,
-                            additionalPrice: option.additionalPrice?.toString() || "0",
-                        }));
-
-                        if (optionsToInsert.length > 0) {
-                            await tx.insert(variationOptions).values(optionsToInsert);
-                        }
-                    }
-                }
-            }
-
-            // ✅ حفظ branches في branchMenuItems إن وُجدت وغير فارغة
-            const incomingBranches = req.body.branches;
-            if (Array.isArray(incomingBranches) && incomingBranches.length > 0) {
-                const activeBranches = await tx
-                    .select({ id: branches.id })
-                    .from(branches)
-                    .where(eq(branches.restaurantId, restaurantId));
-                const activeBranchIds = new Set(activeBranches.map((b: any) => b.id));
-
-                for (const b of incomingBranches) {
-                    if (!b.branchId || !activeBranchIds.has(b.branchId)) continue;
-                    await tx.insert(branchMenuItems).values({
-                        id: uuidv4(),
-                        branchId: b.branchId,
-                        foodId,
-                        status: b.status === "inactive" ? "inactive" : "active",
-                    });
-                    if (b.price !== undefined && b.price !== null && b.price !== "") {
-                        await upsertFoodPricingOverride(tx, {
-                            foodId,
-                            branchId: b.branchId,
-                            serviceModule: null,
-                            price: String(b.price),
-                        });
-                    }
-                }
-            }
-        });
+                subcategoryid,
+                foodtype,
+                Nutrition,
+                allergen_ingredients,
+                is_Halal,
+                addonsIds: finalAddonsIds, // ✅ حفظ المصفوفة النظيفة
+                startTime, endTime, search_tags,
+                price, discount_type, discount_value,
+                Maximum_Purchase,
+                stock_type, status,
+                isOutOfStock,
+                points,
+                variations,
+                branches: req.body.branches,
+            })
+        );
 
         return SuccessResponse(res, {
             message: "Create food success",

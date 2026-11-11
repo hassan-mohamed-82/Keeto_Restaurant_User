@@ -6,6 +6,9 @@ export const invalidateCache = (req: Request, res: Response, next: NextFunction)
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
         // Wait for the response to finish
         res.on('finish', async () => {
+            // Read-only POSTs (e.g. the bulk import dry run) can opt out
+            if (res.locals.skipCacheInvalidation) return;
+
             // Only invalidate if the request was successful
             if (res.statusCode >= 200 && res.statusCode < 300) {
                 try {

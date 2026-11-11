@@ -46,6 +46,7 @@ import paymentTransactionsRouter from "./paymentTransactions";
 import FirstOrderDiscountRouter from "./firstOrderDiscount";
 import videosRouter from "./videos";
 import PushedNotificationRouter from "./pushedNotification";
+import BulkImportRouter from "./bulkImport";
 
 import ServiceFeesRouter from "../admin/serviceFees";
 import TaxRouter from "../admin/tax";
@@ -111,6 +112,7 @@ router.use("/payment-transactions", paymentTransactionsRouter);
 router.use("/first-order-discounts", FirstOrderDiscountRouter);
 router.use("/videos", videosRouter);
 router.use("/pushed-notifications", PushedNotificationRouter);
+router.use("/import", BulkImportRouter); // bulk Excel import of subcategories & foods
 
 
 

@@ -17,6 +17,8 @@ import { v4 as uuidv4 } from "uuid";
 import redis from "../../config/redis";
 import { handleImageUpdate } from "../../utils/handleImages";
 import { activeFoodCondition } from "../../helpers/foodConditions";
+import { MENU_MESSAGES, getMissingSubcategoryFields } from "../../helpers/menu.rules";
+import { insertSubcategory } from "../../helpers/menu.insert";
 
 export const createSubcategory = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
@@ -28,8 +30,8 @@ export const createSubcategory = async (req: Request, res: Response) => {
     // استقبلنا order_level و order_Level لدعم الحالتين
     const { name, categoryId, priority, status, nameAr, nameFr, image, addonsIds, order_level, order_Level } = req.body;
 
-    if (!name || !categoryId) {
-        throw new BadRequest("Subcategory name and category ID are required");
+    if (getMissingSubcategoryFields({ name, categoryId }).length > 0) {
+        throw new BadRequest(MENU_MESSAGES.subcategoryRequiredFields);
     }
 
     // Check if category exists
@@ -40,7 +42,7 @@ export const createSubcategory = async (req: Request, res: Response) => {
         .limit(1);
 
     if (!existingCategory[0]) {
-        throw new BadRequest("Category not found");
+        throw new BadRequest(MENU_MESSAGES.categoryNotFound);
     }
 
     // Validate addons
@@ -56,25 +58,23 @@ export const createSubcategory = async (req: Request, res: Response) => {
             );
             
         if (existingAddons.length !== addonsIds.length) {
-            throw new BadRequest("One or more Addon IDs are invalid or do not belong to this restaurant");
+            throw new BadRequest(MENU_MESSAGES.subcategoryAddonsInvalid);
         }
     }
 
-    const id = uuidv4();
     const imageUrl = await handleImageUpdate(req, undefined, image, "subcategories");
 
-    await db.insert(subcategories).values({
-        id,
+    // Shared insert (same helper the bulk import uses)
+    const id = await insertSubcategory(db, restaurantId, {
         name,
         nameAr,
         nameFr,
         image: imageUrl,
         categoryId,
-        restaurantId: restaurantId,
-        addonsIds: addonsIds || [],
-        priority: priority || "low",
-        order_Level: order_Level !== undefined ? order_Level : (order_level !== undefined ? order_level : 0),
-        status: status || "active",
+        addonsIds,
+        priority,
+        status,
+        orderLevel: order_Level !== undefined ? order_Level : order_level,
     });
 
     return SuccessResponse(res, { message: "Create subcategory success", data: { id } }, 201);
