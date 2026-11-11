@@ -5,6 +5,16 @@ import { admins } from '../../models/schema/admin/admin';
 import { sendEmail } from '../../utils/sendEmails';
 import { eq, and } from 'drizzle-orm';
 
+/** Safely parse a JSON field that may come back from MySQL as a string or already as an object. */
+function parseJsonField<T>(value: unknown, fallback: T): T {
+  if (!value) return fallback;
+  if (typeof value === 'object') return value as T;
+  if (typeof value === 'string') {
+    try { return JSON.parse(value) as T; } catch { return fallback; }
+  }
+  return fallback;
+}
+
 export const updateSettings = async (req: Request, res: Response): Promise<void> => {
   const restaurantId = req.user?.restaurantId || req.user?.id;
   const { settings, schedules } = req.body;
@@ -113,7 +123,10 @@ export const updateSettings = async (req: Request, res: Response): Promise<void>
         // ✅ orderNowSetting — toggle order-now elements on/off (hotline, branches, name, orderNow, eMenu, socialMedia, menuPdf, iosIcon, androidIcon)
         const incomingOrderNow = settings.orderNowSetting ?? settings.orderNowSettings;
         if (incomingOrderNow !== undefined && typeof incomingOrderNow === 'object' && incomingOrderNow !== null) {
-          const currentOrderNow = (existingSettings[0]?.orderNowSetting as OrderNowSetting | undefined) || defaultOrderNowSetting;
+        const currentOrderNow: OrderNowSetting = {
+            ...defaultOrderNowSetting,
+            ...parseJsonField<Partial<OrderNowSetting>>(existingSettings[0]?.orderNowSetting, {}),
+          };
           settingsData.orderNowSetting = {
             hotline: incomingOrderNow.hotline !== undefined ? Boolean(incomingOrderNow.hotline) : (currentOrderNow.hotline ?? true),
             branches: incomingOrderNow.branches !== undefined ? Boolean(incomingOrderNow.branches) : (currentOrderNow.branches ?? true),
@@ -251,10 +264,11 @@ export const getSettingsByRestaurantId = async (req: Request, res: Response): Pr
     settingsResult = newSettings[0];
   }
 
-  // ✅ ضمان إرجاع كامل كائن orderNowSetting بالقيم الافتراضية (true) حتى لو كان null في قاعدة البيانات
+  // ✅ ضمان إرجاع كامل كائن orderNowSetting بالقيم الافتراضية (true) حتى لو كان null أو string في قاعدة البيانات
+  const rawOrderNow = parseJsonField<Partial<OrderNowSetting>>(settingsResult?.orderNowSetting, {});
   const resolvedOrderNowSetting: OrderNowSetting = {
     ...defaultOrderNowSetting,
-    ...((settingsResult?.orderNowSetting as any) || {}),
+    ...rawOrderNow,
   };
 
   const finalSettings = {
@@ -399,9 +413,10 @@ export const getOrderNowSetting = async (req: Request, res: Response): Promise<v
     .where(eq(restaurantSettings.restaurantId, restaurantId))
     .limit(1);
 
+  const rawOrderNowGet = parseJsonField<Partial<OrderNowSetting>>(settings?.orderNowSetting, {});
   const resolvedOrderNowSetting: OrderNowSetting = {
     ...defaultOrderNowSetting,
-    ...((settings?.orderNowSetting as any) || {}),
+    ...rawOrderNowGet,
   };
 
   res.status(200).json({
@@ -409,7 +424,6 @@ export const getOrderNowSetting = async (req: Request, res: Response): Promise<v
     data: {
       restaurantId,
       orderNowSetting: resolvedOrderNowSetting,
-      ...resolvedOrderNowSetting,
     },
   });
 };
@@ -434,7 +448,10 @@ export const updateOrderNowSetting = async (req: Request, res: Response): Promis
     .where(eq(restaurantSettings.restaurantId, restaurantId))
     .limit(1);
 
-  const currentOrderNow = (existingSettings?.orderNowSetting as OrderNowSetting | undefined) || defaultOrderNowSetting;
+  const currentOrderNow: OrderNowSetting = {
+    ...defaultOrderNowSetting,
+    ...parseJsonField<Partial<OrderNowSetting>>(existingSettings?.orderNowSetting, {}),
+  };
 
   const mergedSetting: OrderNowSetting = {
     hotline: incomingOrderNow.hotline !== undefined ? Boolean(incomingOrderNow.hotline) : (currentOrderNow.hotline ?? true),
@@ -468,7 +485,6 @@ export const updateOrderNowSetting = async (req: Request, res: Response): Promis
     data: {
       restaurantId,
       orderNowSetting: mergedSetting,
-      ...mergedSetting,
     },
   });
 };
