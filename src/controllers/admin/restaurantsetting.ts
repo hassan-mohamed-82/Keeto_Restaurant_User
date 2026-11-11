@@ -384,3 +384,91 @@ export const getBusyStatus = async (req: Request, res: Response): Promise<void> 
     }
   });
 };
+
+export const getOrderNowSetting = async (req: Request, res: Response): Promise<void> => {
+  const restaurantId = req.user?.restaurantId || req.user?.id;
+
+  if (!restaurantId) {
+    res.status(400).json({ success: false, message: "Restaurant id is required" });
+    return;
+  }
+
+  const [settings] = await db
+    .select({ orderNowSetting: restaurantSettings.orderNowSetting })
+    .from(restaurantSettings)
+    .where(eq(restaurantSettings.restaurantId, restaurantId))
+    .limit(1);
+
+  const resolvedOrderNowSetting: OrderNowSetting = {
+    ...defaultOrderNowSetting,
+    ...((settings?.orderNowSetting as any) || {}),
+  };
+
+  res.status(200).json({
+    success: true,
+    data: {
+      restaurantId,
+      orderNowSetting: resolvedOrderNowSetting,
+      ...resolvedOrderNowSetting,
+    },
+  });
+};
+
+export const updateOrderNowSetting = async (req: Request, res: Response): Promise<void> => {
+  const restaurantId = req.user?.restaurantId || req.user?.id;
+
+  if (!restaurantId) {
+    res.status(400).json({ success: false, message: "Restaurant id is required" });
+    return;
+  }
+
+  const incomingOrderNow = req.body?.orderNowSetting ?? req.body?.orderNowSettings ?? req.body;
+  if (!incomingOrderNow || typeof incomingOrderNow !== "object") {
+    res.status(400).json({ success: false, message: "orderNowSetting data is required" });
+    return;
+  }
+
+  const [existingSettings] = await db
+    .select({ orderNowSetting: restaurantSettings.orderNowSetting })
+    .from(restaurantSettings)
+    .where(eq(restaurantSettings.restaurantId, restaurantId))
+    .limit(1);
+
+  const currentOrderNow = (existingSettings?.orderNowSetting as OrderNowSetting | undefined) || defaultOrderNowSetting;
+
+  const mergedSetting: OrderNowSetting = {
+    hotline: incomingOrderNow.hotline !== undefined ? Boolean(incomingOrderNow.hotline) : (currentOrderNow.hotline ?? true),
+    branches: incomingOrderNow.branches !== undefined ? Boolean(incomingOrderNow.branches) : (currentOrderNow.branches ?? true),
+    name: incomingOrderNow.name !== undefined ? Boolean(incomingOrderNow.name) : (currentOrderNow.name ?? true),
+    orderNow: incomingOrderNow.orderNow !== undefined ? Boolean(incomingOrderNow.orderNow) : (currentOrderNow.orderNow ?? true),
+    eMenu: incomingOrderNow.eMenu !== undefined ? Boolean(incomingOrderNow.eMenu) : (currentOrderNow.eMenu ?? true),
+    socialMedia: incomingOrderNow.socialMedia !== undefined ? Boolean(incomingOrderNow.socialMedia) : (currentOrderNow.socialMedia ?? true),
+    menuPdf: incomingOrderNow.menuPdf !== undefined ? Boolean(incomingOrderNow.menuPdf) : (currentOrderNow.menuPdf ?? true),
+    iosIcon: incomingOrderNow.iosIcon !== undefined ? Boolean(incomingOrderNow.iosIcon) : (currentOrderNow.iosIcon ?? true),
+    androidIcon: incomingOrderNow.androidIcon !== undefined ? Boolean(incomingOrderNow.androidIcon) : (currentOrderNow.androidIcon ?? true),
+  };
+
+  if (existingSettings) {
+    await db
+      .update(restaurantSettings)
+      .set({ orderNowSetting: mergedSetting })
+      .where(eq(restaurantSettings.restaurantId, restaurantId));
+  } else {
+    await db
+      .insert(restaurantSettings)
+      .values({
+        restaurantId,
+        orderNowSetting: mergedSetting,
+      });
+  }
+
+  res.status(200).json({
+    success: true,
+    message: "Order Now settings updated successfully",
+    data: {
+      restaurantId,
+      orderNowSetting: mergedSetting,
+      ...mergedSetting,
+    },
+  });
+};

@@ -11,7 +11,7 @@ export const updateBusyStatusSchema = z.object({
     }
 );
 
-export const orderNowSettingSchema = z.object({
+export const orderNowSettingFieldsSchema = z.object({
     hotline: z.boolean().optional(),
     branches: z.boolean().optional(),
     name: z.boolean().optional(),
@@ -21,7 +21,16 @@ export const orderNowSettingSchema = z.object({
     menuPdf: z.boolean().optional(),
     iosIcon: z.boolean().optional(),
     androidIcon: z.boolean().optional(),
-}).optional();
+});
+
+export const orderNowSettingSchema = orderNowSettingFieldsSchema.optional();
+
+export const updateOrderNowSettingSchema = z.union([
+    z.object({
+        orderNowSetting: orderNowSettingFieldsSchema.optional(),
+    }).passthrough(),
+    orderNowSettingFieldsSchema.passthrough(),
+]);
 
 // ✅ Zod schema for updating general restaurant settings
 // Enforces: cashEnabled and enableOnlinePayment cannot both be false at the same time
