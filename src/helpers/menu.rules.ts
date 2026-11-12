@@ -19,6 +19,8 @@ export const MENU_ENUMS = {
     stockType: food.stock_type.enumValues,
     foodStatus: food.status.enumValues,
     selectionType: foodVariations.selectionType.enumValues,
+    soldBy: food.sold_by.enumValues,
+    weightUnit: food.weight_unit.enumValues,
 } as const;
 
 export type SubcategoryPriority = (typeof MENU_ENUMS.subcategoryPriority)[number];
@@ -28,6 +30,8 @@ export type DiscountType = (typeof MENU_ENUMS.discountType)[number];
 export type StockType = (typeof MENU_ENUMS.stockType)[number];
 export type FoodStatus = (typeof MENU_ENUMS.foodStatus)[number];
 export type SelectionType = (typeof MENU_ENUMS.selectionType)[number];
+export type SoldBy = (typeof MENU_ENUMS.soldBy)[number];
+export type WeightUnit = (typeof MENU_ENUMS.weightUnit)[number];
 
 // ----------------------------------------------------------------------------
 // Defaults applied when a value is not provided

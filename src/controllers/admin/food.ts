@@ -58,7 +58,9 @@ export const createFood = async (req: Request, res: Response) => {
             price, discount_type, discount_value, Maximum_Purchase, stock_type,
             status, variations, points,
             nameAr, nameFr, descriptionAr, descriptionFr,
-            isOutOfStock
+            isOutOfStock,
+            sold_by,
+            weight_unit,
         } = req.body;
 
         const incomingAddons = req.body.addonsId ?? req.body.addons ?? req.body.addonIds ?? req.body['addonsId[]'] ?? req.body['addons[]'];
@@ -130,6 +132,14 @@ export const createFood = async (req: Request, res: Response) => {
         }
 
         // 5. بدء المعاملة (Transaction) لحفظ البيانات
+        // Weight selling cross-validation
+        if (sold_by === "weight" && !weight_unit) {
+            throw new BadRequest("weight_unit is required when sold_by is 'weight'");
+        }
+        if (sold_by !== "weight" && weight_unit) {
+            throw new BadRequest("weight_unit must be null when sold_by is 'unit'");
+        }
+
         // الـ insert نفسه (الأكلة + variations + options + branchMenuItems) في helper مشترك مع الـ bulk import
         const foodId = await db.transaction((tx) =>
             insertFood(tx, restaurantId, {
@@ -149,6 +159,8 @@ export const createFood = async (req: Request, res: Response) => {
                 stock_type, status,
                 isOutOfStock,
                 points,
+                sold_by: sold_by || "unit",
+                weight_unit: sold_by === "weight" ? weight_unit : null,
                 variations,
                 branches: req.body.branches,
             })
@@ -192,6 +204,7 @@ export const getAllFoods = async (req: Request, res: Response) => {
         is_Halal: food.is_Halal, isOutOfStock: food.isOutOfStock, addonsId: food.addonsId, startTime: food.startTime, endTime: food.endTime,
         search_tags: food.search_tags, price: food.price, discount_type: food.discount_type, discount_value: food.discount_value,
         Maximum_Purchase: food.Maximum_Purchase, points: food.points, stock_type: food.stock_type, status: food.status,
+        sold_by: food.sold_by, weight_unit: food.weight_unit,
         createdAt: food.createdAt, updatedAt: food.updatedAt,
         restaurant: restaurants,
         category_name: categories.name, category_nameAr: categories.nameAr, category_nameFr: categories.nameFr,
@@ -300,6 +313,7 @@ export const getFoodById = async (req: Request, res: Response) => {
         is_Halal: food.is_Halal, isOutOfStock: food.isOutOfStock, addonsId: food.addonsId, startTime: food.startTime, endTime: food.endTime,
         search_tags: food.search_tags, price: food.price, discount_type: food.discount_type, discount_value: food.discount_value,
         Maximum_Purchase: food.Maximum_Purchase, points: food.points, stock_type: food.stock_type, status: food.status,
+        sold_by: food.sold_by, weight_unit: food.weight_unit,
         createdAt: food.createdAt, updatedAt: food.updatedAt,
         restaurant: { id: restaurants.id, name: restaurants.name },
         category: { id: categories.id, name: categories.name, nameAr: categories.nameAr, nameFr: categories.nameFr },
@@ -386,7 +400,8 @@ export const updateFood = async (req: Request, res: Response) => {
         "foodtype", "Nutrition", "allergen_ingredients", "is_Halal",
         "startTime", "endTime", "search_tags",
         "discount_type", "discount_value", "Maximum_Purchase", "stock_type",
-        "points", "isOutOfStock"
+        "points", "isOutOfStock",
+        "sold_by", "weight_unit",
     ];
 
     const updateData: any = {
@@ -412,6 +427,30 @@ export const updateFood = async (req: Request, res: Response) => {
             } else {
                 updateData[key] = data[key];
             }
+        }
+    }
+
+    // Weight selling cross-validation on update — four cases:
+    //
+    // 1. weight → unit  (sold_by='unit' explicitly sent)  → clear weight_unit silently ✅
+    // 2. unit  → weight without weight_unit               → reject ✅
+    // 3. weight_unit sent alone on a unit food            → reject ✅
+    // 4. Other fields updated on existing unit food       → unchanged ✅
+    const effectiveSoldBy = updateData.sold_by ?? existingFood[0].sold_by;
+    const effectiveWeightUnit = updateData.weight_unit !== undefined ? updateData.weight_unit : existingFood[0].weight_unit;
+
+    if (effectiveSoldBy === "weight" && !effectiveWeightUnit) {
+        // Case 2: unit → weight without weight_unit
+        throw new BadRequest("weight_unit is required when sold_by is 'weight'");
+    }
+    if (effectiveSoldBy !== "weight" && updateData.weight_unit) {
+        // Case 1 vs Case 3: check whether sold_by was explicitly sent
+        if (updateData.sold_by !== undefined) {
+            // Case 1: explicit sold_by transition → clear weight_unit silently
+            updateData.weight_unit = null;
+        } else {
+            // Case 3: weight_unit sent alone on a unit food → reject
+            throw new BadRequest("Cannot set weight_unit on a food that is sold by unit");
         }
     }
 

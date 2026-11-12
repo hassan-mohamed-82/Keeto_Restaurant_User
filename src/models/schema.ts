@@ -83,4 +83,4 @@ export * from "./schema/admin/platformPaymentGateways";
 export * from "./schema/admin/videos";
 export * from "./schema/admin/pushedNotification";
 export * from "./schema/admin/restaurantDomains";
-
+export * from "./schema/admin/weightRequests";

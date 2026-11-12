@@ -154,6 +154,14 @@ export const FOOD_COLUMNS = {
         header: "addons", type: "list", required: false, width: 36,
         note: "Optional. Comma-separated addon names, e.g. Extra cheese, Ketchup. See the Instructions sheet for the available names.",
     },
+    sold_by: {
+        header: "sold_by", type: "enum", required: false, width: 12, enumValues: MENU_ENUMS.soldBy,
+        note: `Optional. ${MENU_ENUMS.soldBy.join(", ")}. Default: unit. If weight, price is per weight_unit.`,
+    },
+    weight_unit: {
+        header: "weight_unit", type: "enum", required: false, width: 12, enumValues: MENU_ENUMS.weightUnit,
+        note: `Optional. ${MENU_ENUMS.weightUnit.join(", ")}. Required when sold_by is weight; must be empty when sold_by is unit.`,
+    },
 } as const satisfies ColumnSpecs;
 
 export const VARIATION_COLUMNS = {

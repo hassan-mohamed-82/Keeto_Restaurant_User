@@ -141,6 +141,8 @@ export interface FoodInsertData {
     status?: FoodStatus | null;
     isOutOfStock?: boolean | null;
     points?: number | null;
+    sold_by?: "unit" | "weight" | null;
+    weight_unit?: "kg" | "gm" | null;
     variations?: FoodVariationInput[];
     /** Branch availability rows (branchMenuItems), optionally with a branch price. */
     branches?: FoodBranchInput[];
@@ -186,6 +188,8 @@ export async function insertFood(
         status: data.status || FOOD_DEFAULTS.status,
         isOutOfStock: data.isOutOfStock ?? FOOD_DEFAULTS.isOutOfStock,
         points: data.points ?? FOOD_DEFAULTS.points,
+        sold_by: data.sold_by || "unit",
+        weight_unit: data.sold_by === "weight" ? (data.weight_unit || null) : null,
     });
 
     // Variations and their options

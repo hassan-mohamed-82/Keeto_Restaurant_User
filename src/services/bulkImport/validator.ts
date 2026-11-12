@@ -487,6 +487,16 @@ class ImportValidator {
         if (v.image !== null && !isHttpUrl(v.image)) addError(ctx, "image", IMAGE_URL_MESSAGE);
         const addonIds = this.resolveAddons(ctx, v.addons);
 
+        // Weight selling cross-validation
+        const soldBy = (v as any).sold_by as string | null;
+        const weightUnit = (v as any).weight_unit as string | null;
+        if (soldBy === "weight" && !weightUnit) {
+            addError(ctx, "weight_unit", '"weight_unit" is required when sold_by is "weight"');
+        }
+        if (soldBy !== "weight" && weightUnit) {
+            addError(ctx, "weight_unit", '"weight_unit" must be empty when sold_by is "unit"');
+        }
+
         if (
             ctx.errors.length === 0 &&
             category &&
@@ -523,6 +533,8 @@ class ImportValidator {
                     status: v.status ?? undefined,
                     isOutOfStock: v.isOutOfStock,
                     points: v.points,
+                    sold_by: (soldBy === "weight" ? "weight" : "unit") as "unit" | "weight",
+                    weight_unit: (soldBy === "weight" ? weightUnit : null) as "kg" | "gm" | null,
                     variations: [],
                 },
             };

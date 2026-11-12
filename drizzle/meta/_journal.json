@@ -36,6 +36,13 @@
       "when": 1776938613598,
       "tag": "0004_salty_lady_deathstrike",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1794484233618,
+      "tag": "0005_weight_based_orders",
+      "breakpoints": true
     }
   ]
 }
