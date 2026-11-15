@@ -189,6 +189,14 @@ export const VARIATION_COLUMNS = {
     optionNameAr: { header: "optionNameAr", type: "text", required: false, width: 22, maxLength: DB_LIMITS.varchar255, note: "Optional. Arabic option name." },
     optionNameFr: { header: "optionNameFr", type: "text", required: false, width: 22, maxLength: DB_LIMITS.varchar255, note: "Optional. French option name." },
     additionalPrice: { header: "additionalPrice", type: "decimal", required: false, width: 15, note: "Optional. Extra price for this option, 0 or more. Default: 0." },
+    priceMode: {
+        header: "priceMode",
+        type: "enum",
+        required: false,
+        width: 14,
+        enumValues: MENU_ENUMS.priceMode,
+        note: `Optional. ${MENU_ENUMS.priceMode.join(", ")}. Default: fixed. per_weight is only allowed for foods sold by weight.`,
+    },
 } as const satisfies ColumnSpecs;
 
 export type SubcategoryColumns = typeof SUBCATEGORY_COLUMNS;

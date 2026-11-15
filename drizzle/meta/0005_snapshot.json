@@ -2126,6 +2126,14 @@
           "autoincrement": false,
           "onUpdate": true,
           "default": "(now())"
+        },
+        "price_mode": {
+          "name": "price_mode",
+          "type": "enum('fixed','per_weight')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'fixed'"
         }
       },
       "indexes": {},

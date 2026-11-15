@@ -13,6 +13,7 @@
 import { eq } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 import { db } from "../models/connection";
+import { BadRequest } from "../Errors/BadRequest";
 import {
     subcategories,
     food,
@@ -91,6 +92,7 @@ export interface FoodVariationOptionInput {
     optionNameAr?: string;
     optionNameFr?: string;
     additionalPrice?: string | number | null;
+    priceMode?: "fixed" | "per_weight" | null;
 }
 
 export interface FoodVariationInput {
@@ -211,13 +213,25 @@ export async function insertFood(
             });
 
             if (variation.options && Array.isArray(variation.options)) {
-                const optionsToInsert = variation.options.map((option) => ({
-                    variationId,
-                    optionName: option.optionName,
-                    optionNameAr: option.optionNameAr,
-                    optionNameFr: option.optionNameFr,
-                    additionalPrice: option.additionalPrice?.toString() || "0",
-                }));
+                const optionsToInsert = variation.options.map((option) => {
+                    const mode = option.priceMode || "fixed";
+                    if (mode === "per_weight" && data.sold_by !== "weight") {
+                        throw new BadRequest("per_weight price_mode is only allowed on weight-based products");
+                    }
+                    const addPrice = option.additionalPrice?.toString() || "0";
+                    const p = parseFloat(addPrice);
+                    if (isNaN(p) || p < 0) {
+                        throw new BadRequest("Option additional price must be greater than or equal to 0");
+                    }
+                    return {
+                        variationId,
+                        optionName: option.optionName,
+                        optionNameAr: option.optionNameAr,
+                        optionNameFr: option.optionNameFr,
+                        additionalPrice: addPrice,
+                        priceMode: mode,
+                    };
+                });
 
                 if (optionsToInsert.length > 0) {
                     await executor.insert(variationOptions).values(optionsToInsert);

@@ -41,9 +41,9 @@ ALTER TABLE `food` ADD `weight_unit` enum('kg','gm');
 -- 3. Restaurant settings: weight timeout & max increase limits
 ALTER TABLE `restaurant_settings` ADD `weight_max_increase_percent` int NOT NULL DEFAULT 10;
 --> statement-breakpoint
-ALTER TABLE `restaurant_settings` ADD `weight_restaurant_timeout_min` int NOT NULL DEFAULT 10;
+ALTER TABLE `restaurant_settings` ADD `weight_restaurant_timeout_min` int NOT NULL DEFAULT 30;
 --> statement-breakpoint
-ALTER TABLE `restaurant_settings` ADD `weight_customer_timeout_min` int NOT NULL DEFAULT 15;
+ALTER TABLE `restaurant_settings` ADD `weight_customer_timeout_min` int NOT NULL DEFAULT 40;
 --> statement-breakpoint
 
 -- 4. Cart items: weight locking and weighing columns
@@ -66,3 +66,7 @@ ALTER TABLE `order_items` ADD `ordered_weight` decimal(10,3);
 ALTER TABLE `order_items` ADD `final_weight` decimal(10,3);
 --> statement-breakpoint
 ALTER TABLE `order_items` ADD `weight_unit` enum('kg','gm');
+--> statement-breakpoint
+
+-- 6. Variation options: price_mode for weight-based extras
+ALTER TABLE `variation_options` ADD `price_mode` enum('fixed','per_weight') NOT NULL DEFAULT 'fixed';

@@ -40,6 +40,7 @@ export const variationOptions = mysqlTable("variation_options", {
     optionNameAr: varchar("option_name_ar", { length: 255 }).notNull().default(''),
     optionNameFr: varchar("option_name_fr", { length: 255 }).notNull().default(''),
     additionalPrice: varchar("additional_price", { length: 255 }).notNull().default("0"), // Additional price
+    priceMode: mysqlEnum("price_mode", ["fixed", "per_weight"]).notNull().default("fixed"),
     isDefault: boolean("is_default").default(false),
     status: boolean("status").default(true), // حالة الاوبشن (متاح / غير متاح)
 

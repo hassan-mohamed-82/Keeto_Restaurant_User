@@ -190,6 +190,7 @@ function addInstructionsSheet(workbook: ExcelJS.Workbook, lookups: TemplateLooku
     addLine(`• discount_type: ${MENU_ENUMS.discountType.join(" | ")} (default percentage)`);
     addLine(`• stock_type: ${MENU_ENUMS.stockType.join(" | ")} (default unlimited)`);
     addLine(`• selectionType: ${MENU_ENUMS.selectionType.join(" | ")} (default single)`);
+    addLine(`• priceMode: ${MENU_ENUMS.priceMode.join(" | ")} (default fixed)`);
     blank();
     addLine("Variations example (one variation \"Size\" with three options)", "heading");
     addLine("food | variationName | isRequired | selectionType | min | max | optionName | additionalPrice");
@@ -261,6 +262,7 @@ export async function renderImportTemplate(lookups: TemplateLookups): Promise<Bu
     // Variations
     applyListValidation(variationSheet, columnNumberOf(VARIATION_COLUMNS, "isRequired"), yesNo);
     applyListValidation(variationSheet, columnNumberOf(VARIATION_COLUMNS, "selectionType"), strictEnum(MENU_ENUMS.selectionType));
+    applyListValidation(variationSheet, columnNumberOf(VARIATION_COLUMNS, "priceMode"), strictEnum(MENU_ENUMS.priceMode));
 
     // exceljs types writeBuffer() as its own ArrayBuffer-like Buffer; at runtime it is a Node Buffer
     const output = await workbook.xlsx.writeBuffer();

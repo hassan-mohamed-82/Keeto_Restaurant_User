@@ -38,37 +38,81 @@ export const validateWeightSettings = (settings: {
     }
 };
 
+export interface WeightedOptionExtra {
+    price: number | string;
+    priceMode?: "fixed" | "per_weight" | string | null;
+}
+
 /**
- * Computes line total for a weighted item using safe integer arithmetic:
- * item_total = round(weight * unit_price, 2)
+ * Validates whether an option's priceMode and additionalPrice are valid for a given food's sold_by.
+ * - Additional price must be >= 0.
+ * - per_weight is only allowed for foods sold by weight.
+ */
+export const validateOptionPriceMode = (
+    soldBy: "unit" | "weight" | string | null | undefined,
+    priceMode?: "fixed" | "per_weight" | string | null,
+    additionalPrice?: number | string | null
+): void => {
+    if (additionalPrice !== undefined && additionalPrice !== null) {
+        const p = typeof additionalPrice === "number" ? additionalPrice : parseFloat(additionalPrice.toString());
+        if (isNaN(p) || p < 0) {
+            throw new BadRequest("Option additional price must be greater than or equal to 0");
+        }
+    }
+    const mode = priceMode || "fixed";
+    if (mode === "per_weight" && soldBy !== "weight") {
+        throw new BadRequest("per_weight price_mode is only allowed on weight-based products");
+    }
+};
+
+/**
+ * Computes line total for a weighted item using exact integer arithmetic:
+ * line_total = weight * food_unit_price + sum(fixed extras) + sum(weight * per_weight extras)
  *
  * Avoids IEEE-754 floating point drift by scaling weight to thousandths (milligrams/grams)
  * and unitPrice to hundredths (cents/piastres).
  *
  * @param weight customer or restaurant weight (in food's weight_unit)
- * @param unitPrice price per weight_unit
- * @returns string formatted with 2 decimal places (e.g. "49.95")
+ * @param foodUnitPrice price per weight_unit of the food
+ * @param options optional array of option/addon extras with price and priceMode
+ * @returns string formatted with 2 decimal places (e.g. "190.00")
  */
 export const computeWeightedLineTotal = (
     weight: number | string,
-    unitPrice: number | string
+    foodUnitPrice: number | string,
+    options: WeightedOptionExtra[] = []
 ): string => {
     const w = typeof weight === "number" ? weight : parseFloat(weight);
-    const p = typeof unitPrice === "number" ? unitPrice : parseFloat(unitPrice);
+    const baseP = typeof foodUnitPrice === "number" ? foodUnitPrice : parseFloat(foodUnitPrice);
 
-    if (isNaN(w) || isNaN(p) || w < 0 || p < 0) {
+    if (isNaN(w) || isNaN(baseP) || w < 0 || baseP < 0) {
         throw new BadRequest("Invalid weight or unit price");
     }
 
-    // w * 1000 to thousandths; p * 100 to hundredths
+    // w * 1000 to thousandths; baseP * 100 to hundredths
     const weightScaled = Math.round(w * 1000);
-    const priceScaled = Math.round(p * 100);
+    let totalPerWeightCents = Math.round(baseP * 100);
+    let fixedCents = 0;
 
-    // weightScaled * priceScaled has scale 100,000
+    for (const opt of options) {
+        const optPrice = typeof opt.price === "number" ? opt.price : parseFloat(opt.price || "0");
+        if (isNaN(optPrice) || optPrice < 0) {
+            throw new BadRequest("Option additional price must be >= 0");
+        }
+        const optCents = Math.round(optPrice * 100);
+        if (opt.priceMode === "per_weight") {
+            totalPerWeightCents += optCents;
+        } else {
+            fixedCents += optCents;
+        }
+    }
+
+    // weightScaled * totalPerWeightCents has scale 100,000
     // To get cents (scale 100), divide by 1000 and round
-    const totalCents = Math.round((weightScaled * priceScaled) / 1000);
+    const perWeightCents = Math.round((weightScaled * totalPerWeightCents) / 1000);
+    const finalCents = perWeightCents + fixedCents;
 
-    return (totalCents / 100).toFixed(2);
+    return (finalCents / 100).toFixed(2);
 };
 
 /**

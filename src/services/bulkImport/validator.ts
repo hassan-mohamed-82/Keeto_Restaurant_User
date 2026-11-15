@@ -645,6 +645,11 @@ class ImportValidator {
             if (additionalPrice < 0) addError(ctx, "additionalPrice", '"additionalPrice" cannot be negative');
             else if (additionalPrice > DB_LIMITS.decimal10_2Max) addError(ctx, "additionalPrice", '"additionalPrice" is too large');
 
+            const priceMode = (v.priceMode as "fixed" | "per_weight" | null) ?? "fixed";
+            if (priceMode === "per_weight" && target.planned?.data.sold_by !== "weight") {
+                addError(ctx, "priceMode", '"per_weight" priceMode is only allowed for foods sold by weight');
+            }
+
             if (ctx.errors.length > 0) {
                 group.hasErrors = true;
             } else {
@@ -653,6 +658,7 @@ class ImportValidator {
                     optionNameAr: v.optionNameAr ?? undefined, // undefined → column default ''
                     optionNameFr: v.optionNameFr ?? undefined,
                     additionalPrice: roundTo2(additionalPrice),
+                    priceMode,
                 });
             }
             this.finishRow(ctx);

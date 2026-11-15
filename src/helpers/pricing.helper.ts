@@ -43,6 +43,7 @@ export type ServiceModule = "takeaway" | "dine_in" | "delivery";
 export type VariantPriceResult = {
     variantOptionId: string;
     price: number;
+    priceMode?: "fixed" | "per_weight";
     isAvailable: boolean;
 };
 
@@ -199,6 +200,7 @@ export const calculateCalculatedPrice = async (
             ? db.select({
                 id: variationOptions.id,
                 additionalPrice: variationOptions.additionalPrice,
+                priceMode: variationOptions.priceMode,
                 status: variationOptions.status,
             })
                 .from(variationOptions)
@@ -236,7 +238,7 @@ export const calculateCalculatedPrice = async (
     for (const optionId of variantOptionIds) {
         const baseOption = baseVarMap.get(optionId);
         if (!baseOption) {
-            resolvedVariants.push({ variantOptionId: optionId, price: 0, isAvailable: false });
+            resolvedVariants.push({ variantOptionId: optionId, price: 0, priceMode: "fixed", isAvailable: false });
             continue;
         }
 
@@ -248,6 +250,7 @@ export const calculateCalculatedPrice = async (
         resolvedVariants.push({
             variantOptionId: optionId,
             price: varPrice,
+            priceMode: (baseOption.priceMode ?? "fixed") as "fixed" | "per_weight",
             isAvailable: varAvailable,
         });
     }

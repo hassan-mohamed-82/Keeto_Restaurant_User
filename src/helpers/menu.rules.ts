@@ -6,7 +6,7 @@
 // defaults and cross-entity rules. Enum values are read from the Drizzle schema
 // so they can never drift from the database definition.
 // =============================================================================
-import { subcategories, food, foodVariations } from "../models/schema";
+import { subcategories, food, foodVariations, variationOptions } from "../models/schema";
 
 // ----------------------------------------------------------------------------
 // Enum values (single source of truth: the schema)
@@ -21,6 +21,7 @@ export const MENU_ENUMS = {
     selectionType: foodVariations.selectionType.enumValues,
     soldBy: food.sold_by.enumValues,
     weightUnit: food.weight_unit.enumValues,
+    priceMode: variationOptions.priceMode.enumValues,
 } as const;
 
 export type SubcategoryPriority = (typeof MENU_ENUMS.subcategoryPriority)[number];
@@ -32,6 +33,7 @@ export type FoodStatus = (typeof MENU_ENUMS.foodStatus)[number];
 export type SelectionType = (typeof MENU_ENUMS.selectionType)[number];
 export type SoldBy = (typeof MENU_ENUMS.soldBy)[number];
 export type WeightUnit = (typeof MENU_ENUMS.weightUnit)[number];
+export type PriceMode = (typeof MENU_ENUMS.priceMode)[number];
 
 // ----------------------------------------------------------------------------
 // Defaults applied when a value is not provided

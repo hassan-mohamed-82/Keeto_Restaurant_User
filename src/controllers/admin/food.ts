@@ -454,6 +454,19 @@ export const updateFood = async (req: Request, res: Response) => {
         }
     }
 
+    if (updateData.sold_by === "unit" && existingFood[0].sold_by === "weight") {
+        const existingPerWeight = await db
+            .select({ id: variationOptions.id })
+            .from(variationOptions)
+            .innerJoin(foodVariations, eq(variationOptions.variationId, foodVariations.id))
+            .where(and(eq(foodVariations.foodId, id), eq(variationOptions.priceMode, "per_weight")))
+            .limit(1);
+        const incomingVars = data.variations ?? data['variations[]'];
+        if (existingPerWeight.length > 0 && incomingVars === undefined) {
+            throw new BadRequest("Cannot switch food to unit while it has per_weight variation options. Update options to fixed first.");
+        }
+    }
+
     // ==========================================
     // 2️⃣ معالجة الـ Addons بشكل مخصص وآمن 
     // ==========================================
@@ -591,6 +604,15 @@ export const updateFood = async (req: Request, res: Response) => {
                         ? option.additionalPrice.toString()
                         : "0";
 
+                    const optionPriceMode = option.priceMode ?? (existingOpt?.priceMode ?? "fixed");
+                    if (effectiveSoldBy !== "weight" && optionPriceMode === "per_weight") {
+                        throw new BadRequest("per_weight price_mode is only allowed on weight-based products");
+                    }
+                    const addPriceNum = parseFloat(additionalPriceStr);
+                    if (isNaN(addPriceNum) || addPriceNum < 0) {
+                        throw new BadRequest("Option additional price must be greater than or equal to 0");
+                    }
+
                     if (existingOpt) {
                         // Update existing option (preserves UUID!)
                         await db.update(variationOptions).set({
@@ -599,6 +621,7 @@ export const updateFood = async (req: Request, res: Response) => {
                             optionNameAr: option.optionNameAr ?? existingOpt.optionNameAr,
                             optionNameFr: option.optionNameFr ?? existingOpt.optionNameFr,
                             additionalPrice: additionalPriceStr,
+                            priceMode: optionPriceMode,
                             status: option.status !== undefined ? option.status : existingOpt.status,
                             isDefault: option.isDefault !== undefined ? option.isDefault : existingOpt.isDefault,
                         }).where(eq(variationOptions.id, optionId));
@@ -612,6 +635,7 @@ export const updateFood = async (req: Request, res: Response) => {
                             optionNameAr: option.optionNameAr || '',
                             optionNameFr: option.optionNameFr || '',
                             additionalPrice: additionalPriceStr,
+                            priceMode: optionPriceMode,
                             status: option.status !== undefined ? option.status : true,
                             isDefault: option.isDefault !== undefined ? option.isDefault : false,
                         });
