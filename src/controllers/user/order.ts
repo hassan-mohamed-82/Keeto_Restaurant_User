@@ -632,7 +632,13 @@ export const checkout = async (req: Request | any, res: Response) => {
             const endOk = !freeDeliveryOffer.endDate || new Date(freeDeliveryOffer.endDate) >= nowForOffer;
             const minAmount = parseFloat(freeDeliveryOffer.minOrderAmount as string || "0");
 
-            if (startOk && endOk && subtotal >= minAmount) {
+            const rawBranchIds = freeDeliveryOffer.branchIds;
+            const offerBranchIds = Array.isArray(rawBranchIds)
+                ? rawBranchIds
+                : (typeof rawBranchIds === "string" ? (() => { try { const p = JSON.parse(rawBranchIds); return Array.isArray(p) ? p : []; } catch { return []; } })() : []);
+            const branchOk = offerBranchIds.length === 0 || (resolvedBranchId ? offerBranchIds.includes(resolvedBranchId) : false);
+
+            if (startOk && endOk && subtotal >= minAmount && branchOk) {
                 isFreeDelivery = true;
                 deliveryFee = 0;
             }
