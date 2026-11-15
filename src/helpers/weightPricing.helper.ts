@@ -160,3 +160,88 @@ export const isSaneWeight = (weight: number, unit?: "kg" | "gm" | string | null)
     const max = unit === "gm" ? SANE_MAX_WEIGHT.gm : SANE_MAX_WEIGHT.kg;
     return weight <= max;
 };
+
+export interface WeightInputFood {
+    sold_by?: "unit" | "weight" | string | null;
+    weight_unit?: "kg" | "gm" | string | null;
+}
+
+/**
+ * Single source of truth for validating a weight entered by a customer or by
+ * restaurant staff. Returns the normalised weight (3 decimals) for weight-sold
+ * foods, or null for unit-sold foods (where a weight must not be sent).
+ *
+ * Rules:
+ * - at most 3 decimal places;
+ * - must be >= 0.001 after rounding (0.0004 would otherwise be stored as "0.000");
+ * - must be <= the sane maximum for the food's weight_unit (isSaneWeight).
+ *
+ * `selectedOptions` is reserved for the weight-group / allow_custom_weight rules.
+ * Those columns (food.allow_custom_weight, variation_options.weight_value, a
+ * "weight group" flag on food_variations) do NOT exist in either schema yet, so
+ * no weight-group rule is enforced here. Wire them in once the columns exist.
+ */
+export const validateWeightInput = (
+    food: WeightInputFood,
+    weight: number | string | null | undefined,
+    _selectedOptions: unknown[] = []
+): number | null => {
+    const hasWeight = weight !== undefined && weight !== null && weight !== "";
+
+    if (food.sold_by !== "weight") {
+        if (hasWeight) throw new BadRequest("Weight cannot be specified for unit-sold products");
+        return null;
+    }
+
+    if (!hasWeight) {
+        throw new BadRequest("Weight is required and must be greater than 0 for weight-based products");
+    }
+
+    const w = typeof weight === "number" ? weight : Number(String(weight).trim());
+    if (!Number.isFinite(w) || w <= 0) {
+        throw new BadRequest("Weight must be a number greater than 0");
+    }
+
+    const scaled = w * 1000;
+    if (Math.abs(scaled - Math.round(scaled)) > 1e-6) {
+        throw new BadRequest("Weight can have at most 3 decimal places");
+    }
+
+    const thousandths = Math.round(scaled);
+    if (thousandths < 1) {
+        throw new BadRequest("Weight must be at least 0.001");
+    }
+
+    const normalised = thousandths / 1000;
+    const unit = food.weight_unit === "gm" ? "gm" : "kg";
+    if (!isSaneWeight(normalised, unit)) {
+        throw new BadRequest(`Weight exceeds the maximum allowed (${SANE_MAX_WEIGHT[unit]} ${unit})`);
+    }
+
+    return normalised;
+};
+
+/**
+ * Splits a weighted line total into base / variations / addons portions whose sum
+ * is EXACTLY the computeWeightedLineTotal() result (the variations portion absorbs
+ * any 1-cent rounding difference). Used to fill order_items price columns for
+ * weighted rows so that basePortion + variationsPortion + addonsPortion = total.
+ */
+export const splitWeightedLineTotal = (
+    weight: number | string,
+    foodUnitPrice: number | string,
+    variationExtras: WeightedOptionExtra[] = [],
+    addonExtras: WeightedOptionExtra[] = []
+): { total: string; basePortion: string; variationsPortion: string; addonsPortion: string } => {
+    const toCents = (s: string) => Math.round(parseFloat(s) * 100);
+    const totalCents = toCents(computeWeightedLineTotal(weight, foodUnitPrice, [...variationExtras, ...addonExtras]));
+    const baseCents = toCents(computeWeightedLineTotal(weight, foodUnitPrice, []));
+    const addonsCents = toCents(computeWeightedLineTotal(weight, 0, addonExtras));
+    const variationsCents = totalCents - baseCents - addonsCents;
+    return {
+        total: (totalCents / 100).toFixed(2),
+        basePortion: (baseCents / 100).toFixed(2),
+        variationsPortion: (variationsCents / 100).toFixed(2),
+        addonsPortion: (addonsCents / 100).toFixed(2),
+    };
+};

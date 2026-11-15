@@ -1546,6 +1546,7 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
         basePrice: orderItems.basePrice,
         variationsPrice: orderItems.variationsPrice,
         totalPrice: orderItems.totalPrice,
+        finalWeight: orderItems.finalWeight,
         variations: orderItems.variations,
         foodName: food.name,
         foodNameAr: food.nameAr,
@@ -1597,7 +1598,10 @@ export const generateOrderInvoicePDF = async (req: Request, res: Response) => {
         }
 
         const finalVarPrice = parseFloat(item.variationsPrice as string || "0") > 0 ? parseFloat(item.variationsPrice as string || "0") : totalCalculatedVarPrice;
-        const finalTotalPrice = (parseFloat(item.basePrice as string || "0") + finalVarPrice) * item.quantity;
+        // Weighted rows: basePrice is per weight unit, so the stored line total is authoritative.
+        const finalTotalPrice = item.finalWeight != null
+            ? parseFloat(item.totalPrice as string || "0")
+            : (parseFloat(item.basePrice as string || "0") + finalVarPrice) * item.quantity;
 
         return {
             ...item,
