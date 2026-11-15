@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { catchAsync } from "../../utils/catchAsync";
 import { hasPermission } from "../../middlewares/hasPermission";
+import { validate } from "../../middlewares/validation";
+import { bulkApplyFoodDiscountSchema } from "../../validation/admin/food";
 import {
     createFood,
     getAllFoods,
@@ -14,6 +16,7 @@ import {
     getOutOfStockFoods,
     toggleFoodOutOfStock,
     getActiveInStockFoods,
+    bulkApplyFoodDiscount,
 } from "../../controllers/admin/food";
 import {
     assignIngredientsToFood,
@@ -27,6 +30,9 @@ router.get("/select", hasPermission("food", "read"), catchAsync(getFoodSelectDat
 
 // ✅ Create food - يحتاج صلاحية create
 router.post("/", hasPermission("food", "create"), catchAsync(createFood));
+
+// ✅ Bulk apply discount to food items (by foodIds, subcategoryIds, categoryIds, or all foods when empty)
+router.put("/discount", hasPermission("food", "update"), validate(bulkApplyFoodDiscountSchema), catchAsync(bulkApplyFoodDiscount));
 
 // ✅ Get all foods - يحتاج صلاحية read
 router.get("/", hasPermission("food", "read"), catchAsync(getAllFoods));

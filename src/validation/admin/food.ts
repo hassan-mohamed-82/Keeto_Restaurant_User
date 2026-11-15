@@ -33,3 +33,81 @@ export const createFoodSchema = z.object({
 });
 
 export const updateFoodSchema = createFoodSchema.partial();
+
+export function safeParseJson(val: any): any {
+    if (typeof val === "string") {
+        const trimmed = val.trim();
+        if ((trimmed.startsWith("[") && trimmed.endsWith("]")) || (trimmed.startsWith("{") && trimmed.endsWith("}"))) {
+            try {
+                return JSON.parse(trimmed);
+            } catch {
+                return val;
+            }
+        }
+    }
+    return val;
+}
+
+const parseIdArray = (val: any): string[] => {
+    if (val === undefined || val === null || val === "") return [];
+    val = safeParseJson(val);
+    if (typeof val === "string") {
+        if (val.includes(",")) return val.split(",").map((s) => s.trim()).filter(Boolean);
+        return val.trim() ? [val.trim()] : [];
+    }
+    if (Array.isArray(val)) {
+        return val.map(String).map((s) => s.trim()).filter(Boolean);
+    }
+    return [];
+};
+
+const normalizeBulkDiscountInput = (obj: any) => {
+    if (obj && typeof obj === "object") {
+        if (obj.discountType === undefined && obj.discount_type !== undefined) {
+            obj.discountType = obj.discount_type;
+        }
+        if (obj.discountValue === undefined && obj.discount_value !== undefined) {
+            obj.discountValue = obj.discount_value;
+        }
+        if (obj.foodIds === undefined) {
+            obj.foodIds = parseIdArray(obj.food_ids ?? obj.productIds ?? obj.product_ids ?? obj.products);
+        } else {
+            obj.foodIds = parseIdArray(obj.foodIds);
+        }
+        if (obj.subCategoryIds === undefined) {
+            obj.subCategoryIds = parseIdArray(obj.subcategoryIds ?? obj.sub_category_ids ?? obj.subcategory_ids ?? obj.subcategories);
+        } else {
+            obj.subCategoryIds = parseIdArray(obj.subCategoryIds);
+        }
+        if (obj.categoryIds === undefined) {
+            obj.categoryIds = parseIdArray(obj.category_ids ?? obj.categories);
+        } else {
+            obj.categoryIds = parseIdArray(obj.categoryIds);
+        }
+    }
+    return obj;
+};
+
+export const bulkApplyFoodDiscountSchema = z.preprocess(
+    normalizeBulkDiscountInput,
+    z.object({
+        discountType: z.enum(["percentage", "amount"]).optional().default("percentage"),
+        discountValue: z.coerce.number().min(0, "discountValue must be non-negative").optional().nullable(),
+        foodIds: z.array(z.string().min(1)).optional().default([]),
+        subCategoryIds: z.array(z.string().min(1)).optional().default([]),
+        categoryIds: z.array(z.string().min(1)).optional().default([]),
+    }).refine(
+        (data) => {
+            const type = data.discountType || "percentage";
+            const val = data.discountValue || 0;
+            if (type === "percentage" && val > 100) {
+                return false;
+            }
+            return true;
+        },
+        {
+            message: "Discount percentage cannot exceed 100%",
+            path: ["discountValue"],
+        }
+    )
+);

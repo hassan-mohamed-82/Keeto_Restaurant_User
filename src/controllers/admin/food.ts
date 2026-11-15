@@ -25,7 +25,7 @@ import {
 } from "../../models/schema";
 import { getUnavailableBranchesForFoods } from "../../helpers/food.helper";
 // ✅ تم إضافة and, or, isNull هنا عشان نصلح مشكلة الشروط المتعددة
-import { eq, inArray, and, or, isNull, lte } from "drizzle-orm";
+import { eq, inArray, and, or, isNull, lte, sql } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { NotFound } from "../../Errors/NotFound";
 import { BadRequest } from "../../Errors/BadRequest";
@@ -1748,5 +1748,87 @@ export const getActiveInStockFoods = async (req: Request | any, res: Response) =
     return SuccessResponse(res, {
         message: "Active in-stock foods fetched successfully",
         data,
+    });
+};
+
+// =============================================
+// BULK APPLY FOOD DISCOUNT
+// =============================================
+export const bulkApplyFoodDiscount = async (req: Request, res: Response) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId) {
+        throw new BadRequest("Restaurant context is missing or unauthorized");
+    }
+
+    const discountType = (req.body.discountType || req.body.discount_type || "percentage") as "percentage" | "amount";
+    const rawVal = req.body.discountValue !== undefined ? req.body.discountValue : req.body.discount_value;
+    const discountValNum = rawVal !== undefined && rawVal !== null && rawVal !== "" && !isNaN(Number(rawVal))
+        ? Number(rawVal)
+        : null;
+
+    if (discountType === "percentage" && discountValNum !== null && (discountValNum < 0 || discountValNum > 100)) {
+        throw new BadRequest("Discount percentage must be between 0 and 100");
+    }
+
+    if (discountType === "amount" && discountValNum !== null && discountValNum < 0) {
+        throw new BadRequest("Discount amount must be non-negative");
+    }
+
+    const foodIds: string[] = Array.isArray(req.body.foodIds) ? req.body.foodIds.filter(Boolean) : [];
+    const subCategoryIds: string[] = Array.isArray(req.body.subCategoryIds) ? req.body.subCategoryIds.filter(Boolean) : [];
+    const categoryIds: string[] = Array.isArray(req.body.categoryIds) ? req.body.categoryIds.filter(Boolean) : [];
+
+    const hasSpecificTarget = foodIds.length > 0 || subCategoryIds.length > 0 || categoryIds.length > 0;
+
+    const targetConditions: any[] = [];
+    if (foodIds.length > 0) {
+        targetConditions.push(inArray(food.id, foodIds));
+    }
+    if (subCategoryIds.length > 0) {
+        targetConditions.push(inArray(food.subcategoryid, subCategoryIds));
+    }
+    if (categoryIds.length > 0) {
+        targetConditions.push(inArray(food.categoryid, categoryIds));
+    }
+
+    const whereClause = hasSpecificTarget
+        ? and(eq(food.restaurantid, restaurantId), or(...targetConditions))
+        : eq(food.restaurantid, restaurantId);
+
+    const discountValueToStore = discountValNum !== null && discountValNum > 0
+        ? discountValNum.toFixed(2)
+        : null;
+
+    await db
+        .update(food)
+        .set({
+            discount_type: discountType,
+            discount_value: discountValueToStore,
+        })
+        .where(whereClause);
+
+    // Count affected items
+    const [countResult] = await db
+        .select({ cnt: sql<number>`count(*)` })
+        .from(food)
+        .where(whereClause);
+
+    const affectedCount = Number(countResult?.cnt || 0);
+
+    return SuccessResponse(res, {
+        message: discountValueToStore !== null
+            ? `Discount applied successfully to ${affectedCount} items`
+            : `Discount removed successfully from ${affectedCount} items`,
+        data: {
+            scope: hasSpecificTarget ? "targeted" : "all_restaurant_foods",
+            affectedCount,
+            discountType,
+            discountValue: discountValueToStore,
+            appliedFilters: {
+                foodIds,
+                subCategoryIds,
+                categoryIds,
+            },
+        },
     });
 };
