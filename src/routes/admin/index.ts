@@ -11,6 +11,7 @@ import branchesRouter from "./branches";
 import branchemenuRouter from "./branchemenu";
 import foodLocksRouter from "./foodLocks";
 import OrderRouter from "./order"
+import WeightRequestsRouter from "./weightRequests";
 import IngredientsRouter from "./ingredients"
 import IngredientCategoryRouter from "./IngredientCategory";
 import restaurantZoneDeliveryFeesRouter from "./restaurantZoneDeliveryFees";
@@ -102,6 +103,7 @@ router.use("/expenses", expenseRouter);
 router.use("/expense-categories", expenseCategoryRouter);
 router.use("/points-products", PointsProductsRouter);
 router.use("/points-orders", PointsOrdersRouter)
+router.use("/weight-requests", WeightRequestsRouter);
 router.use("/delivery-men", DeliveryManRouter);
 router.use("/recommended-foods", RecommendedFoodRouter);
 router.use("/free-delivery", FreeDeliveryOfferRouter);

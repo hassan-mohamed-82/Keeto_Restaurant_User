@@ -149,3 +149,14 @@ export const isWeightWithinLimit = (
     // 0.0001 epsilon for floating point comparison safety
     return fw <= maxAllowed + 0.0001;
 };
+
+export const SANE_MAX_WEIGHT = {
+    kg: 100,
+    gm: 100000,
+} as const;
+
+export const isSaneWeight = (weight: number, unit?: "kg" | "gm" | string | null): boolean => {
+    if (weight <= 0) return false;
+    const max = unit === "gm" ? SANE_MAX_WEIGHT.gm : SANE_MAX_WEIGHT.kg;
+    return weight <= max;
+};

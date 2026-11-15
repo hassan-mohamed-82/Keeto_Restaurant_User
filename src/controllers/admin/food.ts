@@ -1554,3 +1554,199 @@ export const getOutOfStockFoods = async (req: Request, res: Response) => {
         data: result,
     });
 };
+
+/**
+ * 🟢 Returns all active and in-stock foods with their active variations (and options with priceMode)
+ * and addons, formatted for the staff UI selector when adding items to weight requests.
+ */
+export const getActiveInStockFoods = async (req: Request | any, res: Response) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
+
+    const conditions: any[] = [
+        activeFoodCondition,
+        eq(food.restaurantid, restaurantId),
+        eq(food.status, "active"),
+        eq(food.isOutOfStock, false),
+    ];
+
+    if (req.query.sold_by) {
+        conditions.push(eq(food.sold_by, req.query.sold_by as any));
+    }
+    if (req.query.categoryId) {
+        conditions.push(eq(food.categoryid, req.query.categoryId as string));
+    }
+    if (req.query.subCategoryId) {
+        conditions.push(eq(food.subcategoryid, req.query.subCategoryId as string));
+    }
+
+    const rawFoods = await db
+        .select({
+            id: food.id,
+            name: food.name,
+            nameAr: food.nameAr,
+            nameFr: food.nameFr,
+            description: food.description,
+            descriptionAr: food.descriptionAr,
+            descriptionFr: food.descriptionFr,
+            image: food.image,
+            price: food.price,
+            sold_by: food.sold_by,
+            weight_unit: food.weight_unit,
+            categoryid: food.categoryid,
+            subcategoryid: food.subcategoryid,
+            category_name: categories.name,
+            category_nameAr: categories.nameAr,
+            subcategory_name: subcategories.name,
+            subcategory_nameAr: subcategories.nameAr,
+            addonsId: food.addonsId,
+        })
+        .from(food)
+        .leftJoin(categories, eq(food.categoryid, categories.id))
+        .leftJoin(subcategories, eq(food.subcategoryid, subcategories.id))
+        .where(and(...conditions));
+
+    if (rawFoods.length === 0) {
+        return SuccessResponse(res, {
+            message: "Active in-stock foods fetched successfully",
+            data: [],
+        });
+    }
+
+    const foodIds = rawFoods.map((f) => f.id);
+
+    // Fetch active variations and their active options
+    const allVars = await db
+        .select({
+            id: foodVariations.id,
+            foodId: foodVariations.foodId,
+            name: foodVariations.name,
+            nameAr: foodVariations.nameAr,
+            nameFr: foodVariations.nameFr,
+            isRequired: foodVariations.isRequired,
+            selectionType: foodVariations.selectionType,
+            status: foodVariations.status,
+        })
+        .from(foodVariations)
+        .where(and(inArray(foodVariations.foodId, foodIds), eq(foodVariations.status, true)));
+
+    const varIds = allVars.map((v) => v.id);
+
+    const allOpts = varIds.length > 0
+        ? await db
+            .select({
+                id: variationOptions.id,
+                variationId: variationOptions.variationId,
+                optionName: variationOptions.optionName,
+                optionNameAr: variationOptions.optionNameAr,
+                optionNameFr: variationOptions.optionNameFr,
+                additionalPrice: variationOptions.additionalPrice,
+                priceMode: variationOptions.priceMode,
+                status: variationOptions.status,
+            })
+            .from(variationOptions)
+            .where(and(inArray(variationOptions.variationId, varIds), eq(variationOptions.status, true)))
+        : [];
+
+    // Collect and fetch active addons
+    const allAddonsIdsToFetch = new Set<string>();
+    rawFoods.forEach((f) => {
+        let safeAddons = f.addonsId;
+        if (typeof safeAddons === "string") {
+            try { safeAddons = JSON.parse(safeAddons); } catch { safeAddons = []; }
+        }
+        const cleanAddons = Array.isArray(safeAddons) ? safeAddons : [];
+        cleanAddons.forEach((id: any) => {
+            if (typeof id === "string" && id.trim()) allAddonsIdsToFetch.add(id.trim());
+        });
+    });
+
+    const uniqueAddonIds = Array.from(allAddonsIdsToFetch);
+    const dbAddons = uniqueAddonIds.length > 0
+        ? await db
+            .select({
+                id: addons.id,
+                name: addons.name,
+                nameAr: addons.nameAr,
+                nameFr: addons.nameFr,
+                price: addons.price,
+                status: addons.status,
+            })
+            .from(addons)
+            .where(and(inArray(addons.id, uniqueAddonIds), eq(addons.status, "active")))
+        : [];
+
+    const addonsMap = new Map(dbAddons.map((a) => [a.id, a]));
+
+    const data = rawFoods.map((f) => {
+        const foodVars = allVars
+            .filter((v) => v.foodId === f.id)
+            .map((v) => ({
+                id: v.id,
+                name: v.name,
+                nameAr: v.nameAr,
+                nameFr: v.nameFr,
+                isRequired: v.isRequired,
+                selectionType: v.selectionType,
+                options: allOpts
+                    .filter((o) => o.variationId === v.id)
+                    .map((o) => ({
+                        id: o.id,
+                        optionName: o.optionName,
+                        optionNameAr: o.optionNameAr,
+                        optionNameFr: o.optionNameFr,
+                        additionalPrice: o.additionalPrice,
+                        priceMode: o.priceMode || "fixed",
+                    })),
+            }));
+
+        let parsedAddonsList: string[] = [];
+        if (typeof f.addonsId === "string") {
+            try { parsedAddonsList = JSON.parse(f.addonsId); } catch { parsedAddonsList = []; }
+        } else if (Array.isArray(f.addonsId)) {
+            parsedAddonsList = f.addonsId as string[];
+        }
+
+        const foodAddons = parsedAddonsList
+            .map((aid) => addonsMap.get(aid))
+            .filter(Boolean)
+            .map((a) => ({
+                id: a!.id,
+                name: a!.name,
+                nameAr: a!.nameAr,
+                nameFr: a!.nameFr,
+                price: a!.price,
+            }));
+
+        return {
+            id: f.id,
+            name: f.name,
+            nameAr: f.nameAr,
+            nameFr: f.nameFr,
+            description: f.description,
+            descriptionAr: f.descriptionAr,
+            descriptionFr: f.descriptionFr,
+            image: f.image,
+            price: f.price,
+            sold_by: f.sold_by || "unit",
+            weight_unit: f.weight_unit || null,
+            category: {
+                id: f.categoryid,
+                name: f.category_name,
+                nameAr: f.category_nameAr,
+            },
+            subcategory: {
+                id: f.subcategoryid,
+                name: f.subcategory_name,
+                nameAr: f.subcategory_nameAr,
+            },
+            variations: foodVars,
+            addons: foodAddons,
+        };
+    });
+
+    return SuccessResponse(res, {
+        message: "Active in-stock foods fetched successfully",
+        data,
+    });
+};

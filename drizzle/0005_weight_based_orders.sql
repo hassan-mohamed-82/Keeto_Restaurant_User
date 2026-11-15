@@ -57,6 +57,10 @@ ALTER TABLE `cart_items` ADD `weight_unit` enum('kg','gm');
 --> statement-breakpoint
 ALTER TABLE `cart_items` ADD `weight_request_id` char(36);
 --> statement-breakpoint
+ALTER TABLE `cart_items` ADD `added_by` enum('customer','restaurant') NOT NULL DEFAULT 'customer';
+--> statement-breakpoint
+ALTER TABLE `cart_items` ADD `added_by_admin_id` char(36);
+--> statement-breakpoint
 ALTER TABLE `cart_items` ADD CONSTRAINT `cart_items_weight_request_id_weight_requests_id_fk` FOREIGN KEY (`weight_request_id`) REFERENCES `weight_requests`(`id`) ON DELETE set null ON UPDATE no action;
 --> statement-breakpoint
 

@@ -13,6 +13,7 @@ import {
     changeFoodStatus,
     getOutOfStockFoods,
     toggleFoodOutOfStock,
+    getActiveInStockFoods,
 } from "../../controllers/admin/food";
 import {
     assignIngredientsToFood,
@@ -32,6 +33,9 @@ router.get("/", hasPermission("food", "read"), catchAsync(getAllFoods));
 
 // ✅ Get out-of-stock foods - restaurant sees all OOS foods + unavailable branches; branch sees only its own OOS
 router.get("/out-of-stock", hasPermission("food", "read"), catchAsync(getOutOfStockFoods));
+
+// ✅ Get active and in-stock foods with variations and addons for ordering / weighing
+router.get("/available", hasPermission("food", "read"), catchAsync(getActiveInStockFoods));
 
 // ✅ Get food by id - يحتاج صلاحية read
 router.get("/:id", hasPermission("food", "read"), catchAsync(getFoodById));

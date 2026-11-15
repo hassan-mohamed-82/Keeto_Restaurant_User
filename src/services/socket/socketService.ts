@@ -420,3 +420,9 @@ export const notifyOrderTracking = (orderId: string, event: string, data: any) =
         io.to(`order:track:${orderId}`).emit(event, data);
     }
 };
+
+export const notifyUser = (userId: string, event: string, data: any) => {
+    if (io) {
+        io.to(`user:${userId}`).emit(event, data);
+    }
+};

@@ -47,7 +47,8 @@ export const getOrderByRedeemCode = async (req: Request, res: Response) => {
             userPhone: users.phone,
             foodId: food.id,
             foodName: food.name,
-            foodImage: food.image
+            foodImage: food.image,
+            sold_by: food.sold_by,
         })
         .from(redeemRequests)
         .innerJoin(users, eq(redeemRequests.userId, users.id))
@@ -65,6 +66,10 @@ export const getOrderByRedeemCode = async (req: Request, res: Response) => {
 
     if (!request) {
         throw new NotFound("Redeem request not found for this restaurant");
+    }
+
+    if (request.sold_by === "weight") {
+        throw new BadRequest("Weight-based foods cannot be redeemed via points orders.");
     }
 
     const isExpired = new Date() > new Date(request.expiresAt);
@@ -132,6 +137,7 @@ export const approveRedeemCode = async (req: Request, res: Response) => {
             status: redeemRequests.status,
             expiresAt: redeemRequests.expiresAt,
             foodName: food.name,
+            sold_by: food.sold_by,
         })
         .from(redeemRequests)
         .innerJoin(food, eq(redeemRequests.foodId, food.id))
@@ -145,6 +151,10 @@ export const approveRedeemCode = async (req: Request, res: Response) => {
 
     if (!redeemReq) {
         throw new NotFound("Redeem request not found");
+    }
+
+    if (redeemReq.sold_by === "weight") {
+        throw new BadRequest("Weight-based foods cannot be redeemed via points orders.");
     }
 
     if (redeemReq.status !== "pending") {

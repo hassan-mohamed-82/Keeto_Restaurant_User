@@ -17,6 +17,7 @@ import swaggerUi from 'swagger-ui-express';
 import swaggerFile from './swagger-output.json';
 import { initNotificationCleanupCron } from "./services/initNotificationCleanupCron";
 import { initAutoDeliverCron } from "./services/autoDeliverCron";
+import { initWeightRequestCron } from "./services/weightRequestCron";
 import { initSocket } from "./services/socket/socketService";
 // import { initAbandonedCartCron } from "./services/abandonedCartCron";
 
@@ -29,6 +30,7 @@ initOrderNotificationCron();
 initOrderDelayAlertCron();
 initNotificationCleanupCron();
 initAutoDeliverCron();
+// initWeightRequestCron();
 // initAbandonedCartCron();
 
 const httpServer: http.Server = http.createServer(app);

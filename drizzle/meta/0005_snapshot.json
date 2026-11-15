@@ -6478,6 +6478,21 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "added_by": {
+          "name": "added_by",
+          "type": "enum('customer','restaurant')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'customer'"
+        },
+        "added_by_admin_id": {
+          "name": "added_by_admin_id",
+          "type": "char(36)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {},
