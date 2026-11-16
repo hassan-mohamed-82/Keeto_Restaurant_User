@@ -177,7 +177,7 @@ function addInstructionsSheet(workbook: ExcelJS.Workbook, lookups: TemplateLooku
     addLine("• Required columns have an orange header: Subcategories: category, name. Foods: category, name, description, price. Variations: food, variationName, optionName.");
     addLine("• Times use the 24-hour format HH:mm, e.g. 09:00 or 23:30. Excel time cells are accepted too.");
     addLine("• Images are optional. Paste an image URL starting with http:// or https://, or leave the cell empty.");
-    addLine("• yes / no columns: is_Halal, isOutOfStock, isRequired.");
+    addLine("• yes / no columns: is_Halal, isOutOfStock, allow_custom_weight, isRequired, isWeightGroup.");
     addLine("• Numbers use \".\" for decimals, e.g. 85.50.");
     addLine("• An active food cannot be placed under an inactive subcategory.");
     addLine("• Addons: type addon names separated by commas, e.g. \"Extra cheese, Ketchup\". The available names are listed below and in the hidden Lookups sheet (right-click a sheet tab → Unhide).");
@@ -191,6 +191,9 @@ function addInstructionsSheet(workbook: ExcelJS.Workbook, lookups: TemplateLooku
     addLine(`• stock_type: ${MENU_ENUMS.stockType.join(" | ")} (default unlimited)`);
     addLine(`• selectionType: ${MENU_ENUMS.selectionType.join(" | ")} (default single)`);
     addLine(`• priceMode: ${MENU_ENUMS.priceMode.join(" | ")} (default fixed)`);
+    addLine(`• sold_by: ${MENU_ENUMS.soldBy.join(" | ")} (default unit); weight_unit: ${MENU_ENUMS.weightUnit.join(" | ")} (required for weight foods)`);
+    addLine("• Weight groups: a weight food can have ONE variation with isWeightGroup = yes. Each of its options needs a weightValue (e.g. 0.25, 0.5, 1 for kg), unique in the group. The customer's weight must equal the chosen option. allow_custom_weight = no means the customer can only pick one of these weights.");
+    addLine("• A fixed (amount) discount is not allowed on foods sold per gram (weight_unit = gm): use a percentage.");
     blank();
     addLine("Variations example (one variation \"Size\" with three options)", "heading");
     addLine("food | variationName | isRequired | selectionType | min | max | optionName | additionalPrice");
@@ -258,11 +261,15 @@ export async function renderImportTemplate(lookups: TemplateLookups): Promise<Bu
     applyListValidation(foodSheet, columnNumberOf(FOOD_COLUMNS, "stock_type"), strictEnum(MENU_ENUMS.stockType));
     applyListValidation(foodSheet, columnNumberOf(FOOD_COLUMNS, "status"), strictEnum(MENU_ENUMS.foodStatus));
     applyListValidation(foodSheet, columnNumberOf(FOOD_COLUMNS, "isOutOfStock"), yesNo);
+    applyListValidation(foodSheet, columnNumberOf(FOOD_COLUMNS, "sold_by"), strictEnum(MENU_ENUMS.soldBy));
+    applyListValidation(foodSheet, columnNumberOf(FOOD_COLUMNS, "weight_unit"), strictEnum(MENU_ENUMS.weightUnit));
+    applyListValidation(foodSheet, columnNumberOf(FOOD_COLUMNS, "allow_custom_weight"), yesNo);
 
     // Variations
     applyListValidation(variationSheet, columnNumberOf(VARIATION_COLUMNS, "isRequired"), yesNo);
     applyListValidation(variationSheet, columnNumberOf(VARIATION_COLUMNS, "selectionType"), strictEnum(MENU_ENUMS.selectionType));
     applyListValidation(variationSheet, columnNumberOf(VARIATION_COLUMNS, "priceMode"), strictEnum(MENU_ENUMS.priceMode));
+    applyListValidation(variationSheet, columnNumberOf(VARIATION_COLUMNS, "isWeightGroup"), yesNo);
 
     // exceljs types writeBuffer() as its own ArrayBuffer-like Buffer; at runtime it is a Node Buffer
     const output = await workbook.xlsx.writeBuffer();

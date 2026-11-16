@@ -8,6 +8,12 @@
 // Pure function: no database access.
 // =============================================================================
 import {
+    FIXED_DISCOUNT_ON_GRAM_MESSAGE,
+    isFixedDiscountOnGramFood,
+    toThousandths,
+    validateWeightGroupConfig,
+} from "../../helpers/weightPricing.helper";
+import {
     blocksActiveFoodUnderInactiveSubcategory,
     FOOD_DEFAULTS,
     FOOD_REQUIRED_FIELDS,
@@ -210,6 +216,7 @@ interface VariationGroupFields {
     selectionType?: GroupField<SelectionType>;
     min?: GroupField<number>;
     max?: GroupField<number>;
+    isWeightGroup?: GroupField<boolean>;
 }
 
 interface VariationGroup {
@@ -496,6 +503,13 @@ class ImportValidator {
         if (soldBy !== "weight" && weightUnit) {
             addError(ctx, "weight_unit", '"weight_unit" must be empty when sold_by is "unit"');
         }
+        const allowCustomWeight = (v as any).allow_custom_weight as boolean | null;
+        if (soldBy !== "weight" && allowCustomWeight === false) {
+            addError(ctx, "allow_custom_weight", '"allow_custom_weight" can only be "no" for foods sold by weight');
+        }
+        if (isFixedDiscountOnGramFood({ soldBy, weightUnit, discountType: v.discount_type ?? FOOD_DEFAULTS.discountType, discountValue: v.discount_value })) {
+            addError(ctx, "discount_type", FIXED_DISCOUNT_ON_GRAM_MESSAGE);
+        }
 
         if (
             ctx.errors.length === 0 &&
@@ -535,6 +549,7 @@ class ImportValidator {
                     points: v.points,
                     sold_by: (soldBy === "weight" ? "weight" : "unit") as "unit" | "weight",
                     weight_unit: (soldBy === "weight" ? weightUnit : null) as "kg" | "gm" | null,
+                    allow_custom_weight: soldBy === "weight" ? allowCustomWeight !== false : true,
                     variations: [],
                 },
             };
@@ -631,6 +646,7 @@ class ImportValidator {
             this.mergeGroupField(ctx, group, "selectionType", "selectionType", v.selectionType);
             this.mergeGroupField(ctx, group, "min", "min", v.min);
             this.mergeGroupField(ctx, group, "max", "max", v.max);
+            this.mergeGroupField(ctx, group, "isWeightGroup", "isWeightGroup", (v as any).isWeightGroup as boolean | null);
 
             // The option on this row
             const optionKey = normalizeName(v.optionName);
@@ -649,6 +665,10 @@ class ImportValidator {
             if (priceMode === "per_weight" && target.planned?.data.sold_by !== "weight") {
                 addError(ctx, "priceMode", '"per_weight" priceMode is only allowed for foods sold by weight');
             }
+            const weightValue = (v as any).weightValue as number | null;
+            if (weightValue !== null && toThousandths(weightValue) === null) {
+                addError(ctx, "weightValue", '"weightValue" must be greater than 0 with at most 3 decimals');
+            }
 
             if (ctx.errors.length > 0) {
                 group.hasErrors = true;
@@ -659,6 +679,7 @@ class ImportValidator {
                     optionNameFr: v.optionNameFr ?? undefined,
                     additionalPrice: roundTo2(additionalPrice),
                     priceMode,
+                    weightValue,
                 });
             }
             this.finishRow(ctx);
@@ -692,8 +713,26 @@ class ImportValidator {
                 selectionType: group.fields.selectionType?.value,
                 min: min?.value,
                 max: max?.value,
+                isWeightGroup: group.fields.isWeightGroup?.value ?? false,
                 options: group.options,
             });
+        }
+
+        // Food-level weight-group rules, once all variations are attached (same check as insertFood):
+        // one weight group, only on weight foods, single-select, weightValue > 0 and unique,
+        // no weightValue on normal variations, allow_custom_weight = no needs a weight group.
+        const foodSheet = SHEET_NAMES.foods;
+        for (const planned of this.plannedFoods) {
+            try {
+                validateWeightGroupConfig({
+                    soldBy: planned.data.sold_by,
+                    weightUnit: planned.data.weight_unit,
+                    allowCustomWeight: planned.data.allow_custom_weight,
+                    variations: planned.data.variations,
+                });
+            } catch (err: any) {
+                this.errors.push({ sheet: foodSheet, row: planned.rowNumber, column: "allow_custom_weight", message: err?.message || "Invalid weight group setup" });
+            }
         }
     }
 

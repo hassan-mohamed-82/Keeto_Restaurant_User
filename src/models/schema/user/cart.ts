@@ -4,6 +4,7 @@ import { users } from "./Users";
 import { food } from "../admin/food";
 import { restaurants } from "../admin/restaurants";
 import { weightRequests } from "../admin/weightRequests";
+import { branches } from "../admin/branches";
 
 export const cartItems = mysqlTable("cart_items", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
@@ -63,6 +64,10 @@ export const cartItems = mysqlTable("cart_items", {
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
 
     note: varchar("note", { length: 500 }),
+
+    // ─── Channel Pricing Context (mirrors Keeto_SuperAdmin_User; the columns already exist) ───
+    branchId: char("branch_id", { length: 36 }).references(() => branches.id),
+    serviceModule: mysqlEnum("service_module", ["takeaway", "dine_in", "delivery"]),
 });
 
 export const cartItemsRelations = relations(cartItems, ({ one }) => ({

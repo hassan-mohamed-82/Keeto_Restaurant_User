@@ -23,14 +23,26 @@ import {
     calcMaxAllowedWeight,
     validateOptionPriceMode,
     validateWeightInput,
+    isWeightWithinLimit,
+    isSaneWeight,
+    parseBooleanInput,
 } from "../../helpers/weightPricing.helper";
 import {
     ACTIVE_WEIGHT_REQUEST_STATUSES,
+    CART_OWNING_STATUSES,
+    DEFAULT_WEIGHT_CUSTOMER_TIMEOUT_MIN,
+    DEFAULT_WEIGHT_MAX_INCREASE_PERCENT,
+    planConfirmation,
+    resolveRestaurantItemPricingContext,
+    buildRestaurantItemPrice,
+    priceChangeLogEntry,
     isWeighedRow,
     parseAddonSnapshot,
     parseVariationSnapshot,
 } from "../../helpers/weightRequest.helper";
 import { notifyUser } from "../../services/socket/socketService";
+import { priceWeightRequestRows } from "../../services/weightRequestPricing.service";
+import { calculateCalculatedPrice } from "../../helpers/pricing.helper";
 import { sendPushNotification } from "../../utils/notifications";
 
 const getStaffRestaurantId = (req: Request | any): string => {
@@ -79,7 +91,8 @@ const formatRequestDetails = async (requestId: string) => {
     // While the request is active, show the restaurant the WHOLE cart of this customer for this
     // restaurant (weighted, restaurant-added and normal rows). Once it is finished, only the rows
     // still tagged with it (usually none: the cart is cleared / unlocked).
-    const isActive = ACTIVE_WEIGHT_REQUEST_STATUSES.includes(request.status as any);
+    // checking_out (Visa payment in progress) still owns the cart, so show the whole cart too.
+    const isActive = CART_OWNING_STATUSES.includes(request.status as any);
     const items = await db
         .select({
             cartItemId: cartItems.id,
@@ -103,6 +116,9 @@ const formatRequestDetails = async (requestId: string) => {
             addedBy: cartItems.addedBy,
             addedByAdminId: cartItems.addedByAdminId,
             weightRequestId: cartItems.weightRequestId,
+            discountId: food.discountId,
+            discountType: food.discount_type,
+            discountValue: food.discount_value,
         })
         .from(cartItems)
         .leftJoin(food, eq(cartItems.foodId, food.id))
@@ -112,42 +128,42 @@ const formatRequestDetails = async (requestId: string) => {
                 : eq(cartItems.weightRequestId, requestId)
         );
 
-    let subtotal = 0;
+    // Same price snapshot + product discount + line formula as the customer's getCart (shared service).
+    // Normal (unit) rows are priced from their stored snapshot: an estimate, priced live at checkout.
+    const priced = await priceWeightRequestRows(
+        items.map((item) => ({
+            foodId: item.foodId,
+            isWeighted: item.sold_by === "weight" || item.orderedWeight != null,
+            orderedWeight: item.orderedWeight,
+            finalWeight: item.finalWeight,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            variations: item.variations,
+            addons: item.addons,
+            isUnavailable: item.isUnavailable,
+            discountId: item.discountId,
+            discountType: item.discountType,
+            discountValue: item.discountValue,
+        })),
+        request.restaurantId
+    );
+    const r2 = (n: number) => Math.round(n * 100) / 100;
     let weighedSubtotal = 0;
     let normalItemsSubtotal = 0;
-    const formattedItems = items.map((item) => {
+
+    const formattedItems = items.map((item, index) => {
         const isWeighted = item.sold_by === "weight" || item.orderedWeight != null;
+        const line = priced.lines[index];
         const orderedW = item.orderedWeight ? Number(item.orderedWeight) : null;
         const finalW = item.finalWeight ? Number(item.finalWeight) : null;
         const weightChanged = finalW != null && orderedW != null && Math.abs(finalW - orderedW) > 0.0001;
 
-        let parsedVars: any[] = parseVariationSnapshot(item.variations);
-        let parsedAddons: any[] = parseAddonSnapshot(item.addons);
-
-        // Normal rows: stored line total (estimate; they are priced at checkout like any order).
-        let lineTotal = parseFloat(item.totalPrice as string || "0");
-        if (isWeighted) {
-            // Snapshot price (cart_items.unit_price = price per weight unit, as possibly set by staff),
-            // the same price the customer will be charged at checkout.
-            const effectiveWeight = finalW ?? orderedW ?? 0;
-            const optExtras = [
-                ...parsedVars.map((v: any) => ({
-                    price: v.price ?? v.additionalPrice ?? 0,
-                    priceMode: v.priceMode || "fixed",
-                })),
-                ...parsedAddons.map((a: any) => ({
-                    price: a.price || 0,
-                    priceMode: "fixed",
-                })),
-            ];
-            const baseP = parseFloat(item.unitPrice as string || "0");
-            lineTotal = parseFloat(computeWeightedLineTotal(effectiveWeight, baseP, optExtras));
-        }
+        const parsedVars: any[] = parseVariationSnapshot(item.variations);
+        const parsedAddons: any[] = parseAddonSnapshot(item.addons);
 
         if (!item.isUnavailable) {
-            subtotal += lineTotal;
-            if (isWeighted || item.addedBy === "restaurant") weighedSubtotal += lineTotal;
-            else normalItemsSubtotal += lineTotal;
+            if (isWeighted || item.addedBy === "restaurant") weighedSubtotal += line.finalTotal;
+            else normalItemsSubtotal += line.finalTotal;
         }
 
         return {
@@ -164,7 +180,14 @@ const formatRequestDetails = async (requestId: string) => {
             finalWeight: item.finalWeight ? String(item.finalWeight) : null,
             weightUnit: item.weightUnit || item.foodWeightUnit || null,
             unitPrice: item.unitPrice,
-            totalPrice: lineTotal.toFixed(2),
+            // per unit (or per weight unit for weighted items), before and after the product discount
+            originalUnitPrice: r2(line.originalUnitPrice),
+            discountedUnitPrice: r2(line.finalUnitPrice),
+            originalTotalPrice: line.originalTotal.toFixed(2),
+            discountAmount: line.discountTotal.toFixed(2),
+            totalPrice: line.finalTotal.toFixed(2),
+            appliedDiscount: line.appliedDiscount,
+            isEstimated: !isWeighted && item.addedBy !== "restaurant",
             variations: parsedVars,
             addons: parsedAddons,
             note: item.note,
@@ -195,9 +218,11 @@ const formatRequestDetails = async (requestId: string) => {
         },
         items: formattedItems,
         totals: {
-            subtotal: parseFloat(subtotal.toFixed(2)),
-            weighedSubtotal: parseFloat(weighedSubtotal.toFixed(2)),
-            normalItemsSubtotal: parseFloat(normalItemsSubtotal.toFixed(2)),
+            originalSubtotal: priced.totals.originalSubtotal,
+            discountTotal: priced.totals.discountTotal,
+            subtotal: priced.totals.subtotal,
+            weighedSubtotal: r2(weighedSubtotal),
+            normalItemsSubtotal: r2(normalItemsSubtotal),
             isEstimated: true,
             totalItems: formattedItems.length,
             availableItems: formattedItems.filter((i) => !i.isUnavailable).length,
@@ -347,6 +372,9 @@ export const patchCustomerItemWeight = async (req: Request | any, res: Response)
         updateData.isUnavailable = Boolean(unavailable);
     }
 
+    if (unitPrice !== undefined && req.user?.type !== "owner") {
+        throw new BadRequest("Only the restaurant owner can set a custom price.");
+    }
     if (unitPrice !== undefined) {
         const numUnitPrice = Number(unitPrice);
         if (numUnitPrice <= 0) {
@@ -370,7 +398,7 @@ export const patchCustomerItemWeight = async (req: Request | any, res: Response)
             .where(eq(restaurantSettings.restaurantId, request.restaurantId))
             .limit(1);
 
-        const maxIncreasePercent = settings?.weightMaxIncreasePercent ?? 20;
+        const maxIncreasePercent = settings?.weightMaxIncreasePercent ?? DEFAULT_WEIGHT_MAX_INCREASE_PERCENT;
         const orderedW = Number(item.orderedWeight || 0);
 
         if (orderedW > 0) {
@@ -417,7 +445,7 @@ export const patchCustomerItemWeight = async (req: Request | any, res: Response)
     // Write under a lock on the request so a concurrent confirm / reject / cancel cannot interleave.
     await db.transaction(async (tx) => {
         const [locked] = await tx
-            .select({ status: weightRequests.status })
+            .select({ status: weightRequests.status, weighingLog: weightRequests.weighingLog })
             .from(weightRequests)
             .where(eq(weightRequests.id, id))
             .for("update");
@@ -426,6 +454,19 @@ export const patchCustomerItemWeight = async (req: Request | any, res: Response)
         }
         await tx.update(cartItems).set(updateData)
             .where(and(eq(cartItems.id, cartItemId), eq(cartItems.weightRequestId, id)));
+
+        // Owner price override: old and new price kept in weighing_log.
+        if (updateData.unitPrice !== undefined && Number(updateData.unitPrice) !== Number(item.unitPrice ?? 0)) {
+            await tx.update(weightRequests)
+                .set({
+                    weighingLog: [
+                        ...((locked.weighingLog as any[]) || []),
+                        priceChangeLogEntry({ cartItemId, foodId: item.foodId, oldPrice: item.unitPrice, newPrice: updateData.unitPrice, by: staffId, now }),
+                    ],
+                    updatedAt: now,
+                })
+                .where(eq(weightRequests.id, id));
+        }
     });
 
     const updatedDetails = await formatRequestDetails(id);
@@ -458,15 +499,36 @@ export const replaceRestaurantItems = async (req: Request | any, res: Response) 
 
     const now = new Date();
 
+    // "The restaurant never sends a price": unitPrice is accepted from the restaurant OWNER only.
+    const isOwner = req.user?.type === "owner";
+    if (!isOwner && Array.isArray(incomingItems) && incomingItems.some((it: any) => it?.unitPrice !== undefined)) {
+        throw new BadRequest("Only the restaurant owner can set a custom price. Remove unitPrice to use the menu price.");
+    }
+
     await db.transaction(async (tx) => {
         const [lockedReq] = await tx
-            .select({ status: weightRequests.status })
+            .select({ status: weightRequests.status, weighingLog: weightRequests.weighingLog })
             .from(weightRequests)
             .where(eq(weightRequests.id, id))
             .for("update");
         if (!lockedReq || lockedReq.status !== "awaiting_weighing") {
             throw new BadRequest(`Item edits are only allowed while request is awaiting weighing. Current status: ${lockedReq?.status}`);
         }
+
+        // Same branch / channel pricing as the customer's cart (see resolveRestaurantItemPricingContext).
+        const customerPricingRows = await tx
+            .select({ branchId: cartItems.branchId, serviceModule: cartItems.serviceModule })
+            .from(cartItems)
+            .where(and(eq(cartItems.userId, request.userId), eq(cartItems.restaurantId, restaurantId), eq(cartItems.addedBy, "customer")));
+        const activeBranches = request.branchId
+            ? []
+            : await tx.select({ id: branches.id }).from(branches).where(and(eq(branches.restaurantId, restaurantId), eq(branches.status, "active")));
+        const pricingContext = resolveRestaurantItemPricingContext({
+            requestBranchId: request.branchId,
+            customerRows: customerPricingRows,
+            activeBranchIds: activeBranches.map((b: any) => b.id),
+        });
+        const priceLog: any[] = [];
 
         // Fetch existing restaurant-added items of this request
         const existingRestItems = await tx
@@ -509,14 +571,6 @@ export const replaceRestaurantItems = async (req: Request | any, res: Response) 
 
             const isWeighted = targetFood.sold_by === "weight";
 
-            // Same weight rules as the customer cart (decimals, minimum, sane maximum).
-            try {
-                const normalised = validateWeightInput(targetFood, itemInput.weight, itemInput.variations || []);
-                if (isWeighted) itemInput.weight = normalised;
-            } catch (err: any) {
-                throw new BadRequest(`Item at index ${i}: ${err.message}`);
-            }
-
             // Validate variations and addons from DB
             const rawVars = Array.isArray(itemInput.variations) ? itemInput.variations : [];
             const rawAddons = Array.isArray(itemInput.addons) ? itemInput.addons : [];
@@ -537,6 +591,9 @@ export const replaceRestaurantItems = async (req: Request | any, res: Response) 
                         variationNameAr: foodVariations.nameAr,
                         isRequired: foodVariations.isRequired,
                         selectionType: foodVariations.selectionType,
+                        isWeightGroup: foodVariations.isWeightGroup,
+                        weightValue: variationOptions.weightValue,
+                        variationFoodId: foodVariations.foodId,
                     })
                     .from(variationOptions)
                     .leftJoin(foodVariations, eq(variationOptions.variationId, foodVariations.id))
@@ -547,23 +604,55 @@ export const replaceRestaurantItems = async (req: Request | any, res: Response) 
                 ? await tx.select().from(addons).where(inArray(addons.id, addonIds))
                 : [];
 
+            if (dbOptions.length !== new Set(optionIds).size || dbOptions.some((o) => o.variationFoodId !== targetFood.id)) {
+                throw new BadRequest(`Item at index ${i}: one or more options do not belong to "${targetFood.name}".`);
+            }
+
+            // Same weight rules as the customer cart: decimals, minimum, sane maximum, and the
+            // weight-group / allow_custom_weight rules for the selected options.
+            try {
+                const normalised = validateWeightInput(
+                    targetFood,
+                    itemInput.weight,
+                    dbOptions.map((o) => ({ isWeightGroup: o.isWeightGroup, weightValue: o.weightValue }))
+                );
+                if (isWeighted) itemInput.weight = normalised;
+            } catch (err: any) {
+                throw new BadRequest(`Item at index ${i}: ${err.message}`);
+            }
+
             // Validate price_mode on options
             for (const opt of dbOptions) {
                 validateOptionPriceMode(targetFood.sold_by, opt.priceMode, opt.additionalPrice);
             }
 
-            // Build detailed variations snapshot
-            const detailedVars = dbOptions.map((opt) => ({
-                variationId: opt.variationId,
-                variationName: opt.variationName,
-                variationNameAr: opt.variationNameAr,
-                optionId: opt.id,
-                optionName: opt.optionName,
-                optionNameAr: opt.optionNameAr,
-                price: opt.additionalPrice || "0.00",
-                additionalPrice: opt.additionalPrice || "0.00",
-                priceMode: opt.priceMode || "fixed",
-            }));
+            // Channel-resolved prices for the food and its options (calculateCalculatedPrice, as in the cart).
+            const priceResult = await calculateCalculatedPrice(
+                targetFood.id,
+                dbOptions.map((o) => o.id),
+                pricingContext.branchId,
+                pricingContext.serviceModule
+            );
+            if (!priceResult.isAvailable) {
+                throw new BadRequest(`Item at index ${i}: "${targetFood.name}" or one of its options is not available on this branch / channel.`);
+            }
+            const resolvedOptionPrice = new Map(priceResult.variants.map((v) => [v.variantOptionId, v.price]));
+
+            // Build detailed variations snapshot (channel-resolved option prices)
+            const detailedVars = dbOptions.map((opt) => {
+                const optionPrice = Number(resolvedOptionPrice.get(opt.id) ?? opt.additionalPrice ?? 0).toFixed(2);
+                return {
+                    variationId: opt.variationId,
+                    variationName: opt.variationName,
+                    variationNameAr: opt.variationNameAr,
+                    optionId: opt.id,
+                    optionName: opt.optionName,
+                    optionNameAr: opt.optionNameAr,
+                    price: optionPrice,
+                    additionalPrice: optionPrice,
+                    priceMode: opt.priceMode || "fixed",
+                };
+            });
 
             // Build detailed addons snapshot
             const detailedAddons = dbAddons.map((a) => ({
@@ -573,33 +662,24 @@ export const replaceRestaurantItems = async (req: Request | any, res: Response) 
                 price: (a.price as string) || "0.00",
             }));
 
-            const basePriceNum = itemInput.unitPrice !== undefined
-                ? Number(itemInput.unitPrice)
-                : parseFloat(targetFood.price as string || "0");
             const quantity = itemInput.quantity || 1;
-
-            let unitPriceStr: string;
-            let totalPriceStr: string;
-
-            if (isWeighted) {
-                const optExtras = [
-                    ...detailedVars.map((v) => ({
-                        price: v.additionalPrice || "0",
-                        priceMode: v.priceMode || "fixed",
-                    })),
-                    ...detailedAddons.map((a) => ({
-                        price: a.price || "0",
-                        priceMode: "fixed" as const,
-                    })),
-                ];
-                unitPriceStr = basePriceNum.toFixed(2);
-                totalPriceStr = computeWeightedLineTotal(itemInput.weight, basePriceNum, optExtras);
-            } else {
-                const varSum = detailedVars.reduce((s, v) => s + parseFloat(v.additionalPrice || "0"), 0);
-                const addonSum = detailedAddons.reduce((s, a) => s + parseFloat(a.price || "0"), 0);
-                const singleUnit = basePriceNum + varSum + addonSum;
-                unitPriceStr = singleUnit.toFixed(2);
-                totalPriceStr = (singleUnit * quantity).toFixed(2);
+            const ownerUnitPrice = isOwner && itemInput.unitPrice !== undefined ? Number(itemInput.unitPrice) : undefined;
+            const built = buildRestaurantItemPrice({
+                isWeighted,
+                weight: isWeighted ? Number(itemInput.weight) : null,
+                quantity,
+                resolvedBasePrice: priceResult.basePrice,
+                options: detailedVars.map((v) => ({ price: Number(v.price), priceMode: v.priceMode })),
+                addonPrices: detailedAddons.map((a) => Number(a.price || 0)),
+                ownerUnitPrice,
+            }, (w, base, extras) => computeWeightedLineTotal(w, base, extras));
+            const unitPriceStr = built.unitPrice;
+            const totalPriceStr = built.totalPrice;
+            if (ownerUnitPrice !== undefined && Math.abs(ownerUnitPrice - priceResult.basePrice) > 0.001) {
+                priceLog.push(priceChangeLogEntry({
+                    cartItemId: itemInput.cartItemId ?? null, foodId: targetFood.id, foodName: targetFood.name,
+                    oldPrice: priceResult.basePrice, newPrice: ownerUnitPrice, by: staffId, now,
+                }));
             }
 
             if (itemInput.cartItemId) {
@@ -637,6 +717,8 @@ export const replaceRestaurantItems = async (req: Request | any, res: Response) 
                     variations: JSON.stringify(detailedVars),
                     addons: JSON.stringify(detailedAddons),
                     note: itemInput.note || null,
+                    branchId: pricingContext.branchId || null,
+                    serviceModule: pricingContext.serviceModule ?? null,
                     weightRequestId: id,
                     addedBy: "restaurant",
                     addedByAdminId: staffId,
@@ -654,6 +736,13 @@ export const replaceRestaurantItems = async (req: Request | any, res: Response) 
                 await tx.delete(cartItems).where(eq(cartItems.id, existingItem.id));
             }
         }
+
+        // Owner price overrides: old (menu) and new price kept in weighing_log.
+        if (priceLog.length > 0) {
+            await tx.update(weightRequests)
+                .set({ weighingLog: [...((lockedReq.weighingLog as any[]) || []), ...priceLog], updatedAt: now })
+                .where(eq(weightRequests.id, id));
+        }
     });
 
     const updatedDetails = await formatRequestDetails(id);
@@ -666,13 +755,18 @@ export const replaceRestaurantItems = async (req: Request | any, res: Response) 
 /**
  * 🟢 5. POST /admin/weight-requests/:id/confirm
  * Sends the request to the customer. ONE time only.
- * Validates all customer items are weighed or unavailable.
- * Writes weighing_log JSON, updates status to awaiting_customer_approval, sets customer timeout, notifies customer.
+ * By default, weighted customer rows that were not weighed (no final_weight, not unavailable) are
+ * confirmed AT THE ORDERED WEIGHT. Optional body { strict: true } restores the old rule (reject them).
+ * Validates every weighted row, writes weighing_log, sets the customer timeout, notifies the customer.
  */
 export const confirmWeightRequest = async (req: Request | any, res: Response) => {
     const { id } = req.params;
     const staffId = req.user?.id;
     const restaurantId = getStaffRestaurantId(req);
+    const strict = parseBooleanInput(req.body?.strict) === true;
+
+    // Same restaurant + branch check as the other routes: staff of another branch cannot confirm.
+    await fetchAuthorizedWeightRequest(id, req);
 
     const now = new Date();
 
@@ -697,37 +791,40 @@ export const confirmWeightRequest = async (req: Request | any, res: Response) =>
                 orderedWeight: cartItems.weight,
                 finalWeight: cartItems.finalWeight,
                 weightUnit: cartItems.weightUnit,
+                foodWeightUnit: food.weight_unit,
                 isUnavailable: cartItems.isUnavailable,
                 addedBy: cartItems.addedBy,
                 sold_by: food.sold_by,
+                unitPrice: cartItems.unitPrice,
+                variations: cartItems.variations,
+                addons: cartItems.addons,
             })
             .from(cartItems)
             .leftJoin(food, eq(cartItems.foodId, food.id))
-            .where(eq(cartItems.weightRequestId, id));
+            .where(eq(cartItems.weightRequestId, id))
+            .for("update");
 
-        // Validation: every weighted customer row must have final_weight or be marked unavailable;
-        // weighted restaurant-added rows must carry a weight. Normal rows are not validated here.
-        const weightedCustomerRows = items.filter(
-            (i) => i.addedBy === "customer" && isWeighedRow({ weight: i.orderedWeight }, i.sold_by)
+        const [settings] = await tx
+            .select({
+                weightCustomerTimeoutMin: restaurantSettings.weightCustomerTimeoutMin,
+                weightMaxIncreasePercent: restaurantSettings.weightMaxIncreasePercent,
+            })
+            .from(restaurantSettings)
+            .where(eq(restaurantSettings.restaurantId, restaurantId))
+            .limit(1);
+
+        const plan = planConfirmation(
+            items,
+            { strict, maxIncreasePercent: settings?.weightMaxIncreasePercent ?? DEFAULT_WEIGHT_MAX_INCREASE_PERCENT },
+            (w, price, extras) => computeWeightedLineTotal(w, price, extras),
+            { isWeightWithinLimit, isSaneWeight }
         );
-        const restaurantRows = items.filter((i) => i.addedBy === "restaurant");
-        for (const item of weightedCustomerRows) {
-            if (!item.isUnavailable && (!item.finalWeight || Number(item.finalWeight) <= 0)) {
-                throw new BadRequest(
-                    `Item "${item.foodName}" has not been weighed yet. Please set its final weight or mark it as unavailable.`
-                );
-            }
-        }
-        for (const item of restaurantRows) {
-            if (isWeighedRow({ weight: item.orderedWeight }, item.sold_by) && !(Number(item.finalWeight ?? item.orderedWeight) > 0)) {
-                throw new BadRequest(`Restaurant-added item "${item.foodName}" has no weight.`);
-            }
-        }
+
+        if (plan.kind === "reject") throw new BadRequest(plan.message);
 
         // Every weighted customer row unavailable and nothing added by the restaurant:
         // nothing left to weigh → cancel with the normal cleanup and tell the customer.
-        const allUnavailable = weightedCustomerRows.every((i) => i.isUnavailable) && restaurantRows.length === 0;
-        if (allUnavailable) {
+        if (plan.kind === "cancel") {
             await tx
                 .update(weightRequests)
                 .set({
@@ -745,35 +842,30 @@ export const confirmWeightRequest = async (req: Request | any, res: Response) =>
             return { status: "cancelled" as const, userId: request.userId, expiresAt: null };
         }
 
-        // Build weighing_log
-        const weighingLog: any[] = items.map((item) => ({
+        // Rows confirmed at the ordered weight (the line total is unchanged; stored again for consistency).
+        for (const d of plan.defaults) {
+            await tx
+                .update(cartItems)
+                .set({ finalWeight: d.finalWeight, totalPrice: d.totalPrice, updatedAt: now })
+                .where(and(eq(cartItems.id, d.id), eq(cartItems.weightRequestId, id)));
+        }
+
+        const earlierPriceChanges = ((request.weighingLog as any[]) || []).filter((e: any) => e?.action === "price_changed");
+        const weighingLog: any[] = [...earlierPriceChanges, ...plan.log.map(({ item, action, finalWeight }) => ({
             cartItemId: item.id,
             foodId: item.foodId,
             foodName: item.foodName,
             addedBy: item.addedBy,
             orderedWeight: item.orderedWeight,
-            finalWeight: item.finalWeight,
+            finalWeight,
             weightUnit: item.weightUnit,
             isUnavailable: Boolean(item.isUnavailable),
-            action: item.isUnavailable
-                ? "marked_unavailable"
-                : item.addedBy === "restaurant"
-                    ? "added_by_restaurant"
-                    : "weighed",
+            action,
             weighedBy: staffId,
             timestamp: now.toISOString(),
-        }));
+        }))];
 
-        // Customer timeout from restaurant settings
-        const [settings] = await tx
-            .select({
-                weightCustomerTimeoutMin: restaurantSettings.weightCustomerTimeoutMin,
-            })
-            .from(restaurantSettings)
-            .where(eq(restaurantSettings.restaurantId, restaurantId))
-            .limit(1);
-
-        const customerTimeoutMin = settings?.weightCustomerTimeoutMin ?? 30;
+        const customerTimeoutMin = settings?.weightCustomerTimeoutMin ?? DEFAULT_WEIGHT_CUSTOMER_TIMEOUT_MIN;
         const expiresAt = new Date(now.getTime() + customerTimeoutMin * 60 * 1000);
 
         await tx
@@ -786,7 +878,7 @@ export const confirmWeightRequest = async (req: Request | any, res: Response) =>
                 weighingLog: weighingLog,
                 updatedAt: now,
             })
-            .where(eq(weightRequests.id, id));
+            .where(and(eq(weightRequests.id, id), eq(weightRequests.status, "awaiting_weighing")));
 
         return { status: "awaiting_customer_approval" as const, userId: request.userId, expiresAt };
     });

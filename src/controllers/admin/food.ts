@@ -39,10 +39,42 @@ import {
     getMissingFoodFields,
 } from "../../helpers/menu.rules";
 import { insertFood } from "../../helpers/menu.insert";
+import {
+    FIXED_DISCOUNT_ON_GRAM_MESSAGE,
+    isFixedDiscountOnGramFood,
+    parseBooleanInput,
+    validateWeightGroupConfig,
+    type WeightGroupVariationConfig,
+} from "../../helpers/weightPricing.helper";
 
 // =============================================
 // CREATE Food
 // =============================================
+/**
+ * Normalises the weight-group fields of incoming variations (booleans may arrive as strings).
+ * Accepts isWeightGroup / is_weight_group and weightValue / weight_value.
+ */
+const normalizeWeightVariationInput = (variations: any): any => {
+    let list = variations;
+    if (typeof list === "string") {
+        try { list = JSON.parse(list); } catch { return variations; }
+    }
+    if (!Array.isArray(list)) return variations;
+    return list.map((v: any) => {
+        if (!v || typeof v !== "object") return v;
+        const isWeightGroup = parseBooleanInput(v.isWeightGroup ?? v.is_weight_group);
+        return {
+            ...v,
+            ...(isWeightGroup !== undefined ? { isWeightGroup } : {}),
+            options: Array.isArray(v.options)
+                ? v.options.map((o: any) => (o && typeof o === "object" && o.weightValue === undefined && o.weight_value !== undefined
+                    ? { ...o, weightValue: o.weight_value }
+                    : o))
+                : v.options,
+        };
+    });
+};
+
 export const createFood = async (req: Request, res: Response) => {
     try {
         const restaurantId = req.user?.restaurantId || req.user?.id;
@@ -61,6 +93,7 @@ export const createFood = async (req: Request, res: Response) => {
             isOutOfStock,
             sold_by,
             weight_unit,
+            allow_custom_weight,
         } = req.body;
 
         const incomingAddons = req.body.addonsId ?? req.body.addons ?? req.body.addonIds ?? req.body['addonsId[]'] ?? req.body['addons[]'];
@@ -161,7 +194,8 @@ export const createFood = async (req: Request, res: Response) => {
                 points,
                 sold_by: sold_by || "unit",
                 weight_unit: sold_by === "weight" ? weight_unit : null,
-                variations,
+                allow_custom_weight: parseBooleanInput(allow_custom_weight),
+                variations: normalizeWeightVariationInput(variations),
                 branches: req.body.branches,
             })
         );
@@ -204,7 +238,7 @@ export const getAllFoods = async (req: Request, res: Response) => {
         is_Halal: food.is_Halal, isOutOfStock: food.isOutOfStock, addonsId: food.addonsId, startTime: food.startTime, endTime: food.endTime,
         search_tags: food.search_tags, price: food.price, discount_type: food.discount_type, discount_value: food.discount_value,
         Maximum_Purchase: food.Maximum_Purchase, points: food.points, stock_type: food.stock_type, status: food.status,
-        sold_by: food.sold_by, weight_unit: food.weight_unit,
+        sold_by: food.sold_by, weight_unit: food.weight_unit, allow_custom_weight: food.allow_custom_weight,
         createdAt: food.createdAt, updatedAt: food.updatedAt,
         restaurant: restaurants,
         category_name: categories.name, category_nameAr: categories.nameAr, category_nameFr: categories.nameFr,
@@ -287,6 +321,7 @@ export const getAllFoods = async (req: Request, res: Response) => {
             is_Halal: f.is_Halal, isOutOfStock: f.isOutOfStock, startTime: f.startTime, endTime: f.endTime, search_tags: f.search_tags,
             discount_type: f.discount_type, discount_value: f.discount_value, Maximum_Purchase: f.Maximum_Purchase,
             points: f.points ?? 0,
+            sold_by: f.sold_by, weight_unit: f.weight_unit, allow_custom_weight: f.allow_custom_weight,
             stock_type: f.stock_type, createdAt: f.createdAt, updatedAt: f.updatedAt,
             variations: foodVars, restaurant: f.restaurant,
             ingredients: assignedIngredients,
@@ -313,7 +348,7 @@ export const getFoodById = async (req: Request, res: Response) => {
         is_Halal: food.is_Halal, isOutOfStock: food.isOutOfStock, addonsId: food.addonsId, startTime: food.startTime, endTime: food.endTime,
         search_tags: food.search_tags, price: food.price, discount_type: food.discount_type, discount_value: food.discount_value,
         Maximum_Purchase: food.Maximum_Purchase, points: food.points, stock_type: food.stock_type, status: food.status,
-        sold_by: food.sold_by, weight_unit: food.weight_unit,
+        sold_by: food.sold_by, weight_unit: food.weight_unit, allow_custom_weight: food.allow_custom_weight,
         createdAt: food.createdAt, updatedAt: food.updatedAt,
         restaurant: { id: restaurants.id, name: restaurants.name },
         category: { id: categories.id, name: categories.name, nameAr: categories.nameAr, nameFr: categories.nameFr },
@@ -538,9 +573,69 @@ export const updateFood = async (req: Request, res: Response) => {
         }
     }
 
+    // ⚖️ Weight groups / custom weight / fixed discount on per-gram foods.
+    // Validated on the EFFECTIVE result (incoming values over the stored ones) before any write.
+    const incomingVariationsForWeight: any[] | null = Array.isArray(data.variations)
+        ? normalizeWeightVariationInput(data.variations)
+        : null;
+    if (incomingVariationsForWeight) data.variations = incomingVariationsForWeight;
+    const storedVars = await db.select().from(foodVariations).where(eq(foodVariations.foodId, id));
+    const storedOpts = storedVars.length > 0
+        ? await db.select().from(variationOptions).where(inArray(variationOptions.variationId, storedVars.map((v) => v.id)))
+        : [];
+    const effectiveWeightVariations: WeightGroupVariationConfig[] = incomingVariationsForWeight
+        ? incomingVariationsForWeight.map((v: any) => {
+            const stored = v.id ? storedVars.find((sv) => sv.id === v.id) : undefined;
+            return {
+                name: v.name ?? stored?.name,
+                isWeightGroup: v.isWeightGroup !== undefined ? v.isWeightGroup : Boolean(stored?.isWeightGroup),
+                selectionType: v.selectionType ?? stored?.selectionType,
+                options: (Array.isArray(v.options) ? v.options : []).map((o: any) => {
+                    const storedOpt = o.id ? storedOpts.find((so) => so.id === o.id) : undefined;
+                    return {
+                        optionName: o.optionName ?? storedOpt?.optionName,
+                        weightValue: o.weightValue !== undefined ? o.weightValue : (storedOpt?.weightValue ?? null),
+                    };
+                }),
+            };
+        })
+        : storedVars.map((sv) => ({
+            name: sv.name,
+            isWeightGroup: Boolean(sv.isWeightGroup),
+            selectionType: sv.selectionType,
+            options: storedOpts.filter((so) => so.variationId === sv.id).map((so) => ({ optionName: so.optionName, weightValue: so.weightValue })),
+        }));
+    const incomingAllowCustom = parseBooleanInput(data.allow_custom_weight);
+    const weightConfig = validateWeightGroupConfig({
+        soldBy: effectiveSoldBy,
+        weightUnit: effectiveSoldBy === "weight" ? (updateData.weight_unit !== undefined ? updateData.weight_unit : existingFood[0].weight_unit) : null,
+        // switching a food back to unit resets it to true (validateWeightGroupConfig returns true for unit foods)
+        allowCustomWeight: effectiveSoldBy === "weight"
+            ? (incomingAllowCustom !== undefined ? incomingAllowCustom : existingFood[0].allow_custom_weight)
+            : (incomingAllowCustom === false ? false : true),
+        variations: effectiveWeightVariations,
+    });
+    updateData.allow_custom_weight = weightConfig.allowCustomWeight;
+
+    if (isFixedDiscountOnGramFood({
+        soldBy: effectiveSoldBy,
+        weightUnit: effectiveSoldBy === "weight" ? (updateData.weight_unit !== undefined ? updateData.weight_unit : existingFood[0].weight_unit) : null,
+        discountType: updateData.discount_type !== undefined ? updateData.discount_type : existingFood[0].discount_type,
+        discountValue: updateData.discount_value !== undefined ? updateData.discount_value : existingFood[0].discount_value,
+    })) {
+        throw new BadRequest(FIXED_DISCOUNT_ON_GRAM_MESSAGE);
+    }
+
     // ✅ تنفيذ التحديث الرئيسي للأكلة
     if (Object.keys(updateData).length > 1) {
         await db.update(food).set(updateData).where(eq(food.id, id));
+    }
+
+    // Variations not sent: keep the stored weight group's "required" in line with allow_custom_weight.
+    if (!incomingVariationsForWeight && weightConfig.weightGroups.size > 0) {
+        await db.update(foodVariations)
+            .set({ isRequired: !weightConfig.allowCustomWeight, selectionType: "single" })
+            .where(and(eq(foodVariations.foodId, id), eq(foodVariations.isWeightGroup, true)));
     }
 
     // ===========================
@@ -560,9 +655,10 @@ export const updateFood = async (req: Request, res: Response) => {
         const incomingVarIds = new Set<string>();
         const incomingOptIds = new Set<string>();
 
-        for (const variation of data.variations) {
+        for (const [variationIndex, variation] of (data.variations as any[]).entries()) {
             let variationId = variation.id;
             const existingVar = variationId ? oldVars.find(v => v.id === variationId) : null;
+            const weightGroup = weightConfig.weightGroups.get(variationIndex);
 
             if (existingVar) {
                 // Update existing variation
@@ -570,11 +666,12 @@ export const updateFood = async (req: Request, res: Response) => {
                     name: variation.name,
                     nameAr: variation.nameAr ?? existingVar.nameAr,
                     nameFr: variation.nameFr ?? existingVar.nameFr,
-                    isRequired: variation.isRequired !== undefined ? variation.isRequired : existingVar.isRequired,
-                    selectionType: variation.selectionType || existingVar.selectionType,
-                    min: variation.min !== undefined ? variation.min : existingVar.min,
-                    max: variation.max !== undefined ? variation.max : existingVar.max,
+                    isRequired: weightGroup ? weightGroup.isRequired : (variation.isRequired !== undefined ? variation.isRequired : existingVar.isRequired),
+                    selectionType: weightGroup ? weightGroup.selectionType : (variation.selectionType || existingVar.selectionType),
+                    min: weightGroup ? null : (variation.min !== undefined ? variation.min : existingVar.min),
+                    max: weightGroup ? null : (variation.max !== undefined ? variation.max : existingVar.max),
                     status: variation.status !== undefined ? variation.status : existingVar.status,
+                    isWeightGroup: Boolean(weightGroup),
                 }).where(eq(foodVariations.id, variationId));
             } else {
                 // Insert new variation
@@ -585,19 +682,21 @@ export const updateFood = async (req: Request, res: Response) => {
                     name: variation.name,
                     nameAr: variation.nameAr || '',
                     nameFr: variation.nameFr || '',
-                    isRequired: variation.isRequired || false,
-                    selectionType: variation.selectionType || "single",
-                    min: variation.min ?? null,
-                    max: variation.max ?? null,
+                    isRequired: weightGroup ? weightGroup.isRequired : (variation.isRequired || false),
+                    selectionType: weightGroup ? weightGroup.selectionType : (variation.selectionType || "single"),
+                    min: weightGroup ? null : (variation.min ?? null),
+                    max: weightGroup ? null : (variation.max ?? null),
                     status: variation.status !== undefined ? variation.status : true,
+                    isWeightGroup: Boolean(weightGroup),
                 });
             }
             incomingVarIds.add(variationId);
 
             // Handle options for this variation
             if (variation.options && Array.isArray(variation.options)) {
-                for (const option of variation.options) {
+                for (const [optionIndex, option] of (variation.options as any[]).entries()) {
                     let optionId = option.id;
+                    const optionWeightValue = weightConfig.weightValues.get(`${variationIndex}:${optionIndex}`) ?? null;
                     const existingOpt = optionId ? oldOptions.find(o => o.id === optionId) : null;
 
                     const additionalPriceStr = option.additionalPrice !== undefined && option.additionalPrice !== null
@@ -622,6 +721,7 @@ export const updateFood = async (req: Request, res: Response) => {
                             optionNameFr: option.optionNameFr ?? existingOpt.optionNameFr,
                             additionalPrice: additionalPriceStr,
                             priceMode: optionPriceMode,
+                            weightValue: optionWeightValue,
                             status: option.status !== undefined ? option.status : existingOpt.status,
                             isDefault: option.isDefault !== undefined ? option.isDefault : existingOpt.isDefault,
                         }).where(eq(variationOptions.id, optionId));
@@ -636,6 +736,7 @@ export const updateFood = async (req: Request, res: Response) => {
                             optionNameFr: option.optionNameFr || '',
                             additionalPrice: additionalPriceStr,
                             priceMode: optionPriceMode,
+                            weightValue: optionWeightValue,
                             status: option.status !== undefined ? option.status : true,
                             isDefault: option.isDefault !== undefined ? option.isDefault : false,
                         });
@@ -1593,6 +1694,7 @@ export const getActiveInStockFoods = async (req: Request | any, res: Response) =
             price: food.price,
             sold_by: food.sold_by,
             weight_unit: food.weight_unit,
+            allow_custom_weight: food.allow_custom_weight,
             categoryid: food.categoryid,
             subcategoryid: food.subcategoryid,
             category_name: categories.name,
@@ -1625,6 +1727,7 @@ export const getActiveInStockFoods = async (req: Request | any, res: Response) =
             nameFr: foodVariations.nameFr,
             isRequired: foodVariations.isRequired,
             selectionType: foodVariations.selectionType,
+            isWeightGroup: foodVariations.isWeightGroup,
             status: foodVariations.status,
         })
         .from(foodVariations)
@@ -1642,6 +1745,7 @@ export const getActiveInStockFoods = async (req: Request | any, res: Response) =
                 optionNameFr: variationOptions.optionNameFr,
                 additionalPrice: variationOptions.additionalPrice,
                 priceMode: variationOptions.priceMode,
+                weightValue: variationOptions.weightValue,
                 status: variationOptions.status,
             })
             .from(variationOptions)
@@ -1688,6 +1792,7 @@ export const getActiveInStockFoods = async (req: Request | any, res: Response) =
                 nameFr: v.nameFr,
                 isRequired: v.isRequired,
                 selectionType: v.selectionType,
+                isWeightGroup: Boolean(v.isWeightGroup),
                 options: allOpts
                     .filter((o) => o.variationId === v.id)
                     .map((o) => ({
@@ -1697,6 +1802,7 @@ export const getActiveInStockFoods = async (req: Request | any, res: Response) =
                         optionNameFr: o.optionNameFr,
                         additionalPrice: o.additionalPrice,
                         priceMode: o.priceMode || "fixed",
+                        weightValue: o.weightValue ?? null,
                     })),
             }));
 
@@ -1730,6 +1836,7 @@ export const getActiveInStockFoods = async (req: Request | any, res: Response) =
             price: f.price,
             sold_by: f.sold_by || "unit",
             weight_unit: f.weight_unit || null,
+            allow_custom_weight: f.allow_custom_weight ?? true,
             category: {
                 id: f.categoryid,
                 name: f.category_name,
@@ -1798,6 +1905,22 @@ export const bulkApplyFoodDiscount = async (req: Request, res: Response) => {
     const discountValueToStore = discountValNum !== null && discountValNum > 0
         ? discountValNum.toFixed(2)
         : null;
+
+    // ⚖️ A fixed-amount discount must not reach a product sold per gram (it is applied per gram).
+    // Rejected as a whole, nothing applied, with the products that block it.
+    if (discountType !== "percentage" && discountValueToStore !== null) {
+        const gramFoods = await db
+            .select({ id: food.id, name: food.name })
+            .from(food)
+            .where(and(whereClause, eq(food.sold_by, "weight"), eq(food.weight_unit, "gm")))
+            .limit(11);
+        if (gramFoods.length > 0) {
+            const names = gramFoods.slice(0, 10).map((f) => `"${f.name}"`).join(", ");
+            throw new BadRequest(
+                `${FIXED_DISCOUNT_ON_GRAM_MESSAGE} Products sold per gram in this selection: ${names}${gramFoods.length > 10 ? ", ..." : ""}. Exclude them or use a percentage.`
+            );
+        }
+    }
 
     await db
         .update(food)

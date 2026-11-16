@@ -50,3 +50,9 @@ export const replaceRestaurantItemsSchema = z.object({
 export const rejectWeightRequestSchema = z.object({
     reason: z.string().max(500, "Reason cannot exceed 500 characters").optional(),
 });
+
+/** Optional body of POST /:id/confirm. strict: true = reject unweighed rows (old behaviour). */
+export const confirmWeightRequestSchema = z
+    .object({ strict: z.union([z.boolean(), z.enum(["true", "false"])]).optional() })
+    .optional()
+    .default({});

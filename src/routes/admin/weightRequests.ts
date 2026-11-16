@@ -18,6 +18,7 @@ import {
     patchWeightItemBodySchema,
     replaceRestaurantItemsSchema,
     rejectWeightRequestSchema,
+    confirmWeightRequestSchema,
 } from "../../validation/admin/weightRequests";
 
 const router = Router();
@@ -45,8 +46,8 @@ router.get(
     catchAsync(getWeightRequestById)
 );
 
-// 3. Patch weight or unavailable for customer item
-router.patch(
+// 3. PUT weight or unavailable for customer item
+router.put(
     "/:id/items/:cartItemId",
     hasPermission("order", "update", true),
     validate(patchWeightItemParamSchema, "params"),
@@ -68,6 +69,7 @@ router.post(
     "/:id/confirm",
     hasPermission("order", "update", true),
     validate(getWeightRequestParamSchema, "params"),
+    validate(confirmWeightRequestSchema, "body"),
     catchAsync(confirmWeightRequest)
 );
 

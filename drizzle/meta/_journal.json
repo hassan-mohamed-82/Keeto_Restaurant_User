@@ -57,6 +57,20 @@
       "when": 1794753652764,
       "tag": "0011_payment_transactions_gateway_geidea",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1794820855332,
+      "tag": "0012_weight_groups_custom_weight",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1794823574053,
+      "tag": "0013_weight_timeout_defaults",
+      "breakpoints": true
     }
   ]
 }

@@ -24,6 +24,11 @@ import {
 } from "../models/schema";
 import { upsertFoodPricingOverride } from "./pricing.overrides";
 import {
+    FIXED_DISCOUNT_ON_GRAM_MESSAGE,
+    isFixedDiscountOnGramFood,
+    validateWeightGroupConfig,
+} from "./weightPricing.helper";
+import {
     FOOD_DEFAULTS,
     SUBCATEGORY_DEFAULTS,
     VARIATION_DEFAULTS,
@@ -93,6 +98,8 @@ export interface FoodVariationOptionInput {
     optionNameFr?: string;
     additionalPrice?: string | number | null;
     priceMode?: "fixed" | "per_weight" | null;
+    /** Weight-group options only: the weight in the food's weight_unit (e.g. "0.500"). */
+    weightValue?: string | number | null;
 }
 
 export interface FoodVariationInput {
@@ -103,6 +110,8 @@ export interface FoodVariationInput {
     selectionType?: SelectionType | null;
     min?: number | null;
     max?: number | null;
+    /** The weight choices of a weighted food (at most one, single-select). */
+    isWeightGroup?: boolean | null;
     options?: FoodVariationOptionInput[];
 }
 
@@ -145,6 +154,8 @@ export interface FoodInsertData {
     points?: number | null;
     sold_by?: "unit" | "weight" | null;
     weight_unit?: "kg" | "gm" | null;
+    /** Weighted foods only; default true. false requires a weight group. */
+    allow_custom_weight?: boolean | null;
     variations?: FoodVariationInput[];
     /** Branch availability rows (branchMenuItems), optionally with a branch price. */
     branches?: FoodBranchInput[];
@@ -161,6 +172,19 @@ export async function insertFood(
     data: FoodInsertData
 ): Promise<string> {
     const foodId = data.id ?? uuidv4();
+
+    // Weight-group rules and the fixed-discount rule (same for manual create and the bulk import).
+    if (isFixedDiscountOnGramFood({
+        soldBy: data.sold_by, weightUnit: data.weight_unit, discountType: data.discount_type, discountValue: data.discount_value,
+    })) {
+        throw new BadRequest(FIXED_DISCOUNT_ON_GRAM_MESSAGE);
+    }
+    const weightConfig = validateWeightGroupConfig({
+        soldBy: data.sold_by || "unit",
+        weightUnit: data.weight_unit,
+        allowCustomWeight: data.allow_custom_weight,
+        variations: data.variations || [],
+    });
 
     await executor.insert(food).values({
         id: foodId,
@@ -192,13 +216,15 @@ export async function insertFood(
         points: data.points ?? FOOD_DEFAULTS.points,
         sold_by: data.sold_by || "unit",
         weight_unit: data.sold_by === "weight" ? (data.weight_unit || null) : null,
+        allow_custom_weight: weightConfig.allowCustomWeight,
     });
 
     // Variations and their options
     const variations = data.variations;
     if (variations && Array.isArray(variations) && variations.length > 0) {
-        for (const variation of variations) {
+        for (const [variationIndex, variation] of variations.entries()) {
             const variationId = uuidv4();
+            const weightGroup = weightConfig.weightGroups.get(variationIndex);
 
             await executor.insert(foodVariations).values({
                 id: variationId,
@@ -206,14 +232,15 @@ export async function insertFood(
                 name: variation.name,
                 nameAr: variation.nameAr,
                 nameFr: variation.nameFr,
-                isRequired: variation.isRequired ?? VARIATION_DEFAULTS.isRequired,
-                selectionType: variation.selectionType || VARIATION_DEFAULTS.selectionType,
-                min: variation.min || null,
-                max: variation.max || null,
+                isRequired: weightGroup ? weightGroup.isRequired : (variation.isRequired ?? VARIATION_DEFAULTS.isRequired),
+                selectionType: weightGroup ? weightGroup.selectionType : (variation.selectionType || VARIATION_DEFAULTS.selectionType),
+                min: weightGroup ? null : (variation.min || null),
+                max: weightGroup ? null : (variation.max || null),
+                isWeightGroup: Boolean(weightGroup),
             });
 
             if (variation.options && Array.isArray(variation.options)) {
-                const optionsToInsert = variation.options.map((option) => {
+                const optionsToInsert = variation.options.map((option, optionIndex) => {
                     const mode = option.priceMode || "fixed";
                     if (mode === "per_weight" && data.sold_by !== "weight") {
                         throw new BadRequest("per_weight price_mode is only allowed on weight-based products");
@@ -230,6 +257,7 @@ export async function insertFood(
                         optionNameFr: option.optionNameFr,
                         additionalPrice: addPrice,
                         priceMode: mode,
+                        weightValue: weightConfig.weightValues.get(`${variationIndex}:${optionIndex}`) ?? null,
                     };
                 });
 

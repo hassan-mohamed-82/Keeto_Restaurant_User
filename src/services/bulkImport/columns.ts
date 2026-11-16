@@ -162,6 +162,10 @@ export const FOOD_COLUMNS = {
         header: "weight_unit", type: "enum", required: false, width: 12, enumValues: MENU_ENUMS.weightUnit,
         note: `Optional. ${MENU_ENUMS.weightUnit.join(", ")}. Required when sold_by is weight; must be empty when sold_by is unit.`,
     },
+    allow_custom_weight: {
+        header: "allow_custom_weight", type: "boolean", required: false, width: 18,
+        note: "Optional. yes or no. Default: yes. Weight foods only: no means the customer must pick a weight option, so the food needs a weight group in the Variations sheet. A fixed (amount) discount is not allowed on foods sold per gram (gm).",
+    },
 } as const satisfies ColumnSpecs;
 
 export const VARIATION_COLUMNS = {
@@ -196,6 +200,14 @@ export const VARIATION_COLUMNS = {
         width: 14,
         enumValues: MENU_ENUMS.priceMode,
         note: `Optional. ${MENU_ENUMS.priceMode.join(", ")}. Default: fixed. per_weight is only allowed for foods sold by weight.`,
+    },
+    isWeightGroup: {
+        header: "isWeightGroup", type: "boolean", required: false, width: 14,
+        note: "Optional. yes or no. Default: no. Fill it once per variation. yes = the weight choices of a weight food (e.g. 250 g / 500 g / 1 kg): at most one per food, single-select.",
+    },
+    weightValue: {
+        header: "weightValue", type: "decimal", required: false, width: 13,
+        note: "Weight-group options only (required there): the weight of this option in the food's weight_unit, greater than 0, at most 3 decimals, unique inside the group. Must be empty for normal variations. The option's additionalPrice is an optional extra fee (normally 0): the weight itself is priced as weight × price.",
     },
 } as const satisfies ColumnSpecs;
 
