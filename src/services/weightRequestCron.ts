@@ -34,7 +34,7 @@ const ORPHAN_BATCH_SIZE = 200;
 let isRunning = false;
 
 type PendingNotification =
-    | { to: "customer"; userId: string; requestId: string; reason: string }
+    | { to: "customer"; userId: string; restaurantId: string; branchId?: string | null; requestId: string; reason: string }
     | { to: "restaurant"; restaurantId: string; branchId: string | null; requestId: string; reason: string };
 
 /** Normal cleanup: restaurant-added rows deleted, the customer's rows unlocked and reset. */
@@ -83,7 +83,7 @@ const applyAction = async (tx: any, action: CronAction, request: any, order: any
             if (affectedRows(result) !== 1) return null;
             await cleanupCartForRequest(tx, request.id, now);
             return action.notify === "customer"
-                ? { to: "customer", userId: request.userId, requestId: request.id, reason: action.reason }
+                ? { to: "customer", userId: request.userId, restaurantId: request.restaurantId, branchId: request.branchId, requestId: request.id, reason: action.reason }
                 : { to: "restaurant", restaurantId: request.restaurantId, branchId: request.branchId, requestId: request.id, reason: action.reason };
         }
 
@@ -144,7 +144,7 @@ const applyAction = async (tx: any, action: CronAction, request: any, order: any
                 .where(and(eq(weightRequests.id, request.id), eq(weightRequests.status, "checking_out")));
             if (affectedRows(expired) !== 1) return null;
             await cleanupCartForRequest(tx, request.id, now);
-            return { to: "customer", userId: request.userId, requestId: request.id, reason: EXPIRE_REASON_PAYMENTS };
+            return { to: "customer", userId: request.userId, restaurantId: request.restaurantId, branchId: request.branchId, requestId: request.id, reason: EXPIRE_REASON_PAYMENTS };
         }
 
         default:
@@ -158,13 +158,26 @@ const sendNotification = async (n: PendingNotification) => {
             const body = n.reason === EXPIRE_REASON_PAYMENTS
                 ? "لم تكتمل عملية الدفع عدة مرات، تم إلغاء طلب الوزن. يمكنك إرسال السلة للوزن مرة أخرى."
                 : "لم يقم المطعم بوزن طلبك في الوقت المحدد، تم إلغاء طلب الوزن. يمكنك إرسال السلة مرة أخرى.";
-            notifyUser(n.userId, "weight_request_expired", { weightRequestId: n.requestId, reason: n.reason });
+            notifyUser(n.userId, "weight_request_expired", {
+                weightRequestId: n.requestId,
+                restaurantId: n.restaurantId,
+                branchId: n.branchId,
+                reason: n.reason,
+            });
             await sendPushNotification({
                 recipientType: "user",
                 recipientId: n.userId,
+                restaurantId: n.restaurantId,
+                branchId: n.branchId,
                 title: "انتهت صلاحية طلب الوزن ⏰",
                 body,
-                data: { type: "weight_request_expired", weightRequestId: n.requestId, reason: n.reason },
+                data: {
+                    type: "weight_request_expired",
+                    weightRequestId: n.requestId,
+                    restaurantId: n.restaurantId,
+                    branchId: n.branchId,
+                    reason: n.reason,
+                },
             });
         } else {
             await sendPushNotification({

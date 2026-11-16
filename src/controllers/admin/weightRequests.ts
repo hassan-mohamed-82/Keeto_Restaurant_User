@@ -39,6 +39,7 @@ import {
     isWeighedRow,
     parseAddonSnapshot,
     parseVariationSnapshot,
+    parseWeighingLog,
 } from "../../helpers/weightRequest.helper";
 import { notifyUser } from "../../services/socket/socketService";
 import { priceWeightRequestRows } from "../../services/weightRequestPricing.service";
@@ -212,7 +213,7 @@ const formatRequestDetails = async (requestId: string) => {
             weighedBy: request.weighedBy,
             cancelReason: request.cancelReason,
             orderId: request.orderId,
-            weighingLog: request.weighingLog || [],
+            weighingLog: parseWeighingLog(request.weighingLog),
             createdAt: request.createdAt,
             isExpired,
         },
@@ -460,7 +461,7 @@ export const patchCustomerItemWeight = async (req: Request | any, res: Response)
             await tx.update(weightRequests)
                 .set({
                     weighingLog: [
-                        ...((locked.weighingLog as any[]) || []),
+                        ...parseWeighingLog(locked.weighingLog),
                         priceChangeLogEntry({ cartItemId, foodId: item.foodId, oldPrice: item.unitPrice, newPrice: updateData.unitPrice, by: staffId, now }),
                     ],
                     updatedAt: now,
@@ -740,7 +741,7 @@ export const replaceRestaurantItems = async (req: Request | any, res: Response) 
         // Owner price overrides: old (menu) and new price kept in weighing_log.
         if (priceLog.length > 0) {
             await tx.update(weightRequests)
-                .set({ weighingLog: [...((lockedReq.weighingLog as any[]) || []), ...priceLog], updatedAt: now })
+                .set({ weighingLog: [...parseWeighingLog(lockedReq.weighingLog), ...priceLog], updatedAt: now })
                 .where(eq(weightRequests.id, id));
         }
     });
@@ -839,7 +840,13 @@ export const confirmWeightRequest = async (req: Request | any, res: Response) =>
                 .set({ weightRequestId: null, finalWeight: null, isUnavailable: false, updatedAt: now })
                 .where(and(eq(cartItems.weightRequestId, id), eq(cartItems.addedBy, "customer")));
 
-            return { status: "cancelled" as const, userId: request.userId, expiresAt: null };
+            return {
+                status: "cancelled" as const,
+                userId: request.userId,
+                restaurantId: request.restaurantId,
+                branchId: request.branchId || null,
+                expiresAt: null
+            };
         }
 
         // Rows confirmed at the ordered weight (the line total is unchanged; stored again for consistency).
@@ -850,7 +857,7 @@ export const confirmWeightRequest = async (req: Request | any, res: Response) =>
                 .where(and(eq(cartItems.id, d.id), eq(cartItems.weightRequestId, id)));
         }
 
-        const earlierPriceChanges = ((request.weighingLog as any[]) || []).filter((e: any) => e?.action === "price_changed");
+        const earlierPriceChanges = parseWeighingLog(request.weighingLog).filter((e: any) => e?.action === "price_changed");
         const weighingLog: any[] = [...earlierPriceChanges, ...plan.log.map(({ item, action, finalWeight }) => ({
             cartItemId: item.id,
             foodId: item.foodId,
@@ -880,7 +887,13 @@ export const confirmWeightRequest = async (req: Request | any, res: Response) =>
             })
             .where(and(eq(weightRequests.id, id), eq(weightRequests.status, "awaiting_weighing")));
 
-        return { status: "awaiting_customer_approval" as const, userId: request.userId, expiresAt };
+        return {
+            status: "awaiting_customer_approval" as const,
+            userId: request.userId,
+            restaurantId: request.restaurantId,
+            branchId: request.branchId || null,
+            expiresAt
+        };
     });
 
     // Notify the customer AFTER the transaction committed (never inside it); a notification
@@ -889,28 +902,43 @@ export const confirmWeightRequest = async (req: Request | any, res: Response) =>
         if (result.status === "cancelled") {
             notifyUser(result.userId, "weight_request_rejected", {
                 weightRequestId: id,
+                restaurantId: result.restaurantId,
+                branchId: result.branchId,
                 reason: "All weighed items are unavailable.",
             });
             await sendPushNotification({
                 recipientType: "user",
                 recipientId: result.userId,
+                restaurantId: result.restaurantId,
+                branchId: result.branchId,
                 title: "تم إلغاء طلب الوزن ❌",
                 body: "الأصناف المطلوب وزنها غير متوفرة حالياً لدى المطعم.",
-                data: { type: "weight_request_rejected", weightRequestId: id },
+                data: {
+                    type: "weight_request_rejected",
+                    weightRequestId: id,
+                    restaurantId: result.restaurantId,
+                    branchId: result.branchId,
+                },
             });
         } else {
             notifyUser(result.userId, "weight_request_confirmed", {
                 weightRequestId: id,
+                restaurantId: result.restaurantId,
+                branchId: result.branchId,
                 expiresAt: result.expiresAt,
             });
             await sendPushNotification({
                 recipientType: "user",
                 recipientId: result.userId,
+                restaurantId: result.restaurantId,
+                branchId: result.branchId,
                 title: "تم وزن طلبك! ⚖️",
                 body: "قام المطعم بوزن طلبك، يرجى مراجعة الأوزان وتأكيد الطلب.",
                 data: {
                     type: "weight_request_confirmed",
                     weightRequestId: id,
+                    restaurantId: result.restaurantId,
+                    branchId: result.branchId,
                 },
             });
         }
@@ -985,17 +1013,23 @@ export const rejectWeightRequest = async (req: Request | any, res: Response) => 
     try {
         notifyUser(request.userId, "weight_request_rejected", {
             weightRequestId: id,
+            restaurantId: request.restaurantId,
+            branchId: request.branchId || null,
             reason: reason || "Rejected by restaurant",
         });
 
         await sendPushNotification({
             recipientType: "user",
             recipientId: request.userId,
+            restaurantId: request.restaurantId,
+            branchId: request.branchId || null,
             title: "تم إلغاء طلب الوزن ❌",
             body: reason || "قام المطعم بإلغاء طلب الوزن الخاص بك.",
             data: {
                 type: "weight_request_rejected",
                 weightRequestId: id,
+                restaurantId: request.restaurantId,
+                branchId: request.branchId || null,
             },
         });
     } catch (notifyErr) {

@@ -25,6 +25,12 @@ export const parseAddonSnapshot = (raw: any): any[] => {
     return Array.isArray(v) ? v : [];
 };
 
+/** Parses request.weighingLog which may be a raw JSON string from MySQL or already an array. */
+export const parseWeighingLog = (raw: any): any[] => {
+    const v = parseMaybeJson(raw);
+    return Array.isArray(v) ? v : [];
+};
+
 /** A cart row that needs weighing (weight-sold food or a stored weight). */
 export const isWeighedRow = (row: { weight?: unknown; offerId?: string | null }, foodSoldBy?: string | null): boolean =>
     !row.offerId && (foodSoldBy === "weight" || (row.weight !== undefined && row.weight !== null));

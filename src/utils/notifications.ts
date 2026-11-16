@@ -483,18 +483,21 @@ export const sendPushNotification = async (params: {
     recipientType: "user" | "restaurant" | "superadmin" | "delivery_man";
     recipientId: string;
     branchId?: string | null;
+    restaurantId?: string | null;
     title: string;
     body: string;
     data?: any;
 }) => {
-    const { recipientType, recipientId, branchId, title, body, data } = params;
+    const { recipientType, recipientId, branchId, restaurantId, title, body, data } = params;
+
+    const resolvedRestaurantId = restaurantId || data?.restaurantId || (recipientType === "restaurant" ? recipientId : null);
 
     let payloadData: any = {
         ...(data || {}),
         recipientType,
         recipientId,
         branchId: branchId || data?.branchId || null,
-        restaurantId: data?.restaurantId || (recipientType === "restaurant" ? recipientId : null),
+        restaurantId: resolvedRestaurantId,
         sound: "notification_sound.wav"
     };
 
