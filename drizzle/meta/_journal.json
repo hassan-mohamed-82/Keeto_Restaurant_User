@@ -43,6 +43,20 @@
       "when": 1794484233618,
       "tag": "0005_weight_based_orders",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1794753652763,
+      "tag": "0010_weight_checkout_needs_review",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1794753652764,
+      "tag": "0011_payment_transactions_gateway_geidea",
+      "breakpoints": true
     }
   ]
 }

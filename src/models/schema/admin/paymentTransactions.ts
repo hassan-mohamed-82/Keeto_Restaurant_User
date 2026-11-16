@@ -30,7 +30,7 @@ export const paymentTransactions = mysqlTable("payment_transactions", {
     restaurantId: char("restaurant_id", { length: 36 })
         .references(() => restaurants.id, { onDelete: "set null" }),
 
-    gateway: mysqlEnum("gateway", ["kashier", "paymob"]).notNull(),
+    gateway: mysqlEnum("gateway", ["kashier", "paymob", "geidea"]).notNull(),
 
     // المعرف الخاص بالمعاملة من البوابة (مثل transaction id)
     transactionId: varchar("transaction_id", { length: 150 }),
@@ -42,7 +42,7 @@ export const paymentTransactions = mysqlTable("payment_transactions", {
 
     currency: varchar("currency", { length: 10 }).default("EGP"),
 
-    status: mysqlEnum("status", ["pending", "success", "failed"]).default("pending").notNull(),
+    status: mysqlEnum("status", ["pending", "success", "failed", "needs_review"]).default("pending").notNull(),
 
     // سبب الفشل أو رسالة الخطأ القادمة من البوابة
     failureReason: text("failure_reason"),
