@@ -119,6 +119,7 @@ export interface ConfirmItem {
     sold_by: string | null;
     orderedWeight: string | number | null;
     finalWeight: string | number | null;
+    quantity?: number | null;
     isUnavailable: boolean | null;
     weightUnit: string | null;
     foodWeightUnit?: string | null;
@@ -151,7 +152,7 @@ export type ConfirmPlan =
 export const planConfirmation = (
     items: ConfirmItem[],
     opts: { strict: boolean; maxIncreasePercent: number },
-    computeLineTotal: (weight: number, unitPrice: number, extras: Array<{ price: number | string; priceMode?: string | null }>) => string,
+    computeLineTotal: (weight: number, unitPrice: number, extras: Array<{ price: number | string; priceMode?: string | null }>, quantity?: number) => string,
     checks: {
         isWeightWithinLimit: (ordered: number | string, final: number | string, pct: number) => boolean;
         isSaneWeight: (weight: number, unit?: string | null) => boolean;
@@ -209,7 +210,8 @@ export const planConfirmation = (
                 ...parseAddonSnapshot(item.addons).map((a: any) => ({ price: a.price ?? 0, priceMode: "fixed" })),
             ];
             const fw = finalWeight.toFixed(3);
-            defaults.push({ id: item.id, finalWeight: fw, totalPrice: computeLineTotal(finalWeight, Number(item.unitPrice ?? 0), extras) });
+            const qty = Math.max(1, Math.round(Number(item.quantity) || 1));
+            defaults.push({ id: item.id, finalWeight: fw, totalPrice: computeLineTotal(finalWeight, Number(item.unitPrice ?? 0), extras, qty) });
             log.push({ item, action: "confirmed_as_ordered", finalWeight: fw });
         }
     }
@@ -263,11 +265,11 @@ export const buildRestaurantItemPrice = (p: {
     options: Array<{ price: number; priceMode?: string | null }>;
     addonPrices: number[];
     ownerUnitPrice?: number;
-}, computeLineTotal: (w: number, base: number, extras: Array<{ price: number; priceMode?: string | null }>) => string) => {
+}, computeLineTotal: (w: number, base: number, extras: Array<{ price: number; priceMode?: string | null }>, qty?: number) => string) => {
     const base = p.ownerUnitPrice !== undefined ? p.ownerUnitPrice : p.resolvedBasePrice;
     if (p.isWeighted) {
         const extras = [...p.options, ...p.addonPrices.map((price) => ({ price, priceMode: "fixed" }))];
-        return { unitPrice: base.toFixed(2), totalPrice: computeLineTotal(Number(p.weight), base, extras), basePrice: base };
+        return { unitPrice: base.toFixed(2), totalPrice: computeLineTotal(Number(p.weight), base, extras, p.quantity), basePrice: base };
     }
     const cents = (n: number) => Math.round(n * 100);
     const unitCents = cents(base) + p.options.reduce((s, o) => s + cents(Number(o.price)), 0) + p.addonPrices.reduce((s, a) => s + cents(a), 0);

@@ -337,6 +337,7 @@ export const patchCustomerItemWeight = async (req: Request | any, res: Response)
         .select({
             id: cartItems.id,
             foodId: cartItems.foodId,
+            quantity: cartItems.quantity,
             orderedWeight: cartItems.weight,
             finalWeight: cartItems.finalWeight,
             weightUnit: cartItems.weightUnit,
@@ -401,23 +402,32 @@ export const patchCustomerItemWeight = async (req: Request | any, res: Response)
 
         const maxIncreasePercent = settings?.weightMaxIncreasePercent ?? DEFAULT_WEIGHT_MAX_INCREASE_PERCENT;
         const orderedW = Number(item.orderedWeight || 0);
+        const itemQty = Math.max(1, Number(item.quantity) || 1);
 
         if (orderedW > 0) {
-            const maxAllowed = calcMaxAllowedWeight(orderedW, maxIncreasePercent);
-            if (numFinalWeight > maxAllowed) {
-                throw new BadRequest(
-                    `Final weight (${numFinalWeight}) exceeds the maximum allowed increase of ${maxIncreasePercent}% (max: ${maxAllowed})`
-                );
-            }
-        }
+            const maxAllowedPerPiece = calcMaxAllowedWeight(orderedW, maxIncreasePercent);
+            const maxAllowedTotal = calcMaxAllowedWeight(orderedW * itemQty, maxIncreasePercent);
 
-        updateData.finalWeight = numFinalWeight.toFixed(3);
+            let pieceWeight = numFinalWeight;
+            if (numFinalWeight > maxAllowedPerPiece) {
+                if (itemQty > 1 && numFinalWeight <= maxAllowedTotal) {
+                    pieceWeight = Math.round((numFinalWeight / itemQty) * 1000) / 1000;
+                } else {
+                    throw new BadRequest(
+                        `Final weight (${numFinalWeight}) exceeds the maximum allowed increase of ${maxIncreasePercent}% (max: ${maxAllowedPerPiece}${itemQty > 1 ? `, max total: ${maxAllowedTotal}` : ""})`
+                    );
+                }
+            }
+            updateData.finalWeight = pieceWeight.toFixed(3);
+        } else {
+            updateData.finalWeight = numFinalWeight.toFixed(3);
+        }
     }
 
     // Recompute line total if either finalWeight or unitPrice changed
     if (finalWeight !== undefined || unitPrice !== undefined) {
         const effectiveWeight = finalWeight !== undefined
-            ? Number(finalWeight)
+            ? Number(updateData.finalWeight ?? finalWeight)
             : Number(item.finalWeight || item.orderedWeight || 0);
 
         const baseP = unitPrice !== undefined
@@ -439,7 +449,7 @@ export const patchCustomerItemWeight = async (req: Request | any, res: Response)
             })),
         ];
 
-        const recomputedTotal = computeWeightedLineTotal(effectiveWeight, baseP, optExtras);
+        const recomputedTotal = computeWeightedLineTotal(effectiveWeight, baseP, optExtras, item.quantity);
         updateData.totalPrice = recomputedTotal;
     }
 
@@ -673,7 +683,7 @@ export const replaceRestaurantItems = async (req: Request | any, res: Response) 
                 options: detailedVars.map((v) => ({ price: Number(v.price), priceMode: v.priceMode })),
                 addonPrices: detailedAddons.map((a) => Number(a.price || 0)),
                 ownerUnitPrice,
-            }, (w, base, extras) => computeWeightedLineTotal(w, base, extras));
+            }, (w, base, extras, qty) => computeWeightedLineTotal(w, base, extras, qty));
             const unitPriceStr = built.unitPrice;
             const totalPriceStr = built.totalPrice;
             if (ownerUnitPrice !== undefined && Math.abs(ownerUnitPrice - priceResult.basePrice) > 0.001) {
@@ -797,6 +807,7 @@ export const confirmWeightRequest = async (req: Request | any, res: Response) =>
                 addedBy: cartItems.addedBy,
                 sold_by: food.sold_by,
                 unitPrice: cartItems.unitPrice,
+                quantity: cartItems.quantity,
                 variations: cartItems.variations,
                 addons: cartItems.addons,
             })
@@ -817,7 +828,7 @@ export const confirmWeightRequest = async (req: Request | any, res: Response) =>
         const plan = planConfirmation(
             items,
             { strict, maxIncreasePercent: settings?.weightMaxIncreasePercent ?? DEFAULT_WEIGHT_MAX_INCREASE_PERCENT },
-            (w, price, extras) => computeWeightedLineTotal(w, price, extras),
+            (w, price, extras, qty) => computeWeightedLineTotal(w, price, extras, qty),
             { isWeightWithinLimit, isSaneWeight }
         );
 
