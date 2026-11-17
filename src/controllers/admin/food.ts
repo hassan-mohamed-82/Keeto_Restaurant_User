@@ -704,9 +704,9 @@ export const updateFood = async (req: Request, res: Response) => {
                         : "0";
 
                     const optionPriceMode = option.priceMode ?? (existingOpt?.priceMode ?? "fixed");
-                    if (effectiveSoldBy !== "weight" && optionPriceMode === "per_weight") {
-                        throw new BadRequest("per_weight price_mode is only allowed on weight-based products");
-                    }
+                    const resolvedPriceMode = (effectiveSoldBy !== "weight" && optionPriceMode === "per_weight")
+                        ? "fixed"
+                        : optionPriceMode;
                     const addPriceNum = parseFloat(additionalPriceStr);
                     if (isNaN(addPriceNum) || addPriceNum < 0) {
                         throw new BadRequest("Option additional price must be greater than or equal to 0");
@@ -720,7 +720,7 @@ export const updateFood = async (req: Request, res: Response) => {
                             optionNameAr: option.optionNameAr ?? existingOpt.optionNameAr,
                             optionNameFr: option.optionNameFr ?? existingOpt.optionNameFr,
                             additionalPrice: additionalPriceStr,
-                            priceMode: optionPriceMode,
+                            priceMode: resolvedPriceMode,
                             weightValue: optionWeightValue,
                             status: option.status !== undefined ? option.status : existingOpt.status,
                             isDefault: option.isDefault !== undefined ? option.isDefault : existingOpt.isDefault,
@@ -735,7 +735,7 @@ export const updateFood = async (req: Request, res: Response) => {
                             optionNameAr: option.optionNameAr || '',
                             optionNameFr: option.optionNameFr || '',
                             additionalPrice: additionalPriceStr,
-                            priceMode: optionPriceMode,
+                            priceMode: resolvedPriceMode,
                             weightValue: optionWeightValue,
                             status: option.status !== undefined ? option.status : true,
                             isDefault: option.isDefault !== undefined ? option.isDefault : false,
