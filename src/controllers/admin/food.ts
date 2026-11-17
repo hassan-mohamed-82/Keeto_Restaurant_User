@@ -437,6 +437,7 @@ export const updateFood = async (req: Request, res: Response) => {
         "discount_type", "discount_value", "Maximum_Purchase", "stock_type",
         "points", "isOutOfStock",
         "sold_by", "weight_unit",
+        "order_level",
     ];
 
     const updateData: any = {
@@ -1953,5 +1954,44 @@ export const bulkApplyFoodDiscount = async (req: Request, res: Response) => {
                 categoryIds,
             },
         },
+    });
+};
+
+// =============================================
+// PATCH Food Order Level
+// =============================================
+export const changeFoodOrderLevel = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+
+    if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
+
+    const { order_level } = req.body;
+
+    if (order_level === undefined || order_level === null) {
+        throw new BadRequest("order_level is required");
+    }
+
+    const parsed = parseInt(order_level, 10);
+    if (isNaN(parsed) || parsed < 0) {
+        throw new BadRequest("order_level must be a non-negative integer");
+    }
+
+    const existing = await db
+        .select({ id: food.id })
+        .from(food)
+        .where(and(eq(food.id, id), eq(food.restaurantid, restaurantId), activeFoodCondition))
+        .limit(1);
+
+    if (!existing[0]) throw new NotFound("Food not found or you don't have permission to edit it");
+
+    await db
+        .update(food)
+        .set({ order_level: parsed, updatedAt: new Date() })
+        .where(eq(food.id, id));
+
+    return SuccessResponse(res, {
+        message: "Food order level updated successfully",
+        data: { id, order_level: parsed },
     });
 };

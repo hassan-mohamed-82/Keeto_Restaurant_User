@@ -64,6 +64,9 @@ export const food = mysqlTable("food", {
     status: mysqlEnum("status", ["active", "inactive"]).default("active"),
     points: int("points").default(0),
 
+    // Display ordering
+    order_level: int("order_level").notNull().default(0),
+
     // Weight-based selling
     sold_by: mysqlEnum("sold_by", ["unit", "weight"]).notNull().default("unit"),
     weight_unit: mysqlEnum("weight_unit", ["kg", "gm"]),

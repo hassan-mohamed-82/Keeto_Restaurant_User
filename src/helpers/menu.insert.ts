@@ -152,6 +152,7 @@ export interface FoodInsertData {
     status?: FoodStatus | null;
     isOutOfStock?: boolean | null;
     points?: number | null;
+    order_level?: number | null;
     sold_by?: "unit" | "weight" | null;
     weight_unit?: "kg" | "gm" | null;
     /** Weighted foods only; default true. false requires a weight group. */
@@ -214,6 +215,7 @@ export async function insertFood(
         status: data.status || FOOD_DEFAULTS.status,
         isOutOfStock: data.isOutOfStock ?? FOOD_DEFAULTS.isOutOfStock,
         points: data.points ?? FOOD_DEFAULTS.points,
+        order_level: data.order_level ?? 0,
         sold_by: data.sold_by || "unit",
         weight_unit: data.sold_by === "weight" ? (data.weight_unit || null) : null,
         allow_custom_weight: weightConfig.allowCustomWeight,

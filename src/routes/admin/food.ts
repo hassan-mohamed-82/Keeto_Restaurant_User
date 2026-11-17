@@ -17,6 +17,7 @@ import {
     toggleFoodOutOfStock,
     getActiveInStockFoods,
     bulkApplyFoodDiscount,
+    changeFoodOrderLevel,
 } from "../../controllers/admin/food";
 import {
     assignIngredientsToFood,
@@ -70,5 +71,8 @@ router.put("/status/:id", hasPermission("food", "update"), catchAsync(changeFood
 router.put("/:id/branch/:branchId/status", hasPermission("food", "update"), catchAsync(changeFoodStatus));
 // ✅ Toggle food out-of-stock (global, with optional branchId for subcategory cascade)
 router.put("/:id/branch/:branchId/out-of-stock", hasPermission("food", "update"), catchAsync(toggleFoodOutOfStock));
+
+// ✅ Change food order level
+router.put("/:id/order-level", hasPermission("food", "update"), catchAsync(changeFoodOrderLevel));
 
 export default router;

@@ -150,6 +150,10 @@ export const FOOD_COLUMNS = {
     },
     points: { header: "points", type: "integer", required: false, width: 9, note: "Optional. Loyalty points (whole number). Default: 0." },
     isOutOfStock: { header: "isOutOfStock", type: "boolean", required: false, width: 12, note: "Optional. yes or no. Default: no." },
+    order_level: {
+        header: "order_level", type: "integer", required: false, width: 12,
+        note: "Optional. Whole number (0 or more) used to sort foods inside a category/subcategory. Lower = first. Default: 0.",
+    },
     addons: {
         header: "addons", type: "list", required: false, width: 36,
         note: "Optional. Comma-separated addon names, e.g. Extra cheese, Ketchup. See the Instructions sheet for the available names.",
