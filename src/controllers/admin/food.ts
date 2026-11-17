@@ -231,7 +231,7 @@ export const getAllFoods = async (req: Request, res: Response) => {
     }
 
     const rawFoods = await db.select({
-        id: food.id, name: food.name, nameAr: food.nameAr, nameFr: food.nameFr,
+        id: food.id, name: food.name, nameAr: food.nameAr, nameFr: food.nameFr,order_level:food.order_level,
         description: food.description, descriptionAr: food.descriptionAr, descriptionFr: food.descriptionFr,
         image: food.image, restaurantid: food.restaurantid, categoryid: food.categoryid, subcategoryid: food.subcategoryid,
         foodtype: food.foodtype, Nutrition: food.Nutrition, allergen_ingredients: food.allergen_ingredients,
@@ -312,7 +312,7 @@ export const getAllFoods = async (req: Request, res: Response) => {
         }));
 
         return {
-            id: f.id, name: f.name, nameAr: f.nameAr, nameFr: f.nameFr,
+            id: f.id, name: f.name, nameAr: f.nameAr, nameFr: f.nameFr, order_level: f.order_level,
             description: f.description, descriptionAr: f.descriptionAr, descriptionFr: f.descriptionFr,
             image: f.image, price: f.price, status: f.status,
             addonsId: cleanAddonsArray,
@@ -341,7 +341,7 @@ export const getFoodById = async (req: Request, res: Response) => {
     if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
 
     const foodItem = await db.select({
-        id: food.id, name: food.name, nameAr: food.nameAr, nameFr: food.nameFr,
+        id: food.id, name: food.name, nameAr: food.nameAr, nameFr: food.nameFr, order_level:food.order_level,
         description: food.description, descriptionAr: food.descriptionAr, descriptionFr: food.descriptionFr,
         image: food.image, restaurantid: food.restaurantid, categoryid: food.categoryid, subcategoryid: food.subcategoryid,
         foodtype: food.foodtype, Nutrition: food.Nutrition, allergen_ingredients: food.allergen_ingredients,
