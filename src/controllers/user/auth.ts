@@ -88,7 +88,10 @@ const verifyLink = `${baseUrl}/api/user/auth/verify-email?token=${token}`;
             purpose: "verify_email",
             expiresAt
         });
+    });
 
+    // ✅ sendEmail خارج الـ transaction
+    try {
         await sendEmail({
             to: email,
             subject: "Verify Your Keeto Account",
@@ -151,7 +154,9 @@ const verifyLink = `${baseUrl}/api/user/auth/verify-email?token=${token}`;
 </html>
             `
         });
-    });
+    } catch (emailErr) {
+        console.error("⚠️ Email send failed but user was saved:", emailErr);
+    }
 
     return SuccessResponse(res, {
         message: "Account created successfully. Please check your email."
