@@ -208,6 +208,7 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
             cancelReasonId: orders.cancelReasonId,
             cancelReason: orders.cancelReason,
             cancelReasonType: orders.cancelReasonType,
+            cancelledAt: orders.cancelledAt,
             note: orders.note,
             deliveryMan: {
                 id: deliveryMen.id,
@@ -494,6 +495,7 @@ export const getOrdersByStatus = async (
             cancelReasonId: orders.cancelReasonId,
             cancelReason: orders.cancelReason,
             cancelReasonType: orders.cancelReasonType,
+            cancelledAt: orders.cancelledAt,
             note: orders.note,
             deliveryMan: {
                 id: deliveryMen.id,
@@ -1137,6 +1139,7 @@ export const getRestaurantOrderById = async (req: Request, res: Response) => {
             cancelReasonId: orderDetail.order.cancelReasonId,
             cancelReason: orderDetail.order.cancelReason,
             cancelReasonType: orderDetail.order.cancelReasonType,
+            cancelledAt: orderDetail.order.cancelledAt,
             note: orderDetail.order.note,
             subtotal: orderDetail.order.subtotal,
             deliveryFee: orderDetail.order.deliveryFee,

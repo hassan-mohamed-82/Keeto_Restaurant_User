@@ -1119,6 +1119,8 @@ export const cancelOrder = async (req: Request | any, res: Response) => {
         await tx.update(orders)
             .set({
                 status: "cancelled",
+                cancelledAt: new Date(),
+                statusChangedAt: new Date(),
                 cancelReasonId: finalReasonId,
                 cancelReason: finalReasonText,
                 cancelReasonType: "user",

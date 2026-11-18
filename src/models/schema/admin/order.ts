@@ -206,6 +206,7 @@ export const orders = mysqlTable("orders", {
     shippingAssignedAt: timestamp("shipping_assigned_at"),
     pickedUpAt: timestamp("picked_up_at"),
     deliveredAt: timestamp("delivered_at"),
+    cancelledAt: timestamp("cancelled_at"),
 
     // وقت آخر تغيير لحالة الأوردر (status فقط)، بمعزل عن أي تعديلات أخرى.
     // يستخدمه الـ Cron لمعرفة كم مضى على دخول الأوردر حالته الحالية.

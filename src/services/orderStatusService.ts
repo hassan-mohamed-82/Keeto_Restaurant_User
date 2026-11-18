@@ -278,6 +278,7 @@ export async function changeOrderStatus(params: ChangeOrderStatusParams): Promis
             cancelReason: isCancel ? cancel?.reasonText ?? null : null,
             cancelReasonType: isCancel ? "restaurant" : null,
         };
+        if (isCancel) payload.cancelledAt = now;
         if (deliveryManId) payload.deliveryManId = deliveryManId;
         if (status === "delivered") {
             payload.deliveredAt = now;
