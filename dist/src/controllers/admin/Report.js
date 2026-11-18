@@ -583,6 +583,8 @@ const getDashboardReports = async (req, res) => {
     let userCancellations = 0;
     let restaurantCancellations = 0;
     let otherCancellations = 0;
+    let totalCanceledAmount = 0;
+    let totalAmountIncludingCanceled = 0;
     const orderSourcesObj = {};
     const discountEffectivenessMap = {};
     const branchesNetSales = {};
@@ -597,6 +599,7 @@ const getDashboardReports = async (req, res) => {
         const amount = parseFloat(o.totalAmount || "0");
         const sub = parseFloat(o.subtotal || "0");
         const disc = parseFloat(o.discountAmount || "0");
+        totalAmountIncludingCanceled += amount;
         if (o.status !== "cancelled" && o.status !== "refund") {
             totalRevenue += amount;
             numberOfOrders++;
@@ -625,6 +628,7 @@ const getDashboardReports = async (req, res) => {
         }
         // الإلغاءات
         if (o.status === "cancelled") {
+            totalCanceledAmount += amount;
             if (o.cancelReasonType === "user")
                 userCancellations++;
             else if (o.cancelReasonType === "restaurant")
@@ -749,6 +753,7 @@ const getDashboardReports = async (req, res) => {
             .where((0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId));
         totalUsers = Number(ordersUsersRow?.total || 0);
     }
+    const totalCanceledOrders = userCancellations + restaurantCancellations + otherCancellations;
     // ==========================================
     // إرسال الـ Response
     // ==========================================
@@ -758,7 +763,10 @@ const getDashboardReports = async (req, res) => {
         data: {
             cards: {
                 totalRevenue: totalRevenue.toFixed(2),
+                totalAmountIncludingCanceled: totalAmountIncludingCanceled.toFixed(2),
                 numberOfOrders,
+                totalCanceledOrders,
+                totalCanceledAmount: totalCanceledAmount.toFixed(2),
                 averageOrderValue: numberOfOrders > 0 ? (totalRevenue / numberOfOrders).toFixed(2) : "0.00",
                 totalUsers,
             },

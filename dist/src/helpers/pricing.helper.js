@@ -125,6 +125,7 @@ const calculateCalculatedPrice = async (foodId, variantOptionIds, branchId, serv
             ? connection_1.db.select({
                 id: schema_1.variationOptions.id,
                 additionalPrice: schema_1.variationOptions.additionalPrice,
+                priceMode: schema_1.variationOptions.priceMode,
                 status: schema_1.variationOptions.status,
             })
                 .from(schema_1.variationOptions)
@@ -159,7 +160,7 @@ const calculateCalculatedPrice = async (foodId, variantOptionIds, branchId, serv
     for (const optionId of variantOptionIds) {
         const baseOption = baseVarMap.get(optionId);
         if (!baseOption) {
-            resolvedVariants.push({ variantOptionId: optionId, price: 0, isAvailable: false });
+            resolvedVariants.push({ variantOptionId: optionId, price: 0, priceMode: "fixed", isAvailable: false });
             continue;
         }
         const winning = (0, pricing_overrides_1.pickBestOverride)(overridesByVariant.get(optionId) ?? []);
@@ -169,6 +170,7 @@ const calculateCalculatedPrice = async (foodId, variantOptionIds, branchId, serv
         resolvedVariants.push({
             variantOptionId: optionId,
             price: varPrice,
+            priceMode: (baseOption.priceMode ?? "fixed"),
             isAvailable: varAvailable,
         });
     }

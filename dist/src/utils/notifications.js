@@ -428,13 +428,14 @@ const schema_1 = require("../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
 const uuid_1 = require("uuid");
 const sendPushNotification = async (params) => {
-    const { recipientType, recipientId, branchId, title, body, data } = params;
+    const { recipientType, recipientId, branchId, restaurantId, title, body, data } = params;
+    const resolvedRestaurantId = restaurantId || data?.restaurantId || (recipientType === "restaurant" ? recipientId : null);
     let payloadData = {
         ...(data || {}),
         recipientType,
         recipientId,
         branchId: branchId || data?.branchId || null,
-        restaurantId: data?.restaurantId || (recipientType === "restaurant" ? recipientId : null),
+        restaurantId: resolvedRestaurantId,
         sound: "notification_sound.wav"
     };
     if (recipientType === "restaurant") {

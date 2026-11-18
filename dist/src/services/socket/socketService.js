@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.notifyOrderTracking = exports.notifyAdmins = exports.notifyRestaurant = exports.notifyShippingCompany = exports.notifyDeliveryMan = exports.getIO = exports.initSocket = exports.invalidateCourierCache = void 0;
+exports.notifyUser = exports.notifyOrderTracking = exports.notifyAdmins = exports.notifyRestaurant = exports.notifyShippingCompany = exports.notifyDeliveryMan = exports.getIO = exports.initSocket = exports.invalidateCourierCache = void 0;
 const socket_io_1 = require("socket.io");
 const auth_1 = require("../../utils/auth");
 const connection_1 = require("../../models/connection");
@@ -365,3 +365,9 @@ const notifyOrderTracking = (orderId, event, data) => {
     }
 };
 exports.notifyOrderTracking = notifyOrderTracking;
+const notifyUser = (userId, event, data) => {
+    if (io) {
+        io.to(`user:${userId}`).emit(event, data);
+    }
+};
+exports.notifyUser = notifyUser;

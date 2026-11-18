@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateSettingsSchema = exports.updateBusyStatusSchema = void 0;
+exports.updateSettingsSchema = exports.updateOrderNowSettingSchema = exports.orderNowSettingSchema = exports.orderNowSettingFieldsSchema = exports.updateBusyStatusSchema = void 0;
 const zod_1 = require("zod");
 exports.updateBusyStatusSchema = zod_1.z.object({
     isBusy: zod_1.z.boolean().optional(),
@@ -9,6 +9,24 @@ exports.updateBusyStatusSchema = zod_1.z.object({
 }).refine((data) => data.isBusy !== undefined || data.busy !== undefined || data.status !== undefined, {
     message: "You must provide either 'isBusy' (boolean), 'busy' (boolean), or 'status' ('busy' | 'available')",
 });
+exports.orderNowSettingFieldsSchema = zod_1.z.object({
+    hotline: zod_1.z.boolean().optional(),
+    branches: zod_1.z.boolean().optional(),
+    name: zod_1.z.boolean().optional(),
+    orderNow: zod_1.z.boolean().optional(),
+    eMenu: zod_1.z.boolean().optional(),
+    socialMedia: zod_1.z.boolean().optional(),
+    menuPdf: zod_1.z.boolean().optional(),
+    iosIcon: zod_1.z.boolean().optional(),
+    androidIcon: zod_1.z.boolean().optional(),
+});
+exports.orderNowSettingSchema = exports.orderNowSettingFieldsSchema.optional();
+exports.updateOrderNowSettingSchema = zod_1.z.union([
+    zod_1.z.object({
+        orderNowSetting: exports.orderNowSettingFieldsSchema.optional(),
+    }).passthrough(),
+    exports.orderNowSettingFieldsSchema.passthrough(),
+]);
 // ✅ Zod schema for updating general restaurant settings
 // Enforces: cashEnabled and enableOnlinePayment cannot both be false at the same time
 exports.updateSettingsSchema = zod_1.z.object({
@@ -16,6 +34,7 @@ exports.updateSettingsSchema = zod_1.z.object({
         cashEnabled: zod_1.z.boolean().optional(),
         enableOnlinePayment: zod_1.z.boolean().optional(),
         isTemporarilyClosed: zod_1.z.boolean().optional(),
+        orderNowSetting: exports.orderNowSettingSchema,
     }).passthrough().optional(),
     schedules: zod_1.z.array(zod_1.z.any()).optional(),
 }).superRefine((data, ctx) => {

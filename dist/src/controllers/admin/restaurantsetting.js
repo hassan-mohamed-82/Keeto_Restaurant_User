@@ -1,11 +1,27 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getBusyStatus = exports.updateBusyStatus = exports.getSettingsByRestaurantId = exports.updateSettings = void 0;
+exports.updateOrderNowSetting = exports.getOrderNowSetting = exports.getBusyStatus = exports.updateBusyStatus = exports.getSettingsByRestaurantId = exports.updateSettings = void 0;
 const connection_1 = require("../../models/connection"); // غير المسار حسب مكان ملف اتصال قاعدة البيانات عندك
 const schema_1 = require("../../models/schema");
 const admin_1 = require("../../models/schema/admin/admin");
 const sendEmails_1 = require("../../utils/sendEmails");
 const drizzle_orm_1 = require("drizzle-orm");
+/** Safely parse a JSON field that may come back from MySQL as a string or already as an object. */
+function parseJsonField(value, fallback) {
+    if (!value)
+        return fallback;
+    if (typeof value === 'object')
+        return value;
+    if (typeof value === 'string') {
+        try {
+            return JSON.parse(value);
+        }
+        catch {
+            return fallback;
+        }
+    }
+    return fallback;
+}
 const updateSettings = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     const { settings, schedules } = req.body;
@@ -128,6 +144,25 @@ const updateSettings = async (req, res) => {
                     settingsData.repeatNotificationStatuses = settings.repeatNotificationStatuses;
                 if (settings.resetDailyOrderNumberTime !== undefined)
                     settingsData.resetDailyOrderNumberTime = settings.resetDailyOrderNumberTime;
+                // ✅ orderNowSetting — toggle order-now elements on/off (hotline, branches, name, orderNow, eMenu, socialMedia, menuPdf, iosIcon, androidIcon)
+                const incomingOrderNow = settings.orderNowSetting ?? settings.orderNowSettings;
+                if (incomingOrderNow !== undefined && typeof incomingOrderNow === 'object' && incomingOrderNow !== null) {
+                    const currentOrderNow = {
+                        ...schema_1.defaultOrderNowSetting,
+                        ...parseJsonField(existingSettings[0]?.orderNowSetting, {}),
+                    };
+                    settingsData.orderNowSetting = {
+                        hotline: incomingOrderNow.hotline !== undefined ? Boolean(incomingOrderNow.hotline) : (currentOrderNow.hotline ?? true),
+                        branches: incomingOrderNow.branches !== undefined ? Boolean(incomingOrderNow.branches) : (currentOrderNow.branches ?? true),
+                        name: incomingOrderNow.name !== undefined ? Boolean(incomingOrderNow.name) : (currentOrderNow.name ?? true),
+                        orderNow: incomingOrderNow.orderNow !== undefined ? Boolean(incomingOrderNow.orderNow) : (currentOrderNow.orderNow ?? true),
+                        eMenu: incomingOrderNow.eMenu !== undefined ? Boolean(incomingOrderNow.eMenu) : (currentOrderNow.eMenu ?? true),
+                        socialMedia: incomingOrderNow.socialMedia !== undefined ? Boolean(incomingOrderNow.socialMedia) : (currentOrderNow.socialMedia ?? true),
+                        menuPdf: incomingOrderNow.menuPdf !== undefined ? Boolean(incomingOrderNow.menuPdf) : (currentOrderNow.menuPdf ?? true),
+                        iosIcon: incomingOrderNow.iosIcon !== undefined ? Boolean(incomingOrderNow.iosIcon) : (currentOrderNow.iosIcon ?? true),
+                        androidIcon: incomingOrderNow.androidIcon !== undefined ? Boolean(incomingOrderNow.androidIcon) : (currentOrderNow.androidIcon ?? true),
+                    };
+                }
                 if (existingSettings.length > 0) {
                     // ✅ Update existing settings
                     await tx.update(schema_1.restaurantSettings)
@@ -237,15 +272,25 @@ const getSettingsByRestaurantId = async (req, res) => {
     let settingsResult = settings[0];
     // لو مفيش إعدادات خالص للمطعم ده، هنكريتله إعدادات افتراضية
     if (!settingsResult) {
-        await connection_1.db.insert(schema_1.restaurantSettings).values({ restaurantId });
+        await connection_1.db.insert(schema_1.restaurantSettings).values({ restaurantId, orderNowSetting: schema_1.defaultOrderNowSetting });
         const newSettings = await connection_1.db.select().from(schema_1.restaurantSettings).where((0, drizzle_orm_1.eq)(schema_1.restaurantSettings.restaurantId, restaurantId)).limit(1);
         settingsResult = newSettings[0];
     }
-    const isBusy = Boolean(settingsResult?.isBusy);
+    // ✅ ضمان إرجاع كامل كائن orderNowSetting بالقيم الافتراضية (true) حتى لو كان null أو string في قاعدة البيانات
+    const rawOrderNow = parseJsonField(settingsResult?.orderNowSetting, {});
+    const resolvedOrderNowSetting = {
+        ...schema_1.defaultOrderNowSetting,
+        ...rawOrderNow,
+    };
+    const finalSettings = {
+        ...settingsResult,
+        orderNowSetting: resolvedOrderNowSetting,
+    };
+    const isBusy = Boolean(finalSettings?.isBusy);
     res.status(200).json({
         success: true,
         data: {
-            settings: settingsResult,
+            settings: finalSettings,
             schedules: schedules || [],
             busyStatus: isBusy ? "busy" : "available",
         }
@@ -345,3 +390,83 @@ const getBusyStatus = async (req, res) => {
     });
 };
 exports.getBusyStatus = getBusyStatus;
+const getOrderNowSetting = async (req, res) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId) {
+        res.status(400).json({ success: false, message: "Restaurant id is required" });
+        return;
+    }
+    const [settings] = await connection_1.db
+        .select({ orderNowSetting: schema_1.restaurantSettings.orderNowSetting })
+        .from(schema_1.restaurantSettings)
+        .where((0, drizzle_orm_1.eq)(schema_1.restaurantSettings.restaurantId, restaurantId))
+        .limit(1);
+    const rawOrderNowGet = parseJsonField(settings?.orderNowSetting, {});
+    const resolvedOrderNowSetting = {
+        ...schema_1.defaultOrderNowSetting,
+        ...rawOrderNowGet,
+    };
+    res.status(200).json({
+        success: true,
+        data: {
+            restaurantId,
+            orderNowSetting: resolvedOrderNowSetting,
+        },
+    });
+};
+exports.getOrderNowSetting = getOrderNowSetting;
+const updateOrderNowSetting = async (req, res) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId) {
+        res.status(400).json({ success: false, message: "Restaurant id is required" });
+        return;
+    }
+    const incomingOrderNow = req.body?.orderNowSetting ?? req.body?.orderNowSettings ?? req.body;
+    if (!incomingOrderNow || typeof incomingOrderNow !== "object") {
+        res.status(400).json({ success: false, message: "orderNowSetting data is required" });
+        return;
+    }
+    const [existingSettings] = await connection_1.db
+        .select({ orderNowSetting: schema_1.restaurantSettings.orderNowSetting })
+        .from(schema_1.restaurantSettings)
+        .where((0, drizzle_orm_1.eq)(schema_1.restaurantSettings.restaurantId, restaurantId))
+        .limit(1);
+    const currentOrderNow = {
+        ...schema_1.defaultOrderNowSetting,
+        ...parseJsonField(existingSettings?.orderNowSetting, {}),
+    };
+    const mergedSetting = {
+        hotline: incomingOrderNow.hotline !== undefined ? Boolean(incomingOrderNow.hotline) : (currentOrderNow.hotline ?? true),
+        branches: incomingOrderNow.branches !== undefined ? Boolean(incomingOrderNow.branches) : (currentOrderNow.branches ?? true),
+        name: incomingOrderNow.name !== undefined ? Boolean(incomingOrderNow.name) : (currentOrderNow.name ?? true),
+        orderNow: incomingOrderNow.orderNow !== undefined ? Boolean(incomingOrderNow.orderNow) : (currentOrderNow.orderNow ?? true),
+        eMenu: incomingOrderNow.eMenu !== undefined ? Boolean(incomingOrderNow.eMenu) : (currentOrderNow.eMenu ?? true),
+        socialMedia: incomingOrderNow.socialMedia !== undefined ? Boolean(incomingOrderNow.socialMedia) : (currentOrderNow.socialMedia ?? true),
+        menuPdf: incomingOrderNow.menuPdf !== undefined ? Boolean(incomingOrderNow.menuPdf) : (currentOrderNow.menuPdf ?? true),
+        iosIcon: incomingOrderNow.iosIcon !== undefined ? Boolean(incomingOrderNow.iosIcon) : (currentOrderNow.iosIcon ?? true),
+        androidIcon: incomingOrderNow.androidIcon !== undefined ? Boolean(incomingOrderNow.androidIcon) : (currentOrderNow.androidIcon ?? true),
+    };
+    if (existingSettings) {
+        await connection_1.db
+            .update(schema_1.restaurantSettings)
+            .set({ orderNowSetting: mergedSetting })
+            .where((0, drizzle_orm_1.eq)(schema_1.restaurantSettings.restaurantId, restaurantId));
+    }
+    else {
+        await connection_1.db
+            .insert(schema_1.restaurantSettings)
+            .values({
+            restaurantId,
+            orderNowSetting: mergedSetting,
+        });
+    }
+    res.status(200).json({
+        success: true,
+        message: "Order Now settings updated successfully",
+        data: {
+            restaurantId,
+            orderNowSetting: mergedSetting,
+        },
+    });
+};
+exports.updateOrderNowSetting = updateOrderNowSetting;

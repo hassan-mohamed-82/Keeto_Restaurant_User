@@ -14,6 +14,8 @@ const uuid_1 = require("uuid");
 const redis_1 = __importDefault(require("../../config/redis"));
 const handleImages_1 = require("../../utils/handleImages");
 const foodConditions_1 = require("../../helpers/foodConditions");
+const menu_rules_1 = require("../../helpers/menu.rules");
+const menu_insert_1 = require("../../helpers/menu.insert");
 const createSubcategory = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) {
@@ -21,8 +23,8 @@ const createSubcategory = async (req, res) => {
     }
     // استقبلنا order_level و order_Level لدعم الحالتين
     const { name, categoryId, priority, status, nameAr, nameFr, image, addonsIds, order_level, order_Level } = req.body;
-    if (!name || !categoryId) {
-        throw new BadRequest_1.BadRequest("Subcategory name and category ID are required");
+    if ((0, menu_rules_1.getMissingSubcategoryFields)({ name, categoryId }).length > 0) {
+        throw new BadRequest_1.BadRequest(menu_rules_1.MENU_MESSAGES.subcategoryRequiredFields);
     }
     // Check if category exists
     const existingCategory = await connection_1.db
@@ -31,7 +33,7 @@ const createSubcategory = async (req, res) => {
         .where((0, drizzle_orm_1.eq)(schema_1.categories.id, categoryId))
         .limit(1);
     if (!existingCategory[0]) {
-        throw new BadRequest_1.BadRequest("Category not found");
+        throw new BadRequest_1.BadRequest(menu_rules_1.MENU_MESSAGES.categoryNotFound);
     }
     // Validate addons
     if (addonsIds && Array.isArray(addonsIds) && addonsIds.length > 0) {
@@ -40,23 +42,21 @@ const createSubcategory = async (req, res) => {
             .from(schema_1.addons)
             .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.addons.restaurantid, restaurantId), (0, drizzle_orm_1.inArray)(schema_1.addons.id, addonsIds)));
         if (existingAddons.length !== addonsIds.length) {
-            throw new BadRequest_1.BadRequest("One or more Addon IDs are invalid or do not belong to this restaurant");
+            throw new BadRequest_1.BadRequest(menu_rules_1.MENU_MESSAGES.subcategoryAddonsInvalid);
         }
     }
-    const id = (0, uuid_1.v4)();
     const imageUrl = await (0, handleImages_1.handleImageUpdate)(req, undefined, image, "subcategories");
-    await connection_1.db.insert(schema_1.subcategories).values({
-        id,
+    // Shared insert (same helper the bulk import uses)
+    const id = await (0, menu_insert_1.insertSubcategory)(connection_1.db, restaurantId, {
         name,
         nameAr,
         nameFr,
         image: imageUrl,
         categoryId,
-        restaurantId: restaurantId,
-        addonsIds: addonsIds || [],
-        priority: priority || "low",
-        order_Level: order_Level !== undefined ? order_Level : (order_level !== undefined ? order_level : 0),
-        status: status || "active",
+        addonsIds,
+        priority,
+        status,
+        orderLevel: order_Level !== undefined ? order_Level : order_level,
     });
     return (0, response_1.SuccessResponse)(res, { message: "Create subcategory success", data: { id } }, 201);
 };

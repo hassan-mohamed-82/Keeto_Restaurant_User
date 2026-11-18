@@ -8,6 +8,7 @@ const response_1 = require("../../utils/response");
 const BadRequest_1 = require("../../Errors/BadRequest");
 const Errors_1 = require("../../Errors");
 const uuid_1 = require("uuid");
+const localization_helper_1 = require("../../helpers/localization.helper");
 const getAdminRestaurantId = (req) => {
     if (!req.user)
         throw new Errors_1.UnauthorizedError("Not authenticated");
@@ -26,9 +27,31 @@ const getFreeDeliveryOffer = async (req, res) => {
         .from(schema_1.freeDeliveryOffers)
         .where((0, drizzle_orm_1.eq)(schema_1.freeDeliveryOffers.restaurantId, restaurantId))
         .limit(1);
+    if (!offer) {
+        return (0, response_1.SuccessResponse)(res, {
+            message: "Free delivery offer fetched successfully",
+            data: null,
+        });
+    }
+    const branchIds = (0, localization_helper_1.parseJsonArray)(offer.branchIds);
+    let branchesData = [];
+    if (branchIds.length > 0) {
+        branchesData = await connection_1.db
+            .select({
+            id: schema_1.branches.id,
+            name: schema_1.branches.name,
+            nameAr: schema_1.branches.nameAr,
+            nameFr: schema_1.branches.nameFr,
+        })
+            .from(schema_1.branches)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branches.restaurantId, restaurantId), (0, drizzle_orm_1.inArray)(schema_1.branches.id, branchIds)));
+    }
     return (0, response_1.SuccessResponse)(res, {
         message: "Free delivery offer fetched successfully",
-        data: offer || null,
+        data: {
+            ...offer,
+            branches: branchesData,
+        },
     });
 };
 exports.getFreeDeliveryOffer = getFreeDeliveryOffer;
@@ -37,7 +60,7 @@ exports.getFreeDeliveryOffer = getFreeDeliveryOffer;
 // ==========================================
 const upsertFreeDeliveryOffer = async (req, res) => {
     const restaurantId = getAdminRestaurantId(req);
-    const { status, minOrderAmount, maxOrdersPerUser, startDate, endDate } = req.body;
+    const { status, minOrderAmount, maxOrdersPerUser, startDate, endDate, branchIds, branch_ids } = req.body;
     if (status && !["active", "inactive"].includes(status)) {
         throw new BadRequest_1.BadRequest("Status must be 'active' or 'inactive'");
     }
@@ -69,6 +92,21 @@ const upsertFreeDeliveryOffer = async (req, res) => {
     if (parsedStartDate && parsedEndDate && parsedEndDate <= parsedStartDate) {
         throw new BadRequest_1.BadRequest("endDate must be after startDate");
     }
+    const rawBranchIds = branchIds !== undefined ? branchIds : branch_ids;
+    let parsedBranchIds = undefined;
+    if (rawBranchIds !== undefined) {
+        parsedBranchIds = (0, localization_helper_1.parseJsonArray)(rawBranchIds);
+        // If branches were selected, verify they belong to this restaurant
+        if (parsedBranchIds.length > 0) {
+            const foundBranches = await connection_1.db
+                .select({ id: schema_1.branches.id })
+                .from(schema_1.branches)
+                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branches.restaurantId, restaurantId), (0, drizzle_orm_1.inArray)(schema_1.branches.id, parsedBranchIds)));
+            if (foundBranches.length !== parsedBranchIds.length) {
+                throw new BadRequest_1.BadRequest("One or more selected branches do not belong to this restaurant");
+            }
+        }
+    }
     // Check existing offer for this restaurant
     const [existing] = await connection_1.db
         .select()
@@ -84,6 +122,7 @@ const upsertFreeDeliveryOffer = async (req, res) => {
             maxOrdersPerUser: maxOrdersPerUser !== undefined ? parsedMaxOrdersPerUser : existing.maxOrdersPerUser,
             startDate: startDate !== undefined ? parsedStartDate : existing.startDate,
             endDate: endDate !== undefined ? parsedEndDate : existing.endDate,
+            branchIds: parsedBranchIds !== undefined ? parsedBranchIds : (existing.branchIds ?? []),
             updatedAt: new Date(),
         })
             .where((0, drizzle_orm_1.eq)(schema_1.freeDeliveryOffers.id, existing.id));
@@ -97,6 +136,7 @@ const upsertFreeDeliveryOffer = async (req, res) => {
             maxOrdersPerUser: parsedMaxOrdersPerUser,
             startDate: parsedStartDate,
             endDate: parsedEndDate,
+            branchIds: parsedBranchIds ?? [],
         });
     }
     const [updated] = await connection_1.db
@@ -104,9 +144,27 @@ const upsertFreeDeliveryOffer = async (req, res) => {
         .from(schema_1.freeDeliveryOffers)
         .where((0, drizzle_orm_1.eq)(schema_1.freeDeliveryOffers.restaurantId, restaurantId))
         .limit(1);
+    const updatedBranchIds = (0, localization_helper_1.parseJsonArray)(updated?.branchIds);
+    let branchesData = [];
+    if (updatedBranchIds.length > 0) {
+        branchesData = await connection_1.db
+            .select({
+            id: schema_1.branches.id,
+            name: schema_1.branches.name,
+            nameAr: schema_1.branches.nameAr,
+            nameFr: schema_1.branches.nameFr,
+        })
+            .from(schema_1.branches)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branches.restaurantId, restaurantId), (0, drizzle_orm_1.inArray)(schema_1.branches.id, updatedBranchIds)));
+    }
     return (0, response_1.SuccessResponse)(res, {
         message: "Free delivery offer updated successfully",
-        data: updated,
+        data: updated
+            ? {
+                ...updated,
+                branches: branchesData,
+            }
+            : null,
     });
 };
 exports.upsertFreeDeliveryOffer = upsertFreeDeliveryOffer;

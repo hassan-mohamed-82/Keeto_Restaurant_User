@@ -37,7 +37,8 @@ const getOrderByRedeemCode = async (req, res) => {
         userPhone: schema_1.users.phone,
         foodId: schema_1.food.id,
         foodName: schema_1.food.name,
-        foodImage: schema_1.food.image
+        foodImage: schema_1.food.image,
+        sold_by: schema_1.food.sold_by,
     })
         .from(schema_1.redeemRequests)
         .innerJoin(schema_1.users, (0, drizzle_orm_1.eq)(schema_1.redeemRequests.userId, schema_1.users.id))
@@ -46,6 +47,9 @@ const getOrderByRedeemCode = async (req, res) => {
         .limit(1);
     if (!request) {
         throw new NotFound_1.NotFound("Redeem request not found for this restaurant");
+    }
+    if (request.sold_by === "weight") {
+        throw new BadRequest_1.BadRequest("Weight-based foods cannot be redeemed via points orders.");
     }
     const isExpired = new Date() > new Date(request.expiresAt);
     // فحص توفر الوجبة ومكوناتها وخياراتها بالفرع والمطعم
@@ -100,6 +104,7 @@ const approveRedeemCode = async (req, res) => {
         status: schema_1.redeemRequests.status,
         expiresAt: schema_1.redeemRequests.expiresAt,
         foodName: schema_1.food.name,
+        sold_by: schema_1.food.sold_by,
     })
         .from(schema_1.redeemRequests)
         .innerJoin(schema_1.food, (0, drizzle_orm_1.eq)(schema_1.redeemRequests.foodId, schema_1.food.id))
@@ -107,6 +112,9 @@ const approveRedeemCode = async (req, res) => {
         .limit(1);
     if (!redeemReq) {
         throw new NotFound_1.NotFound("Redeem request not found");
+    }
+    if (redeemReq.sold_by === "weight") {
+        throw new BadRequest_1.BadRequest("Weight-based foods cannot be redeemed via points orders.");
     }
     if (redeemReq.status !== "pending") {
         throw new BadRequest_1.BadRequest(`Redeem request has already been processed with status: ${redeemReq.status}`);

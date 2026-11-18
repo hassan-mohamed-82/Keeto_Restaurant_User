@@ -23,6 +23,7 @@ exports.discounts = (0, mysql_core_1.mysqlTable)("discounts", {
     endDate: (0, mysql_core_1.timestamp)("end_date"),
     isActive: (0, mysql_core_1.boolean)("is_active").default(true),
     isGlobal: (0, mysql_core_1.boolean)("is_global").default(false),
+    channel: (0, mysql_core_1.mysqlEnum)("channel", ["all", "online", "pos"]).notNull().default("all"),
     logo: (0, mysql_core_1.varchar)("logo", { length: 500 }),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow().onUpdateNow(),
@@ -40,6 +41,7 @@ exports.discountGroups = (0, mysql_core_1.mysqlTable)("discount_groups", {
         .default("percentage"),
     discountValue: (0, mysql_core_1.decimal)("discount_value", { precision: 10, scale: 2 }).notNull(),
     maxDiscount: (0, mysql_core_1.decimal)("max_discount", { precision: 10, scale: 2 }),
+    channel: (0, mysql_core_1.mysqlEnum)("channel", ["all", "online", "pos"]).notNull().default("all"),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow().onUpdateNow(),
 }, (table) => ({

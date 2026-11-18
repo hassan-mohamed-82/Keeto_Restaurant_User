@@ -511,6 +511,30 @@ const createOffer = async (req, res) => {
     const finalModule = filteredModule.length > 0 ? filteredModule : ["pos"];
     const consolidatedFoods = consolidateFoodsAndVariations(foods, foodIds !== undefined ? foodIds : food_ids);
     const distinctFoodIds = consolidatedFoods.map((f) => f.foodId);
+    if (distinctFoodIds.length === 0) {
+        throw new Errors_1.BadRequest("At least one food item is required for the offer");
+    }
+    if (new Date(endDate) < new Date(startDate)) {
+        throw new Errors_1.BadRequest("endDate must be greater than or equal to startDate");
+    }
+    // Verify all foods exist and belong to this restaurant
+    const existingFoods = await connection_1.db
+        .select({ id: schema_1.food.id })
+        .from(schema_1.food)
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId), (0, drizzle_orm_1.inArray)(schema_1.food.id, distinctFoodIds)));
+    if (existingFoods.length !== distinctFoodIds.length) {
+        throw new Errors_1.BadRequest("One or more foods not found or do not belong to this restaurant");
+    }
+    // Verify all branches exist and belong to this restaurant (if specified)
+    if (finalBranchIds.length > 0) {
+        const existingBranches = await connection_1.db
+            .select({ id: schema_1.branches.id })
+            .from(schema_1.branches)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branches.restaurantId, restaurantId), (0, drizzle_orm_1.inArray)(schema_1.branches.id, finalBranchIds)));
+        if (existingBranches.length !== finalBranchIds.length) {
+            throw new Errors_1.BadRequest("One or more branches not found or do not belong to this restaurant");
+        }
+    }
     let savedImageUrl = null;
     if (image) {
         if (typeof image === "string" && image.startsWith("http")) {
@@ -693,6 +717,12 @@ const updateOffer = async (req, res) => {
         throw new Errors_1.NotFound("Bundle not found");
     }
     const { name, nameAr, nameFr, image, startDate, endDate, price, foods, foodIds, food_ids, branchIds, branch_ids, module, modules, status, } = req.body;
+    // Validate dates
+    const effectiveStartDate = startDate !== undefined ? new Date(startDate) : new Date(existingOffer.startDate);
+    const effectiveEndDate = endDate !== undefined ? new Date(endDate) : new Date(existingOffer.endDate);
+    if (effectiveEndDate < effectiveStartDate) {
+        throw new Errors_1.BadRequest("endDate must be greater than or equal to startDate");
+    }
     const updateData = {};
     if (name !== undefined)
         updateData.name = name;
@@ -719,6 +749,17 @@ const updateOffer = async (req, res) => {
     if (rawFoods !== undefined) {
         const consolidatedFoods = consolidateFoodsAndVariations(Array.isArray(foods) ? foods : (Array.isArray(rawFoods) && typeof rawFoods[0] === "object" ? rawFoods : []), rawFoods);
         const distinctFoodIds = consolidatedFoods.map((f) => f.foodId);
+        if (distinctFoodIds.length === 0) {
+            throw new Errors_1.BadRequest("At least one food item is required when updating foods");
+        }
+        // Verify all foods exist and belong to this restaurant
+        const existingFoods = await connection_1.db
+            .select({ id: schema_1.food.id })
+            .from(schema_1.food)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId), (0, drizzle_orm_1.inArray)(schema_1.food.id, distinctFoodIds)));
+        if (existingFoods.length !== distinctFoodIds.length) {
+            throw new Errors_1.BadRequest("One or more foods not found or do not belong to this restaurant");
+        }
         updateData.foodIds = distinctFoodIds;
         // Delete existing offer_foods and insert updated rows
         await connection_1.db.delete(schema_1.offerFoods).where((0, drizzle_orm_1.eq)(schema_1.offerFoods.offerId, id));
@@ -742,7 +783,17 @@ const updateOffer = async (req, res) => {
     }
     const rawBranchIds = branchIds !== undefined ? branchIds : branch_ids;
     if (rawBranchIds !== undefined) {
-        updateData.branchIds = parseJsonArray(rawBranchIds);
+        const parsedBranchIds = parseJsonArray(rawBranchIds);
+        if (parsedBranchIds.length > 0) {
+            const existingBranches = await connection_1.db
+                .select({ id: schema_1.branches.id })
+                .from(schema_1.branches)
+                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branches.restaurantId, restaurantId), (0, drizzle_orm_1.inArray)(schema_1.branches.id, parsedBranchIds)));
+            if (existingBranches.length !== parsedBranchIds.length) {
+                throw new Errors_1.BadRequest("One or more branches not found or do not belong to this restaurant");
+            }
+        }
+        updateData.branchIds = parsedBranchIds;
     }
     if (status !== undefined)
         updateData.status = status;

@@ -97,3 +97,4 @@ __exportStar(require("./schema/admin/platformPaymentGateways"), exports);
 __exportStar(require("./schema/admin/videos"), exports);
 __exportStar(require("./schema/admin/pushedNotification"), exports);
 __exportStar(require("./schema/admin/restaurantDomains"), exports);
+__exportStar(require("./schema/admin/weightRequests"), exports);

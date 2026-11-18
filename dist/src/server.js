@@ -32,6 +32,7 @@ app.set("trust proxy", true);
 (0, orderDelayAlertCron_1.initOrderDelayAlertCron)();
 (0, initNotificationCleanupCron_1.initNotificationCleanupCron)();
 (0, autoDeliverCron_1.initAutoDeliverCron)();
+// initWeightRequestCron();
 // initAbandonedCartCron();
 const httpServer = http_1.default.createServer(app);
 const io = (0, socketService_1.initSocket)(httpServer);

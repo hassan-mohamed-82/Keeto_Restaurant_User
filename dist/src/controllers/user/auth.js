@@ -71,6 +71,9 @@ const signup = async (req, res) => {
             purpose: "verify_email",
             expiresAt
         });
+    });
+    // ✅ sendEmail خارج الـ transaction
+    try {
         await (0, sendEmails_1.sendEmail)({
             to: email,
             subject: "Verify Your Keeto Account",
@@ -133,7 +136,10 @@ const signup = async (req, res) => {
 </html>
             `
         });
-    });
+    }
+    catch (emailErr) {
+        console.error("⚠️ Email send failed but user was saved:", emailErr);
+    }
     return (0, response_1.SuccessResponse)(res, {
         message: "Account created successfully. Please check your email."
     }, 201);

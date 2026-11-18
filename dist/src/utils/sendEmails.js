@@ -14,7 +14,11 @@ const getResendClient = () => {
         return null;
     return new resend_1.Resend(process.env.RESEND_API_KEY);
 };
+// ✅ Singleton SMTP transporter — created once, reused for all emails
+let _smtpTransporter = null;
 const getSmtpTransporter = () => {
+    if (_smtpTransporter)
+        return _smtpTransporter;
     const host = process.env.SMTP_HOST || "mail.keeto.org";
     const port = Number(process.env.SMTP_PORT) || 587;
     const user = process.env.SMTP_USER;
@@ -23,18 +27,20 @@ const getSmtpTransporter = () => {
         console.log("❌ SMTP not configured — SMTP_USER or SMTP_PASS missing");
         return null;
     }
-    return nodemailer_1.default.createTransport({
+    _smtpTransporter = nodemailer_1.default.createTransport({
         host,
         port,
-        secure: false, // Must be false for port 587 (uses STARTTLS)
-        auth: {
-            user,
-            pass,
-        },
-        tls: {
-            rejectUnauthorized: false, // Prevents failures with self-signed certificates on Plesk
-        },
+        secure: false,
+        pool: true, // ✅ Connection pooling — reuse TCP connections
+        maxConnections: 5, // ✅ Max 5 simultaneous connections to SMTP
+        maxMessages: 100, // ✅ Max 100 messages per connection
+        auth: { user, pass },
+        tls: { rejectUnauthorized: false },
+        connectionTimeout: 10000, // ✅ 10s to connect
+        greetingTimeout: 10000, // ✅ 10s for SMTP greeting
+        socketTimeout: 15000, // ✅ 15s per send operation
     });
+    return _smtpTransporter;
 };
 const sendEmail = async ({ to, subject, html, }) => {
     console.log("📧 Sending email to:", to, "| Subject:", subject);

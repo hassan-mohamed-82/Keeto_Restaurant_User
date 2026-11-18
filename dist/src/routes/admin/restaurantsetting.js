@@ -11,4 +11,6 @@ router.get("/", (0, catchAsync_1.catchAsync)(restaurantsetting_1.getSettingsByRe
 router.put("/", (0, validation_1.validate)(restaurantsetting_2.updateSettingsSchema), hasPermission_1.hasRestaurantOpenClosePermission, (0, catchAsync_1.catchAsync)(restaurantsetting_1.updateSettings));
 router.get("/busy-status", (0, catchAsync_1.catchAsync)(restaurantsetting_1.getBusyStatus));
 router.put("/busy-status", (0, validation_1.validate)(restaurantsetting_2.updateBusyStatusSchema), (0, catchAsync_1.catchAsync)(restaurantsetting_1.updateBusyStatus));
+router.get("/order-now", (0, catchAsync_1.catchAsync)(restaurantsetting_1.getOrderNowSetting));
+router.put("/order-now", (0, validation_1.validate)(restaurantsetting_2.updateOrderNowSettingSchema), (0, catchAsync_1.catchAsync)(restaurantsetting_1.updateOrderNowSetting));
 exports.default = router;

@@ -693,6 +693,8 @@ export const getDashboardReports = async (req: Request | any, res: Response) => 
     let userCancellations = 0;
     let restaurantCancellations = 0;
     let otherCancellations = 0;
+    let totalCanceledAmount = 0;
+    let totalAmountIncludingCanceled = 0;
 
     const orderSourcesObj: Record<string, number> = {};
 
@@ -711,6 +713,8 @@ export const getDashboardReports = async (req: Request | any, res: Response) => 
         const amount = parseFloat((o.totalAmount as string) || "0");
         const sub = parseFloat((o.subtotal as string) || "0");
         const disc = parseFloat((o.discountAmount as string) || "0");
+
+        totalAmountIncludingCanceled += amount;
 
         if (o.status !== "cancelled" && o.status !== "refund") {
             totalRevenue += amount;
@@ -745,6 +749,7 @@ export const getDashboardReports = async (req: Request | any, res: Response) => 
 
         // الإلغاءات
         if (o.status === "cancelled") {
+            totalCanceledAmount += amount;
             if (o.cancelReasonType === "user") userCancellations++;
             else if (o.cancelReasonType === "restaurant") restaurantCancellations++;
             else otherCancellations++;
@@ -878,6 +883,10 @@ export const getDashboardReports = async (req: Request | any, res: Response) => 
         totalUsers = Number(ordersUsersRow?.total || 0);
     }
 
+    const totalCanceledOrders = userCancellations + restaurantCancellations + otherCancellations;
+    const totalAllOrders = numberOfOrders + totalCanceledOrders;
+    const canceledOrdersPercentage = totalAllOrders > 0 ? ((totalCanceledOrders / totalAllOrders) * 100).toFixed(2) : "0.00";
+
     // ==========================================
     // إرسال الـ Response
     // ==========================================
@@ -887,7 +896,11 @@ export const getDashboardReports = async (req: Request | any, res: Response) => 
         data: {
             cards: {
                 totalRevenue: totalRevenue.toFixed(2),
+                totalAmountIncludingCanceled: totalAmountIncludingCanceled.toFixed(2),
                 numberOfOrders,
+                totalCanceledOrders,
+                canceledOrdersPercentage,
+                totalCanceledAmount: totalCanceledAmount.toFixed(2),
                 averageOrderValue: numberOfOrders > 0 ? (totalRevenue / numberOfOrders).toFixed(2) : "0.00",
                 totalUsers,
             },

@@ -233,11 +233,12 @@ function parseJsonField(val, fallback) {
  * Checks for overdue orders every minute and sends an email alert exactly once per delayed order.
  */
 function initOrderDelayAlertCron() {
-    console.log("⏰ Order Delay Email Alert Cron initialized (runs every minute)...");
-    node_cron_1.default.schedule("*/1 * * * *", async () => {
+    console.log("⏰ Order Delay Email Alert Cron initialized (runs every 5 minutes)...");
+    node_cron_1.default.schedule("*/5 * * * *", async () => {
         try {
             const now = new Date();
-            // 1. Get active orders that have NOT yet received a delay alert email
+            const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+            // 1. Get active orders (created within the last 24h) that have NOT yet received a delay alert email
             const activeOrders = await connection_1.db
                 .select({
                 id: schema_1.orders.id,
@@ -258,7 +259,8 @@ function initOrderDelayAlertCron() {
             })
                 .from(schema_1.orders)
                 .leftJoin(schema_1.restaurants, (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, schema_1.restaurants.id))
-                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.orders.isDelayEmailSent, false), (0, drizzle_orm_1.isNull)(schema_1.orders.isDelayEmailSent)), (0, drizzle_orm_1.inArray)(schema_1.orders.status, ["pending", "accepted", "preparing", "out_for_delivery"])));
+                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.gte)(schema_1.orders.createdAt, oneDayAgo), (0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.orders.isDelayEmailSent, false), (0, drizzle_orm_1.isNull)(schema_1.orders.isDelayEmailSent)), (0, drizzle_orm_1.inArray)(schema_1.orders.status, ["pending", "accepted", "preparing", "out_for_delivery"])))
+                .limit(50);
             if (!activeOrders || activeOrders.length === 0) {
                 return;
             }
@@ -428,15 +430,19 @@ function initOrderDelayAlertCron() {
                 });
                 const restPrefix = restaurantName ? `[${restaurantName}] ` : "";
                 const subject = `⚠️ تنبيه تأخير: ${restPrefix}الطلب #${order.dailyOrderNumber} تجاوز ${elapsedMinutes} دقيقة!`;
-                // Send email to all recipients
-                const sendPromises = Array.from(recipientEmails).map((to) => (0, sendEmails_1.sendEmail)({
-                    to,
-                    subject,
-                    html: emailHtml,
-                }).catch((err) => {
-                    console.error(`❌ Failed to send delay alert email to ${to}:`, err);
-                }));
-                await Promise.allSettled(sendPromises);
+                // Send email to all recipients in controlled batches to avoid SMTP overload
+                const BATCH_SIZE = 5;
+                const emailList = Array.from(recipientEmails);
+                for (let i = 0; i < emailList.length; i += BATCH_SIZE) {
+                    const batch = emailList.slice(i, i + BATCH_SIZE);
+                    await Promise.allSettled(batch.map((to) => (0, sendEmails_1.sendEmail)({ to, subject, html: emailHtml }).catch((err) => {
+                        console.error(`❌ Failed to send delay alert email to ${to}:`, err);
+                    })));
+                    // Small delay between batches to avoid SMTP rate-limiting
+                    if (i + BATCH_SIZE < emailList.length) {
+                        await new Promise((resolve) => setTimeout(resolve, 300));
+                    }
+                }
                 // 4. Mark isDelayEmailSent = true immediately to ensure it's sent ONLY ONCE!
                 await connection_1.db
                     .update(schema_1.orders)

@@ -40,6 +40,7 @@ exports.foodPricingOverrides = (0, mysql_core_1.mysqlTable)("food_pricing_overri
     branchId: (0, mysql_core_1.char)("branch_id", { length: 36 }).references(() => branches_1.branches.id),
     // NULL = applies to every service module (takeaway/dine_in/delivery)
     serviceModule: (0, mysql_core_1.mysqlEnum)("service_module", ["takeaway", "dine_in", "delivery"]),
+    channel: (0, mysql_core_1.mysqlEnum)("channel", ["all", "online", "pos"]).notNull().default("all"),
     price: (0, mysql_core_1.decimal)("price", { precision: 10, scale: 2 }).notNull(),
     // active = this override is in effect, inactive = ignored (falls through
     // to the next-most-specific override / base price)
@@ -59,6 +60,7 @@ exports.variantPricingOverrides = (0, mysql_core_1.mysqlTable)("variant_pricing_
         .notNull(),
     branchId: (0, mysql_core_1.char)("branch_id", { length: 36 }).references(() => branches_1.branches.id),
     serviceModule: (0, mysql_core_1.mysqlEnum)("service_module", ["takeaway", "dine_in", "delivery"]),
+    channel: (0, mysql_core_1.mysqlEnum)("channel", ["all", "online", "pos"]).notNull().default("all"),
     price: (0, mysql_core_1.decimal)("price", { precision: 10, scale: 2 }).notNull(),
     status: (0, mysql_core_1.mysqlEnum)("status", ["active", "inactive"]).default("active").notNull(),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),

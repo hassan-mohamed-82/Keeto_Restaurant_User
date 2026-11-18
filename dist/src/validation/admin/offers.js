@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getOfferFoodsSchema = exports.updateOfferSchema = exports.createOfferSchema = exports.offerFoodItemSchema = exports.offerVariationSchema = exports.parseStringOrArray = exports.OFFER_MODULES = exports.SUPPORTED_LANGUAGES = void 0;
+exports.getOfferFoodsSchema = exports.offerIdParamSchema = exports.updateOfferSchema = exports.createOfferSchema = exports.offerFoodItemSchema = exports.offerVariationSchema = exports.parseStringOrArray = exports.OFFER_MODULES = exports.SUPPORTED_LANGUAGES = void 0;
 exports.safeParseJson = safeParseJson;
 const zod_1 = require("zod");
 exports.SUPPORTED_LANGUAGES = ["en", "ar", "fr"];
@@ -301,21 +301,31 @@ exports.offerFoodItemSchema = zod_1.z.preprocess((raw) => {
         addonIds: Array.from(new Set(rawAddons.map(String).filter(Boolean))),
     };
 }));
+const datePreprocess = (fieldName, isRequired = true) => zod_1.z.preprocess((val) => {
+    if (val === undefined || val === null || val === "")
+        return undefined;
+    if (typeof val === "string" || typeof val === "number" || val instanceof Date) {
+        const d = new Date(val);
+        if (isNaN(d.getTime()))
+            return "INVALID_DATE";
+        return d;
+    }
+    return val;
+}, isRequired
+    ? zod_1.z.date({
+        required_error: `${fieldName} is required`,
+        invalid_type_error: `${fieldName} must be a valid date`,
+    })
+    : zod_1.z.date({
+        invalid_type_error: `${fieldName} must be a valid date`,
+    }).optional());
 exports.createOfferSchema = zod_1.z.preprocess(normalizeOfferInput, zod_1.z.object({
-    name: zod_1.z.string({ required_error: "Offer name is required" }).min(1, "Offer name is required").max(255, "Name cannot exceed 255 characters"),
-    nameAr: zod_1.z.string().max(255, "Arabic name cannot exceed 255 characters").optional().nullable(),
-    nameFr: zod_1.z.string().max(255, "French name cannot exceed 255 characters").optional().nullable(),
+    name: zod_1.z.string({ required_error: "Offer name is required" }).trim().min(1, "Offer name is required").max(255, "Name cannot exceed 255 characters"),
+    nameAr: zod_1.z.string().trim().max(255, "Arabic name cannot exceed 255 characters").optional().nullable(),
+    nameFr: zod_1.z.string().trim().max(255, "French name cannot exceed 255 characters").optional().nullable(),
     image: zod_1.z.string().optional().nullable(),
-    startDate: zod_1.z.preprocess((val) => {
-        if (typeof val === "string" || val instanceof Date)
-            return new Date(val);
-        return val;
-    }, zod_1.z.date({ required_error: "startDate is required" })),
-    endDate: zod_1.z.preprocess((val) => {
-        if (typeof val === "string" || val instanceof Date)
-            return new Date(val);
-        return val;
-    }, zod_1.z.date({ required_error: "endDate is required" })),
+    startDate: datePreprocess("startDate", true),
+    endDate: datePreprocess("endDate", true),
     price: zod_1.z.preprocess((val) => {
         if (typeof val === "string" && val.trim() !== "") {
             const num = Number(val);
@@ -340,24 +350,36 @@ exports.createOfferSchema = zod_1.z.preprocess(normalizeOfferInput, zod_1.z.obje
         .min(1, "At least one module must be selected ('pos', 'web', 'app')")),
     modules: zod_1.z.preprocess((val) => (0, exports.parseStringOrArray)(val), zod_1.z.array(zod_1.z.enum(exports.OFFER_MODULES))).optional(),
     status: zod_1.z.enum(["active", "inactive"]).optional().default("active"),
+})
+    .refine((data) => {
+    const hasFoods = Array.isArray(data.foods) && data.foods.length > 0;
+    const hasFoodIds = Array.isArray(data.foodIds) && data.foodIds.length > 0;
+    const hasFood_ids = Array.isArray(data.food_ids) && data.food_ids.length > 0;
+    return hasFoods || hasFoodIds || hasFood_ids;
+}, {
+    message: "At least one food item is required for the offer",
+    path: ["foods"],
+})
+    .refine((data) => {
+    if (data.startDate && data.endDate) {
+        return new Date(data.endDate) >= new Date(data.startDate);
+    }
+    return true;
+}, {
+    message: "endDate must be greater than or equal to startDate",
+    path: ["endDate"],
 }));
 exports.updateOfferSchema = zod_1.z.preprocess(normalizeOfferInput, zod_1.z.object({
-    name: zod_1.z.string().min(1, "Offer name cannot be empty").max(255, "Name cannot exceed 255 characters").optional(),
-    nameAr: zod_1.z.string().max(255, "Arabic name cannot exceed 255 characters").optional().nullable(),
-    nameFr: zod_1.z.string().max(255, "French name cannot exceed 255 characters").optional().nullable(),
+    name: zod_1.z.string().trim().min(1, "Offer name cannot be empty").max(255, "Name cannot exceed 255 characters").optional(),
+    nameAr: zod_1.z.string().trim().max(255, "Arabic name cannot exceed 255 characters").optional().nullable(),
+    nameFr: zod_1.z.string().trim().max(255, "French name cannot exceed 255 characters").optional().nullable(),
     image: zod_1.z.string().optional().nullable(),
-    startDate: zod_1.z.preprocess((val) => {
-        if (typeof val === "string" || val instanceof Date)
-            return new Date(val);
-        return val;
-    }, zod_1.z.date()).optional(),
-    endDate: zod_1.z.preprocess((val) => {
-        if (typeof val === "string" || val instanceof Date)
-            return new Date(val);
-        return val;
-    }, zod_1.z.date()).optional(),
+    startDate: datePreprocess("startDate", false),
+    endDate: datePreprocess("endDate", false),
     price: zod_1.z
         .preprocess((val) => {
+        if (val === undefined || val === null || val === "")
+            return undefined;
         if (typeof val === "string" && val.trim() !== "") {
             const num = Number(val);
             return isNaN(num) ? val : num;
@@ -381,7 +403,34 @@ exports.updateOfferSchema = zod_1.z.preprocess(normalizeOfferInput, zod_1.z.obje
         .min(1, "At least one module must be selected ('pos', 'web', 'app')")).optional(),
     modules: zod_1.z.preprocess((val) => (0, exports.parseStringOrArray)(val), zod_1.z.array(zod_1.z.enum(exports.OFFER_MODULES))).optional(),
     status: zod_1.z.enum(["active", "inactive"]).optional(),
+})
+    .refine((data) => {
+    if (data.startDate && data.endDate) {
+        return new Date(data.endDate) >= new Date(data.startDate);
+    }
+    return true;
+}, {
+    message: "endDate must be greater than or equal to startDate",
+    path: ["endDate"],
+})
+    .refine((data) => {
+    if (data.foods !== undefined) {
+        return Array.isArray(data.foods) && data.foods.length > 0;
+    }
+    if (data.foodIds !== undefined) {
+        return Array.isArray(data.foodIds) && data.foodIds.length > 0;
+    }
+    if (data.food_ids !== undefined) {
+        return Array.isArray(data.food_ids) && data.food_ids.length > 0;
+    }
+    return true;
+}, {
+    message: "If updating foods, at least one food item must be provided",
+    path: ["foods"],
 }));
+exports.offerIdParamSchema = zod_1.z.object({
+    id: zod_1.z.string().uuid("Invalid offer ID format"),
+});
 exports.getOfferFoodsSchema = zod_1.z.object({
     page: zod_1.z.preprocess((v) => (v !== undefined && v !== null && v !== "" ? Number(v) : 1), zod_1.z.number().int().min(1).default(1)).optional(),
     limit: zod_1.z.preprocess((v) => (v !== undefined && v !== null && v !== "" ? Number(v) : 10), zod_1.z.number().int().min(1).max(100).default(10)).optional(),

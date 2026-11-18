@@ -15,14 +15,14 @@ router.post("/branches", (0, catchAsync_1.catchAsync)(bundle_1.getBranches));
 router.get("/foods", (0, validation_1.validate)(offers_1.getOfferFoodsSchema, "query"), (0, catchAsync_1.catchAsync)(bundle_1.getFoods));
 router.post("/foods", (0, validation_1.validate)(offers_1.getOfferFoodsSchema, "body"), (0, catchAsync_1.catchAsync)(bundle_1.getFoods));
 // Specific offer branches & foods
-router.get("/:id/branches", (0, catchAsync_1.catchAsync)(bundle_1.getOfferBranches));
-router.post("/:id/branches", (0, catchAsync_1.catchAsync)(bundle_1.getOfferBranches));
-router.get("/:id/foods", (0, catchAsync_1.catchAsync)(bundle_1.getOfferFoods));
-router.post("/:id/foods", (0, catchAsync_1.catchAsync)(bundle_1.getOfferFoods));
+router.get("/:id/branches", (0, validation_1.validate)(offers_1.offerIdParamSchema, "params"), (0, catchAsync_1.catchAsync)(bundle_1.getOfferBranches));
+router.post("/:id/branches", (0, validation_1.validate)(offers_1.offerIdParamSchema, "params"), (0, catchAsync_1.catchAsync)(bundle_1.getOfferBranches));
+router.get("/:id/foods", (0, validation_1.validate)(offers_1.offerIdParamSchema, "params"), (0, catchAsync_1.catchAsync)(bundle_1.getOfferFoods));
+router.post("/:id/foods", (0, validation_1.validate)(offers_1.offerIdParamSchema, "params"), (0, catchAsync_1.catchAsync)(bundle_1.getOfferFoods));
 // Offer CRUD
-router.get("/:id", (0, catchAsync_1.catchAsync)(bundle_1.getOfferById));
-router.post("/:id/details", (0, catchAsync_1.catchAsync)(bundle_1.getOfferById));
-router.put("/:id", (0, validation_1.validate)(offers_1.updateOfferSchema), (0, catchAsync_1.catchAsync)(bundle_1.updateOffer));
-router.patch("/:id/toggle-status", (0, catchAsync_1.catchAsync)(bundle_1.toggleOfferStatus));
-router.delete("/:id", (0, catchAsync_1.catchAsync)(bundle_1.deleteOffer));
+router.get("/:id", (0, validation_1.validate)(offers_1.offerIdParamSchema, "params"), (0, catchAsync_1.catchAsync)(bundle_1.getOfferById));
+router.post("/:id/details", (0, validation_1.validate)(offers_1.offerIdParamSchema, "params"), (0, catchAsync_1.catchAsync)(bundle_1.getOfferById));
+router.put("/:id", (0, validation_1.validate)(offers_1.offerIdParamSchema, "params"), (0, validation_1.validate)(offers_1.updateOfferSchema), (0, catchAsync_1.catchAsync)(bundle_1.updateOffer));
+router.patch("/:id/toggle-status", (0, validation_1.validate)(offers_1.offerIdParamSchema, "params"), (0, catchAsync_1.catchAsync)(bundle_1.toggleOfferStatus));
+router.delete("/:id", (0, validation_1.validate)(offers_1.offerIdParamSchema, "params"), (0, catchAsync_1.catchAsync)(bundle_1.deleteOffer));
 exports.default = router;
