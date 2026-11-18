@@ -40,6 +40,8 @@ export const discounts = mysqlTable("discounts", {
     isActive: boolean("is_active").default(true),
     isGlobal: boolean("is_global").default(false),
 
+    channel: mysqlEnum("channel", ["all", "online", "pos"]).notNull().default("all"),
+
     logo: varchar("logo", { length: 500 }),
 
     createdAt: timestamp("created_at").defaultNow(),
@@ -62,6 +64,8 @@ export const discountGroups = mysqlTable("discount_groups", {
 
     discountValue: decimal("discount_value", { precision: 10, scale: 2 }).notNull(),
     maxDiscount: decimal("max_discount", { precision: 10, scale: 2 }),
+
+    channel: mysqlEnum("channel", ["all", "online", "pos"]).notNull().default("all"),
 
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),

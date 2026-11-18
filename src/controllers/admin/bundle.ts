@@ -618,6 +618,36 @@ export const createOffer = async (req: Request, res: Response) => {
     );
     const distinctFoodIds = consolidatedFoods.map((f) => f.foodId);
 
+    if (distinctFoodIds.length === 0) {
+        throw new BadRequest("At least one food item is required for the offer");
+    }
+
+    if (new Date(endDate) < new Date(startDate)) {
+        throw new BadRequest("endDate must be greater than or equal to startDate");
+    }
+
+    // Verify all foods exist and belong to this restaurant
+    const existingFoods = await db
+        .select({ id: food.id })
+        .from(food)
+        .where(and(eq(food.restaurantid, restaurantId), inArray(food.id, distinctFoodIds)));
+
+    if (existingFoods.length !== distinctFoodIds.length) {
+        throw new BadRequest("One or more foods not found or do not belong to this restaurant");
+    }
+
+    // Verify all branches exist and belong to this restaurant (if specified)
+    if (finalBranchIds.length > 0) {
+        const existingBranches = await db
+            .select({ id: branches.id })
+            .from(branches)
+            .where(and(eq(branches.restaurantId, restaurantId), inArray(branches.id, finalBranchIds)));
+
+        if (existingBranches.length !== finalBranchIds.length) {
+            throw new BadRequest("One or more branches not found or do not belong to this restaurant");
+        }
+    }
+
     let savedImageUrl: string | null = null;
     if (image) {
         if (typeof image === "string" && image.startsWith("http")) {
@@ -862,6 +892,13 @@ export const updateOffer = async (req: Request, res: Response) => {
         status,
     } = req.body;
 
+    // Validate dates
+    const effectiveStartDate = startDate !== undefined ? new Date(startDate) : new Date(existingOffer.startDate);
+    const effectiveEndDate = endDate !== undefined ? new Date(endDate) : new Date(existingOffer.endDate);
+    if (effectiveEndDate < effectiveStartDate) {
+        throw new BadRequest("endDate must be greater than or equal to startDate");
+    }
+
     const updateData: Partial<typeof offers.$inferInsert> = {};
     if (name !== undefined) updateData.name = name;
     if (nameAr !== undefined) updateData.nameAr = nameAr;
@@ -887,6 +924,21 @@ export const updateOffer = async (req: Request, res: Response) => {
             rawFoods
         );
         const distinctFoodIds = consolidatedFoods.map((f) => f.foodId);
+
+        if (distinctFoodIds.length === 0) {
+            throw new BadRequest("At least one food item is required when updating foods");
+        }
+
+        // Verify all foods exist and belong to this restaurant
+        const existingFoods = await db
+            .select({ id: food.id })
+            .from(food)
+            .where(and(eq(food.restaurantid, restaurantId), inArray(food.id, distinctFoodIds)));
+
+        if (existingFoods.length !== distinctFoodIds.length) {
+            throw new BadRequest("One or more foods not found or do not belong to this restaurant");
+        }
+
         updateData.foodIds = distinctFoodIds;
 
         // Delete existing offer_foods and insert updated rows
@@ -921,7 +973,18 @@ export const updateOffer = async (req: Request, res: Response) => {
 
     const rawBranchIds = branchIds !== undefined ? branchIds : branch_ids;
     if (rawBranchIds !== undefined) {
-        updateData.branchIds = parseJsonArray(rawBranchIds);
+        const parsedBranchIds = parseJsonArray(rawBranchIds);
+        if (parsedBranchIds.length > 0) {
+            const existingBranches = await db
+                .select({ id: branches.id })
+                .from(branches)
+                .where(and(eq(branches.restaurantId, restaurantId), inArray(branches.id, parsedBranchIds)));
+
+            if (existingBranches.length !== parsedBranchIds.length) {
+                throw new BadRequest("One or more branches not found or do not belong to this restaurant");
+            }
+        }
+        updateData.branchIds = parsedBranchIds;
     }
 
     if (status !== undefined) updateData.status = status;

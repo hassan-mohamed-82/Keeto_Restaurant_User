@@ -322,21 +322,34 @@ export const offerFoodItemSchema = z.preprocess(
     })
 );
 
+const datePreprocess = (fieldName: string, isRequired = true) =>
+    z.preprocess((val) => {
+        if (val === undefined || val === null || val === "") return undefined;
+        if (typeof val === "string" || typeof val === "number" || val instanceof Date) {
+            const d = new Date(val);
+            if (isNaN(d.getTime())) return "INVALID_DATE";
+            return d;
+        }
+        return val;
+    }, isRequired
+        ? z.date({
+            required_error: `${fieldName} is required`,
+            invalid_type_error: `${fieldName} must be a valid date`,
+        })
+        : z.date({
+            invalid_type_error: `${fieldName} must be a valid date`,
+        }).optional()
+    );
+
 export const createOfferSchema = z.preprocess(
     normalizeOfferInput,
     z.object({
-        name: z.string({ required_error: "Offer name is required" }).min(1, "Offer name is required").max(255, "Name cannot exceed 255 characters"),
-        nameAr: z.string().max(255, "Arabic name cannot exceed 255 characters").optional().nullable(),
-        nameFr: z.string().max(255, "French name cannot exceed 255 characters").optional().nullable(),
+        name: z.string({ required_error: "Offer name is required" }).trim().min(1, "Offer name is required").max(255, "Name cannot exceed 255 characters"),
+        nameAr: z.string().trim().max(255, "Arabic name cannot exceed 255 characters").optional().nullable(),
+        nameFr: z.string().trim().max(255, "French name cannot exceed 255 characters").optional().nullable(),
         image: z.string().optional().nullable(),
-        startDate: z.preprocess((val) => {
-            if (typeof val === "string" || val instanceof Date) return new Date(val);
-            return val;
-        }, z.date({ required_error: "startDate is required" })),
-        endDate: z.preprocess((val) => {
-            if (typeof val === "string" || val instanceof Date) return new Date(val);
-            return val;
-        }, z.date({ required_error: "endDate is required" })),
+        startDate: datePreprocess("startDate", true),
+        endDate: datePreprocess("endDate", true),
         price: z.preprocess(
             (val) => {
                 if (typeof val === "string" && val.trim() !== "") {
@@ -371,26 +384,45 @@ export const createOfferSchema = z.preprocess(
         ).optional(),
         status: z.enum(["active", "inactive"]).optional().default("active"),
     })
+    .refine(
+        (data: any) => {
+            const hasFoods = Array.isArray(data.foods) && data.foods.length > 0;
+            const hasFoodIds = Array.isArray(data.foodIds) && data.foodIds.length > 0;
+            const hasFood_ids = Array.isArray(data.food_ids) && data.food_ids.length > 0;
+            return hasFoods || hasFoodIds || hasFood_ids;
+        },
+        {
+            message: "At least one food item is required for the offer",
+            path: ["foods"],
+        }
+    )
+    .refine(
+        (data: any) => {
+            if (data.startDate && data.endDate) {
+                return new Date(data.endDate) >= new Date(data.startDate);
+            }
+            return true;
+        },
+        {
+            message: "endDate must be greater than or equal to startDate",
+            path: ["endDate"],
+        }
+    )
 );
 
 export const updateOfferSchema = z.preprocess(
     normalizeOfferInput,
     z.object({
-        name: z.string().min(1, "Offer name cannot be empty").max(255, "Name cannot exceed 255 characters").optional(),
-        nameAr: z.string().max(255, "Arabic name cannot exceed 255 characters").optional().nullable(),
-        nameFr: z.string().max(255, "French name cannot exceed 255 characters").optional().nullable(),
+        name: z.string().trim().min(1, "Offer name cannot be empty").max(255, "Name cannot exceed 255 characters").optional(),
+        nameAr: z.string().trim().max(255, "Arabic name cannot exceed 255 characters").optional().nullable(),
+        nameFr: z.string().trim().max(255, "French name cannot exceed 255 characters").optional().nullable(),
         image: z.string().optional().nullable(),
-        startDate: z.preprocess((val) => {
-            if (typeof val === "string" || val instanceof Date) return new Date(val);
-            return val;
-        }, z.date()).optional(),
-        endDate: z.preprocess((val) => {
-            if (typeof val === "string" || val instanceof Date) return new Date(val);
-            return val;
-        }, z.date()).optional(),
+        startDate: datePreprocess("startDate", false),
+        endDate: datePreprocess("endDate", false),
         price: z
             .preprocess(
                 (val) => {
+                    if (val === undefined || val === null || val === "") return undefined;
                     if (typeof val === "string" && val.trim() !== "") {
                         const num = Number(val);
                         return isNaN(num) ? val : num;
@@ -423,7 +455,41 @@ export const updateOfferSchema = z.preprocess(
         ).optional(),
         status: z.enum(["active", "inactive"]).optional(),
     })
+    .refine(
+        (data: any) => {
+            if (data.startDate && data.endDate) {
+                return new Date(data.endDate) >= new Date(data.startDate);
+            }
+            return true;
+        },
+        {
+            message: "endDate must be greater than or equal to startDate",
+            path: ["endDate"],
+        }
+    )
+    .refine(
+        (data: any) => {
+            if (data.foods !== undefined) {
+                return Array.isArray(data.foods) && data.foods.length > 0;
+            }
+            if (data.foodIds !== undefined) {
+                return Array.isArray(data.foodIds) && data.foodIds.length > 0;
+            }
+            if (data.food_ids !== undefined) {
+                return Array.isArray(data.food_ids) && data.food_ids.length > 0;
+            }
+            return true;
+        },
+        {
+            message: "If updating foods, at least one food item must be provided",
+            path: ["foods"],
+        }
+    )
 );
+
+export const offerIdParamSchema = z.object({
+    id: z.string().uuid("Invalid offer ID format"),
+});
 
 export type CreateOfferInput = z.infer<typeof createOfferSchema>;
 export type UpdateOfferInput = z.infer<typeof updateOfferSchema>;

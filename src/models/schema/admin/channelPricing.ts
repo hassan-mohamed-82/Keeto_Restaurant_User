@@ -52,6 +52,8 @@ export const foodPricingOverrides = mysqlTable(
         // NULL = applies to every service module (takeaway/dine_in/delivery)
         serviceModule: mysqlEnum("service_module", ["takeaway", "dine_in", "delivery"]),
 
+        channel: mysqlEnum("channel", ["all", "online", "pos"]).notNull().default("all"),
+
         price: decimal("price", { precision: 10, scale: 2 }).notNull(),
 
         // active = this override is in effect, inactive = ignored (falls through
@@ -84,6 +86,8 @@ export const variantPricingOverrides = mysqlTable(
 
         branchId: char("branch_id", { length: 36 }).references(() => branches.id),
         serviceModule: mysqlEnum("service_module", ["takeaway", "dine_in", "delivery"]),
+
+        channel: mysqlEnum("channel", ["all", "online", "pos"]).notNull().default("all"),
 
         price: decimal("price", { precision: 10, scale: 2 }).notNull(),
         status: mysqlEnum("status", ["active", "inactive"]).default("active").notNull(),

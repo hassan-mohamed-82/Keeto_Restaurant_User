@@ -1,7 +1,12 @@
 import { Router } from "express";
 import { catchAsync } from "../../utils/catchAsync";
 import { validate } from "../../middlewares/validation";
-import { createOfferSchema, updateOfferSchema, getOfferFoodsSchema } from "../../validation/admin/offers";
+import {
+    createOfferSchema,
+    updateOfferSchema,
+    getOfferFoodsSchema,
+    offerIdParamSchema,
+} from "../../validation/admin/offers";
 import {
     createOffer,
     getAllOffers,
@@ -28,16 +33,16 @@ router.get("/foods", validate(getOfferFoodsSchema, "query"), catchAsync(getFoods
 router.post("/foods", validate(getOfferFoodsSchema, "body"), catchAsync(getFoods));
 
 // Specific offer branches & foods
-router.get("/:id/branches", catchAsync(getOfferBranches));
-router.post("/:id/branches", catchAsync(getOfferBranches));
-router.get("/:id/foods", catchAsync(getOfferFoods));
-router.post("/:id/foods", catchAsync(getOfferFoods));
+router.get("/:id/branches", validate(offerIdParamSchema, "params"), catchAsync(getOfferBranches));
+router.post("/:id/branches", validate(offerIdParamSchema, "params"), catchAsync(getOfferBranches));
+router.get("/:id/foods", validate(offerIdParamSchema, "params"), catchAsync(getOfferFoods));
+router.post("/:id/foods", validate(offerIdParamSchema, "params"), catchAsync(getOfferFoods));
 
 // Offer CRUD
-router.get("/:id", catchAsync(getOfferById));
-router.post("/:id/details", catchAsync(getOfferById));
-router.put("/:id", validate(updateOfferSchema), catchAsync(updateOffer));
-router.patch("/:id/toggle-status", catchAsync(toggleOfferStatus));
-router.delete("/:id", catchAsync(deleteOffer));
+router.get("/:id", validate(offerIdParamSchema, "params"), catchAsync(getOfferById));
+router.post("/:id/details", validate(offerIdParamSchema, "params"), catchAsync(getOfferById));
+router.put("/:id", validate(offerIdParamSchema, "params"), validate(updateOfferSchema), catchAsync(updateOffer));
+router.patch("/:id/toggle-status", validate(offerIdParamSchema, "params"), catchAsync(toggleOfferStatus));
+router.delete("/:id", validate(offerIdParamSchema, "params"), catchAsync(deleteOffer));
 
 export default router;

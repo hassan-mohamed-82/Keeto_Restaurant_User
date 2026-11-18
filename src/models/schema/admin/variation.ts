@@ -24,6 +24,8 @@ export const foodVariations = mysqlTable("food_variations", {
     nameFr: varchar("name_fr", { length: 255 }).notNull().default(''),
     isRequired: boolean("is_required").default(false), // Required
     selectionType: mysqlEnum("selection_type", ["single", "multiple"]).default("single"), // Single vs Multiple
+    channel: mysqlEnum("channel", ["all", "online", "pos"]).notNull().default("all"),
+
     /** The weight choices of a weighted food (at most one per food, single-select). */
     isWeightGroup: boolean("is_weight_group").notNull().default(false),
     min: int("min"), // Min
@@ -38,7 +40,8 @@ export const foodVariations = mysqlTable("food_variations", {
 export const variationOptions = mysqlTable("variation_options", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
     variationId: char("variation_id", { length: 36 }).references(() => foodVariations.id, { onDelete: "cascade" }).notNull(),
-    
+    channel: mysqlEnum("channel", ["all", "online", "pos"]).notNull().default("all"),
+
     optionName: varchar("option_name", { length: 255 }).notNull(), // Option name
     optionNameAr: varchar("option_name_ar", { length: 255 }).notNull().default(''),
     optionNameFr: varchar("option_name_fr", { length: 255 }).notNull().default(''),
