@@ -16,8 +16,8 @@ export const getDashboard = async (req: Request, res: Response) => {
     if (!req.user) throw new UnauthorizedError("Unauthenticated");
 
     const deliveryManId = req.user.id;
-    const restaurantId = req.user.restaurantId;
-    if (!restaurantId) throw new BadRequest("Restaurant ID missing");
+    // const restaurantId = req.user.restaurantId;
+    // if (!restaurantId) throw new BadRequest("Restaurant ID missing");
 
     // Parse period/date filters from query
     const { startDate, endDate, period } = req.query as {
@@ -28,7 +28,7 @@ export const getDashboard = async (req: Request, res: Response) => {
 
     const conditions: any[] = [
         eq(orders.deliveryManId, deliveryManId),
-        eq(orders.restaurantId, restaurantId),
+        // eq(orders.restaurantId, restaurantId),
         eq(orders.orderType, "delivery"),
         excludeUnpaidVisaOrders(),
     ];
