@@ -3,6 +3,35 @@ import { v4 as uuidv4 } from "uuid";
 import { foodPricingOverrides, variantPricingOverrides } from "../models/schema/admin/channelPricing";
 
 export type ServiceModule = "takeaway" | "dine_in" | "delivery";
+export type PricingChannel = "all" | "online" | "pos";
+
+export function resolvePricingChannel(
+    channel?: string | null,
+    posPricingStatus?: boolean | string | number | null
+): PricingChannel {
+    // If posPricingStatus is explicitly provided:
+    // true -> both POS & Online ("all")
+    // false -> only online ("online")
+    if (posPricingStatus !== undefined && posPricingStatus !== null && posPricingStatus !== "") {
+        const isPosTrue =
+            posPricingStatus === true ||
+            posPricingStatus === "true" ||
+            posPricingStatus === 1 ||
+            posPricingStatus === "1";
+        return isPosTrue ? "all" : "online";
+    }
+
+    // If channel is explicitly provided ("all", "online", "pos")
+    if (channel && typeof channel === "string") {
+        const lower = channel.trim().toLowerCase();
+        if (lower === "all" || lower === "online" || lower === "pos") {
+            return lower as PricingChannel;
+        }
+    }
+
+    // Default is "all"
+    return "all";
+}
 
 export function overrideRank(row: { branchId: string | null; serviceModule: string | null }): number {
     return (row.branchId ? 2 : 0) + (row.serviceModule ? 1 : 0);
@@ -64,8 +93,14 @@ export async function upsertFoodPricingOverride(
         serviceModule: ServiceModule | null;
         price: string;
         status?: "active" | "inactive";
+        channel?: PricingChannel;
+        posPricingStatus?: boolean | string;
     }
 ) {
+    const channelVal = resolvePricingChannel(
+        input.channel,
+        input.posPricingStatus ?? (input as any).pospricingstatus
+    );
     const statusVal: "active" | "inactive" = input.status === "inactive" ? "inactive" : "active";
     const whereClause = and(
         eq(foodPricingOverrides.foodId, input.foodId),
@@ -81,7 +116,7 @@ export async function upsertFoodPricingOverride(
     if (existing) {
         await tx
             .update(foodPricingOverrides)
-            .set({ price: input.price, status: statusVal, updatedAt: new Date() })
+            .set({ price: input.price, status: statusVal, channel: channelVal, updatedAt: new Date() })
             .where(eq(foodPricingOverrides.id, existing.id));
         return existing.id as string;
     }
@@ -93,6 +128,7 @@ export async function upsertFoodPricingOverride(
         branchId: input.branchId,
         serviceModule: input.serviceModule,
         price: input.price,
+        channel: channelVal,
         status: statusVal,
     });
     return id;
@@ -106,8 +142,14 @@ export async function upsertVariantPricingOverride(
         serviceModule: ServiceModule | null;
         price: string;
         status?: "active" | "inactive";
+        channel?: PricingChannel;
+        posPricingStatus?: boolean | string;
     }
 ) {
+    const channelVal = resolvePricingChannel(
+        input.channel,
+        input.posPricingStatus ?? (input as any).pospricingstatus
+    );
     const statusVal: "active" | "inactive" = input.status === "inactive" ? "inactive" : "active";
     const whereClause = and(
         eq(variantPricingOverrides.variantId, input.variantId),
@@ -123,7 +165,7 @@ export async function upsertVariantPricingOverride(
     if (existing) {
         await tx
             .update(variantPricingOverrides)
-            .set({ price: input.price, status: statusVal, updatedAt: new Date() })
+            .set({ price: input.price, status: statusVal, channel: channelVal, updatedAt: new Date() })
             .where(eq(variantPricingOverrides.id, existing.id));
         return existing.id as string;
     }
@@ -135,6 +177,7 @@ export async function upsertVariantPricingOverride(
         branchId: input.branchId,
         serviceModule: input.serviceModule,
         price: input.price,
+        channel: channelVal,
         status: statusVal,
     });
     return id;
@@ -151,6 +194,7 @@ export async function fetchFoodOverrides(
             id: foodPricingOverrides.id,
             branchId: foodPricingOverrides.branchId,
             serviceModule: foodPricingOverrides.serviceModule,
+            channel: foodPricingOverrides.channel,
             price: foodPricingOverrides.price,
             status: foodPricingOverrides.status,
         })
@@ -176,6 +220,7 @@ export async function fetchVariantOverrides(
             variantId: variantPricingOverrides.variantId,
             branchId: variantPricingOverrides.branchId,
             serviceModule: variantPricingOverrides.serviceModule,
+            channel: variantPricingOverrides.channel,
             price: variantPricingOverrides.price,
             status: variantPricingOverrides.status,
         })

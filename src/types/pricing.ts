@@ -1,9 +1,12 @@
 export type ServiceModule = "takeaway" | "dine_in" | "delivery";
+export type PricingChannel = "all" | "online" | "pos";
 
 export interface BranchPriceOverride {
     branchId: string;
     price?: number | string | null; // Optional: If missing/null/undefined -> default to "0.00" (inherits base food.price)
     status?: "active" | "inactive"; // Defaults to "active" if not provided
+    channel?: PricingChannel;
+    posPricingStatus?: boolean | string;
 }
 
 export interface ChannelPriceOverride {
@@ -11,10 +14,14 @@ export interface ChannelPriceOverride {
     serviceModule: ServiceModule;
     price: number | string;
     status?: "active" | "inactive"; // Defaults to "active" if not provided
+    channel?: PricingChannel;
+    posPricingStatus?: boolean | string;
 }
 
 export interface VariantPriceOverride {
     variantId: string;
+    channel?: PricingChannel;
+    posPricingStatus?: boolean | string;
     branches?: BranchPriceOverride[];
     channels?: ChannelPriceOverride[];
 }
@@ -32,6 +39,8 @@ export interface UpsertFoodPricingInput {
     categoryId: string;
     subcategoryId?: string;
     mainPrice: number | string; // Base price for food.price (standard across all branches)
+    channel?: PricingChannel;
+    posPricingStatus?: boolean | string;
     branches?: BranchPriceOverride[]; // Branch-specific overrides
     channels?: ChannelPriceOverride[]; // Channel pricing (takeaway, dine_in, delivery)
     variants?: VariantPriceOverride[]; // Variant branch & channel pricing
@@ -45,6 +54,7 @@ export interface GetMenuQueryParams {
     subcategoryId?: string;
     categoryId?: string;
     restaurantId?: string;
+    channel?: PricingChannel;
 }
 
 export interface BatchProductChannelPriceInput {
@@ -54,6 +64,8 @@ export interface BatchProductChannelPriceInput {
     price: number | string;
     status?: "active" | "inactive";
     branchPriceStatus?: "active" | "inactive";
+    channel?: PricingChannel;
+    posPricingStatus?: boolean | string;
 }
 
 export interface BatchVariantChannelPriceInput {
@@ -63,6 +75,8 @@ export interface BatchVariantChannelPriceInput {
     price: number | string;
     status?: "active" | "inactive";
     branchPriceStatus?: "active" | "inactive";
+    channel?: PricingChannel;
+    posPricingStatus?: boolean | string;
 }
 
 

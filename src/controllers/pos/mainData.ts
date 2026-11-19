@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { db } from "../../models/connection";
 
 import { categories, subcategories, food, } from "../../models/schema";
-import { eq, inArray, sql, and } from "drizzle-orm";
+import { eq, inArray, sql, and, or } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { UnauthorizedError } from "../../Errors";
@@ -105,6 +105,7 @@ export async function products(req: Request, res: Response) {
         eq(food.status, "active"),
         eq(food.restaurantid, restaurantId),
         eq(food.isOutOfStock, false),
+        or(eq(food.channel, "pos"), eq(food.channel, "all")),
     ];
 
     if (subcategoryId) {

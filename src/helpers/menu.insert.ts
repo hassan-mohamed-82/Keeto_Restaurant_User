@@ -157,6 +157,7 @@ export interface FoodInsertData {
     weight_unit?: "kg" | "gm" | null;
     /** Weighted foods only; default true. false requires a weight group. */
     allow_custom_weight?: boolean | null;
+    channel?: "all" | "online" | "pos" | null;
     variations?: FoodVariationInput[];
     /** Branch availability rows (branchMenuItems), optionally with a branch price. */
     branches?: FoodBranchInput[];
@@ -219,6 +220,7 @@ export async function insertFood(
         sold_by: data.sold_by || "unit",
         weight_unit: data.sold_by === "weight" ? (data.weight_unit || null) : null,
         allow_custom_weight: weightConfig.allowCustomWeight,
+        channel: (data.channel && ["all", "online", "pos"].includes(data.channel)) ? data.channel : "all",
     });
 
     // Variations and their options

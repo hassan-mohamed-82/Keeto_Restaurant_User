@@ -94,7 +94,12 @@ export const createFood = async (req: Request, res: Response) => {
             sold_by,
             weight_unit,
             allow_custom_weight,
+            channel,
         } = req.body;
+
+        const finalChannel = (channel && ["all", "online", "pos"].includes(String(channel).trim().toLowerCase()))
+            ? (String(channel).trim().toLowerCase() as "all" | "online" | "pos")
+            : "all";
 
         const incomingAddons = req.body.addonsId ?? req.body.addons ?? req.body.addonIds ?? req.body['addonsId[]'] ?? req.body['addons[]'];
 
@@ -195,6 +200,7 @@ export const createFood = async (req: Request, res: Response) => {
                 sold_by: sold_by || "unit",
                 weight_unit: sold_by === "weight" ? weight_unit : null,
                 allow_custom_weight: parseBooleanInput(allow_custom_weight),
+                channel: finalChannel,
                 variations: normalizeWeightVariationInput(variations),
                 branches: req.body.branches,
             })
@@ -218,16 +224,22 @@ export const getAllFoods = async (req: Request, res: Response) => {
     if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
 
     // 1. Extract query params
-    const { categoryId, subCategoryId } = req.query;
+    const { categoryId, subCategoryId, channel } = req.query;
 
     // 2. Build dynamic conditions
-    const conditions = [activeFoodCondition, eq(food.restaurantid, restaurantId)];
+    const conditions: any[] = [activeFoodCondition, eq(food.restaurantid, restaurantId)];
 
     if (categoryId) {
         conditions.push(eq(food.categoryid, categoryId as string));
     }
     if (subCategoryId) {
         conditions.push(eq(food.subcategoryid, subCategoryId as string));
+    }
+    if (channel && typeof channel === "string") {
+        const cleanChannel = channel.trim().toLowerCase();
+        if (cleanChannel === "online" || cleanChannel === "pos") {
+            conditions.push(or(eq(food.channel, cleanChannel), eq(food.channel, "all")));
+        }
     }
 
     const rawFoods = await db.select({
@@ -238,6 +250,7 @@ export const getAllFoods = async (req: Request, res: Response) => {
         is_Halal: food.is_Halal, isOutOfStock: food.isOutOfStock, addonsId: food.addonsId, startTime: food.startTime, endTime: food.endTime,
         search_tags: food.search_tags, price: food.price, discount_type: food.discount_type, discount_value: food.discount_value,
         Maximum_Purchase: food.Maximum_Purchase, points: food.points, stock_type: food.stock_type, status: food.status,
+        channel: food.channel,
         sold_by: food.sold_by, weight_unit: food.weight_unit, allow_custom_weight: food.allow_custom_weight,
         createdAt: food.createdAt, updatedAt: food.updatedAt,
         restaurant: restaurants,
@@ -348,6 +361,7 @@ export const getFoodById = async (req: Request, res: Response) => {
         is_Halal: food.is_Halal, isOutOfStock: food.isOutOfStock, addonsId: food.addonsId, startTime: food.startTime, endTime: food.endTime,
         search_tags: food.search_tags, price: food.price, discount_type: food.discount_type, discount_value: food.discount_value,
         Maximum_Purchase: food.Maximum_Purchase, points: food.points, stock_type: food.stock_type, status: food.status,
+        channel: food.channel,
         sold_by: food.sold_by, weight_unit: food.weight_unit, allow_custom_weight: food.allow_custom_weight,
         createdAt: food.createdAt, updatedAt: food.updatedAt,
         restaurant: { id: restaurants.id, name: restaurants.name },
@@ -438,6 +452,7 @@ export const updateFood = async (req: Request, res: Response) => {
         "points", "isOutOfStock",
         "sold_by", "weight_unit",
         "order_level",
+        "channel",
     ];
 
     const updateData: any = {
@@ -464,6 +479,14 @@ export const updateFood = async (req: Request, res: Response) => {
                 updateData[key] = data[key];
             }
         }
+    }
+
+    if (updateData.channel !== undefined) {
+        const cleanChan = String(updateData.channel).trim().toLowerCase();
+        if (!["all", "online", "pos"].includes(cleanChan)) {
+            throw new BadRequest("channel must be 'all', 'online', or 'pos'");
+        }
+        updateData.channel = cleanChan;
     }
 
     // Weight selling cross-validation on update — four cases:
@@ -1485,6 +1508,7 @@ export const getOutOfStockFoods = async (req: Request, res: Response) => {
                 price: food.price,
                 status: food.status,
                 isOutOfStock: food.isOutOfStock,
+                channel: food.channel,
                 stock_type: food.stock_type,
                 foodtype: food.foodtype,
                 startTime: food.startTime,
@@ -1576,6 +1600,7 @@ export const getOutOfStockFoods = async (req: Request, res: Response) => {
             image: food.image,
             price: food.price,
             status: food.status,
+            channel: food.channel,
             isOutOfStock: food.isOutOfStock,
             stock_type: food.stock_type,
             foodtype: food.foodtype,
@@ -1681,6 +1706,12 @@ export const getActiveInStockFoods = async (req: Request | any, res: Response) =
     if (req.query.subCategoryId) {
         conditions.push(eq(food.subcategoryid, req.query.subCategoryId as string));
     }
+    if (req.query.channel && typeof req.query.channel === "string") {
+        const cleanChannel = req.query.channel.trim().toLowerCase();
+        if (cleanChannel === "online" || cleanChannel === "pos") {
+            conditions.push(or(eq(food.channel, cleanChannel as any), eq(food.channel, "all")));
+        }
+    }
 
     const rawFoods = await db
         .select({
@@ -1693,6 +1724,7 @@ export const getActiveInStockFoods = async (req: Request | any, res: Response) =
             descriptionFr: food.descriptionFr,
             image: food.image,
             price: food.price,
+            channel: food.channel,
             sold_by: food.sold_by,
             weight_unit: food.weight_unit,
             allow_custom_weight: food.allow_custom_weight,

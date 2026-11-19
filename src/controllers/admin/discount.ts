@@ -19,8 +19,13 @@ export const createDiscount = async (req: Request, res: Response) => {
     const {
         name, nameAr, nameFr,
         foodGroups, startDate, endDate, isActive,
-        minOrderAmount, usageLimit, logo
+        minOrderAmount, usageLimit, logo,
+        channel,
     } = req.body;
+
+    const discountChannel = (channel && ["all", "online", "pos"].includes(String(channel).trim().toLowerCase()))
+        ? (String(channel).trim().toLowerCase() as "all" | "online" | "pos")
+        : "all";
 
     if (!name) throw new BadRequest("Discount name is required");
     if (!Array.isArray(foodGroups) || foodGroups.length === 0) {
@@ -66,6 +71,7 @@ export const createDiscount = async (req: Request, res: Response) => {
             discountValue: value,
             maxDiscount: group.maxDiscount,
             foodIds,
+            channel: group.channel,
         };
     });
 
@@ -123,6 +129,7 @@ export const createDiscount = async (req: Request, res: Response) => {
             endDate: end,
             isActive: shouldBeActive,
             isGlobal: false,
+            channel: discountChannel,
             logo: campaignLogo,
         });
         await tx.insert(discountRestaurants).values({ id: uuidv4(), discountId: newDiscountId, restaurantId });
@@ -130,12 +137,16 @@ export const createDiscount = async (req: Request, res: Response) => {
         // 2. إنشاء كل الخصومات الفرعية (groups) تحت نفس الخصم الأساسي
         for (const group of groups) {
             const groupId = uuidv4();
+            const groupChannel = (group.channel && ["all", "online", "pos"].includes(String(group.channel).trim().toLowerCase()))
+                ? (String(group.channel).trim().toLowerCase() as "all" | "online" | "pos")
+                : discountChannel;
             await tx.insert(discountGroups).values({
                 id: groupId,
                 discountId: newDiscountId,
                 discountType: group.discountType as "percentage" | "fixed_amount",
                 discountValue: String(group.discountValue),
                 maxDiscount: group.maxDiscount === undefined || group.maxDiscount === null ? null : String(Number(group.maxDiscount)),
+                channel: groupChannel,
             });
 
             if (group.foodIds.length > 0) {
@@ -162,16 +173,22 @@ export const getAllDiscounts = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Unauthorized");
 
+    const channelParam = typeof req.query.channel === "string" ? req.query.channel.trim().toLowerCase() : null;
+    const whereConditions = [
+        or(
+            eq(discounts.isGlobal, true),
+            eq(discountRestaurants.restaurantId, restaurantId)
+        )
+    ];
+    if (channelParam && (channelParam === "online" || channelParam === "pos")) {
+        whereConditions.push(or(eq(discounts.channel, channelParam), eq(discounts.channel, "all")));
+    }
+
     const rawDiscounts = await db
         .selectDistinct({ discount: discounts })
         .from(discounts)
         .leftJoin(discountRestaurants, eq(discounts.id, discountRestaurants.discountId))
-        .where(
-            or(
-                eq(discounts.isGlobal, true),
-                eq(discountRestaurants.restaurantId, restaurantId)
-            )
-        );
+        .where(and(...whereConditions));
 
     const data = await Promise.all(rawDiscounts.map(async ({ discount }) => {
         const groups = await db.select().from(discountGroups).where(eq(discountGroups.discountId, discount.id));
@@ -189,6 +206,7 @@ export const getAllDiscounts = async (req: Request, res: Response) => {
                 discountType: group.discountType,
                 discountValue: group.discountValue,
                 maxDiscount: group.maxDiscount,
+                channel: group.channel,
                 foodIds: foodsData.map(f => f.id),
                 foods: foodsData,
             };
@@ -201,6 +219,7 @@ export const getAllDiscounts = async (req: Request, res: Response) => {
             nameFr: discount.nameFr,
             isActive: discount.isActive,
             isGlobal: discount.isGlobal,
+            channel: discount.channel,
             startDate: discount.startDate,
             endDate: discount.endDate,
             minOrderAmount: discount.minOrderAmount,
@@ -255,6 +274,7 @@ export const getDiscountById = async (req: Request, res: Response) => {
             discountType: group.discountType,
             discountValue: group.discountValue,
             maxDiscount: group.maxDiscount,
+            channel: group.channel,
             foodIds: foodsData.map(f => f.id),
             foods: foodsData,
         };
@@ -268,6 +288,7 @@ export const getDiscountById = async (req: Request, res: Response) => {
         nameFr: discount.nameFr,
         isActive: discount.isActive,
         isGlobal: discount.isGlobal,
+        channel: discount.channel,
         startDate: discount.startDate,
         endDate: discount.endDate,
         minOrderAmount: discount.minOrderAmount,
@@ -308,6 +329,7 @@ export const updateDiscount = async (req: Request, res: Response) => {
         name, nameAr, nameFr,
         minOrderAmount, usageLimit, startDate, endDate, isActive, logo,
         foodGroups, // ✅ لو عايز تحدّث الخصومات الفرعية في نفس الطلب
+        channel,
     } = req.body;
 
     let FinalLogo = logo;
@@ -354,6 +376,11 @@ export const updateDiscount = async (req: Request, res: Response) => {
     }
     if (isActive !== undefined) updateData.isActive = isActive;
     if (logo !== undefined) updateData.logo = FinalLogo;
+    if (channel !== undefined) {
+        updateData.channel = (channel && ["all", "online", "pos"].includes(String(channel).trim().toLowerCase()))
+            ? String(channel).trim().toLowerCase()
+            : "all";
+    }
 
     await db.update(discounts).set(updateData).where(eq(discounts.id, id));
 
@@ -370,12 +397,16 @@ export const updateDiscount = async (req: Request, res: Response) => {
         for (const group of foodGroups) {
             const discountType = group.discountType === "fixed" ? "fixed_amount" : group.discountType;
             const groupId = uuidv4();
+            const groupChannel = (group.channel && ["all", "online", "pos"].includes(String(group.channel).trim().toLowerCase()))
+                ? String(group.channel).trim().toLowerCase()
+                : (updateData.channel || existing.discounts.channel || "all");
             await db.insert(discountGroups).values({
                 id: groupId,
                 discountId: id,
                 discountType,
                 discountValue: String(group.discountValue),
                 maxDiscount: group.maxDiscount === undefined || group.maxDiscount === null ? null : String(Number(group.maxDiscount)),
+                channel: groupChannel,
             });
 
             if (Array.isArray(group.foodIds) && group.foodIds.length > 0) {
