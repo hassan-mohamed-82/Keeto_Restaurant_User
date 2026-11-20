@@ -29,6 +29,7 @@ export const createFirstOrderDiscount = async (req: Request, res: Response) => {
     const {
         name, nameAr, nameFr,
         firstOrderCount,
+        channel,
         discountType, discountValue,
         maxDiscountAmount,
         maxUsage, maxUsagePerUser,
@@ -45,6 +46,7 @@ export const createFirstOrderDiscount = async (req: Request, res: Response) => {
         nameFr: nameFr ?? null,
         restaurantId,
         firstOrderCount: Number(firstOrderCount),
+        channel: channel ?? "all",
         discountType,
         discountValue: String(discountValue),
         maxDiscountAmount: maxDiscountAmount ? String(maxDiscountAmount) : null,
@@ -125,6 +127,7 @@ export const updateFirstOrderDiscount = async (req: Request, res: Response) => {
     const {
         name, nameAr, nameFr,
         firstOrderCount,
+        channel,
         discountType, discountValue,
         maxDiscountAmount,
         maxUsage, maxUsagePerUser,
@@ -138,6 +141,7 @@ export const updateFirstOrderDiscount = async (req: Request, res: Response) => {
     if (nameAr !== undefined) updateData.nameAr = nameAr;
     if (nameFr !== undefined) updateData.nameFr = nameFr;
     if (firstOrderCount !== undefined) updateData.firstOrderCount = Number(firstOrderCount);
+    if (channel !== undefined) updateData.channel = channel;
     if (discountType !== undefined) updateData.discountType = discountType;
     if (discountValue !== undefined) updateData.discountValue = String(discountValue);
     if (maxDiscountAmount !== undefined) updateData.maxDiscountAmount = maxDiscountAmount ? String(maxDiscountAmount) : null;

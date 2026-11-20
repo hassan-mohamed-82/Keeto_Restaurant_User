@@ -12,6 +12,8 @@ export const createFirstOrderDiscountSchema = z.object({
         .int()
         .min(1, "firstOrderCount must be at least 1"),
 
+    channel: z.enum(["all", "app", "web", "pos"]).default("all"),
+
     discountType: z.enum(["percentage", "fixed"], {
         required_error: "discountType is required",
         invalid_type_error: "discountType must be 'percentage' or 'fixed'",
@@ -42,6 +44,7 @@ export const updateFirstOrderDiscountSchema = z.object({
     nameAr: z.string().trim().max(255).optional().nullable(),
     nameFr: z.string().trim().max(255).optional().nullable(),
     firstOrderCount: z.number().int().min(1).optional(),
+    channel: z.enum(["all", "app", "web", "pos"]).optional(),
     discountType: z.enum(["percentage", "fixed"]).optional(),
     discountValue: z.number().min(0).optional(),
     maxDiscountAmount: z.number().min(0).optional().nullable(),
