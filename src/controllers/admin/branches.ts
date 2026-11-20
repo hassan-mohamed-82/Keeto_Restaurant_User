@@ -2,7 +2,7 @@
 
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { branches, zones } from "../../models/schema";
+import { branches, zones, restaurantSettings } from "../../models/schema";
 import { eq, and } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
@@ -63,6 +63,8 @@ export const getMyBranches = async (req: Request, res: Response) => {
         phoneNumber: branches.phoneNumber,
         status: branches.status,
         inactiveReason: branches.inactiveReason,
+        visa_status: branches.visa_status,
+        cash_status: branches.cash_status,
         zone: {
             id: zones.id,
             name: zones.name,
@@ -96,6 +98,8 @@ export const getBranchById = async (req: Request, res: Response) => {
         phoneNumber: branches.phoneNumber,
         status: branches.status,
         inactiveReason: branches.inactiveReason,
+        visa_status: branches.visa_status,
+        cash_status: branches.cash_status,
         zone: {
             id: zones.id,
             name: zones.name,
@@ -227,4 +231,90 @@ export const updateBranchStatus = async (req: Request, res: Response) => {
 export const getallzones = async (req: Request, res: Response) => {
     const zone = await db.select().from(zones).where(eq(zones.status, "active"));
     return SuccessResponse(res, { message: "Get zones success", data: zone });
+};
+
+// ==========================================
+// Toggle visa_status per branch
+// ==========================================
+export const updateBranchVisaStatus = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId) throw new BadRequest("Restaurant ID missing");
+
+    const { visa_status } = req.body;
+    if (typeof visa_status !== "boolean") {
+        throw new BadRequest("visa_status must be a boolean");
+    }
+
+    // 1. Check restaurant has enableOnlinePayment = true (global master switch)
+    const [settings] = await db
+        .select({ enableOnlinePayment: restaurantSettings.enableOnlinePayment })
+        .from(restaurantSettings)
+        .where(eq(restaurantSettings.restaurantId, restaurantId))
+        .limit(1);
+
+    if (!settings?.enableOnlinePayment) {
+        throw new BadRequest(
+            "Cannot toggle branch visa status: Online payment (Visa) is globally disabled for this restaurant. Enable it in restaurant settings first."
+        );
+    }
+
+    // 2. Verify branch belongs to this restaurant
+    const [existingBranch] = await db
+        .select({ id: branches.id })
+        .from(branches)
+        .where(and(eq(branches.id, id), eq(branches.restaurantId, restaurantId)))
+        .limit(1);
+
+    if (!existingBranch) throw new NotFound("Branch not found or does not belong to your restaurant");
+
+    // 3. Update visa_status
+    await db
+        .update(branches)
+        .set({ visa_status })
+        .where(eq(branches.id, id));
+
+    return SuccessResponse(res, {
+        message: `Branch visa (online payment) ${visa_status ? "enabled" : "disabled"} successfully`,
+        data: { branchId: id, visa_status },
+    });
+};
+
+// ==========================================
+// Toggle visa_status for ALL branches of this restaurant
+// ==========================================
+export const updateAllBranchesVisaStatus = async (req: Request, res: Response) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId) throw new BadRequest("Restaurant ID missing");
+
+    const { visa_status } = req.body;
+    if (typeof visa_status !== "boolean") {
+        throw new BadRequest("visa_status must be a boolean");
+    }
+
+    if (visa_status === true) {
+        // Check global setting before enabling
+        const [settings] = await db
+            .select({ enableOnlinePayment: restaurantSettings.enableOnlinePayment })
+            .from(restaurantSettings)
+            .where(eq(restaurantSettings.restaurantId, restaurantId))
+            .limit(1);
+
+        if (!settings?.enableOnlinePayment) {
+            throw new BadRequest(
+                "Cannot enable branch visa: Online payment (Visa) is globally disabled for this restaurant. Enable it in restaurant settings first."
+            );
+        }
+    }
+
+    // Update all branches for this restaurant
+    await db
+        .update(branches)
+        .set({ visa_status })
+        .where(eq(branches.restaurantId, restaurantId));
+
+    return SuccessResponse(res, {
+        message: `Visa (online payment) ${visa_status ? "enabled" : "disabled"} for all branches successfully`,
+        data: { restaurantId, visa_status },
+    });
 };
