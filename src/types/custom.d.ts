@@ -116,6 +116,10 @@ export type ModuleName =
     | "delivery_man_accounts"
     | "socialmedia"
     | "Videos"
+    | "videos"
+    | "bundles"
+    | "firstorderdiscount"
+    | "pushnotification"
     | "pricing"
     |"order_list_amount";
 

@@ -30,6 +30,15 @@ const parsePermissions = (permissions: any): Permission[] => {
 const MODULE_ALIASES: Record<string, string[]> = {
     orders: ["orders", "order"],
     order: ["orders", "order"],
+    bundles: ["bundles", "bundle"],
+    bundle: ["bundles", "bundle"],
+    firstorderdiscount: ["firstorderdiscount", "firstOrderDiscount", "first_order_discount"],
+    firstOrderDiscount: ["firstorderdiscount", "firstOrderDiscount", "first_order_discount"],
+    videos: ["videos", "Videos", "video"],
+    Videos: ["videos", "Videos", "video"],
+    pushnotification: ["pushnotification", "pushNotification", "pushedNotification", "pushed_notification"],
+    pushedNotification: ["pushnotification", "pushNotification", "pushedNotification", "pushed_notification"],
+    pushNotification: ["pushnotification", "pushNotification", "pushedNotification", "pushed_notification"],
 };
 
 // الأسماء اللي بيحفظها الفرونت (View/Add/Edit/...) مقابل الأسماء اللي في الـ routes

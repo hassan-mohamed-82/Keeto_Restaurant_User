@@ -10,6 +10,7 @@ import {
     getFirstOrderDiscountUsages,
 } from "../../controllers/admin/firstOrderDiscount";
 import { validate } from "../../middlewares/validation";
+import { hasPermission } from "../../middlewares/hasPermission";
 import {
     createFirstOrderDiscountSchema,
     updateFirstOrderDiscountSchema,
@@ -18,16 +19,16 @@ import {
 const router = Router();
 
 // CRUD
-router.post("/", validate(createFirstOrderDiscountSchema), catchAsync(createFirstOrderDiscount));
-router.get("/", catchAsync(getAllFirstOrderDiscounts));
-router.get("/:id", catchAsync(getFirstOrderDiscountById));
-router.put("/:id", validate(updateFirstOrderDiscountSchema), catchAsync(updateFirstOrderDiscount));
-router.delete("/:id", catchAsync(deleteFirstOrderDiscount));
+router.post("/", hasPermission("firstorderdiscount", "create"), validate(createFirstOrderDiscountSchema), catchAsync(createFirstOrderDiscount));
+router.get("/", hasPermission("firstorderdiscount", "read"), catchAsync(getAllFirstOrderDiscounts));
+router.get("/:id", hasPermission("firstorderdiscount", "read"), catchAsync(getFirstOrderDiscountById));
+router.put("/:id", hasPermission("firstorderdiscount", "update"), validate(updateFirstOrderDiscountSchema), catchAsync(updateFirstOrderDiscount));
+router.delete("/:id", hasPermission("firstorderdiscount", "delete"), catchAsync(deleteFirstOrderDiscount));
 
 // Toggle active/inactive status
-router.put("/:id/toggle-status", catchAsync(toggleFirstOrderDiscountStatus));
+router.put("/:id/toggle-status", hasPermission("firstorderdiscount", "update"), catchAsync(toggleFirstOrderDiscountStatus));
 
 // Usage history
-router.get("/:id/usages", catchAsync(getFirstOrderDiscountUsages));
+router.get("/:id/usages", hasPermission("firstorderdiscount", "read"), catchAsync(getFirstOrderDiscountUsages));
 
 export default router;
