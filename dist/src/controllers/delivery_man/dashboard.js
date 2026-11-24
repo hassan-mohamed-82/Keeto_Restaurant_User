@@ -8,7 +8,6 @@ const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
 const response_1 = require("../../utils/response");
-const BadRequest_1 = require("../../Errors/BadRequest");
 const Errors_1 = require("../../Errors");
 const order_helper_1 = require("../../helpers/order.helper");
 const dayjs_1 = __importDefault(require("dayjs"));
@@ -20,14 +19,13 @@ const getDashboard = async (req, res) => {
     if (!req.user)
         throw new Errors_1.UnauthorizedError("Unauthenticated");
     const deliveryManId = req.user.id;
-    const restaurantId = req.user.restaurantId;
-    if (!restaurantId)
-        throw new BadRequest_1.BadRequest("Restaurant ID missing");
+    // const restaurantId = req.user.restaurantId;
+    // if (!restaurantId) throw new BadRequest("Restaurant ID missing");
     // Parse period/date filters from query
     const { startDate, endDate, period } = req.query;
     const conditions = [
         (0, drizzle_orm_1.eq)(schema_1.orders.deliveryManId, deliveryManId),
-        (0, drizzle_orm_1.eq)(schema_1.orders.restaurantId, restaurantId),
+        // eq(orders.restaurantId, restaurantId),
         (0, drizzle_orm_1.eq)(schema_1.orders.orderType, "delivery"),
         (0, order_helper_1.excludeUnpaidVisaOrders)(),
     ];

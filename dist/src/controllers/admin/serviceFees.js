@@ -364,7 +364,7 @@ const getSubcategories = async (req, res) => {
         nameFr: schema_1.subcategories.nameFr,
     })
         .from(schema_1.subcategories)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.subcategories.status, "active")));
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.subcategories.isDeleted, false), (0, drizzle_orm_1.eq)(schema_1.subcategories.status, "active")));
     const formatted = subList.map((sub) => ({
         id: sub.id,
         name: (0, localization_helper_1.getLocalizedName)(sub, lang),

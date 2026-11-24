@@ -37,6 +37,10 @@ exports.MODULES = [
     "slider",
     "notification",
     "freeDeliveryOffer",
+    "bundles",
+    "firstorderdiscount",
+    "videos",
+    "pushnotification",
     // ─── Finance ──────────────────────────────────────────
     "restaurant_wallet",
     "financialAccount",

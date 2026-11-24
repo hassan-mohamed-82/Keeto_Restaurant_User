@@ -126,6 +126,7 @@ exports.orders = (0, mysql_core_1.mysqlTable)("orders", {
     shippingAssignedAt: (0, mysql_core_1.timestamp)("shipping_assigned_at"),
     pickedUpAt: (0, mysql_core_1.timestamp)("picked_up_at"),
     deliveredAt: (0, mysql_core_1.timestamp)("delivered_at"),
+    cancelledAt: (0, mysql_core_1.timestamp)("cancelled_at"),
     // وقت آخر تغيير لحالة الأوردر (status فقط)، بمعزل عن أي تعديلات أخرى.
     // يستخدمه الـ Cron لمعرفة كم مضى على دخول الأوردر حالته الحالية.
     statusChangedAt: (0, mysql_core_1.timestamp)("status_changed_at"),

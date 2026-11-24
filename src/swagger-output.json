@@ -776,6 +776,13 @@
                   },
                   "isOutOfStock": {
                     "type": "boolean"
+                  },
+                  "isDeleted": {
+                    "type": "boolean"
+                  },
+                  "deletedAt": {
+                    "type": "string",
+                    "format": "date-time"
                   }
                 }
               }
@@ -871,6 +878,13 @@
                   },
                   "isOutOfStock": {
                     "type": "boolean"
+                  },
+                  "isDeleted": {
+                    "type": "boolean"
+                  },
+                  "deletedAt": {
+                    "type": "string",
+                    "format": "date-time"
                   }
                 }
               }
@@ -958,6 +972,13 @@
                   },
                   "isOutOfStock": {
                     "type": "boolean"
+                  },
+                  "isDeleted": {
+                    "type": "boolean"
+                  },
+                  "deletedAt": {
+                    "type": "string",
+                    "format": "date-time"
                   }
                 }
               }
@@ -1037,6 +1058,13 @@
                   },
                   "isOutOfStock": {
                     "type": "boolean"
+                  },
+                  "isDeleted": {
+                    "type": "boolean"
+                  },
+                  "deletedAt": {
+                    "type": "string",
+                    "format": "date-time"
                   }
                 },
                 "required": [
@@ -1182,6 +1210,13 @@
                   },
                   "isOutOfStock": {
                     "type": "boolean"
+                  },
+                  "isDeleted": {
+                    "type": "boolean"
+                  },
+                  "deletedAt": {
+                    "type": "string",
+                    "format": "date-time"
                   }
                 }
               }
@@ -1219,6 +1254,100 @@
         "tags": [
           "Restaurant / Subcategories"
         ]
+      }
+    },
+    "/api/restaurant/subcategories/{id}/restore": {
+      "put": {
+        "description": "",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized"
+          },
+          "503": {
+            "description": "Service Unavailable"
+          }
+        },
+        "tags": [
+          "Restaurant / Subcategories"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "restaurantId": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "nameAr": {
+                    "type": "string"
+                  },
+                  "nameFr": {
+                    "type": "string"
+                  },
+                  "image": {
+                    "type": "string"
+                  },
+                  "categoryId": {
+                    "type": "string"
+                  },
+                  "addonsIds": {
+                    "type": "object"
+                  },
+                  "priority": {
+                    "type": "string",
+                    "enum": [
+                      "low",
+                      "medium",
+                      "high"
+                    ]
+                  },
+                  "order_Level": {
+                    "type": "integer"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "inactive"
+                    ]
+                  },
+                  "isOutOfStock": {
+                    "type": "boolean"
+                  },
+                  "isDeleted": {
+                    "type": "boolean"
+                  },
+                  "deletedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/restaurant/order/reasons": {
@@ -1960,6 +2089,10 @@
                     "type": "string",
                     "format": "date-time"
                   },
+                  "cancelledAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
                   "statusChangedAt": {
                     "type": "string",
                     "format": "date-time"
@@ -2258,6 +2391,10 @@
                     "format": "date-time"
                   },
                   "deliveredAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "cancelledAt": {
                     "type": "string",
                     "format": "date-time"
                   },
@@ -2562,6 +2699,10 @@
                     "type": "string",
                     "format": "date-time"
                   },
+                  "cancelledAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
                   "statusChangedAt": {
                     "type": "string",
                     "format": "date-time"
@@ -2860,6 +3001,10 @@
                     "format": "date-time"
                   },
                   "deliveredAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "cancelledAt": {
                     "type": "string",
                     "format": "date-time"
                   },
@@ -3941,6 +4086,9 @@
                       "pos"
                     ]
                   },
+                  "isDeleted": {
+                    "type": "boolean"
+                  },
                   "deletedAt": {
                     "type": "string",
                     "format": "date-time"
@@ -4156,6 +4304,9 @@
                       "online",
                       "pos"
                     ]
+                  },
+                  "isDeleted": {
+                    "type": "boolean"
                   },
                   "deletedAt": {
                     "type": "string",
@@ -4428,6 +4579,9 @@
                       "pos"
                     ]
                   },
+                  "isDeleted": {
+                    "type": "boolean"
+                  },
                   "deletedAt": {
                     "type": "string",
                     "format": "date-time"
@@ -4468,6 +4622,199 @@
         "tags": [
           "Restaurant / Food"
         ]
+      }
+    },
+    "/api/restaurant/food/{id}/restore": {
+      "put": {
+        "description": "",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized"
+          },
+          "503": {
+            "description": "Service Unavailable"
+          }
+        },
+        "tags": [
+          "Restaurant / Food"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "nameAr": {
+                    "type": "string"
+                  },
+                  "nameFr": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "descriptionAr": {
+                    "type": "string"
+                  },
+                  "descriptionFr": {
+                    "type": "string"
+                  },
+                  "image": {
+                    "type": "string"
+                  },
+                  "restaurantid": {
+                    "type": "string"
+                  },
+                  "categoryid": {
+                    "type": "string"
+                  },
+                  "subcategoryid": {
+                    "type": "string"
+                  },
+                  "foodtype": {
+                    "type": "string",
+                    "enum": [
+                      "veg",
+                      "non-veg"
+                    ]
+                  },
+                  "Nutrition": {
+                    "type": "string"
+                  },
+                  "allergen_ingredients": {
+                    "type": "string"
+                  },
+                  "is_Halal": {
+                    "type": "boolean"
+                  },
+                  "addonsId": {
+                    "type": "object"
+                  },
+                  "group_note_id": {
+                    "type": "string"
+                  },
+                  "discountId": {
+                    "type": "string"
+                  },
+                  "startTime": {
+                    "type": "string"
+                  },
+                  "endTime": {
+                    "type": "string"
+                  },
+                  "search_tags": {
+                    "type": "string"
+                  },
+                  "price": {
+                    "type": "string"
+                  },
+                  "discount_type": {
+                    "type": "string",
+                    "enum": [
+                      "percentage",
+                      "amount"
+                    ]
+                  },
+                  "discount_value": {
+                    "type": "string"
+                  },
+                  "offer_price": {
+                    "type": "string"
+                  },
+                  "offer_days": {
+                    "type": "object"
+                  },
+                  "offer_start": {
+                    "type": "string"
+                  },
+                  "offer_end": {
+                    "type": "string"
+                  },
+                  "Maximum_Purchase": {
+                    "type": "integer"
+                  },
+                  "stock_type": {
+                    "type": "string",
+                    "enum": [
+                      "limited",
+                      "unlimited",
+                      "daily"
+                    ]
+                  },
+                  "isOutOfStock": {
+                    "type": "boolean"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "inactive"
+                    ]
+                  },
+                  "points": {
+                    "type": "integer"
+                  },
+                  "order_level": {
+                    "type": "integer"
+                  },
+                  "sold_by": {
+                    "type": "string",
+                    "enum": [
+                      "unit",
+                      "weight"
+                    ]
+                  },
+                  "weight_unit": {
+                    "type": "string",
+                    "enum": [
+                      "kg",
+                      "gm"
+                    ]
+                  },
+                  "allow_custom_weight": {
+                    "type": "boolean"
+                  },
+                  "channel": {
+                    "type": "string",
+                    "enum": [
+                      "all",
+                      "online",
+                      "pos"
+                    ]
+                  },
+                  "isDeleted": {
+                    "type": "boolean"
+                  },
+                  "deletedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/restaurant/food/assign-ingredients/{id}": {
@@ -4648,6 +4995,9 @@
                       "online",
                       "pos"
                     ]
+                  },
+                  "isDeleted": {
+                    "type": "boolean"
                   },
                   "deletedAt": {
                     "type": "string",
@@ -4880,6 +5230,9 @@
                       "pos"
                     ]
                   },
+                  "isDeleted": {
+                    "type": "boolean"
+                  },
                   "deletedAt": {
                     "type": "string",
                     "format": "date-time"
@@ -5070,6 +5423,9 @@
                       "pos"
                     ]
                   },
+                  "isDeleted": {
+                    "type": "boolean"
+                  },
                   "deletedAt": {
                     "type": "string",
                     "format": "date-time"
@@ -5259,6 +5615,9 @@
                       "online",
                       "pos"
                     ]
+                  },
+                  "isDeleted": {
+                    "type": "boolean"
                   },
                   "deletedAt": {
                     "type": "string",
@@ -5458,6 +5817,9 @@
                       "pos"
                     ]
                   },
+                  "isDeleted": {
+                    "type": "boolean"
+                  },
                   "deletedAt": {
                     "type": "string",
                     "format": "date-time"
@@ -5656,6 +6018,9 @@
                       "pos"
                     ]
                   },
+                  "isDeleted": {
+                    "type": "boolean"
+                  },
                   "deletedAt": {
                     "type": "string",
                     "format": "date-time"
@@ -5845,6 +6210,9 @@
                       "online",
                       "pos"
                     ]
+                  },
+                  "isDeleted": {
+                    "type": "boolean"
                   },
                   "deletedAt": {
                     "type": "string",
@@ -6820,6 +7188,98 @@
         ]
       }
     },
+    "/api/restaurant/branches/visa-status": {
+      "put": {
+        "description": "",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "503": {
+            "description": "Service Unavailable"
+          }
+        },
+        "tags": [
+          "Restaurant / Branches"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "restaurantId": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "nameAr": {
+                    "type": "string"
+                  },
+                  "nameFr": {
+                    "type": "string"
+                  },
+                  "address": {
+                    "type": "string"
+                  },
+                  "addressAr": {
+                    "type": "string"
+                  },
+                  "addressFr": {
+                    "type": "string"
+                  },
+                  "phoneNumber": {
+                    "type": "string"
+                  },
+                  "zoneId": {
+                    "type": "string"
+                  },
+                  "deliveryRadiusKm": {
+                    "type": "string"
+                  },
+                  "lat": {
+                    "type": "string"
+                  },
+                  "lng": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "inactive"
+                    ]
+                  },
+                  "inactiveReason": {
+                    "type": "string"
+                  },
+                  "cash_status": {
+                    "type": "boolean"
+                  },
+                  "visa_status": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/restaurant/branches/{id}": {
       "get": {
         "description": "",
@@ -7000,6 +7460,106 @@
           }
         ],
         "responses": {
+          "401": {
+            "description": "Unauthorized"
+          },
+          "503": {
+            "description": "Service Unavailable"
+          }
+        },
+        "tags": [
+          "Restaurant / Branches"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "restaurantId": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "nameAr": {
+                    "type": "string"
+                  },
+                  "nameFr": {
+                    "type": "string"
+                  },
+                  "address": {
+                    "type": "string"
+                  },
+                  "addressAr": {
+                    "type": "string"
+                  },
+                  "addressFr": {
+                    "type": "string"
+                  },
+                  "phoneNumber": {
+                    "type": "string"
+                  },
+                  "zoneId": {
+                    "type": "string"
+                  },
+                  "deliveryRadiusKm": {
+                    "type": "string"
+                  },
+                  "lat": {
+                    "type": "string"
+                  },
+                  "lng": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "inactive"
+                    ]
+                  },
+                  "inactiveReason": {
+                    "type": "string"
+                  },
+                  "cash_status": {
+                    "type": "boolean"
+                  },
+                  "visa_status": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/restaurant/branches/{id}/visa-status": {
+      "put": {
+        "description": "",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Bad Request"
+          },
           "401": {
             "description": "Unauthorized"
           },
@@ -13668,6 +14228,15 @@
                   "firstOrderCount": {
                     "type": "integer"
                   },
+                  "channel": {
+                    "type": "string",
+                    "enum": [
+                      "all",
+                      "app",
+                      "web",
+                      "pos"
+                    ]
+                  },
                   "discountType": {
                     "type": "string",
                     "enum": [
@@ -13827,6 +14396,15 @@
                   "firstOrderCount": {
                     "type": "integer"
                   },
+                  "channel": {
+                    "type": "string",
+                    "enum": [
+                      "all",
+                      "app",
+                      "web",
+                      "pos"
+                    ]
+                  },
                   "discountType": {
                     "type": "string",
                     "enum": [
@@ -13954,6 +14532,15 @@
                   },
                   "firstOrderCount": {
                     "type": "integer"
+                  },
+                  "channel": {
+                    "type": "string",
+                    "enum": [
+                      "all",
+                      "app",
+                      "web",
+                      "pos"
+                    ]
                   },
                   "discountType": {
                     "type": "string",
@@ -16721,331 +17308,6 @@
                 "additionalProperties": true
               },
               "example": {}
-            }
-          }
-        }
-      }
-    },
-    "/api/restaurant/tax-type/": {
-      "get": {
-        "description": "",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "401": {
-            "description": "Unauthorized"
-          },
-          "503": {
-            "description": "Service Unavailable"
-          }
-        },
-        "tags": [
-          "Restaurant / Tax Type"
-        ]
-      },
-      "post": {
-        "description": "",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "400": {
-            "description": "Bad Request"
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "503": {
-            "description": "Service Unavailable"
-          }
-        },
-        "tags": [
-          "Restaurant / Tax Type"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "restrauntid": {
-                    "type": "string"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": [
-                      "include",
-                      "exclude"
-                    ]
-                  }
-                },
-                "required": [
-                  "restrauntid"
-                ]
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "description": "",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "400": {
-            "description": "Bad Request"
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "503": {
-            "description": "Service Unavailable"
-          }
-        },
-        "tags": [
-          "Restaurant / Tax Type"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "restrauntid": {
-                    "type": "string"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": [
-                      "include",
-                      "exclude"
-                    ]
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/restaurant/tax-type/{restrauntid}": {
-      "get": {
-        "description": "",
-        "parameters": [
-          {
-            "name": "restrauntid",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "401": {
-            "description": "Unauthorized"
-          },
-          "503": {
-            "description": "Service Unavailable"
-          }
-        },
-        "tags": [
-          "Restaurant / Tax Type"
-        ]
-      },
-      "post": {
-        "description": "",
-        "parameters": [
-          {
-            "name": "restrauntid",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "400": {
-            "description": "Bad Request"
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "503": {
-            "description": "Service Unavailable"
-          }
-        },
-        "tags": [
-          "Restaurant / Tax Type"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "restrauntid": {
-                    "type": "string"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": [
-                      "include",
-                      "exclude"
-                    ]
-                  }
-                },
-                "required": [
-                  "restrauntid"
-                ]
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "description": "",
-        "parameters": [
-          {
-            "name": "restrauntid",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "400": {
-            "description": "Bad Request"
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "503": {
-            "description": "Service Unavailable"
-          }
-        },
-        "tags": [
-          "Restaurant / Tax Type"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "restrauntid": {
-                    "type": "string"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": [
-                      "include",
-                      "exclude"
-                    ]
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/restaurant/tax-type/upsert": {
-      "post": {
-        "description": "",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "400": {
-            "description": "Bad Request"
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "503": {
-            "description": "Service Unavailable"
-          }
-        },
-        "tags": [
-          "Restaurant / Tax Type"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "restrauntid": {
-                    "type": "string"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": [
-                      "include",
-                      "exclude"
-                    ]
-                  }
-                },
-                "required": [
-                  "restrauntid"
-                ]
-              }
             }
           }
         }
@@ -23776,6 +24038,10 @@
                     "type": "string",
                     "format": "date-time"
                   },
+                  "cancelledAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
                   "statusChangedAt": {
                     "type": "string",
                     "format": "date-time"
@@ -24082,6 +24348,10 @@
                     "format": "date-time"
                   },
                   "deliveredAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "cancelledAt": {
                     "type": "string",
                     "format": "date-time"
                   },
@@ -24597,9 +24867,6 @@
     },
     {
       "name": "Restaurant / Bundles"
-    },
-    {
-      "name": "Restaurant / Tax Type"
     },
     {
       "name": "Restaurant / Suppliers"

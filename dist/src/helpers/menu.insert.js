@@ -90,6 +90,7 @@ async function insertFood(executor, restaurantId, data) {
         sold_by: data.sold_by || "unit",
         weight_unit: data.sold_by === "weight" ? (data.weight_unit || null) : null,
         allow_custom_weight: weightConfig.allowCustomWeight,
+        channel: (data.channel && ["all", "online", "pos"].includes(data.channel)) ? data.channel : "all",
     });
     // Variations and their options
     const variations = data.variations;

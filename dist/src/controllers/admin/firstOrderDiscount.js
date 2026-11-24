@@ -23,7 +23,7 @@ const getRestaurantId = (req) => {
 // =====================================================================
 const createFirstOrderDiscount = async (req, res) => {
     const restaurantId = getRestaurantId(req);
-    const { name, nameAr, nameFr, firstOrderCount, discountType, discountValue, maxDiscountAmount, maxUsage, maxUsagePerUser, startDate, endDate, status, } = req.body;
+    const { name, nameAr, nameFr, firstOrderCount, channel, discountType, discountValue, maxDiscountAmount, maxUsage, maxUsagePerUser, startDate, endDate, status, } = req.body;
     const id = (0, uuid_1.v4)();
     await connection_1.db.insert(schema_1.firstOrderDiscounts).values({
         id,
@@ -32,6 +32,7 @@ const createFirstOrderDiscount = async (req, res) => {
         nameFr: nameFr ?? null,
         restaurantId,
         firstOrderCount: Number(firstOrderCount),
+        channel: channel ?? "all",
         discountType,
         discountValue: String(discountValue),
         maxDiscountAmount: maxDiscountAmount ? String(maxDiscountAmount) : null,
@@ -92,7 +93,7 @@ const updateFirstOrderDiscount = async (req, res) => {
         .limit(1);
     if (!existing)
         throw new NotFound_1.NotFound("First-order discount not found or unauthorized");
-    const { name, nameAr, nameFr, firstOrderCount, discountType, discountValue, maxDiscountAmount, maxUsage, maxUsagePerUser, startDate, endDate, status, } = req.body;
+    const { name, nameAr, nameFr, firstOrderCount, channel, discountType, discountValue, maxDiscountAmount, maxUsage, maxUsagePerUser, startDate, endDate, status, } = req.body;
     const updateData = { updatedAt: new Date() };
     if (name !== undefined)
         updateData.name = name;
@@ -102,6 +103,8 @@ const updateFirstOrderDiscount = async (req, res) => {
         updateData.nameFr = nameFr;
     if (firstOrderCount !== undefined)
         updateData.firstOrderCount = Number(firstOrderCount);
+    if (channel !== undefined)
+        updateData.channel = channel;
     if (discountType !== undefined)
         updateData.discountType = discountType;
     if (discountValue !== undefined)

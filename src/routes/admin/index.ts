@@ -52,7 +52,6 @@ import BulkImportRouter from "./bulkImport";
 import ServiceFeesRouter from "../admin/serviceFees";
 import TaxRouter from "../admin/tax";
 import BundleRouter from "../admin/bundles";
-import TaxTypeRouter from "../admin/taxType";
 import SupplierRouter from "../admin/suppliers";
 import StoreRouter from "../admin/stores";
 import StoreManRouter from "../admin/storeMen";
@@ -121,7 +120,6 @@ router.use("/import", BulkImportRouter); // bulk Excel import of subcategories &
 router.use("/service-fees", ServiceFeesRouter);
 router.use("/tax", TaxRouter);
 router.use("/bundles", BundleRouter);
-router.use("/tax-type", TaxTypeRouter);
 router.use("/suppliers", SupplierRouter);
 router.use("/stores", StoreRouter);
 router.use("/store-men", StoreManRouter);

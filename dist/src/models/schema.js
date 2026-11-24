@@ -76,7 +76,6 @@ __exportStar(require("./schema/admin/shifts"), exports);
 __exportStar(require("./schema/admin/serviceFees"), exports);
 __exportStar(require("./schema/admin/taxes"), exports);
 __exportStar(require("./schema/admin/offers"), exports);
-__exportStar(require("./schema/admin/taxType"), exports);
 __exportStar(require("./schema/admin/ratingRequests"), exports);
 __exportStar(require("./schema/admin/noteGroup"), exports);
 __exportStar(require("./schema/admin/orderDelayAlertGroup"), exports);

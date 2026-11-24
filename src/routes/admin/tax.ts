@@ -4,7 +4,7 @@ import { validate } from "../../middlewares/validation";
 import {
     createTaxSchema,
     updateTaxSchema,
-} from "../../validation/admin/taxes";
+} from "../../validation/admin/tax";
 import {
     createTax,
     getAllTaxes,

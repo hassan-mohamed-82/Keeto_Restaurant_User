@@ -26,6 +26,8 @@ router.get("/:id", (0, hasPermission_1.hasPermission)("food", "read"), (0, catch
 router.put("/:id", (0, hasPermission_1.hasPermission)("food", "update"), (0, catchAsync_1.catchAsync)(food_2.updateFood));
 // ✅ Delete food - يحتاج صلاحية delete
 router.delete("/:id", (0, hasPermission_1.hasPermission)("food", "delete"), (0, catchAsync_1.catchAsync)(food_2.deleteFood));
+// Restore a soft-deleted food
+router.put("/:id/restore", (0, hasPermission_1.hasPermission)("food", "delete"), (0, catchAsync_1.catchAsync)(food_2.restoreFoodById));
 // ✅ Assign ingredients - يحتاج صلاحية update
 router.post("/assign-ingredients/:id", (0, hasPermission_1.hasPermission)("food", "update"), (0, catchAsync_1.catchAsync)(foodIngredients_1.assignIngredientsToFood));
 // ✅ Get recipe - يحتاج صلاحية read

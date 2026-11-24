@@ -12,6 +12,7 @@ exports.createFirstOrderDiscountSchema = zod_1.z.object({
         .number({ required_error: "firstOrderCount is required" })
         .int()
         .min(1, "firstOrderCount must be at least 1"),
+    channel: zod_1.z.enum(["all", "app", "web", "pos"]).default("all"),
     discountType: zod_1.z.enum(["percentage", "fixed"], {
         required_error: "discountType is required",
         invalid_type_error: "discountType must be 'percentage' or 'fixed'",
@@ -35,6 +36,7 @@ exports.updateFirstOrderDiscountSchema = zod_1.z.object({
     nameAr: zod_1.z.string().trim().max(255).optional().nullable(),
     nameFr: zod_1.z.string().trim().max(255).optional().nullable(),
     firstOrderCount: zod_1.z.number().int().min(1).optional(),
+    channel: zod_1.z.enum(["all", "app", "web", "pos"]).optional(),
     discountType: zod_1.z.enum(["percentage", "fixed"]).optional(),
     discountValue: zod_1.z.number().min(0).optional(),
     maxDiscountAmount: zod_1.z.number().min(0).optional().nullable(),

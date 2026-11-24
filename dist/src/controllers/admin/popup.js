@@ -55,7 +55,7 @@ const getLinkTargetOptions = async (req, res) => {
             categoryId: schema_1.subcategories.categoryId,
         })
             .from(schema_1.subcategories)
-            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.status, "active"), (0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId), (0, drizzle_orm_1.sql) `${schema_1.subcategories.restaurantId} IS NULL`))),
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.status, "active"), (0, drizzle_orm_1.eq)(schema_1.subcategories.isDeleted, false), (0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId), (0, drizzle_orm_1.sql) `${schema_1.subcategories.restaurantId} IS NULL`))),
         connection_1.db
             .select({
             id: schema_1.food.id,

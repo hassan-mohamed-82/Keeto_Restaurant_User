@@ -754,6 +754,8 @@ const getDashboardReports = async (req, res) => {
         totalUsers = Number(ordersUsersRow?.total || 0);
     }
     const totalCanceledOrders = userCancellations + restaurantCancellations + otherCancellations;
+    const totalAllOrders = numberOfOrders + totalCanceledOrders;
+    const canceledOrdersPercentage = totalAllOrders > 0 ? ((totalCanceledOrders / totalAllOrders) * 100).toFixed(2) : "0.00";
     // ==========================================
     // إرسال الـ Response
     // ==========================================
@@ -766,6 +768,7 @@ const getDashboardReports = async (req, res) => {
                 totalAmountIncludingCanceled: totalAmountIncludingCanceled.toFixed(2),
                 numberOfOrders,
                 totalCanceledOrders,
+                canceledOrdersPercentage,
                 totalCanceledAmount: totalCanceledAmount.toFixed(2),
                 averageOrderValue: numberOfOrders > 0 ? (totalRevenue / numberOfOrders).toFixed(2) : "0.00",
                 totalUsers,

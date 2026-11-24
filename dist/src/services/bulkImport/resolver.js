@@ -97,7 +97,8 @@ async function loadImportLookups(restaurantId) {
     const [categoryRows, subcategoryRows, addonRows, foodRows] = await Promise.all([
         connection_1.db
             .select({ id: schema_1.categories.id, name: schema_1.categories.name, nameAr: schema_1.categories.nameAr, status: schema_1.categories.status })
-            .from(schema_1.categories),
+            .from(schema_1.categories)
+            .where((0, drizzle_orm_1.eq)(schema_1.categories.isDeleted, false)),
         connection_1.db
             .select({
             id: schema_1.subcategories.id,
@@ -107,7 +108,7 @@ async function loadImportLookups(restaurantId) {
             status: schema_1.subcategories.status,
         })
             .from(schema_1.subcategories)
-            .where((0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId)),
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.subcategories.isDeleted, false))),
         connection_1.db
             .select({ id: schema_1.addons.id, name: schema_1.addons.name, nameAr: schema_1.addons.nameAr })
             .from(schema_1.addons)
@@ -145,7 +146,7 @@ async function loadTemplateLookups(restaurantId) {
         connection_1.db
             .select({ name: schema_1.subcategories.name, nameAr: schema_1.subcategories.nameAr })
             .from(schema_1.subcategories)
-            .where((0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId)),
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.subcategories.isDeleted, false))),
         connection_1.db
             .select({ name: schema_1.addons.name, nameAr: schema_1.addons.nameAr })
             .from(schema_1.addons)

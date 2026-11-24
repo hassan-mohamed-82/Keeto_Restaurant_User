@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateBranchSubcategoryOutOfStock = exports.getActiveSubcategoriesByBranch = exports.getSubcategoryBranchAvailability = exports.updateBranchSubcategoryStatus = exports.getallcategory = exports.deleteSubcategory = exports.updateSubcategory = exports.getSubcategoryById = exports.getAllSubcategories = exports.createSubcategory = void 0;
+exports.updateBranchSubcategoryOutOfStock = exports.getActiveSubcategoriesByBranch = exports.getSubcategoryBranchAvailability = exports.updateBranchSubcategoryStatus = exports.getallcategory = exports.restoreSubcategoryById = exports.deleteSubcategory = exports.updateSubcategory = exports.getSubcategoryById = exports.getAllSubcategories = exports.createSubcategory = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -16,6 +16,7 @@ const handleImages_1 = require("../../utils/handleImages");
 const foodConditions_1 = require("../../helpers/foodConditions");
 const menu_rules_1 = require("../../helpers/menu.rules");
 const menu_insert_1 = require("../../helpers/menu.insert");
+const menuSoftDelete_service_1 = require("../../services/menuSoftDelete.service");
 const createSubcategory = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) {
@@ -30,7 +31,7 @@ const createSubcategory = async (req, res) => {
     const existingCategory = await connection_1.db
         .select()
         .from(schema_1.categories)
-        .where((0, drizzle_orm_1.eq)(schema_1.categories.id, categoryId))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.categories.id, categoryId), (0, drizzle_orm_1.eq)(schema_1.categories.isDeleted, false)))
         .limit(1);
     if (!existingCategory[0]) {
         throw new BadRequest_1.BadRequest(menu_rules_1.MENU_MESSAGES.categoryNotFound);
@@ -68,7 +69,8 @@ const getAllSubcategories = async (req, res) => {
     }
     const branchId = req.query.branchId?.trim() || req.user?.branchId || null;
     const categoryId = req.query.categoryId?.trim() || null;
-    const conditions = [(0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId)];
+    // ?deleted=true -> trash list, otherwise only non-deleted subcategories
+    const conditions = [(0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.subcategories.isDeleted, (0, menuSoftDelete_service_1.isTrashRequest)(req))];
     if (categoryId) {
         conditions.push((0, drizzle_orm_1.eq)(schema_1.subcategories.categoryId, categoryId));
     }
@@ -88,6 +90,8 @@ const getAllSubcategories = async (req, res) => {
         effectiveStatus: branchId
             ? (0, drizzle_orm_1.sql) `COALESCE(${schema_1.branchSubcategories.status}, ${schema_1.subcategories.status})`
             : schema_1.subcategories.status,
+        isDeleted: schema_1.subcategories.isDeleted,
+        deletedAt: schema_1.subcategories.deletedAt,
         createdAt: schema_1.subcategories.createdAt,
         updatedAt: schema_1.subcategories.updatedAt,
         category: {
@@ -173,7 +177,7 @@ const getSubcategoryById = async (req, res) => {
         query = query.leftJoin(schema_1.branchSubcategories, (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branchSubcategories.subcategoryId, schema_1.subcategories.id), (0, drizzle_orm_1.eq)(schema_1.branchSubcategories.branchId, branchId)));
     }
     const [sub] = await query
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.id, id), (0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId)))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.id, id), (0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.subcategories.isDeleted, false)))
         .limit(1);
     if (!sub) {
         throw new NotFound_1.NotFound("Subcategory not found");
@@ -216,7 +220,7 @@ const updateSubcategory = async (req, res) => {
     const existingSubcategory = await connection_1.db
         .select()
         .from(schema_1.subcategories)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.id, id), (0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId)))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.id, id), (0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.subcategories.isDeleted, false)))
         .limit(1);
     if (!existingSubcategory[0]) {
         throw new NotFound_1.NotFound("Subcategory not found or you don't have permission to edit it");
@@ -225,7 +229,7 @@ const updateSubcategory = async (req, res) => {
         const existingCategory = await connection_1.db
             .select()
             .from(schema_1.categories)
-            .where((0, drizzle_orm_1.eq)(schema_1.categories.id, categoryId))
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.categories.id, categoryId), (0, drizzle_orm_1.eq)(schema_1.categories.isDeleted, false)))
             .limit(1);
         if (!existingCategory[0]) {
             throw new BadRequest_1.BadRequest("Category not found");
@@ -268,7 +272,7 @@ const updateSubcategory = async (req, res) => {
     }
     await connection_1.db.update(schema_1.subcategories)
         .set(updateData)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.id, id), (0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId)));
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.id, id), (0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.subcategories.isDeleted, false)));
     if (addonsIds !== undefined) {
         await connection_1.db.update(schema_1.food)
             .set({ addonsId: addonsIds })
@@ -282,20 +286,21 @@ const deleteSubcategory = async (req, res) => {
     if (!restaurantId) {
         throw new BadRequest_1.BadRequest("Restaurant context is missing or unauthorized");
     }
-    const { id } = req.params;
-    const existingSubcategory = await connection_1.db
-        .select()
-        .from(schema_1.subcategories)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.id, id), (0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId)))
-        .limit(1);
-    if (!existingSubcategory[0]) {
-        throw new NotFound_1.NotFound("Subcategory not found or you don't have permission to delete it");
-    }
-    await connection_1.db.delete(schema_1.subcategories)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.id, id), (0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId)));
-    return (0, response_1.SuccessResponse)(res, { message: "Delete subcategory success" });
+    // Soft delete: also trashes this subcategory's foods.
+    const data = await (0, menuSoftDelete_service_1.softDeleteSubcategory)(restaurantId, req.params.id);
+    return (0, response_1.SuccessResponse)(res, { message: "Subcategory moved to trash", data });
 };
 exports.deleteSubcategory = deleteSubcategory;
+// Restores the subcategory and the foods trashed together with it.
+const restoreSubcategoryById = async (req, res) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId) {
+        throw new BadRequest_1.BadRequest("Restaurant context is missing or unauthorized");
+    }
+    const data = await (0, menuSoftDelete_service_1.restoreSubcategory)(restaurantId, req.params.id);
+    return (0, response_1.SuccessResponse)(res, { message: "Subcategory restored successfully", data });
+};
+exports.restoreSubcategoryById = restoreSubcategoryById;
 const getallcategory = async (req, res) => {
     const allCategories = await connection_1.db
         .select({
@@ -303,7 +308,7 @@ const getallcategory = async (req, res) => {
         name: schema_1.categories.name,
     })
         .from(schema_1.categories)
-        .where((0, drizzle_orm_1.eq)(schema_1.categories.status, "active"));
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.categories.status, "active"), (0, drizzle_orm_1.eq)(schema_1.categories.isDeleted, false)));
     return (0, response_1.SuccessResponse)(res, { message: "Get all categories success", data: allCategories });
 };
 exports.getallcategory = getallcategory;
@@ -336,7 +341,7 @@ const updateBranchSubcategoryStatus = async (req, res) => {
     const [sub] = await connection_1.db
         .select({ id: schema_1.subcategories.id, name: schema_1.subcategories.name, status: schema_1.subcategories.status })
         .from(schema_1.subcategories)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.id, subcategoryId), (0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId)))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.id, subcategoryId), (0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.subcategories.isDeleted, false)))
         .limit(1);
     if (!sub)
         throw new NotFound_1.NotFound("Subcategory not found or does not belong to your restaurant");
@@ -472,7 +477,7 @@ const getSubcategoryBranchAvailability = async (req, res) => {
         categoryId: schema_1.subcategories.categoryId,
     })
         .from(schema_1.subcategories)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.id, subcategoryId), (0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId)))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.id, subcategoryId), (0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.subcategories.isDeleted, false)))
         .limit(1);
     if (!sub)
         throw new NotFound_1.NotFound("Subcategory not found or does not belong to your restaurant");
@@ -535,6 +540,7 @@ const getActiveSubcategoriesByBranch = async (req, res) => {
     if (!branchId)
         throw new BadRequest_1.BadRequest("Branch ID is required");
     const conditions = [
+        (0, drizzle_orm_1.eq)(schema_1.subcategories.isDeleted, false),
         (0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId),
         (0, drizzle_orm_1.eq)(schema_1.subcategories.status, "active"),
     ];
@@ -601,7 +607,7 @@ const updateBranchSubcategoryOutOfStock = async (req, res) => {
         const [sub] = await connection_1.db
             .select({ id: schema_1.subcategories.id, name: schema_1.subcategories.name })
             .from(schema_1.subcategories)
-            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.id, subcategoryId), (0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId)))
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.id, subcategoryId), (0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.subcategories.isDeleted, false)))
             .limit(1);
         if (!sub)
             throw new NotFound_1.NotFound("Subcategory not found or does not belong to your restaurant");

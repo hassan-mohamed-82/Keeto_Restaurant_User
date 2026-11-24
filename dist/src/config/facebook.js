@@ -54,6 +54,7 @@ const verifyFacebookToken = async (req, res) => {
                 facebookId,
                 googleId: null,
                 appleId: null,
+                deviceId: null,
                 phone: null,
                 alternatePhone: null,
                 photo: null,

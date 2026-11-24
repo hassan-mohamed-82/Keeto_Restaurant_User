@@ -19,4 +19,5 @@ router.get("/", (0, catchAsync_1.catchAsync)(subcategory_1.getAllSubcategories))
 router.get("/:id", (0, catchAsync_1.catchAsync)(subcategory_1.getSubcategoryById));
 router.put("/:id", (0, catchAsync_1.catchAsync)(subcategory_1.updateSubcategory));
 router.delete("/:id", (0, catchAsync_1.catchAsync)(subcategory_1.deleteSubcategory));
+router.put("/:id/restore", (0, catchAsync_1.catchAsync)(subcategory_1.restoreSubcategoryById));
 exports.default = router;

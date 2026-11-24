@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.changeFoodOrderLevel = exports.bulkApplyFoodDiscount = exports.getActiveInStockFoods = exports.getOutOfStockFoods = exports.toggleFoodOutOfStock = exports.changeFoodStatus = exports.toggleVariationOptionStatus = exports.toggleVariationStatus = exports.getFoodSelectData = exports.deleteFood = exports.updateFood = exports.getFoodById = exports.getAllFoods = exports.createFood = void 0;
+exports.changeFoodOrderLevel = exports.bulkApplyFoodDiscount = exports.getActiveInStockFoods = exports.getOutOfStockFoods = exports.toggleFoodOutOfStock = exports.changeFoodStatus = exports.toggleVariationOptionStatus = exports.toggleVariationStatus = exports.getFoodSelectData = exports.restoreFoodById = exports.deleteFood = exports.updateFood = exports.getFoodById = exports.getAllFoods = exports.createFood = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const food_helper_1 = require("../../helpers/food.helper");
@@ -15,6 +15,7 @@ const foodConditions_1 = require("../../helpers/foodConditions");
 const pricing_overrides_1 = require("../../helpers/pricing.overrides");
 const menu_rules_1 = require("../../helpers/menu.rules");
 const menu_insert_1 = require("../../helpers/menu.insert");
+const menuSoftDelete_service_1 = require("../../services/menuSoftDelete.service");
 const weightPricing_helper_1 = require("../../helpers/weightPricing.helper");
 // =============================================
 // CREATE Food
@@ -56,21 +57,24 @@ const createFood = async (req, res) => {
         if (!restaurantId) {
             throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
         }
-        const { name, description, image, categoryid, subcategoryid, foodtype, Nutrition, allergen_ingredients, is_Halal, startTime, endTime, search_tags, price, discount_type, discount_value, Maximum_Purchase, stock_type, status, variations, points, nameAr, nameFr, descriptionAr, descriptionFr, isOutOfStock, sold_by, weight_unit, allow_custom_weight, } = req.body;
+        const { name, description, image, categoryid, subcategoryid, foodtype, Nutrition, allergen_ingredients, is_Halal, startTime, endTime, search_tags, price, discount_type, discount_value, Maximum_Purchase, stock_type, status, variations, points, nameAr, nameFr, descriptionAr, descriptionFr, isOutOfStock, sold_by, weight_unit, allow_custom_weight, channel, } = req.body;
+        const finalChannel = (channel && ["all", "online", "pos"].includes(String(channel).trim().toLowerCase()))
+            ? String(channel).trim().toLowerCase()
+            : "all";
         const incomingAddons = req.body.addonsId ?? req.body.addons ?? req.body.addonIds ?? req.body['addonsId[]'] ?? req.body['addons[]'];
         // 1. التحقق من الحقول المطلوبة (الصورة مطلوبة هنا، واختيارية في الـ bulk import)
         if ((0, menu_rules_1.getMissingFoodFields)({ name, description, image, categoryid, price }, { requireImage: true }).length > 0) {
             throw new BadRequest_1.BadRequest(menu_rules_1.MENU_MESSAGES.foodRequiredFields);
         }
         // 2. التحقق من وجود العلاقات
-        const existingCategory = await connection_1.db.select().from(schema_1.categories).where((0, drizzle_orm_1.eq)(schema_1.categories.id, categoryid)).limit(1);
+        const existingCategory = await connection_1.db.select().from(schema_1.categories).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.categories.id, categoryid), (0, drizzle_orm_1.eq)(schema_1.categories.isDeleted, false))).limit(1);
         if (!existingCategory[0])
             throw new BadRequest_1.BadRequest(menu_rules_1.MENU_MESSAGES.categoryNotFound);
         if (subcategoryid) {
             const existingSub = await connection_1.db
                 .select({ id: schema_1.subcategories.id, status: schema_1.subcategories.status })
                 .from(schema_1.subcategories)
-                .where((0, drizzle_orm_1.eq)(schema_1.subcategories.id, subcategoryid))
+                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.id, subcategoryid), (0, drizzle_orm_1.eq)(schema_1.subcategories.isDeleted, false)))
                 .limit(1);
             if (!existingSub[0])
                 throw new BadRequest_1.BadRequest(menu_rules_1.MENU_MESSAGES.subcategoryNotFound);
@@ -145,6 +149,7 @@ const createFood = async (req, res) => {
             sold_by: sold_by || "unit",
             weight_unit: sold_by === "weight" ? weight_unit : null,
             allow_custom_weight: (0, weightPricing_helper_1.parseBooleanInput)(allow_custom_weight),
+            channel: finalChannel,
             variations: normalizeWeightVariationInput(variations),
             branches: req.body.branches,
         }));
@@ -167,14 +172,21 @@ const getAllFoods = async (req, res) => {
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
     // 1. Extract query params
-    const { categoryId, subCategoryId } = req.query;
+    const { categoryId, subCategoryId, channel } = req.query;
     // 2. Build dynamic conditions
-    const conditions = [foodConditions_1.activeFoodCondition, (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId)];
+    // ?deleted=true -> trash list, otherwise only non-deleted foods
+    const conditions = [(0, drizzle_orm_1.eq)(schema_1.food.isDeleted, (0, menuSoftDelete_service_1.isTrashRequest)(req)), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId)];
     if (categoryId) {
         conditions.push((0, drizzle_orm_1.eq)(schema_1.food.categoryid, categoryId));
     }
     if (subCategoryId) {
         conditions.push((0, drizzle_orm_1.eq)(schema_1.food.subcategoryid, subCategoryId));
+    }
+    if (channel && typeof channel === "string") {
+        const cleanChannel = channel.trim().toLowerCase();
+        if (cleanChannel === "online" || cleanChannel === "pos") {
+            conditions.push((0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.food.channel, cleanChannel), (0, drizzle_orm_1.eq)(schema_1.food.channel, "all")));
+        }
     }
     const rawFoods = await connection_1.db.select({
         id: schema_1.food.id, name: schema_1.food.name, nameAr: schema_1.food.nameAr, nameFr: schema_1.food.nameFr, order_level: schema_1.food.order_level,
@@ -184,7 +196,9 @@ const getAllFoods = async (req, res) => {
         is_Halal: schema_1.food.is_Halal, isOutOfStock: schema_1.food.isOutOfStock, addonsId: schema_1.food.addonsId, startTime: schema_1.food.startTime, endTime: schema_1.food.endTime,
         search_tags: schema_1.food.search_tags, price: schema_1.food.price, discount_type: schema_1.food.discount_type, discount_value: schema_1.food.discount_value,
         Maximum_Purchase: schema_1.food.Maximum_Purchase, points: schema_1.food.points, stock_type: schema_1.food.stock_type, status: schema_1.food.status,
+        channel: schema_1.food.channel,
         sold_by: schema_1.food.sold_by, weight_unit: schema_1.food.weight_unit, allow_custom_weight: schema_1.food.allow_custom_weight,
+        isDeleted: schema_1.food.isDeleted, deletedAt: schema_1.food.deletedAt,
         createdAt: schema_1.food.createdAt, updatedAt: schema_1.food.updatedAt,
         restaurant: schema_1.restaurants,
         category_name: schema_1.categories.name, category_nameAr: schema_1.categories.nameAr, category_nameFr: schema_1.categories.nameFr,
@@ -270,6 +284,7 @@ const getAllFoods = async (req, res) => {
             points: f.points ?? 0,
             sold_by: f.sold_by, weight_unit: f.weight_unit, allow_custom_weight: f.allow_custom_weight,
             stock_type: f.stock_type, createdAt: f.createdAt, updatedAt: f.updatedAt,
+            isDeleted: f.isDeleted, deletedAt: f.deletedAt,
             variations: foodVars, restaurant: f.restaurant,
             ingredients: assignedIngredients,
             category: f.category_name ? { name: f.category_name, nameAr: f.category_nameAr, nameFr: f.category_nameFr } : null,
@@ -295,6 +310,7 @@ const getFoodById = async (req, res) => {
         is_Halal: schema_1.food.is_Halal, isOutOfStock: schema_1.food.isOutOfStock, addonsId: schema_1.food.addonsId, startTime: schema_1.food.startTime, endTime: schema_1.food.endTime,
         search_tags: schema_1.food.search_tags, price: schema_1.food.price, discount_type: schema_1.food.discount_type, discount_value: schema_1.food.discount_value,
         Maximum_Purchase: schema_1.food.Maximum_Purchase, points: schema_1.food.points, stock_type: schema_1.food.stock_type, status: schema_1.food.status,
+        channel: schema_1.food.channel,
         sold_by: schema_1.food.sold_by, weight_unit: schema_1.food.weight_unit, allow_custom_weight: schema_1.food.allow_custom_weight,
         createdAt: schema_1.food.createdAt, updatedAt: schema_1.food.updatedAt,
         restaurant: { id: schema_1.restaurants.id, name: schema_1.restaurants.name },
@@ -382,6 +398,7 @@ const updateFood = async (req, res) => {
         "points", "isOutOfStock",
         "sold_by", "weight_unit",
         "order_level",
+        "channel",
     ];
     const updateData = {
         updatedAt: new Date(),
@@ -400,6 +417,13 @@ const updateFood = async (req, res) => {
                 updateData[key] = data[key];
             }
         }
+    }
+    if (updateData.channel !== undefined) {
+        const cleanChan = String(updateData.channel).trim().toLowerCase();
+        if (!["all", "online", "pos"].includes(cleanChan)) {
+            throw new BadRequest_1.BadRequest("channel must be 'all', 'online', or 'pos'");
+        }
+        updateData.channel = cleanChan;
     }
     // Weight selling cross-validation on update — four cases:
     //
@@ -757,90 +781,28 @@ const updateFood = async (req, res) => {
 };
 exports.updateFood = updateFood;
 // =============================================
-// HYBRID DELETE Food
-// Archived when historical/operational references exist, otherwise deleted.
+// SOFT DELETE Food
+// Keeps the row (variations, pricing, order history) and hides it via isDeleted.
 // =============================================
 const deleteFood = async (req, res) => {
-    const { id } = req.params;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
-    const [existingFood] = await connection_1.db
-        .select({ id: schema_1.food.id, status: schema_1.food.status, deletedAt: schema_1.food.deletedAt })
-        .from(schema_1.food)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.id, id), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId), foodConditions_1.activeFoodCondition))
-        .limit(1);
-    if (!existingFood) {
-        throw new NotFound_1.NotFound("Food not found or you don't have permission to delete it");
-    }
-    const [orderReferences, cartReferences, redeemRequestReferences,] = await Promise.all([
-        connection_1.db.select({ id: schema_1.orderItems.id }).from(schema_1.orderItems).where((0, drizzle_orm_1.eq)(schema_1.orderItems.foodId, id)).limit(1),
-        connection_1.db.select({ id: schema_1.cartItems.id }).from(schema_1.cartItems).where((0, drizzle_orm_1.eq)(schema_1.cartItems.foodId, id)).limit(1),
-        connection_1.db.select({ id: schema_1.redeemRequests.id }).from(schema_1.redeemRequests).where((0, drizzle_orm_1.eq)(schema_1.redeemRequests.foodId, id)).limit(1),
-    ]);
-    const hasReferences = [
-        orderReferences,
-        cartReferences,
-        redeemRequestReferences,
-    ].some((references) => references.length > 0);
-    if (hasReferences) {
-        await connection_1.db
-            .update(schema_1.food)
-            .set({
-            deletedAt: new Date(),
-            status: "inactive",
-            isOutOfStock: true,
-            updatedAt: new Date(),
-        })
-            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.id, id), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId)));
-        await connection_1.db
-            .update(schema_1.branchMenuItems)
-            .set({ status: "inactive", updatedAt: new Date() })
-            .where((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.foodId, id));
-        return (0, response_1.SuccessResponse)(res, {
-            message: "Food deactivated and archived successfully",
-            data: { foodId: id, deletedAt: new Date(), deleteType: "soft" },
-        });
-    }
-    await connection_1.db.transaction(async (tx) => {
-        // 1. Delete variant pricing overrides, variation options, and variations
-        const variations = await tx
-            .select({ id: schema_1.foodVariations.id })
-            .from(schema_1.foodVariations)
-            .where((0, drizzle_orm_1.eq)(schema_1.foodVariations.foodId, id));
-        const variationIds = variations.map((variation) => variation.id);
-        if (variationIds.length > 0) {
-            const options = await tx
-                .select({ id: schema_1.variationOptions.id })
-                .from(schema_1.variationOptions)
-                .where((0, drizzle_orm_1.inArray)(schema_1.variationOptions.variationId, variationIds));
-            const optionIds = options.map((opt) => opt.id);
-            if (optionIds.length > 0) {
-                // Delete variant pricing overrides first
-                await tx.delete(schema_1.variantPricingOverrides).where((0, drizzle_orm_1.inArray)(schema_1.variantPricingOverrides.variantId, optionIds));
-                // Delete variation options
-                await tx.delete(schema_1.variationOptions).where((0, drizzle_orm_1.inArray)(schema_1.variationOptions.id, optionIds));
-            }
-            // Delete food variations
-            await tx.delete(schema_1.foodVariations).where((0, drizzle_orm_1.inArray)(schema_1.foodVariations.id, variationIds));
-        }
-        // 2. Delete food pricing overrides
-        await tx.delete(schema_1.foodPricingOverrides).where((0, drizzle_orm_1.eq)(schema_1.foodPricingOverrides.foodId, id));
-        // 3. Delete other child relations
-        await tx.delete(schema_1.branchIngredientLocks).where((0, drizzle_orm_1.eq)(schema_1.branchIngredientLocks.foodId, id));
-        await tx.delete(schema_1.foodIngredients).where((0, drizzle_orm_1.eq)(schema_1.foodIngredients.foodId, id));
-        await tx.delete(schema_1.branchMenuItems).where((0, drizzle_orm_1.eq)(schema_1.branchMenuItems.foodId, id));
-        await tx.delete(schema_1.favorites).where((0, drizzle_orm_1.eq)(schema_1.favorites.foodId, id));
-        await tx.delete(schema_1.pointsProducts).where((0, drizzle_orm_1.eq)(schema_1.pointsProducts.foodId, id));
-        // 4. Delete the food record
-        await tx.delete(schema_1.food).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.id, id), (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId)));
-    });
-    return (0, response_1.SuccessResponse)(res, {
-        message: "Food permanently deleted from database",
-        data: { foodId: id, deleteType: "hard" },
-    });
+    const data = await (0, menuSoftDelete_service_1.softDeleteFood)(restaurantId, req.params.id);
+    return (0, response_1.SuccessResponse)(res, { message: "Food moved to trash", data });
 };
 exports.deleteFood = deleteFood;
+// =============================================
+// RESTORE Food
+// =============================================
+const restoreFoodById = async (req, res) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId)
+        throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
+    const data = await (0, menuSoftDelete_service_1.restoreFood)(restaurantId, req.params.id);
+    return (0, response_1.SuccessResponse)(res, { message: "Food restored successfully", data });
+};
+exports.restoreFoodById = restoreFoodById;
 // =============================================
 // GET Food Select Data (For Dropdowns)
 // =============================================
@@ -854,7 +816,7 @@ const getFoodSelectData = async (req, res) => {
     const myCategories = await connection_1.db
         .select({ id: schema_1.categories.id, name: schema_1.categories.name })
         .from(schema_1.categories)
-        .where((0, drizzle_orm_1.eq)(schema_1.categories.status, "active"));
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.categories.status, "active"), (0, drizzle_orm_1.eq)(schema_1.categories.isDeleted, false)));
     // ✅ Subcategories - الخاصة بالمطعم أو العامة (restaurantId = null)
     const mySubcategories = await connection_1.db
         .select({
@@ -865,7 +827,7 @@ const getFoodSelectData = async (req, res) => {
         status: schema_1.subcategories.status // ✅ للتأكد من القيمة
     })
         .from(schema_1.subcategories)
-        .where((0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId)));
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId)), (0, drizzle_orm_1.eq)(schema_1.subcategories.isDeleted, false)));
     // ✅ Addons - فقط الخاصة بالمطعم
     const myAddons = await connection_1.db
         .select({ id: schema_1.addons.id, name: schema_1.addons.name })
@@ -1290,6 +1252,7 @@ const getOutOfStockFoods = async (req, res) => {
             price: schema_1.food.price,
             status: schema_1.food.status,
             isOutOfStock: schema_1.food.isOutOfStock,
+            channel: schema_1.food.channel,
             stock_type: schema_1.food.stock_type,
             foodtype: schema_1.food.foodtype,
             startTime: schema_1.food.startTime,
@@ -1367,6 +1330,7 @@ const getOutOfStockFoods = async (req, res) => {
         image: schema_1.food.image,
         price: schema_1.food.price,
         status: schema_1.food.status,
+        channel: schema_1.food.channel,
         isOutOfStock: schema_1.food.isOutOfStock,
         stock_type: schema_1.food.stock_type,
         foodtype: schema_1.food.foodtype,
@@ -1463,6 +1427,12 @@ const getActiveInStockFoods = async (req, res) => {
     if (req.query.subCategoryId) {
         conditions.push((0, drizzle_orm_1.eq)(schema_1.food.subcategoryid, req.query.subCategoryId));
     }
+    if (req.query.channel && typeof req.query.channel === "string") {
+        const cleanChannel = req.query.channel.trim().toLowerCase();
+        if (cleanChannel === "online" || cleanChannel === "pos") {
+            conditions.push((0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.food.channel, cleanChannel), (0, drizzle_orm_1.eq)(schema_1.food.channel, "all")));
+        }
+    }
     const rawFoods = await connection_1.db
         .select({
         id: schema_1.food.id,
@@ -1474,6 +1444,7 @@ const getActiveInStockFoods = async (req, res) => {
         descriptionFr: schema_1.food.descriptionFr,
         image: schema_1.food.image,
         price: schema_1.food.price,
+        channel: schema_1.food.channel,
         sold_by: schema_1.food.sold_by,
         weight_unit: schema_1.food.weight_unit,
         allow_custom_weight: schema_1.food.allow_custom_weight,

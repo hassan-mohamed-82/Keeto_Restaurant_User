@@ -5,7 +5,7 @@ import { eq, and, desc, inArray, count, or, like } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest, NotFound } from "../../Errors";
 import { v4 as uuidv4 } from "uuid";
-import { TAX_MODULES, TAX_TYPES, TAX_MODULE_TYPES, AMOUNT_TYPES } from "../../validation/admin/taxes";
+import { TAX_MODULES, TAX_TYPES, TAX_MODULE_TYPES, AMOUNT_TYPES } from "../../validation/admin/tax";
 
 import { extractLang, getLocalizedName, parseJsonArray, Language } from "../../helpers/localization.helper";
 

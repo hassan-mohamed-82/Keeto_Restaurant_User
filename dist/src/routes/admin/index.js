@@ -56,7 +56,6 @@ const bulkImport_1 = __importDefault(require("./bulkImport"));
 const serviceFees_1 = __importDefault(require("../admin/serviceFees"));
 const tax_1 = __importDefault(require("../admin/tax"));
 const bundles_1 = __importDefault(require("../admin/bundles"));
-const taxType_1 = __importDefault(require("../admin/taxType"));
 const suppliers_1 = __importDefault(require("../admin/suppliers"));
 const stores_1 = __importDefault(require("../admin/stores"));
 const storeMen_1 = __importDefault(require("../admin/storeMen"));
@@ -118,7 +117,6 @@ router.use("/import", bulkImport_1.default); // bulk Excel import of subcategori
 router.use("/service-fees", serviceFees_1.default);
 router.use("/tax", tax_1.default);
 router.use("/bundles", bundles_1.default);
-router.use("/tax-type", taxType_1.default);
 router.use("/suppliers", suppliers_1.default);
 router.use("/stores", stores_1.default);
 router.use("/store-men", storeMen_1.default);

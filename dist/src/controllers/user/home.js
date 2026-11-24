@@ -60,7 +60,7 @@ const getHomeScreen = async (req, res) => {
             nameAr: schema_1.categories.nameAr,
             nameFr: schema_1.categories.nameFr,
             image: schema_1.categories.Image
-        }).from(schema_1.categories).where((0, drizzle_orm_1.eq)(schema_1.categories.status, "active"));
+        }).from(schema_1.categories).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.categories.status, "active"), (0, drizzle_orm_1.eq)(schema_1.categories.isDeleted, false)));
         restaurantsData = await connection_1.db.select({
             id: schema_1.restaurants.id,
             name: schema_1.restaurants.name,

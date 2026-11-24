@@ -946,6 +946,8 @@ const cancelOrder = async (req, res) => {
         await tx.update(schema_1.orders)
             .set({
             status: "cancelled",
+            cancelledAt: new Date(),
+            statusChangedAt: new Date(),
             cancelReasonId: finalReasonId,
             cancelReason: finalReasonText,
             cancelReasonType: "user",

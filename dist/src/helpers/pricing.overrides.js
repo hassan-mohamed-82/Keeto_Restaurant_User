@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.resolvePricingChannel = resolvePricingChannel;
 exports.overrideRank = overrideRank;
 exports.pickBestOverride = pickBestOverride;
 exports.cascadeOverrideCondition = cascadeOverrideCondition;
@@ -12,6 +13,27 @@ exports.parsePrice = parsePrice;
 const drizzle_orm_1 = require("drizzle-orm");
 const uuid_1 = require("uuid");
 const channelPricing_1 = require("../models/schema/admin/channelPricing");
+function resolvePricingChannel(channel, posPricingStatus) {
+    // If posPricingStatus is explicitly provided:
+    // true -> both POS & Online ("all")
+    // false -> only online ("online")
+    if (posPricingStatus !== undefined && posPricingStatus !== null && posPricingStatus !== "") {
+        const isPosTrue = posPricingStatus === true ||
+            posPricingStatus === "true" ||
+            posPricingStatus === 1 ||
+            posPricingStatus === "1";
+        return isPosTrue ? "all" : "online";
+    }
+    // If channel is explicitly provided ("all", "online", "pos")
+    if (channel && typeof channel === "string") {
+        const lower = channel.trim().toLowerCase();
+        if (lower === "all" || lower === "online" || lower === "pos") {
+            return lower;
+        }
+    }
+    // Default is "all"
+    return "all";
+}
 function overrideRank(row) {
     return (row.branchId ? 2 : 0) + (row.serviceModule ? 1 : 0);
 }
@@ -41,6 +63,7 @@ function overrideKeyWhere(table, branchId, serviceModule) {
     return (0, drizzle_orm_1.and)(branchId ? (0, drizzle_orm_1.eq)(table.branchId, branchId) : (0, drizzle_orm_1.isNull)(table.branchId), serviceModule ? (0, drizzle_orm_1.eq)(table.serviceModule, serviceModule) : (0, drizzle_orm_1.isNull)(table.serviceModule));
 }
 async function upsertFoodPricingOverride(tx, input) {
+    const channelVal = resolvePricingChannel(input.channel, input.posPricingStatus ?? input.pospricingstatus);
     const statusVal = input.status === "inactive" ? "inactive" : "active";
     const whereClause = (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(channelPricing_1.foodPricingOverrides.foodId, input.foodId), overrideKeyWhere(channelPricing_1.foodPricingOverrides, input.branchId, input.serviceModule));
     const [existing] = await tx
@@ -51,7 +74,7 @@ async function upsertFoodPricingOverride(tx, input) {
     if (existing) {
         await tx
             .update(channelPricing_1.foodPricingOverrides)
-            .set({ price: input.price, status: statusVal, updatedAt: new Date() })
+            .set({ price: input.price, status: statusVal, channel: channelVal, updatedAt: new Date() })
             .where((0, drizzle_orm_1.eq)(channelPricing_1.foodPricingOverrides.id, existing.id));
         return existing.id;
     }
@@ -62,11 +85,13 @@ async function upsertFoodPricingOverride(tx, input) {
         branchId: input.branchId,
         serviceModule: input.serviceModule,
         price: input.price,
+        channel: channelVal,
         status: statusVal,
     });
     return id;
 }
 async function upsertVariantPricingOverride(tx, input) {
+    const channelVal = resolvePricingChannel(input.channel, input.posPricingStatus ?? input.pospricingstatus);
     const statusVal = input.status === "inactive" ? "inactive" : "active";
     const whereClause = (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(channelPricing_1.variantPricingOverrides.variantId, input.variantId), overrideKeyWhere(channelPricing_1.variantPricingOverrides, input.branchId, input.serviceModule));
     const [existing] = await tx
@@ -77,7 +102,7 @@ async function upsertVariantPricingOverride(tx, input) {
     if (existing) {
         await tx
             .update(channelPricing_1.variantPricingOverrides)
-            .set({ price: input.price, status: statusVal, updatedAt: new Date() })
+            .set({ price: input.price, status: statusVal, channel: channelVal, updatedAt: new Date() })
             .where((0, drizzle_orm_1.eq)(channelPricing_1.variantPricingOverrides.id, existing.id));
         return existing.id;
     }
@@ -88,6 +113,7 @@ async function upsertVariantPricingOverride(tx, input) {
         branchId: input.branchId,
         serviceModule: input.serviceModule,
         price: input.price,
+        channel: channelVal,
         status: statusVal,
     });
     return id;
@@ -98,6 +124,7 @@ async function fetchFoodOverrides(dbOrTx, foodId, branchId, serviceModule) {
         id: channelPricing_1.foodPricingOverrides.id,
         branchId: channelPricing_1.foodPricingOverrides.branchId,
         serviceModule: channelPricing_1.foodPricingOverrides.serviceModule,
+        channel: channelPricing_1.foodPricingOverrides.channel,
         price: channelPricing_1.foodPricingOverrides.price,
         status: channelPricing_1.foodPricingOverrides.status,
     })
@@ -112,6 +139,7 @@ async function fetchVariantOverrides(dbOrTx, variantIds, branchId, serviceModule
         variantId: channelPricing_1.variantPricingOverrides.variantId,
         branchId: channelPricing_1.variantPricingOverrides.branchId,
         serviceModule: channelPricing_1.variantPricingOverrides.serviceModule,
+        channel: channelPricing_1.variantPricingOverrides.channel,
         price: channelPricing_1.variantPricingOverrides.price,
         status: channelPricing_1.variantPricingOverrides.status,
     })

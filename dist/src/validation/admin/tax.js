@@ -1,17 +1,133 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __exportStar = (this && this.__exportStar) || function(m, exports) {
-    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
-};
 Object.defineProperty(exports, "__esModule", { value: true });
-__exportStar(require("./taxes"), exports);
+exports.updateTaxSchema = exports.createTaxSchema = exports.foodFilterSchema = exports.subcategoryFilterSchema = exports.SUPPORTED_LANGUAGES = exports.AMOUNT_TYPES = exports.TAX_MODULE_TYPES = exports.TAX_TYPES = exports.TAX_MODULES = void 0;
+const zod_1 = require("zod");
+exports.TAX_MODULES = ["take_away", "dine_in", "delivery", "car", "all"];
+exports.TAX_TYPES = ["web", "app", "all"];
+exports.TAX_MODULE_TYPES = ["pos", "online", "all"];
+exports.AMOUNT_TYPES = ["percentage", "value"];
+exports.SUPPORTED_LANGUAGES = ["en", "ar", "fr"];
+exports.subcategoryFilterSchema = zod_1.z.object({
+    lang: zod_1.z.enum(exports.SUPPORTED_LANGUAGES).optional().default("en"),
+});
+exports.foodFilterSchema = zod_1.z.object({
+    lang: zod_1.z.enum(exports.SUPPORTED_LANGUAGES).optional().default("en"),
+    subcategory_id: zod_1.z.string().optional(),
+    subcategoryId: zod_1.z.string().optional(),
+});
+const normalizeTaxInput = (obj) => {
+    if (obj && typeof obj === "object") {
+        if (obj.moduleType === undefined && obj.module_type !== undefined) {
+            obj.moduleType = obj.module_type;
+        }
+        else if (obj.module_type === undefined && obj.moduleType !== undefined) {
+            obj.module_type = obj.moduleType;
+        }
+        if (obj.amountType === undefined && obj.amount_type !== undefined) {
+            obj.amountType = obj.amount_type;
+        }
+        else if (obj.amount_type === undefined && obj.amountType !== undefined) {
+            obj.amount_type = obj.amountType;
+        }
+    }
+    return obj;
+};
+// ==========================================
+// Taxes Validation Schemas
+// ==========================================
+exports.createTaxSchema = zod_1.z.preprocess(normalizeTaxInput, zod_1.z.object({
+    name: zod_1.z.string({ required_error: "Name is required" }).min(1, "Name cannot be empty").max(255, "Name cannot exceed 255 characters"),
+    nameAr: zod_1.z.string().max(255, "Arabic name cannot exceed 255 characters").optional().nullable(),
+    nameFr: zod_1.z.string().max(255, "French name cannot exceed 255 characters").optional().nullable(),
+    amount: zod_1.z.preprocess((val) => {
+        if (typeof val === "string" && val.trim() !== "") {
+            const num = Number(val);
+            return isNaN(num) ? val : num;
+        }
+        return val;
+    }, zod_1.z
+        .number({
+        required_error: "Amount is required",
+        invalid_type_error: "Amount must be numeric",
+    })
+        .min(0, "Amount must be 0 or greater")
+        .transform((v) => String(v))),
+    amountType: zod_1.z.enum(exports.AMOUNT_TYPES, {
+        required_error: "amount_type is required and must be either 'percentage' or 'value'",
+        invalid_type_error: "amount_type must be either 'percentage' or 'value'",
+    }),
+    amount_type: zod_1.z.enum(exports.AMOUNT_TYPES).optional(),
+    type: zod_1.z.enum(exports.TAX_TYPES, {
+        required_error: "Type is required and must be one of: web, app, all",
+        invalid_type_error: "Type must be one of: web, app, all",
+    }),
+    moduleType: zod_1.z.enum(exports.TAX_MODULE_TYPES, {
+        required_error: "module_type is required and must be one of: pos, online, all",
+        invalid_type_error: "module_type must be one of: pos, online, all",
+    }),
+    module_type: zod_1.z.enum(exports.TAX_MODULE_TYPES).optional(),
+    branchIds: zod_1.z
+        .array(zod_1.z.string().min(1, "Branch ID cannot be empty"), {
+        required_error: "branchIds is required and must be an array of branch IDs",
+        invalid_type_error: "branchIds must be an array of branch IDs",
+    })
+        .min(1, "At least one branch ID must be provided"),
+    foodIds: zod_1.z
+        .array(zod_1.z.string().min(1, "Food ID cannot be empty"), {
+        required_error: "foodIds is required and must be an array of food IDs",
+        invalid_type_error: "foodIds must be an array of food IDs",
+    })
+        .min(1, "At least one food ID must be provided"),
+    modules: zod_1.z
+        .array(zod_1.z.enum(exports.TAX_MODULES, {
+        errorMap: () => ({
+            message: "Module must be one of: take_away, dine_in, delivery, car, all",
+        }),
+    }), {
+        required_error: "modules is required and must be an array",
+        invalid_type_error: "modules must be an array",
+    })
+        .min(1, "At least one module must be provided"),
+    status: zod_1.z.enum(["active", "inactive"]).optional().default("active"),
+}));
+exports.updateTaxSchema = zod_1.z.preprocess(normalizeTaxInput, zod_1.z.object({
+    name: zod_1.z.string().min(1, "Name cannot be empty").max(255, "Name cannot exceed 255 characters").optional(),
+    nameAr: zod_1.z.string().max(255, "Arabic name cannot exceed 255 characters").optional().nullable(),
+    nameFr: zod_1.z.string().max(255, "French name cannot exceed 255 characters").optional().nullable(),
+    amount: zod_1.z
+        .preprocess((val) => {
+        if (typeof val === "string" && val.trim() !== "") {
+            const num = Number(val);
+            return isNaN(num) ? val : num;
+        }
+        return val;
+    }, zod_1.z
+        .number({
+        invalid_type_error: "Amount must be numeric",
+    })
+        .min(0, "Amount must be 0 or greater")
+        .transform((v) => String(v)))
+        .optional(),
+    amountType: zod_1.z.enum(exports.AMOUNT_TYPES).optional(),
+    amount_type: zod_1.z.enum(exports.AMOUNT_TYPES).optional(),
+    type: zod_1.z.enum(exports.TAX_TYPES).optional(),
+    moduleType: zod_1.z.enum(exports.TAX_MODULE_TYPES).optional(),
+    module_type: zod_1.z.enum(exports.TAX_MODULE_TYPES).optional(),
+    branchIds: zod_1.z
+        .array(zod_1.z.string().min(1, "Branch ID cannot be empty"))
+        .min(1, "At least one branch ID must be provided")
+        .optional(),
+    foodIds: zod_1.z
+        .array(zod_1.z.string().min(1, "Food ID cannot be empty"))
+        .min(1, "At least one food ID must be provided")
+        .optional(),
+    modules: zod_1.z
+        .array(zod_1.z.enum(exports.TAX_MODULES, {
+        errorMap: () => ({
+            message: "Module must be one of: take_away, dine_in, delivery, car, all",
+        }),
+    }))
+        .min(1, "At least one module must be provided")
+        .optional(),
+    status: zod_1.z.enum(["active", "inactive"]).optional(),
+}));

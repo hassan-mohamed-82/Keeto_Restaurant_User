@@ -25,7 +25,7 @@ async function categories_list(req, res) {
         Image: schema_1.categories.Image,
     })
         .from(schema_1.categories)
-        .where((0, drizzle_orm_1.eq)(schema_1.categories.status, "active"))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.categories.status, "active"), (0, drizzle_orm_1.eq)(schema_1.categories.isDeleted, false)))
         .orderBy((0, drizzle_orm_1.sql) `CASE 
             WHEN ${schema_1.categories.priority} = 'high' THEN 1
             WHEN ${schema_1.categories.priority} = 'medium' THEN 2
@@ -54,7 +54,7 @@ async function sub_categories_list(req, res) {
         categoryId: schema_1.subcategories.categoryId,
     })
         .from(schema_1.subcategories)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.status, "active"), (0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId)))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.status, "active"), (0, drizzle_orm_1.eq)(schema_1.subcategories.isDeleted, false), (0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId)))
         .orderBy((0, drizzle_orm_1.sql) `CASE 
             WHEN ${schema_1.subcategories.priority} = 'high' THEN 1
             WHEN ${schema_1.subcategories.priority} = 'medium' THEN 2
@@ -91,6 +91,7 @@ async function products(req, res) {
         (0, drizzle_orm_1.eq)(schema_1.food.status, "active"),
         (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId),
         (0, drizzle_orm_1.eq)(schema_1.food.isOutOfStock, false),
+        (0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.food.channel, "pos"), (0, drizzle_orm_1.eq)(schema_1.food.channel, "all")),
     ];
     if (subcategoryId) {
         queryConditions.push((0, drizzle_orm_1.eq)(schema_1.food.subcategoryid, subcategoryId));

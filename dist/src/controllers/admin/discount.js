@@ -17,7 +17,10 @@ const createDiscount = async (req, res) => {
     const restaurantId = req.body.restaurantId || authenticatedRestaurantId;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Unauthorized");
-    const { name, nameAr, nameFr, foodGroups, startDate, endDate, isActive, minOrderAmount, usageLimit, logo } = req.body;
+    const { name, nameAr, nameFr, foodGroups, startDate, endDate, isActive, minOrderAmount, usageLimit, logo, channel, } = req.body;
+    const discountChannel = (channel && ["all", "online", "pos"].includes(String(channel).trim().toLowerCase()))
+        ? String(channel).trim().toLowerCase()
+        : "all";
     if (!name)
         throw new BadRequest_1.BadRequest("Discount name is required");
     if (!Array.isArray(foodGroups) || foodGroups.length === 0) {
@@ -54,6 +57,7 @@ const createDiscount = async (req, res) => {
             discountValue: value,
             maxDiscount: group.maxDiscount,
             foodIds,
+            channel: group.channel,
         };
     });
     const shouldBeActive = isActive !== undefined ? isActive : true;
@@ -103,18 +107,23 @@ const createDiscount = async (req, res) => {
             endDate: end,
             isActive: shouldBeActive,
             isGlobal: false,
+            channel: discountChannel,
             logo: campaignLogo,
         });
         await tx.insert(schema_1.discountRestaurants).values({ id: (0, uuid_1.v4)(), discountId: newDiscountId, restaurantId });
         // 2. إنشاء كل الخصومات الفرعية (groups) تحت نفس الخصم الأساسي
         for (const group of groups) {
             const groupId = (0, uuid_1.v4)();
+            const groupChannel = (group.channel && ["all", "online", "pos"].includes(String(group.channel).trim().toLowerCase()))
+                ? String(group.channel).trim().toLowerCase()
+                : discountChannel;
             await tx.insert(schema_1.discountGroups).values({
                 id: groupId,
                 discountId: newDiscountId,
                 discountType: group.discountType,
                 discountValue: String(group.discountValue),
                 maxDiscount: group.maxDiscount === undefined || group.maxDiscount === null ? null : String(Number(group.maxDiscount)),
+                channel: groupChannel,
             });
             if (group.foodIds.length > 0) {
                 await tx.update(schema_1.food).set({ discountId: groupId }).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId), (0, drizzle_orm_1.inArray)(schema_1.food.id, group.foodIds)));
@@ -135,11 +144,18 @@ const getAllDiscounts = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Unauthorized");
+    const channelParam = typeof req.query.channel === "string" ? req.query.channel.trim().toLowerCase() : null;
+    const whereConditions = [
+        (0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.discounts.isGlobal, true), (0, drizzle_orm_1.eq)(schema_1.discountRestaurants.restaurantId, restaurantId))
+    ];
+    if (channelParam && (channelParam === "online" || channelParam === "pos")) {
+        whereConditions.push((0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.discounts.channel, channelParam), (0, drizzle_orm_1.eq)(schema_1.discounts.channel, "all")));
+    }
     const rawDiscounts = await connection_1.db
         .selectDistinct({ discount: schema_1.discounts })
         .from(schema_1.discounts)
         .leftJoin(schema_1.discountRestaurants, (0, drizzle_orm_1.eq)(schema_1.discounts.id, schema_1.discountRestaurants.discountId))
-        .where((0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.discounts.isGlobal, true), (0, drizzle_orm_1.eq)(schema_1.discountRestaurants.restaurantId, restaurantId)));
+        .where((0, drizzle_orm_1.and)(...whereConditions));
     const data = await Promise.all(rawDiscounts.map(async ({ discount }) => {
         const groups = await connection_1.db.select().from(schema_1.discountGroups).where((0, drizzle_orm_1.eq)(schema_1.discountGroups.discountId, discount.id));
         const enrichedGroups = await Promise.all(groups.map(async (group) => {
@@ -154,6 +170,7 @@ const getAllDiscounts = async (req, res) => {
                 discountType: group.discountType,
                 discountValue: group.discountValue,
                 maxDiscount: group.maxDiscount,
+                channel: group.channel,
                 foodIds: foodsData.map(f => f.id),
                 foods: foodsData,
             };
@@ -165,6 +182,7 @@ const getAllDiscounts = async (req, res) => {
             nameFr: discount.nameFr,
             isActive: discount.isActive,
             isGlobal: discount.isGlobal,
+            channel: discount.channel,
             startDate: discount.startDate,
             endDate: discount.endDate,
             minOrderAmount: discount.minOrderAmount,
@@ -207,6 +225,7 @@ const getDiscountById = async (req, res) => {
             discountType: group.discountType,
             discountValue: group.discountValue,
             maxDiscount: group.maxDiscount,
+            channel: group.channel,
             foodIds: foodsData.map(f => f.id),
             foods: foodsData,
         };
@@ -219,6 +238,7 @@ const getDiscountById = async (req, res) => {
         nameFr: discount.nameFr,
         isActive: discount.isActive,
         isGlobal: discount.isGlobal,
+        channel: discount.channel,
         startDate: discount.startDate,
         endDate: discount.endDate,
         minOrderAmount: discount.minOrderAmount,
@@ -248,7 +268,7 @@ const updateDiscount = async (req, res) => {
     if (!existing)
         throw new NotFound_1.NotFound("Discount not found or cannot be modified");
     const { name, nameAr, nameFr, minOrderAmount, usageLimit, startDate, endDate, isActive, logo, foodGroups, // ✅ لو عايز تحدّث الخصومات الفرعية في نفس الطلب
-     } = req.body;
+    channel, } = req.body;
     let FinalLogo = logo;
     if (logo && logo.startsWith("data:image")) {
         FinalLogo = await (0, handleImages_1.saveBase64Image)(logo, req, "discounts");
@@ -296,6 +316,11 @@ const updateDiscount = async (req, res) => {
         updateData.isActive = isActive;
     if (logo !== undefined)
         updateData.logo = FinalLogo;
+    if (channel !== undefined) {
+        updateData.channel = (channel && ["all", "online", "pos"].includes(String(channel).trim().toLowerCase()))
+            ? String(channel).trim().toLowerCase()
+            : "all";
+    }
     await connection_1.db.update(schema_1.discounts).set(updateData).where((0, drizzle_orm_1.eq)(schema_1.discounts.id, id));
     // ✅ تحديث الخصومات الفرعية: لو الفرونت بعت foodGroups جديدة، امسح القديمة واعمل جديدة
     if (Array.isArray(foodGroups)) {
@@ -308,12 +333,16 @@ const updateDiscount = async (req, res) => {
         for (const group of foodGroups) {
             const discountType = group.discountType === "fixed" ? "fixed_amount" : group.discountType;
             const groupId = (0, uuid_1.v4)();
+            const groupChannel = (group.channel && ["all", "online", "pos"].includes(String(group.channel).trim().toLowerCase()))
+                ? String(group.channel).trim().toLowerCase()
+                : (updateData.channel || existing.discounts.channel || "all");
             await connection_1.db.insert(schema_1.discountGroups).values({
                 id: groupId,
                 discountId: id,
                 discountType,
                 discountValue: String(group.discountValue),
                 maxDiscount: group.maxDiscount === undefined || group.maxDiscount === null ? null : String(Number(group.maxDiscount)),
+                channel: groupChannel,
             });
             if (Array.isArray(group.foodIds) && group.foodIds.length > 0) {
                 await connection_1.db.update(schema_1.food).set({ discountId: groupId }).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId), (0, drizzle_orm_1.inArray)(schema_1.food.id, group.foodIds)));

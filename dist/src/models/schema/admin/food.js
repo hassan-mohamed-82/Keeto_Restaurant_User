@@ -53,6 +53,7 @@ exports.food = (0, mysql_core_1.mysqlTable)("food", {
     /** Weighted foods: may the customer type any weight, or only pick a weight-group option? */
     allow_custom_weight: (0, mysql_core_1.boolean)("allow_custom_weight").notNull().default(true),
     channel: (0, mysql_core_1.mysqlEnum)("channel", ["all", "online", "pos"]).notNull().default("all"),
+    isDeleted: (0, mysql_core_1.boolean)("is_deleted").notNull().default(false),
     deletedAt: (0, mysql_core_1.timestamp)("deleted_at"),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow().onUpdateNow(),

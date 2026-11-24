@@ -7,7 +7,7 @@ const drizzle_orm_1 = require("drizzle-orm");
 const response_1 = require("../../utils/response");
 const Errors_1 = require("../../Errors");
 const uuid_1 = require("uuid");
-const taxes_1 = require("../../validation/admin/taxes");
+const tax_1 = require("../../validation/admin/tax");
 const localization_helper_1 = require("../../helpers/localization.helper");
 /**
  * Helper to format tax items without heavy nested objects
@@ -256,10 +256,10 @@ const getTaxListOptions = async (req, res) => {
         message: "Tax options fetched successfully",
         data: {
             branches: localizedBranches,
-            modules: taxes_1.TAX_MODULES,
-            types: taxes_1.TAX_TYPES,
-            amountTypes: taxes_1.AMOUNT_TYPES,
-            moduleTypes: taxes_1.TAX_MODULE_TYPES,
+            modules: tax_1.TAX_MODULES,
+            types: tax_1.TAX_TYPES,
+            amountTypes: tax_1.AMOUNT_TYPES,
+            moduleTypes: tax_1.TAX_MODULE_TYPES,
         },
     });
 };
@@ -421,7 +421,7 @@ const getSubcategories = async (req, res) => {
         nameFr: schema_1.subcategories.nameFr,
     })
         .from(schema_1.subcategories)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.subcategories.status, "active")));
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.subcategories.isDeleted, false), (0, drizzle_orm_1.eq)(schema_1.subcategories.status, "active")));
     const formatted = subList.map((sub) => ({
         id: sub.id,
         name: (0, localization_helper_1.getLocalizedName)(sub, lang),

@@ -215,6 +215,8 @@ async function changeOrderStatus(params) {
             cancelReason: isCancel ? cancel?.reasonText ?? null : null,
             cancelReasonType: isCancel ? "restaurant" : null,
         };
+        if (isCancel)
+            payload.cancelledAt = now;
         if (deliveryManId)
             payload.deliveryManId = deliveryManId;
         if (status === "delivered") {

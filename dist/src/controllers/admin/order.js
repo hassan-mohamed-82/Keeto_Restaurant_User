@@ -161,6 +161,7 @@ const getRestaurantOrders = async (req, res) => {
         cancelReasonId: schema_1.orders.cancelReasonId,
         cancelReason: schema_1.orders.cancelReason,
         cancelReasonType: schema_1.orders.cancelReasonType,
+        cancelledAt: schema_1.orders.cancelledAt,
         note: schema_1.orders.note,
         deliveryMan: {
             id: schema_1.deliveryMen.id,
@@ -415,6 +416,7 @@ const getOrdersByStatus = async (req, res, status) => {
         cancelReasonId: schema_1.orders.cancelReasonId,
         cancelReason: schema_1.orders.cancelReason,
         cancelReasonType: schema_1.orders.cancelReasonType,
+        cancelledAt: schema_1.orders.cancelledAt,
         note: schema_1.orders.note,
         deliveryMan: {
             id: schema_1.deliveryMen.id,
@@ -1013,6 +1015,7 @@ const getRestaurantOrderById = async (req, res) => {
             cancelReasonId: orderDetail.order.cancelReasonId,
             cancelReason: orderDetail.order.cancelReason,
             cancelReasonType: orderDetail.order.cancelReasonType,
+            cancelledAt: orderDetail.order.cancelledAt,
             note: orderDetail.order.note,
             subtotal: orderDetail.order.subtotal,
             deliveryFee: orderDetail.order.deliveryFee,
@@ -1275,6 +1278,9 @@ const generateOrderInvoicePDF = async (req, res) => {
     const { orderId } = req.params;
     const adminRestaurantId = req.user?.restaurantId || req.user?.id;
     const adminBranchId = req.user?.branchId;
+    // 🌐 تحديد لغة الفاتورة (الافتراضي عربي، وإذا تم إرسال lang=en تكون إنجليزية)
+    const lang = (req.query.lang || "").trim().toLowerCase();
+    const isAr = lang !== "en";
     // 1. جلب البيانات الأساسية للأوردر
     const [orderDetail] = await connection_1.db.select({
         order: schema_1.orders,
@@ -1286,15 +1292,18 @@ const generateOrderInvoicePDF = async (req, res) => {
         branch: {
             id: schema_1.branches.id,
             name: schema_1.branches.name,
+            nameAr: schema_1.branches.nameAr,
         },
         restaurant: {
             id: schema_1.restaurants.id,
             name: schema_1.restaurants.name,
+            nameAr: schema_1.restaurants.nameAr,
         },
         address: schema_1.addresses,
         zone: {
             id: schema_1.zones.id,
-            name: schema_1.zones.name
+            name: schema_1.zones.name,
+            nameAr: schema_1.zones.nameAr,
         },
         paymentMethodData: {
             id: schema_1.paymentMethods.id,
@@ -1349,7 +1358,8 @@ const generateOrderInvoicePDF = async (req, res) => {
     // ==========================================
     // 🗺️ Fallback: استنتاج الزون والفرع للـ PDF من السناب شوت أو إحداثيات العنوان
     // ==========================================
-    let pdfZoneName = branchSnapshotData?.zoneName || shippingAddressData?.addressZoneName || shippingAddressData?.addressZoneNameAr || orderDetail.zone?.name || "";
+    let pdfZoneName = branchSnapshotData?.zoneName || shippingAddressData?.addressZoneName || orderDetail.zone?.name || "";
+    let pdfZoneNameAr = branchSnapshotData?.zoneNameAr || shippingAddressData?.addressZoneNameAr || orderDetail.zone?.nameAr || "";
     let pdfZoneId = branchSnapshotData?.zoneId || shippingAddressData?.addressZoneId || orderDetail.zone?.id || null;
     const addrLat = shippingAddressData?.lat ? parseFloat(String(shippingAddressData.lat)) : (orderDetail.address?.lat ? parseFloat(String(orderDetail.address.lat)) : null);
     const addrLng = shippingAddressData?.lng ? parseFloat(String(shippingAddressData.lng)) : (orderDetail.address?.lng ? parseFloat(String(orderDetail.address.lng)) : null);
@@ -1361,14 +1371,16 @@ const generateOrderInvoicePDF = async (req, res) => {
         }
     }
     let pdfBranchName = branchSnapshotData?.name || orderDetail.branch?.name || "";
+    let pdfBranchNameAr = branchSnapshotData?.nameAr || orderDetail.branch?.nameAr || "";
     if (!pdfBranchName && pdfZoneId && orderDetail.order.restaurantId) {
         const [matchedBranch] = await connection_1.db
-            .select({ name: schema_1.branches.name })
+            .select({ name: schema_1.branches.name, nameAr: schema_1.branches.nameAr })
             .from(schema_1.branches)
             .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branches.restaurantId, orderDetail.order.restaurantId), (0, drizzle_orm_1.eq)(schema_1.branches.zoneId, pdfZoneId), (0, drizzle_orm_1.eq)(schema_1.branches.status, "active")))
             .limit(1);
         if (matchedBranch) {
             pdfBranchName = matchedBranch.name;
+            pdfBranchNameAr = matchedBranch.nameAr || "";
         }
     }
     // 2. جلب أصناف الأكل والتفاصيل (Variations)
@@ -1469,29 +1481,88 @@ const generateOrderInvoicePDF = async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="Receipt_${orderDetail.order.dailyOrderNumber}.pdf"`);
     doc.pipe(res);
     // Header
-    doc.fontSize(16).text((0, fixArabic_1.fixArabicText)(orderDetail.restaurant?.name) || 'Restaurant', { align: 'center' });
-    if (pdfBranchName) {
-        doc.fontSize(12).text((0, fixArabic_1.fixArabicText)(pdfBranchName), { align: 'center' });
+    const restaurantDisplayName = isAr
+        ? (orderDetail.restaurant?.nameAr || orderDetail.restaurant?.name || 'مطعم')
+        : (orderDetail.restaurant?.name || orderDetail.restaurant?.nameAr || 'Restaurant');
+    const branchDisplayName = isAr
+        ? (pdfBranchNameAr || pdfBranchName || '')
+        : (pdfBranchName || pdfBranchNameAr || '');
+    doc.fontSize(16).text((0, fixArabic_1.fixArabicText)(restaurantDisplayName), { align: 'center' });
+    if (branchDisplayName) {
+        doc.fontSize(12).text((0, fixArabic_1.fixArabicText)(branchDisplayName), { align: 'center' });
     }
     doc.moveDown(0.5);
     doc.moveTo(10, doc.y).lineTo(240, doc.y).dash(2, { space: 2 }).stroke();
     doc.undash();
     doc.moveDown(0.5);
+    // Helpers for RTL / LTR info & total rows
+    const drawInfoRow = (label, value) => {
+        if (!value)
+            return;
+        const startY = doc.y;
+        doc.fontSize(9.5);
+        if (isAr) {
+            // In Arabic (RTL): Label on the right (125..240), Value on the left (10..120)
+            doc.text((0, fixArabic_1.fixArabicText)(label), 125, startY, { width: 115, align: 'right' });
+            const afterLabelY = doc.y;
+            doc.text((0, fixArabic_1.fixArabicText)(value), 10, startY, { width: 110, align: 'left' });
+            doc.y = Math.max(afterLabelY, doc.y);
+        }
+        else {
+            // In English (LTR): Label on the left with value
+            doc.text(`${label}: ${value}`, 10, startY, { width: 230, align: 'left' });
+        }
+        doc.moveDown(0.25);
+    };
+    const drawTotalRow = (label, valueStr, isGrand = false) => {
+        const startY = doc.y;
+        if (isGrand) {
+            doc.fontSize(13);
+        }
+        else {
+            doc.fontSize(10);
+        }
+        if (isAr) {
+            // RTL: Label on the right (75..240), Amount on the left (10..70)
+            doc.text((0, fixArabic_1.fixArabicText)(label), 75, startY, { width: 165, align: 'right' });
+            doc.text(valueStr, 10, startY, { width: 60, align: 'left' });
+        }
+        else {
+            // LTR: Label on the left, Amount on the right
+            doc.text(label, 10, startY, { width: 160, align: 'left' });
+            doc.text(valueStr, 170, startY, { width: 70, align: 'right' });
+        }
+        doc.moveDown(0.35);
+    };
     // Order Info
-    doc.fontSize(10);
-    doc.text(`Order #: ${orderDetail.order.dailyOrderNumber}`);
     const orderDate = new Date(orderDetail.order.createdAt || new Date());
-    // ✅ تحويل الوقت والتاريخ لتوقيت القاهرة بشكل صريح
     const cairoTimeStr = orderDate.toLocaleTimeString("en-US", { timeZone: "Africa/Cairo" });
     const cairoDateStr = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo", year: "numeric", month: "2-digit", day: "2-digit" }).format(orderDate);
-    doc.text(`Date: ${cairoDateStr}`);
-    doc.text(`Time: ${cairoTimeStr}`);
-    doc.text(`Branch: ${(0, fixArabic_1.fixArabicText)(pdfBranchName) || 'N/A'}`);
-    doc.text(`Client: ${(0, fixArabic_1.fixArabicText)(orderDetail.customer?.name) || 'Guest'}`);
-    doc.text(`Phone: ${shippingAddressData?.phone || orderDetail.customer?.phone || 'N/A'}`);
-    doc.text(`Order Type: ${orderDetail.order.orderType}`);
-    doc.text(`Payment: ${(0, fixArabic_1.fixArabicText)(paymentName)}`);
-    doc.moveDown(0.5);
+    const clientName = orderDetail.customer?.name || (isAr ? 'عميل' : 'Guest');
+    const clientPhone = shippingAddressData?.phone || orderDetail.customer?.phone || (isAr ? 'غير متوفر' : 'N/A');
+    const orderTypeTranslations = {
+        delivery: { ar: "ديليفري", en: "Delivery" },
+        takeaway: { ar: "تيك اواي", en: "Takeaway" },
+        dine_in: { ar: "صاله", en: "Dine-in" },
+    };
+    const rawOrderType = (orderDetail.order.orderType || "").toLowerCase();
+    const orderTypeLabel = orderTypeTranslations[rawOrderType]
+        ? (isAr ? orderTypeTranslations[rawOrderType].ar : orderTypeTranslations[rawOrderType].en)
+        : (orderDetail.order.orderType || "");
+    const paymentDisplayName = isAr
+        ? (pmDetails.nameAr || pmDetails.name || "غير محدد")
+        : (pmDetails.name || pmDetails.nameAr || "Unknown");
+    drawInfoRow(isAr ? 'رقم الطلب:' : 'Order #', `#${orderDetail.order.dailyOrderNumber}`);
+    drawInfoRow(isAr ? 'التاريخ:' : 'Date', cairoDateStr);
+    drawInfoRow(isAr ? 'الوقت:' : 'Time', cairoTimeStr);
+    if (branchDisplayName) {
+        drawInfoRow(isAr ? 'الفرع:' : 'Branch', branchDisplayName);
+    }
+    drawInfoRow(isAr ? 'العميل:' : 'Client', clientName);
+    drawInfoRow(isAr ? 'الهاتف:' : 'Phone', clientPhone);
+    drawInfoRow(isAr ? 'نوع الطلب:' : 'Order Type', orderTypeLabel);
+    drawInfoRow(isAr ? 'طريقة الدفع:' : 'Payment', paymentDisplayName);
+    doc.moveDown(0.3);
     doc.moveTo(10, doc.y).lineTo(240, doc.y).dash(2, { space: 2 }).stroke();
     doc.undash();
     doc.moveDown(0.5);
@@ -1506,25 +1577,32 @@ const generateOrderInvoicePDF = async (req, res) => {
             const addrApartment = shippingAddressData?.apartment || orderDetail.address?.apartment || '';
             const addrLandmark = shippingAddressData?.landmark || orderDetail.address?.landmark || '';
             const addrFull = shippingAddressData?.fulladdress || '';
-            doc.text('Delivery Address:', { underline: true });
-            if (pdfZoneName)
-                doc.text(`Zone: ${(0, fixArabic_1.fixArabicText)(pdfZoneName)}`);
+            const zoneDisplayName = isAr ? (pdfZoneNameAr || pdfZoneName || '') : (pdfZoneName || pdfZoneNameAr || '');
+            doc.fontSize(10);
+            doc.text(isAr ? (0, fixArabic_1.fixArabicText)('عنوان التوصيل:') : 'Delivery Address:', 10, doc.y, {
+                width: 230,
+                align: isAr ? 'right' : 'left',
+                underline: true,
+            });
+            doc.moveDown(0.3);
+            if (zoneDisplayName)
+                drawInfoRow(isAr ? 'المنطقة:' : 'Zone', zoneDisplayName);
             if (addrStreet)
-                doc.text(`Street: ${(0, fixArabic_1.fixArabicText)(addrStreet)}`);
+                drawInfoRow(isAr ? 'الشارع:' : 'Street', addrStreet);
             let details = '';
             if (addrBuilding)
-                details += `Bldg: ${(0, fixArabic_1.fixArabicText)(addrBuilding)}`;
+                details += isAr ? `عمارة: ${addrBuilding}` : `Bldg: ${addrBuilding}`;
             if (addrFloor)
-                details += `${details ? ' | ' : ''}Floor: ${(0, fixArabic_1.fixArabicText)(addrFloor)}`;
+                details += `${details ? ' | ' : ''}${isAr ? `الدور: ${addrFloor}` : `Floor: ${addrFloor}`}`;
             if (addrApartment)
-                details += `${details ? ' | ' : ''}Apt: ${(0, fixArabic_1.fixArabicText)(addrApartment)}`;
+                details += `${details ? ' | ' : ''}${isAr ? `شقة: ${addrApartment}` : `Apt: ${addrApartment}`}`;
             if (details)
-                doc.text(details);
+                drawInfoRow(isAr ? 'تفاصيل المبنى:' : 'Bldg Details', details);
             if (addrLandmark)
-                doc.text(`Landmark: ${(0, fixArabic_1.fixArabicText)(addrLandmark)}`);
+                drawInfoRow(isAr ? 'علامة مميزة:' : 'Landmark', addrLandmark);
             if (addrFull && !addrStreet)
-                doc.text(`Address: ${(0, fixArabic_1.fixArabicText)(addrFull)}`);
-            doc.moveDown(0.5);
+                drawInfoRow(isAr ? 'العنوان:' : 'Address', addrFull);
+            doc.moveDown(0.3);
             doc.moveTo(10, doc.y).lineTo(240, doc.y).dash(2, { space: 2 }).stroke();
             doc.undash();
             doc.moveDown(0.5);
@@ -1532,37 +1610,72 @@ const generateOrderInvoicePDF = async (req, res) => {
     }
     // Items Header
     const itemStartY = doc.y;
-    doc.text('Item', 10, itemStartY, { width: 95 });
-    doc.text('Qty', 105, itemStartY, { width: 30, align: 'right' });
-    doc.text('Price', 135, itemStartY, { width: 45, align: 'right' });
-    doc.text('Total', 180, itemStartY, { width: 60, align: 'right' });
-    doc.moveDown(0.2);
+    doc.fontSize(10);
+    if (isAr) {
+        // RTL columns: Total (left) | Price | Qty | Item (right)
+        doc.text((0, fixArabic_1.fixArabicText)('الإجمالي'), 10, itemStartY, { width: 45, align: 'left' });
+        doc.text((0, fixArabic_1.fixArabicText)('السعر'), 60, itemStartY, { width: 40, align: 'right' });
+        doc.text((0, fixArabic_1.fixArabicText)('الكمية'), 105, itemStartY, { width: 25, align: 'center' });
+        doc.text((0, fixArabic_1.fixArabicText)('الصنف'), 135, itemStartY, { width: 105, align: 'right' });
+    }
+    else {
+        // LTR columns: Item (left) | Qty | Price | Total (right)
+        doc.text('Item', 10, itemStartY, { width: 95, align: 'left' });
+        doc.text('Qty', 105, itemStartY, { width: 30, align: 'right' });
+        doc.text('Price', 135, itemStartY, { width: 45, align: 'right' });
+        doc.text('Total', 180, itemStartY, { width: 60, align: 'right' });
+    }
+    doc.moveDown(0.3);
     doc.moveTo(10, doc.y).lineTo(240, doc.y).stroke();
     doc.moveDown(0.5);
     // Items Loop
     for (const item of formattedItems) {
         const currentY = doc.y;
-        const name = (0, fixArabic_1.fixArabicText)(item.foodNameAr || item.foodName) || 'Item';
-        doc.text(name, 10, currentY, { width: 95 });
-        const nextY = doc.y;
-        doc.text(item.quantity.toString(), 105, currentY, { width: 30, align: 'right' });
-        doc.text(parseFloat(item.basePrice).toFixed(2), 135, currentY, { width: 45, align: 'right' });
-        doc.text(item.finalTotalPrice.toFixed(2), 180, currentY, { width: 60, align: 'right' });
-        doc.y = nextY;
-        // طباعة الفارييشنز تحت الصنف مع عرض السعر
+        const rawName = isAr
+            ? (item.foodNameAr || item.foodName || 'صنف')
+            : (item.foodName || item.foodNameAr || 'Item');
+        const name = (0, fixArabic_1.fixArabicText)(rawName);
+        doc.fontSize(9.5);
+        let afterItemY = currentY;
+        if (isAr) {
+            // RTL: Total (left) | Price | Qty | Item (right)
+            doc.text(item.finalTotalPrice.toFixed(2), 10, currentY, { width: 45, align: 'left' });
+            doc.text(parseFloat(item.basePrice).toFixed(2), 60, currentY, { width: 40, align: 'right' });
+            doc.text(item.quantity.toString(), 105, currentY, { width: 25, align: 'center' });
+            doc.text(name, 135, currentY, { width: 105, align: 'right' });
+            afterItemY = doc.y;
+        }
+        else {
+            // LTR: Item (left) | Qty | Price | Total (right)
+            doc.text(name, 10, currentY, { width: 95, align: 'left' });
+            afterItemY = doc.y;
+            doc.text(item.quantity.toString(), 105, currentY, { width: 30, align: 'right' });
+            doc.text(parseFloat(item.basePrice).toFixed(2), 135, currentY, { width: 45, align: 'right' });
+            doc.text(item.finalTotalPrice.toFixed(2), 180, currentY, { width: 60, align: 'right' });
+        }
+        doc.y = afterItemY;
+        // Variations
         if (item.variationDetails.length > 0) {
             doc.fontSize(8);
             for (const v of item.variationDetails) {
                 const vY = doc.y;
                 const vName = (0, fixArabic_1.fixArabicText)(v.name);
-                doc.text(`  + ${vName}`, 10, vY, { width: 120 });
-                if (v.price > 0) {
-                    doc.text(v.price.toFixed(2), 135, vY, { width: 45, align: 'right' });
+                if (isAr) {
+                    if (v.price > 0) {
+                        doc.text(v.price.toFixed(2), 60, vY, { width: 40, align: 'right' });
+                    }
+                    doc.text(`+ ${vName}`, 105, vY, { width: 135, align: 'right' });
+                }
+                else {
+                    doc.text(`  + ${vName}`, 10, vY, { width: 120, align: 'left' });
+                    if (v.price > 0) {
+                        doc.text(v.price.toFixed(2), 135, vY, { width: 45, align: 'right' });
+                    }
                 }
             }
-            doc.fontSize(10);
+            doc.fontSize(9.5);
         }
-        doc.moveDown(0.5);
+        doc.moveDown(0.4);
     }
     doc.moveTo(10, doc.y).lineTo(240, doc.y).stroke();
     doc.moveDown(0.5);
@@ -1570,17 +1683,23 @@ const generateOrderInvoicePDF = async (req, res) => {
     const subtotal = parseFloat(orderDetail.order.subtotal).toFixed(2);
     const deliveryFee = parseFloat(orderDetail.order.deliveryFee).toFixed(2);
     const serviceFee = parseFloat(orderDetail.order.serviceFee).toFixed(2);
+    const discountAmount = parseFloat(orderDetail.order.discountAmount || "0");
     const total = parseFloat(orderDetail.order.totalAmount).toFixed(2);
-    doc.text(`Total Product Price`, 10, doc.y, { continued: true }).text(`${subtotal}`, { align: 'right' });
-    doc.text(`Delivery Fee`, 10, doc.y, { continued: true }).text(`${deliveryFee}`, { align: 'right' });
-    doc.text(`Service Fee`, 10, doc.y, { continued: true }).text(`${serviceFee}`, { align: 'right' });
-    doc.moveDown(0.5);
+    drawTotalRow(isAr ? 'إجمالي المنتجات' : 'Total Product Price', subtotal);
+    if (discountAmount > 0) {
+        drawTotalRow(isAr ? 'الخصم' : 'Discount', `-${discountAmount.toFixed(2)}`);
+    }
+    drawTotalRow(isAr ? 'رسوم التوصيل' : 'Delivery Fee', deliveryFee);
+    drawTotalRow(isAr ? 'رسوم الخدمة' : 'Service Fee', serviceFee);
+    doc.moveDown(0.3);
     doc.moveTo(10, doc.y).lineTo(240, doc.y).stroke();
-    doc.moveDown(0.5);
-    doc.fontSize(14).text(`Grand Total`, 10, doc.y, { continued: true }).text(`${total}`, { align: 'right' });
+    doc.moveDown(0.4);
+    drawTotalRow(isAr ? 'المجموع الكلي' : 'Grand Total', total, true);
     doc.moveDown(1);
-    doc.fontSize(10).text('Thank you for your order', { align: 'center' });
-    doc.fontSize(8).text('Powered by keeto', { align: 'center' });
+    const thankYouText = isAr ? (0, fixArabic_1.fixArabicText)('شكراً لطلبكم') : 'Thank you for your order';
+    const poweredByText = isAr ? (0, fixArabic_1.fixArabicText)('مشغل بواسطة كيتو') : 'Powered by keeto';
+    doc.fontSize(10).text(thankYouText, { align: 'center' });
+    doc.fontSize(8).text(poweredByText, { align: 'center' });
     doc.end();
 };
 exports.generateOrderInvoicePDF = generateOrderInvoicePDF;

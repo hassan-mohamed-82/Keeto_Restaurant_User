@@ -44,6 +44,7 @@ async function syncVariantPricing(tx, restaurantId, variants) {
         const variantId = vOverride.variantId;
         if (!variantId)
             continue;
+        const variantChannel = (0, pricing_overrides_1.resolvePricingChannel)(vOverride.channel, vOverride.posPricingStatus ?? vOverride.pospricingstatus);
         if (vOverride.branches && vOverride.branches.length > 0) {
             const branchOverrideMap = new Map();
             for (const b of vOverride.branches) {
@@ -53,7 +54,8 @@ async function syncVariantPricing(tx, restaurantId, variants) {
                         ? String(rawPrice)
                         : "0.00";
                     const statusVal = b.status === "inactive" ? "inactive" : "active";
-                    branchOverrideMap.set(b.branchId, { price: priceVal, status: statusVal });
+                    const bChannel = (0, pricing_overrides_1.resolvePricingChannel)(b.channel ?? variantChannel, b.posPricingStatus ?? b.pospricingstatus);
+                    branchOverrideMap.set(b.branchId, { price: priceVal, status: statusVal, channel: bChannel });
                 }
             }
             for (const bId of allBranchIds) {
@@ -66,17 +68,20 @@ async function syncVariantPricing(tx, restaurantId, variants) {
                     serviceModule: null,
                     price: override.price,
                     status: override.status,
+                    channel: override.channel,
                 });
             }
         }
         if (vOverride.channels && vOverride.channels.length > 0) {
             for (const chOverride of vOverride.channels) {
+                const chChannel = (0, pricing_overrides_1.resolvePricingChannel)(chOverride.channel ?? variantChannel, chOverride.posPricingStatus ?? chOverride.pospricingstatus);
                 await (0, pricing_overrides_1.upsertVariantPricingOverride)(tx, {
                     variantId,
                     branchId: chOverride.branchId || null,
                     serviceModule: chOverride.serviceModule,
                     price: String(chOverride.price ?? "0.00"),
                     status: chOverride.status === "inactive" ? "inactive" : "active",
+                    channel: chChannel,
                 });
             }
         }
@@ -127,6 +132,7 @@ const upsertFoodWithPricing = async (req, res) => {
     const mainPriceStr = String(input.mainPrice);
     const result = await connection_1.db.transaction(async (tx) => {
         let foodId = input.id;
+        const foodChannel = (0, pricing_overrides_1.resolvePricingChannel)(input.channel, input.posPricingStatus ?? input.pospricingstatus);
         // 1. Create or Update Base Food Record (Sets standard food.price)
         if (foodId) {
             const [existingFood] = await tx
@@ -149,6 +155,7 @@ const upsertFoodWithPricing = async (req, res) => {
                 categoryid: input.categoryId,
                 subcategoryid: input.subcategoryId || null,
                 price: mainPriceStr,
+                channel: foodChannel,
                 updatedAt: new Date(),
             })
                 .where((0, drizzle_orm_1.eq)(schema_1.food.id, foodId));
@@ -168,6 +175,7 @@ const upsertFoodWithPricing = async (req, res) => {
                 categoryid: input.categoryId,
                 subcategoryid: input.subcategoryId || null,
                 price: mainPriceStr,
+                channel: foodChannel,
                 startTime: "00:00",
                 endTime: "23:59",
             });
@@ -200,6 +208,7 @@ const upsertFoodWithPricing = async (req, res) => {
                     serviceModule: null,
                     price: override.price,
                     status: override.status,
+                    channel: foodChannel,
                 });
                 const [existingItem] = await tx
                     .select({ id: schema_1.branchMenuItems.id })
@@ -227,12 +236,14 @@ const upsertFoodWithPricing = async (req, res) => {
         }
         if (input.channels && input.channels.length > 0) {
             for (const chOverride of input.channels) {
+                const chChannel = (0, pricing_overrides_1.resolvePricingChannel)(chOverride.channel ?? input.channel, chOverride.posPricingStatus ?? chOverride.pospricingstatus ?? input.posPricingStatus ?? input.pospricingstatus);
                 await (0, pricing_overrides_1.upsertFoodPricingOverride)(tx, {
                     foodId,
                     branchId: chOverride.branchId || null,
                     serviceModule: chOverride.serviceModule,
                     price: String(chOverride.price ?? "0.00"),
                     status: chOverride.status === "inactive" ? "inactive" : "active",
+                    channel: chChannel,
                 });
             }
         }
@@ -317,6 +328,12 @@ const getMenuWithDynamicPricing = async (req, res) => {
         (0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId)
         // eq(food.status, "active"),
     ];
+    const channelParam = (req.query.channel || req.body?.channel || "all").trim().toLowerCase();
+    if (channelParam && (channelParam === "online" || channelParam === "pos")) {
+        const cond = (0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.food.channel, channelParam), (0, drizzle_orm_1.eq)(schema_1.food.channel, "all"));
+        if (cond)
+            foodConditions.push(cond);
+    }
     if (subcategoryId) {
         foodConditions.push((0, drizzle_orm_1.eq)(schema_1.food.subcategoryid, subcategoryId));
     }
@@ -339,6 +356,7 @@ const getMenuWithDynamicPricing = async (req, res) => {
             categoryId: schema_1.food.categoryid,
             subcategoryId: schema_1.food.subcategoryid,
             mainBasePrice: schema_1.food.price,
+            channel: schema_1.food.channel,
             globalStatus: schema_1.food.status,
             globalIsOutOfStock: schema_1.food.isOutOfStock,
             points: schema_1.food.points,
@@ -462,6 +480,7 @@ const getMenuWithDynamicPricing = async (req, res) => {
                 categoryId: item.categoryId,
                 subcategoryId: item.subcategoryId,
                 mainBasePrice: item.mainBasePrice,
+                channel: item.channel,
                 points: item.points,
                 branchStatus: item.branchStatus || null,
                 branchPriceStatus: item.branchOverrideStatus || null,
@@ -576,6 +595,7 @@ const getMenuWithDynamicPricing = async (req, res) => {
         categoryId: schema_1.food.categoryid,
         subcategoryId: schema_1.food.subcategoryid,
         mainBasePrice: schema_1.food.price,
+        channel: schema_1.food.channel,
         globalStatus: schema_1.food.status,
         isOutOfStock: schema_1.food.isOutOfStock,
         points: schema_1.food.points,
@@ -765,6 +785,7 @@ const getMenuWithDynamicPricing = async (req, res) => {
             categoryId: f.categoryId,
             subcategoryId: f.subcategoryId,
             mainBasePrice: f.mainBasePrice,
+            channel: f.channel,
             points: f.points,
             branchStatus: branchItem?.status || null,
             branchPriceStatus: singleBranchPriceOverride?.status || null,
@@ -880,6 +901,13 @@ const getFoodForPricing = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId)
         throw new BadRequest_1.BadRequest("Restaurant ID missing or unauthorized");
+    const channelParam = (req.query.channel || "all").trim().toLowerCase();
+    const foodConds = [(0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId)];
+    if (channelParam && (channelParam === "online" || channelParam === "pos")) {
+        const cond = (0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.food.channel, channelParam), (0, drizzle_orm_1.eq)(schema_1.food.channel, "all"));
+        if (cond)
+            foodConds.push(cond);
+    }
     const rawFoods = await connection_1.db
         .select({
         id: schema_1.food.id,
@@ -887,10 +915,11 @@ const getFoodForPricing = async (req, res) => {
         nameAr: schema_1.food.nameAr,
         nameFr: schema_1.food.nameFr,
         price: schema_1.food.price,
+        channel: schema_1.food.channel,
         status: schema_1.food.status,
     })
         .from(schema_1.food)
-        .where((0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId));
+        .where((0, drizzle_orm_1.and)(...foodConds));
     if (rawFoods.length === 0) {
         return (0, response_1.SuccessResponse)(res, { message: "No foods found", data: [] });
     }
@@ -982,13 +1011,19 @@ const upsertProductChannelPricing = async (req, res) => {
             const statusVal = entry.branchPriceStatus === "inactive" || entry.status === "inactive"
                 ? "inactive"
                 : "active";
+            const posPricingStatus = entry.posPricingStatus ?? entry.pospricingstatus;
+            const channel = (0, pricing_overrides_1.resolvePricingChannel)(entry.channel, posPricingStatus);
             const isAllBranches = targetBranches.length === 1 && targetBranches[0] === null;
             const isAllModules = targetModules.length === 1 && targetModules[0] === null;
             if (isAllBranches && isAllModules) {
                 // 1. Update Base Price directly in food table
+                const updateFoodData = { price: priceVal, updatedAt: new Date() };
+                if (entry.channel !== undefined || posPricingStatus !== undefined) {
+                    updateFoodData.channel = channel;
+                }
                 await tx
                     .update(schema_1.food)
-                    .set({ price: priceVal, updatedAt: new Date() })
+                    .set(updateFoodData)
                     .where((0, drizzle_orm_1.eq)(schema_1.food.id, foodId));
                 // 2. Remove ALL old pricing overrides (all branches & all modules) so the new price applies everywhere
                 await tx
@@ -1004,6 +1039,8 @@ const upsertProductChannelPricing = async (req, res) => {
                             serviceModule: module,
                             price: priceVal,
                             status: statusVal,
+                            channel,
+                            posPricingStatus,
                         });
                     }
                 }
@@ -1064,6 +1101,8 @@ const upsertVariantChannelPricing = async (req, res) => {
             const statusVal = entry.branchPriceStatus === "inactive" || entry.status === "inactive"
                 ? "inactive"
                 : "active";
+            const posPricingStatus = entry.posPricingStatus ?? entry.pospricingstatus;
+            const channel = (0, pricing_overrides_1.resolvePricingChannel)(entry.channel, posPricingStatus);
             const isAllBranches = targetBranches.length === 1 && targetBranches[0] === null;
             const isAllModules = targetModules.length === 1 && targetModules[0] === null;
             if (isAllBranches && isAllModules) {
@@ -1086,6 +1125,8 @@ const upsertVariantChannelPricing = async (req, res) => {
                             serviceModule: module,
                             price: priceVal,
                             status: statusVal,
+                            channel,
+                            posPricingStatus,
                         });
                     }
                 }
