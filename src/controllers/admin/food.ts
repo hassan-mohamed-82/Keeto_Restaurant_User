@@ -637,10 +637,13 @@ export const updateFood = async (req: Request, res: Response) => {
     const weightConfig = validateWeightGroupConfig({
         soldBy: effectiveSoldBy,
         weightUnit: effectiveSoldBy === "weight" ? (updateData.weight_unit !== undefined ? updateData.weight_unit : existingFood[0].weight_unit) : null,
-        // switching a food back to unit resets it to true (validateWeightGroupConfig returns true for unit foods)
+        // Unit foods are always false (validateWeightGroupConfig ignores the value). A food switched
+        // from unit to weight does not inherit the unit's stored false: it gets the weight default.
         allowCustomWeight: effectiveSoldBy === "weight"
-            ? (incomingAllowCustom !== undefined ? incomingAllowCustom : existingFood[0].allow_custom_weight)
-            : (incomingAllowCustom === false ? false : true),
+            ? (incomingAllowCustom !== undefined
+                ? incomingAllowCustom
+                : (existingFood[0].sold_by === "weight" ? existingFood[0].allow_custom_weight : undefined))
+            : undefined,
         variations: effectiveWeightVariations,
     });
     updateData.allow_custom_weight = weightConfig.allowCustomWeight;
@@ -1796,7 +1799,7 @@ export const getActiveInStockFoods = async (req: Request | any, res: Response) =
             price: f.price,
             sold_by: f.sold_by || "unit",
             weight_unit: f.weight_unit || null,
-            allow_custom_weight: f.allow_custom_weight ?? true,
+            allow_custom_weight: f.allow_custom_weight ?? false,
             category: {
                 id: f.categoryid,
                 name: f.category_name,

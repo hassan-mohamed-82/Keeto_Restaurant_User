@@ -168,7 +168,7 @@ export const FOOD_COLUMNS = {
     },
     allow_custom_weight: {
         header: "allow_custom_weight", type: "boolean", required: false, width: 18,
-        note: "Optional. yes or no. Default: yes. Weight foods only: no means the customer must pick a weight option, so the food needs a weight group in the Variations sheet. A fixed (amount) discount is not allowed on foods sold per gram (gm).",
+        note: "Optional. yes or no. Default: no (yes for a weight food with no weight group). Always no for unit foods. Weight foods only: no means the customer must pick a weight option, so the food needs a weight group in the Variations sheet. A fixed (amount) discount is not allowed on foods sold per gram (gm).",
     },
 } as const satisfies ColumnSpecs;
 

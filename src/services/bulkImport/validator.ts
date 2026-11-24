@@ -504,9 +504,6 @@ class ImportValidator {
             addError(ctx, "weight_unit", '"weight_unit" must be empty when sold_by is "unit"');
         }
         const allowCustomWeight = (v as any).allow_custom_weight as boolean | null;
-        if (soldBy !== "weight" && allowCustomWeight === false) {
-            addError(ctx, "allow_custom_weight", '"allow_custom_weight" can only be "no" for foods sold by weight');
-        }
         if (isFixedDiscountOnGramFood({ soldBy, weightUnit, discountType: v.discount_type ?? FOOD_DEFAULTS.discountType, discountValue: v.discount_value })) {
             addError(ctx, "discount_type", FIXED_DISCOUNT_ON_GRAM_MESSAGE);
         }
@@ -549,7 +546,7 @@ class ImportValidator {
                     points: v.points,
                     sold_by: (soldBy === "weight" ? "weight" : "unit") as "unit" | "weight",
                     weight_unit: (soldBy === "weight" ? weightUnit : null) as "kg" | "gm" | null,
-                    allow_custom_weight: soldBy === "weight" ? allowCustomWeight !== false : true,
+                    allow_custom_weight: soldBy === "weight" ? (allowCustomWeight ?? null) : false,
                     variations: [],
                 },
             };
