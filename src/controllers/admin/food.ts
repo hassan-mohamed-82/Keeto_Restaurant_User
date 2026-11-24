@@ -39,6 +39,7 @@ import {
     getMissingFoodFields,
 } from "../../helpers/menu.rules";
 import { insertFood } from "../../helpers/menu.insert";
+import { softDeleteFood, restoreFood, isTrashRequest } from "../../services/menuSoftDelete.service";
 import {
     FIXED_DISCOUNT_ON_GRAM_MESSAGE,
     isFixedDiscountOnGramFood,
@@ -109,14 +110,14 @@ export const createFood = async (req: Request, res: Response) => {
         }
 
         // 2. التحقق من وجود العلاقات
-        const existingCategory = await db.select().from(categories).where(eq(categories.id, categoryid)).limit(1);
+        const existingCategory = await db.select().from(categories).where(and(eq(categories.id, categoryid), eq(categories.isDeleted, false))).limit(1);
         if (!existingCategory[0]) throw new BadRequest(MENU_MESSAGES.categoryNotFound);
 
         if (subcategoryid) {
             const existingSub = await db
                 .select({ id: subcategories.id, status: subcategories.status })
                 .from(subcategories)
-                .where(eq(subcategories.id, subcategoryid))
+                .where(and(eq(subcategories.id, subcategoryid), eq(subcategories.isDeleted, false)))
                 .limit(1);
             if (!existingSub[0]) throw new BadRequest(MENU_MESSAGES.subcategoryNotFound);
 
@@ -227,7 +228,8 @@ export const getAllFoods = async (req: Request, res: Response) => {
     const { categoryId, subCategoryId, channel } = req.query;
 
     // 2. Build dynamic conditions
-    const conditions: any[] = [activeFoodCondition, eq(food.restaurantid, restaurantId)];
+    // ?deleted=true -> trash list, otherwise only non-deleted foods
+    const conditions: any[] = [eq(food.isDeleted, isTrashRequest(req)), eq(food.restaurantid, restaurantId)];
 
     if (categoryId) {
         conditions.push(eq(food.categoryid, categoryId as string));
@@ -252,6 +254,7 @@ export const getAllFoods = async (req: Request, res: Response) => {
         Maximum_Purchase: food.Maximum_Purchase, points: food.points, stock_type: food.stock_type, status: food.status,
         channel: food.channel,
         sold_by: food.sold_by, weight_unit: food.weight_unit, allow_custom_weight: food.allow_custom_weight,
+        isDeleted: food.isDeleted, deletedAt: food.deletedAt,
         createdAt: food.createdAt, updatedAt: food.updatedAt,
         restaurant: restaurants,
         category_name: categories.name, category_nameAr: categories.nameAr, category_nameFr: categories.nameFr,
@@ -336,6 +339,7 @@ export const getAllFoods = async (req: Request, res: Response) => {
             points: f.points ?? 0,
             sold_by: f.sold_by, weight_unit: f.weight_unit, allow_custom_weight: f.allow_custom_weight,
             stock_type: f.stock_type, createdAt: f.createdAt, updatedAt: f.updatedAt,
+            isDeleted: f.isDeleted, deletedAt: f.deletedAt,
             variations: foodVars, restaurant: f.restaurant,
             ingredients: assignedIngredients,
             category: f.category_name ? { name: f.category_name, nameAr: f.category_nameAr, nameFr: f.category_nameFr } : null,
@@ -875,106 +879,26 @@ export const updateFood = async (req: Request, res: Response) => {
     });
 };
 // =============================================
-// HYBRID DELETE Food
-// Archived when historical/operational references exist, otherwise deleted.
+// SOFT DELETE Food
+// Keeps the row (variations, pricing, order history) and hides it via isDeleted.
 // =============================================
 export const deleteFood = async (req: Request, res: Response) => {
-    const { id } = req.params;
     const restaurantId = req.user?.restaurantId || req.user?.id;
     if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
 
-    const [existingFood] = await db
-        .select({ id: food.id, status: food.status, deletedAt: food.deletedAt })
-        .from(food)
-        .where(and(eq(food.id, id), eq(food.restaurantid, restaurantId), activeFoodCondition))
-        .limit(1);
+    const data = await softDeleteFood(restaurantId, req.params.id);
+    return SuccessResponse(res, { message: "Food moved to trash", data });
+};
 
-    if (!existingFood) {
-        throw new NotFound("Food not found or you don't have permission to delete it");
-    }
+// =============================================
+// RESTORE Food
+// =============================================
+export const restoreFoodById = async (req: Request, res: Response) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId) throw new BadRequest("Restaurant ID missing or unauthorized");
 
-    const [
-        orderReferences,
-        cartReferences,
-        redeemRequestReferences,
-    ] = await Promise.all([
-        db.select({ id: orderItems.id }).from(orderItems).where(eq(orderItems.foodId, id)).limit(1),
-        db.select({ id: cartItems.id }).from(cartItems).where(eq(cartItems.foodId, id)).limit(1),
-        db.select({ id: redeemRequests.id }).from(redeemRequests).where(eq(redeemRequests.foodId, id)).limit(1),
-    ]);
-
-    const hasReferences = [
-        orderReferences,
-        cartReferences,
-        redeemRequestReferences,
-    ].some((references) => references.length > 0);
-
-    if (hasReferences) {
-        await db
-            .update(food)
-            .set({
-                deletedAt: new Date(),
-                status: "inactive",
-                isOutOfStock: true,
-                updatedAt: new Date(),
-            })
-            .where(and(eq(food.id, id), eq(food.restaurantid, restaurantId)));
-
-        await db
-            .update(branchMenuItems)
-            .set({ status: "inactive", updatedAt: new Date() })
-            .where(eq(branchMenuItems.foodId, id));
-
-        return SuccessResponse(res, {
-            message: "Food deactivated and archived successfully",
-            data: { foodId: id, deletedAt: new Date(), deleteType: "soft" },
-        });
-    }
-
-    await db.transaction(async (tx) => {
-        // 1. Delete variant pricing overrides, variation options, and variations
-        const variations = await tx
-            .select({ id: foodVariations.id })
-            .from(foodVariations)
-            .where(eq(foodVariations.foodId, id));
-        const variationIds = variations.map((variation) => variation.id);
-
-        if (variationIds.length > 0) {
-            const options = await tx
-                .select({ id: variationOptions.id })
-                .from(variationOptions)
-                .where(inArray(variationOptions.variationId, variationIds));
-            const optionIds = options.map((opt) => opt.id);
-
-            if (optionIds.length > 0) {
-                // Delete variant pricing overrides first
-                await tx.delete(variantPricingOverrides).where(inArray(variantPricingOverrides.variantId, optionIds));
-                // Delete variation options
-                await tx.delete(variationOptions).where(inArray(variationOptions.id, optionIds));
-            }
-
-            // Delete food variations
-            await tx.delete(foodVariations).where(inArray(foodVariations.id, variationIds));
-        }
-
-        // 2. Delete food pricing overrides
-        await tx.delete(foodPricingOverrides).where(eq(foodPricingOverrides.foodId, id));
-
-        // 3. Delete other child relations
-        await tx.delete(branchIngredientLocks).where(eq(branchIngredientLocks.foodId, id));
-        await tx.delete(foodIngredients).where(eq(foodIngredients.foodId, id));
-        await tx.delete(branchMenuItems).where(eq(branchMenuItems.foodId, id));
-        await tx.delete(favorites).where(eq(favorites.foodId, id));
-        await tx.delete(pointsProducts).where(eq(pointsProducts.foodId, id));
-
-        // 4. Delete the food record
-        await tx.delete(food).where(and(eq(food.id, id), eq(food.restaurantid, restaurantId)));
-    });
-
-    return SuccessResponse(res, {
-        message: "Food permanently deleted from database",
-        data: { foodId: id, deleteType: "hard" },
-    });
+    const data = await restoreFood(restaurantId, req.params.id);
+    return SuccessResponse(res, { message: "Food restored successfully", data });
 };
 
 
@@ -993,7 +917,7 @@ export const getFoodSelectData = async (req: Request, res: Response) => {
     const myCategories = await db
         .select({ id: categories.id, name: categories.name })
         .from(categories)
-        .where(eq(categories.status, "active"));
+        .where(and(eq(categories.status, "active"), eq(categories.isDeleted, false)));
 
     // ✅ Subcategories - الخاصة بالمطعم أو العامة (restaurantId = null)
     const mySubcategories = await db
@@ -1006,9 +930,12 @@ export const getFoodSelectData = async (req: Request, res: Response) => {
         })
         .from(subcategories)
         .where(
-            or(
-                eq(subcategories.restaurantId, restaurantId),
-                // isNull(subcategories.restaurantId)
+            and(
+                or(
+                    eq(subcategories.restaurantId, restaurantId),
+                    // isNull(subcategories.restaurantId)
+                ),
+                eq(subcategories.isDeleted, false),
             )
         );
 

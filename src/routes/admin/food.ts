@@ -9,6 +9,7 @@ import {
     getFoodById,
     updateFood,
     deleteFood,
+    restoreFoodById,
     getFoodSelectData,
     toggleVariationStatus,
     toggleVariationOptionStatus,
@@ -52,6 +53,9 @@ router.put("/:id", hasPermission("food", "update"), catchAsync(updateFood));
 
 // ✅ Delete food - يحتاج صلاحية delete
 router.delete("/:id", hasPermission("food", "delete"), catchAsync(deleteFood));
+
+// Restore a soft-deleted food
+router.put("/:id/restore", hasPermission("food", "delete"), catchAsync(restoreFoodById));
 
 // ✅ Assign ingredients - يحتاج صلاحية update
 router.post("/assign-ingredients/:id", hasPermission("food", "update"), catchAsync(assignIngredientsToFood));

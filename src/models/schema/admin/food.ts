@@ -75,6 +75,7 @@ export const food = mysqlTable("food", {
 
     channel: mysqlEnum("channel", ["all", "online", "pos"]).notNull().default("all"),
 
+    isDeleted: boolean("is_deleted").notNull().default(false),
     deletedAt: timestamp("deleted_at"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),

@@ -61,6 +61,7 @@ export const getLinkTargetOptions = async (req: Request, res: Response) => {
             .where(
                 and(
                     eq(subcategories.status, "active"),
+                    eq(subcategories.isDeleted, false),
                     or(
                         eq(subcategories.restaurantId, restaurantId),
                         sql`${subcategories.restaurantId} IS NULL`

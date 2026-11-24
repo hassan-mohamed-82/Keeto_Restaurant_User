@@ -19,6 +19,7 @@ import { handleImageUpdate } from "../../utils/handleImages";
 import { activeFoodCondition } from "../../helpers/foodConditions";
 import { MENU_MESSAGES, getMissingSubcategoryFields } from "../../helpers/menu.rules";
 import { insertSubcategory } from "../../helpers/menu.insert";
+import { softDeleteSubcategory, restoreSubcategory, isTrashRequest } from "../../services/menuSoftDelete.service";
 
 export const createSubcategory = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
@@ -38,7 +39,7 @@ export const createSubcategory = async (req: Request, res: Response) => {
     const existingCategory = await db
         .select()
         .from(categories)
-        .where(eq(categories.id, categoryId))
+        .where(and(eq(categories.id, categoryId), eq(categories.isDeleted, false)))
         .limit(1);
 
     if (!existingCategory[0]) {
@@ -90,7 +91,8 @@ export const getAllSubcategories = async (req: Request, res: Response) => {
     const branchId = (req.query.branchId as string)?.trim() || req.user?.branchId || null;
     const categoryId = (req.query.categoryId as string)?.trim() || null;
 
-    const conditions: any[] = [eq(subcategories.restaurantId, restaurantId)];
+    // ?deleted=true -> trash list, otherwise only non-deleted subcategories
+    const conditions: any[] = [eq(subcategories.restaurantId, restaurantId), eq(subcategories.isDeleted, isTrashRequest(req))];
     if (categoryId) {
         conditions.push(eq(subcategories.categoryId, categoryId));
     }
@@ -111,6 +113,8 @@ export const getAllSubcategories = async (req: Request, res: Response) => {
             effectiveStatus: branchId
                 ? sql<string>`COALESCE(${branchSubcategories.status}, ${subcategories.status})`
                 : subcategories.status,
+            isDeleted: subcategories.isDeleted,
+            deletedAt: subcategories.deletedAt,
             createdAt: subcategories.createdAt,
             updatedAt: subcategories.updatedAt,
             category: {
@@ -220,7 +224,7 @@ export const getSubcategoryById = async (req: Request, res: Response) => {
     }
 
     const [sub] = await query
-        .where(and(eq(subcategories.id, id), eq(subcategories.restaurantId, restaurantId)))
+        .where(and(eq(subcategories.id, id), eq(subcategories.restaurantId, restaurantId), eq(subcategories.isDeleted, false)))
         .limit(1);
 
     if (!sub) {
@@ -271,7 +275,7 @@ export const updateSubcategory = async (req: Request, res: Response) => {
     const existingSubcategory = await db
         .select()
         .from(subcategories)
-        .where(and(eq(subcategories.id, id), eq(subcategories.restaurantId, restaurantId)))
+        .where(and(eq(subcategories.id, id), eq(subcategories.restaurantId, restaurantId), eq(subcategories.isDeleted, false)))
         .limit(1);
 
     if (!existingSubcategory[0]) {
@@ -282,7 +286,7 @@ export const updateSubcategory = async (req: Request, res: Response) => {
         const existingCategory = await db
             .select()
             .from(categories)
-            .where(eq(categories.id, categoryId))
+            .where(and(eq(categories.id, categoryId), eq(categories.isDeleted, false)))
             .limit(1);
 
         if (!existingCategory[0]) {
@@ -331,7 +335,7 @@ export const updateSubcategory = async (req: Request, res: Response) => {
 
     await db.update(subcategories)
         .set(updateData)
-        .where(and(eq(subcategories.id, id), eq(subcategories.restaurantId, restaurantId)));
+        .where(and(eq(subcategories.id, id), eq(subcategories.restaurantId, restaurantId), eq(subcategories.isDeleted, false)));
 
     if (addonsIds !== undefined) {
         await db.update(food)
@@ -348,22 +352,20 @@ export const deleteSubcategory = async (req: Request, res: Response) => {
         throw new BadRequest("Restaurant context is missing or unauthorized");
     }
 
-    const { id } = req.params;
+    // Soft delete: also trashes this subcategory's foods.
+    const data = await softDeleteSubcategory(restaurantId, req.params.id);
+    return SuccessResponse(res, { message: "Subcategory moved to trash", data });
+};
 
-    const existingSubcategory = await db
-        .select()
-        .from(subcategories)
-        .where(and(eq(subcategories.id, id), eq(subcategories.restaurantId, restaurantId)))
-        .limit(1);
-
-    if (!existingSubcategory[0]) {
-        throw new NotFound("Subcategory not found or you don't have permission to delete it");
+// Restores the subcategory and the foods trashed together with it.
+export const restoreSubcategoryById = async (req: Request, res: Response) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId) {
+        throw new BadRequest("Restaurant context is missing or unauthorized");
     }
 
-    await db.delete(subcategories)
-        .where(and(eq(subcategories.id, id), eq(subcategories.restaurantId, restaurantId)));
-
-    return SuccessResponse(res, { message: "Delete subcategory success" });
+    const data = await restoreSubcategory(restaurantId, req.params.id);
+    return SuccessResponse(res, { message: "Subcategory restored successfully", data });
 };
 
 export const getallcategory = async (req: Request, res: Response) => {
@@ -373,7 +375,7 @@ export const getallcategory = async (req: Request, res: Response) => {
             name: categories.name,
         })
         .from(categories)
-        .where(eq(categories.status, "active"));
+        .where(and(eq(categories.status, "active"), eq(categories.isDeleted, false)));
     return SuccessResponse(res, { message: "Get all categories success", data: allCategories });
 };
 
@@ -408,7 +410,7 @@ export const updateBranchSubcategoryStatus = async (req: Request, res: Response)
     const [sub] = await db
         .select({ id: subcategories.id, name: subcategories.name, status: subcategories.status })
         .from(subcategories)
-        .where(and(eq(subcategories.id, subcategoryId), eq(subcategories.restaurantId, restaurantId)))
+        .where(and(eq(subcategories.id, subcategoryId), eq(subcategories.restaurantId, restaurantId), eq(subcategories.isDeleted, false)))
         .limit(1);
 
     if (!sub) throw new NotFound("Subcategory not found or does not belong to your restaurant");
@@ -562,7 +564,7 @@ export const getSubcategoryBranchAvailability = async (req: Request, res: Respon
             categoryId: subcategories.categoryId,
         })
         .from(subcategories)
-        .where(and(eq(subcategories.id, subcategoryId), eq(subcategories.restaurantId, restaurantId)))
+        .where(and(eq(subcategories.id, subcategoryId), eq(subcategories.restaurantId, restaurantId), eq(subcategories.isDeleted, false)))
         .limit(1);
 
     if (!sub) throw new NotFound("Subcategory not found or does not belong to your restaurant");
@@ -631,6 +633,7 @@ export const getActiveSubcategoriesByBranch = async (req: Request, res: Response
     if (!branchId) throw new BadRequest("Branch ID is required");
 
     const conditions: any[] = [
+        eq(subcategories.isDeleted, false),
         eq(subcategories.restaurantId, restaurantId),
         eq(subcategories.status, "active"),
     ];
@@ -717,7 +720,7 @@ export const updateBranchSubcategoryOutOfStock = async (req: Request, res: Respo
         const [sub] = await db
             .select({ id: subcategories.id, name: subcategories.name })
             .from(subcategories)
-            .where(and(eq(subcategories.id, subcategoryId), eq(subcategories.restaurantId, restaurantId)))
+            .where(and(eq(subcategories.id, subcategoryId), eq(subcategories.restaurantId, restaurantId), eq(subcategories.isDeleted, false)))
             .limit(1);
 
         if (!sub) throw new NotFound("Subcategory not found or does not belong to your restaurant");

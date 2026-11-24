@@ -24,7 +24,7 @@ export async function categories_list(req: Request, res: Response) {
         Image: categories.Image,
     })
     .from(categories)
-    .where(eq(categories.status, "active"))
+    .where(and(eq(categories.status, "active"), eq(categories.isDeleted, false)))
     .orderBy(
         sql`CASE 
             WHEN ${categories.priority} = 'high' THEN 1
@@ -60,6 +60,7 @@ export async function sub_categories_list(req: Request, res: Response) {
     .from(subcategories)
     .where(and(
         eq(subcategories.status, "active"),
+        eq(subcategories.isDeleted, false),
         eq(subcategories.restaurantId, restaurantId)
     ))
     .orderBy(

@@ -60,7 +60,7 @@ export const getHomeScreen = async (req: Request, res: Response) => {
             nameAr: categories.nameAr,
             nameFr: categories.nameFr,
             image: categories.Image
-        }).from(categories).where(eq(categories.status, "active"));
+        }).from(categories).where(and(eq(categories.status, "active"), eq(categories.isDeleted, false)));
 
         restaurantsData = await db.select({
             id: restaurants.id,

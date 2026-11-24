@@ -449,6 +449,7 @@ export const getSubcategories = async (req: Request, res: Response) => {
         .where(
             and(
                 eq(subcategories.restaurantId, restaurantId),
+                eq(subcategories.isDeleted, false),
                 eq(subcategories.status, "active")
             )
         );

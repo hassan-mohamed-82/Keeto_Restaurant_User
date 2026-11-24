@@ -6,6 +6,7 @@ import {
   getSubcategoryById,
   updateSubcategory,
   deleteSubcategory,
+  restoreSubcategoryById,
   getallcategory,
   updateBranchSubcategoryStatus,
   updateBranchSubcategoryOutOfStock,
@@ -33,5 +34,6 @@ router.get("/", catchAsync(getAllSubcategories));
 router.get("/:id", catchAsync(getSubcategoryById));
 router.put("/:id", catchAsync(updateSubcategory));
 router.delete("/:id", catchAsync(deleteSubcategory));
+router.put("/:id/restore", catchAsync(restoreSubcategoryById));
 
 export default router;

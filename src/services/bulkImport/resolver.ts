@@ -135,7 +135,8 @@ export async function loadImportLookups(restaurantId: string): Promise<ImportLoo
     const [categoryRows, subcategoryRows, addonRows, foodRows] = await Promise.all([
         db
             .select({ id: categories.id, name: categories.name, nameAr: categories.nameAr, status: categories.status })
-            .from(categories),
+            .from(categories)
+            .where(eq(categories.isDeleted, false)),
         db
             .select({
                 id: subcategories.id,
@@ -145,7 +146,7 @@ export async function loadImportLookups(restaurantId: string): Promise<ImportLoo
                 status: subcategories.status,
             })
             .from(subcategories)
-            .where(eq(subcategories.restaurantId, restaurantId)),
+            .where(and(eq(subcategories.restaurantId, restaurantId), eq(subcategories.isDeleted, false))),
         db
             .select({ id: addons.id, name: addons.name, nameAr: addons.nameAr })
             .from(addons)
@@ -193,7 +194,7 @@ export async function loadTemplateLookups(restaurantId: string): Promise<Templat
         db
             .select({ name: subcategories.name, nameAr: subcategories.nameAr })
             .from(subcategories)
-            .where(eq(subcategories.restaurantId, restaurantId)),
+            .where(and(eq(subcategories.restaurantId, restaurantId), eq(subcategories.isDeleted, false))),
         db
             .select({ name: addons.name, nameAr: addons.nameAr })
             .from(addons)
