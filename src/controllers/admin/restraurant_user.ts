@@ -42,14 +42,15 @@ export const getRestaurantUsers = async (req: Request, res: Response) => {
         conditions.push(eq(restaurant_users.status, status as any));
     }
 
-    // 2. Search by Phone, Name, Email
+    // 2. Search by Phone, Name, Email, AlternatePhone
     if (search) {
         const searchPattern = `%${search}%`;
         conditions.push(
             or(
                 like(users.name, searchPattern),
                 like(users.phone, searchPattern),
-                like(users.email, searchPattern)
+                like(users.email, searchPattern),
+                like(users.alternatePhone, searchPattern)
             )
         );
     }
@@ -101,6 +102,7 @@ export const getRestaurantUsers = async (req: Request, res: Response) => {
             userId: users.id,
             name: users.name,
             phone: users.phone,
+            alternatePhone: users.alternatePhone,
             email: users.email,
             photo: users.photo,
             points: sql<number>`COALESCE(${userRestaurantPoints.points}, 0)`,
@@ -135,6 +137,7 @@ export const getRestaurantUsers = async (req: Request, res: Response) => {
             users.id,
             users.name,
             users.phone,
+            users.alternatePhone,
             users.email,
             users.photo,
             users.status,
@@ -225,6 +228,7 @@ export const getBlockedRestaurantUsers = async (req: Request, res: Response) => 
         userId: users.id,
         name: users.name,
         phone: users.phone,
+        alternatePhone: users.alternatePhone,
         email: users.email,
         photo: users.photo,
         points: sql<number>`COALESCE(${userRestaurantPoints.points}, 0)`,
@@ -386,6 +390,7 @@ export const getRestaurantUserById = async (req: Request, res: Response) => {
         userId: users.id,
         name: users.name,
         phone: users.phone,
+        alternatePhone: users.alternatePhone,
         email: users.email,
         photo: users.photo,
         points: sql<number>`COALESCE(${userRestaurantPoints.points}, 0)`,
@@ -446,6 +451,7 @@ export const getRestaurantUserStats = async (req: Request, res: Response) => {
             name: users.name,
             email: users.email,
             phone: users.phone,
+            alternatePhone: users.alternatePhone,
             photo: users.photo,
             status: users.status,
             isVerified: users.isVerified,
@@ -562,7 +568,7 @@ export const getRestaurantUserPointsTransactions = async (req: Request, res: Res
 
     // التحقق أن المستخدم فعلاً عميل لهذا المطعم
     const [userRecord] = await db
-        .select({ id: users.id, name: users.name, phone: users.phone })
+        .select({ id: users.id, name: users.name, phone: users.phone, alternatePhone: users.alternatePhone })
         .from(users)
         .where(eq(users.id, userId))
         .limit(1);
