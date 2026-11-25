@@ -35,6 +35,7 @@ import { validateUserNotBlocked } from "../../utils/userBlockCheck";
 import { calculateCurrentStatus } from "./restaurantFeatures";
 import { chargePendingServiceFee, handleCancelledOrder, mapOrderSourceToPlatformType } from "../../services/restaurantWalletService";
 import { releaseCourierForOrder } from "../../services/shipping/dispatchEngine";
+import { CHECKOUT_ORDER_SOURCES, toStoredOrderSource } from "../../types/orderSources";
 
 // 👇 1. دالة تظبيط الوقت لتوقيت مصر عشان نص الإشعار
 const formatToEgyptTime = (date: Date) => {
@@ -152,8 +153,7 @@ export const checkout = async (req: Request | any, res: Response) => {
     // ==========================================
     // 🛡️ 1. Validation
     // ==========================================
-    const validOrderSources = ["online_order_app", "online_order_web", "food_aggregator", "mykeeto", "pos"];
-    if (!validOrderSources.includes(orderSource)) {
+    if (!(CHECKOUT_ORDER_SOURCES as readonly string[]).includes(orderSource)) {
         throw new BadRequest("Invalid order source");
     }
 
@@ -725,7 +725,7 @@ export const checkout = async (req: Request | any, res: Response) => {
             branchId: resolvedBranchId,
             zoneId: resolvedZoneId,
             addressId: addressId || null,
-            orderSource: orderSource === "mykeeto" ? "my_keeto" : orderSource,
+            orderSource: toStoredOrderSource(orderSource),
             paymentMethod,
             orderType: resolvedOrderType,
             subtotal: subtotal.toFixed(2),

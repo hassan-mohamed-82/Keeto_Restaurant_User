@@ -13,6 +13,7 @@ import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors/NotFound";
 import { v4 as uuidv4 } from "uuid";
 import { excludeUnpaidVisaOrders } from "../../helpers/order.helper";
+import { ORDER_SOURCES as ALL_ORDER_SOURCES } from "../../types/orderSources";
 
 /**
  * دالة مساعدة لجلب حركات المحفظة مربوطة ببيانات الأوردر (dailyOrderNumber, orderNumber, ...)
@@ -103,13 +104,7 @@ async function getWalletTransactionsWithOrderDetails(restaurantId: string, limit
 // 1. جلب تفاصيل محفظة المطعم الشاملة (الأرصدة + الرسوم + العمولات + الاشتراكات)
 // ==========================================
 // مصادر الأوردرات (زي orders.orderSource)
-const ORDER_SOURCES = [
-    "online_order_web",
-    "online_order_app",
-    "food_aggregator",
-    "my_keeto",
-    "pos",
-] as const;
+const ORDER_SOURCES = ALL_ORDER_SOURCES;
 
 export const getMyWallet = async (req: Request, res: Response) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;

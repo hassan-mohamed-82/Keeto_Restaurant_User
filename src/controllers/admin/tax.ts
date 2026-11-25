@@ -5,508 +5,287 @@ import { eq, and, desc, inArray, count, or, like } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest, NotFound } from "../../Errors";
 import { v4 as uuidv4 } from "uuid";
-import { TAX_MODULES, TAX_TYPES, TAX_MODULE_TYPES, AMOUNT_TYPES } from "../../validation/admin/tax";
-
+import { TAX_TYPES, TAX_SOURCES, TAX_MODULE_TYPES, TAX_PLATFORM_TYPES, AMOUNT_TYPES } from "../../validation/admin/tax";
 import { extractLang, getLocalizedName, parseJsonArray, Language } from "../../helpers/localization.helper";
+import { taxesForRestaurantCondition } from "../../helpers/tax.helper";
 
 /**
- * Helper to format tax items without heavy nested objects
+ * Restaurant taxes
+ * ─────────────────────────────────────────────────────────────
+ *  source = "restaurant" → created here by the restaurant admin (taxType include | exclude).
+ *  source = "keeto"      → created by the super admin for all restaurants or for selected ones (always exclude).
+ *                          The restaurant can SEE Keeto taxes but cannot edit / delete / toggle them.
+ *
+ *  include → the food price already contains the tax (display only).
+ *  exclude → calculated and added to the order total.
  */
-function formatTaxItem(item: any, lang: Language = "en") {
-    const localizedName = getLocalizedName(
-        {
-            name: item.name || "",
-            nameAr: item.nameAr,
-            nameFr: item.nameFr,
-        },
-        lang
-    );
 
+const getRestaurantId = (req: Request): string => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId) throw new BadRequest("Restaurant context is missing or unauthorized");
+    return restaurantId;
+};
+
+const ownTax = (id: string, restaurantId: string) =>
+    and(eq(taxes.id, id), eq(taxes.restaurantId, restaurantId), eq(taxes.source, "restaurant"));
+
+type TaxRow = typeof taxes.$inferSelect;
+
+function formatTaxItem(item: TaxRow, lang: Language = "en") {
     return {
         id: item.id,
-        restaurantId: item.restaurantId,
-        name: localizedName,
+        restaurantId: item.source === "keeto" ? null : item.restaurantId,
+        name: getLocalizedName({ name: item.name || "", nameAr: item.nameAr, nameFr: item.nameFr }, lang),
         amount: item.amount,
         amountType: item.amountType,
-        type: item.type,
+        source: item.source,
+        isKeetoTax: item.source === "keeto",
+        taxType: item.source === "keeto" ? "exclude" : item.taxType,
+        modules: item.modules,
         moduleType: item.moduleType,
-        modules: parseJsonArray(item.modules),
         status: item.status,
     };
 }
 
-/**
- * Helper to enrich tax items with branch and food details
- */
-async function enrichTaxesWithBranchesAndFoods(
-    items: any[],
-    restaurantId: string,
-    lang: Language = "en"
-) {
+/** Enrich tax items with branch and food details. */
+async function enrichTaxes(items: TaxRow[], restaurantId: string, lang: Language = "en") {
     if (items.length === 0) return [];
 
-    const allBranchIds = Array.from(
-        new Set(items.flatMap((item) => parseJsonArray(item.branchIds)))
-    );
-    const allFoodIds = Array.from(
-        new Set(items.flatMap((item) => parseJsonArray(item.foodIds)))
-    );
+    const allBranchIds = Array.from(new Set(items.flatMap((i) => parseJsonArray(i.branchIds))));
+    const allFoodIds = Array.from(new Set(items.flatMap((i) => parseJsonArray(i.foodIds))));
 
     const [branchList, foodList] = await Promise.all([
-        allBranchIds.length > 0
+        allBranchIds.length
             ? db
-                .select({
-                    id: branches.id,
-                    name: branches.name,
-                    nameAr: branches.nameAr,
-                    nameFr: branches.nameFr,
-                })
+                .select({ id: branches.id, name: branches.name, nameAr: branches.nameAr, nameFr: branches.nameFr })
                 .from(branches)
-                .where(
-                    and(
-                        eq(branches.restaurantId, restaurantId),
-                        inArray(branches.id, allBranchIds)
-                    )
-                )
+                .where(and(eq(branches.restaurantId, restaurantId), inArray(branches.id, allBranchIds)))
             : Promise.resolve([]),
-        allFoodIds.length > 0
+        allFoodIds.length
             ? db
-                .select({
-                    id: food.id,
-                    name: food.name,
-                    nameAr: food.nameAr,
-                    nameFr: food.nameFr,
-                })
+                .select({ id: food.id, name: food.name, nameAr: food.nameAr, nameFr: food.nameFr })
                 .from(food)
-                .where(
-                    and(
-                        eq(food.restaurantid, restaurantId),
-                        inArray(food.id, allFoodIds)
-                    )
-                )
+                .where(and(eq(food.restaurantid, restaurantId), inArray(food.id, allFoodIds)))
             : Promise.resolve([]),
     ]);
 
-    const branchMap = new Map<string, { id: string; name: string; nameAr: string | null; nameFr: string | null }>();
-    for (const b of branchList) {
-        branchMap.set(b.id, b);
-    }
-
-    const foodMap = new Map<string, { id: string; name: string; nameAr: string | null; nameFr: string | null }>();
-    for (const f of foodList) {
-        foodMap.set(f.id, f);
-    }
+    const branchMap = new Map(branchList.map((b) => [b.id, b]));
+    const foodMap = new Map(foodList.map((f) => [f.id, f]));
+    const toRef = (x: { id: string; name: string; nameAr: string | null; nameFr: string | null }) => ({
+        id: x.id,
+        name: getLocalizedName(x, lang),
+        nameAr: x.nameAr,
+        nameFr: x.nameFr,
+    });
 
     return items.map((item) => {
-        const itemBranchIds = parseJsonArray(item.branchIds);
-        const itemFoodIds = parseJsonArray(item.foodIds);
-
-        const itemBranches = itemBranchIds
-            .map((id) => branchMap.get(id))
-            .filter(Boolean)
-            .map((b) => ({
-                id: b!.id,
-                name: getLocalizedName(b!, lang),
-                nameAr: b!.nameAr,
-                nameFr: b!.nameFr,
-            }));
-
-        const itemFoods = itemFoodIds
-            .map((id) => foodMap.get(id))
-            .filter(Boolean)
-            .map((f) => ({
-                id: f!.id,
-                name: getLocalizedName(f!, lang),
-                nameAr: f!.nameAr,
-                nameFr: f!.nameFr,
-            }));
-
-        const localizedName = getLocalizedName(
-            {
-                name: item.name || "",
-                nameAr: item.nameAr,
-                nameFr: item.nameFr,
-            },
-            lang
-        );
-
+        const branchIds = item.source === "keeto" ? [] : parseJsonArray(item.branchIds);
+        const foodIds = item.source === "keeto" ? [] : parseJsonArray(item.foodIds);
         return {
-            id: item.id,
-            restaurantId: item.restaurantId,
-            name: localizedName,
+            ...formatTaxItem(item, lang),
             nameAr: item.nameAr,
             nameFr: item.nameFr,
-            amount: item.amount,
-            amountType: item.amountType,
-            type: item.type,
-            moduleType: item.moduleType,
-            modules: parseJsonArray(item.modules),
-            branchIds: itemBranchIds,
-            foodIds: itemFoodIds,
-            branches: itemBranches,
-            foods: itemFoods,
-            status: item.status,
+            branchIds,
+            foodIds,
+            branches: branchIds.map((id) => branchMap.get(id)).filter(Boolean).map((b) => toRef(b!)),
+            foods: foodIds.map((id) => foodMap.get(id)).filter(Boolean).map((f) => toRef(f!)),
             createdAt: item.createdAt,
             updatedAt: item.updatedAt,
         };
     });
 }
 
+const findTax = async (id: string, restaurantId: string) => {
+    const [item] = await db
+        .select()
+        .from(taxes)
+        .where(and(eq(taxes.id, id), taxesForRestaurantCondition(restaurantId)))
+        .limit(1);
+    if (!item) throw new NotFound("Tax not found");
+    return item;
+};
+
+const findOwnTax = async (id: string, restaurantId: string) => {
+    const item = await findTax(id, restaurantId);
+    if (item.source === "keeto") {
+        throw new BadRequest("This tax is applied by Keeto and cannot be modified by the restaurant");
+    }
+    return item;
+};
+
 // ==========================================
-// 1. Create Tax
+// 1. Create Tax (source = restaurant)
 // ==========================================
 export const createTax = async (req: Request, res: Response) => {
-    const restaurantId = req.user?.restaurantId || req.user?.id;
-    if (!restaurantId) {
-        throw new BadRequest("Restaurant context is missing or unauthorized");
-    }
-
+    const restaurantId = getRestaurantId(req);
     const lang = extractLang(req);
-    const { name, nameAr, nameFr, amount, amountType, amount_type, type, moduleType, module_type, branchIds, foodIds, modules, status } = req.body;
-
-    const finalAmountType = amountType || amount_type || "percentage";
-    const finalModuleType = moduleType || module_type || "all";
-    const finalBranchIds = parseJsonArray(branchIds);
-    const finalFoodIds = parseJsonArray(foodIds);
-    const finalModules = parseJsonArray(modules).length > 0 ? parseJsonArray(modules) : ["all"];
+    const { name, nameAr, nameFr, amount, amountType, taxType, modules, moduleType, branchIds, foodIds, status } = req.body;
 
     const id = uuidv4();
     await db.insert(taxes).values({
         id,
         restaurantId,
+        source: "restaurant",
         name,
         nameAr: nameAr || null,
         nameFr: nameFr || null,
         amount: String(amount),
-        amountType: finalAmountType,
-        type,
-        moduleType: finalModuleType,
-        branchIds: finalBranchIds,
-        foodIds: finalFoodIds,
-        modules: finalModules as any,
-        status: status || "active",
+        amountType,
+        taxType,
+        modules,
+        moduleType,
+        branchIds: parseJsonArray(branchIds),
+        foodIds: parseJsonArray(foodIds),
+        status,
     });
 
-    const [createdItem] = await db
-        .select()
-        .from(taxes)
-        .where(eq(taxes.id, id))
-        .limit(1);
-
-    const [enriched] = await enrichTaxesWithBranchesAndFoods([createdItem], restaurantId, lang);
-
-    return SuccessResponse(
-        res,
-        {
-            message: "Tax created successfully",
-            data: enriched || createdItem,
-        },
-        201
-    );
+    const [enriched] = await enrichTaxes([await findTax(id, restaurantId)], restaurantId, lang);
+    return SuccessResponse(res, { message: "Tax created successfully", data: enriched }, 201);
 };
 
 // ==========================================
-// 2. Get All Taxes (Paginated & Restaurant Scoped)
+// 2. Get All Taxes (restaurant + keeto taxes of this restaurant)
+//    filters: status, source, taxType, modules, moduleType, search, page, limit, all
 // ==========================================
 export const getAllTaxes = async (req: Request, res: Response) => {
-    const restaurantId = req.user?.restaurantId || req.user?.id;
-    if (!restaurantId) {
-        throw new BadRequest("Restaurant context is missing or unauthorized");
-    }
-
+    const restaurantId = getRestaurantId(req);
     const lang = extractLang(req);
-    const params = { ...req.query, ...req.body };
-    const { status, type, moduleType, module_type, search, all } = params;
+    const { status, source, taxType, modules, moduleType, search, all } = req.query as Record<string, string | undefined>;
 
-    const page = Math.max(1, parseInt(params.page as string) || 1);
-    const limit = Math.max(1, Math.min(100, parseInt(params.limit as string) || 10));
-    const offset = (page - 1) * limit;
+    const page = Math.max(1, parseInt(String(req.query.page)) || 1);
+    const limit = Math.max(1, Math.min(100, parseInt(String(req.query.limit)) || 10));
 
-    const conditions = [eq(taxes.restaurantId, restaurantId)];
-    if (status && (status === "active" || status === "inactive")) {
-        conditions.push(eq(taxes.status, status));
-    }
-    if (type && (type === "web" || type === "app" || type === "all")) {
-        conditions.push(eq(taxes.type, type));
-    }
-    const filterModuleType = moduleType || module_type;
-    if (
-        filterModuleType &&
-        (filterModuleType === "pos" || filterModuleType === "online" || filterModuleType === "all")
-    ) {
-        conditions.push(eq(taxes.moduleType, filterModuleType));
-    }
-
-    if (search && typeof search === "string" && search.trim() !== "") {
+    // own restaurant taxes + Keeto taxes that apply to this restaurant
+    const conditions: any[] = [taxesForRestaurantCondition(restaurantId)];
+    if (status === "active" || status === "inactive") conditions.push(eq(taxes.status, status));
+    if (source && (TAX_SOURCES as readonly string[]).includes(source)) conditions.push(eq(taxes.source, source as any));
+    if (taxType && (TAX_TYPES as readonly string[]).includes(taxType)) conditions.push(eq(taxes.taxType, taxType as any));
+    if (modules && (TAX_MODULE_TYPES as readonly string[]).includes(modules)) conditions.push(eq(taxes.modules, modules as any));
+    if (moduleType && (TAX_PLATFORM_TYPES as readonly string[]).includes(moduleType)) conditions.push(eq(taxes.moduleType, moduleType as any));
+    if (search && search.trim()) {
         const term = `%${search.trim()}%`;
-        conditions.push(
-            or(
-                like(taxes.name, term),
-                like(taxes.nameAr, term),
-                like(taxes.nameFr, term)
-            ) as any
-        );
+        conditions.push(or(like(taxes.name, term), like(taxes.nameAr, term), like(taxes.nameFr, term)));
     }
-
+    const where = and(...conditions);
     const isAll = all === "true";
 
-    const [totalCountResult, rawItems] = await Promise.all([
-        db
-            .select({ count: count() })
-            .from(taxes)
-            .where(and(...conditions)),
-        isAll
-            ? db
-                .select()
-                .from(taxes)
-                .where(and(...conditions))
-                .orderBy(desc(taxes.createdAt))
-            : db
-                .select()
-                .from(taxes)
-                .where(and(...conditions))
-                .orderBy(desc(taxes.createdAt))
-                .limit(limit)
-                .offset(offset),
+    const baseQuery = db.select().from(taxes).where(where).orderBy(desc(taxes.createdAt));
+    const [[{ total }], rawItems] = await Promise.all([
+        db.select({ total: count() }).from(taxes).where(where),
+        isAll ? baseQuery : baseQuery.limit(limit).offset((page - 1) * limit),
     ]);
 
-    const totalItems = Number(totalCountResult[0]?.count || 0);
-    const totalPages = isAll ? 1 : Math.ceil(totalItems / limit);
-
-    const formattedList = rawItems.map((item) => formatTaxItem(item, lang));
-
+    const totalItems = Number(total || 0);
     return SuccessResponse(res, {
         message: "Taxes fetched successfully",
-        data: formattedList,
+        data: rawItems.map((item) => formatTaxItem(item, lang)),
         pagination: {
             page: isAll ? 1 : page,
             limit: isAll ? totalItems : limit,
             totalItems,
-            totalPages,
+            totalPages: isAll ? 1 : Math.ceil(totalItems / limit),
         },
     });
 };
 
 // ==========================================
-// 3. Get Tax Options / List Data (Branches, Foods, Modules, Types)
+// 3. Get Tax Options (branches + enums)
 // ==========================================
 export const getTaxListOptions = async (req: Request, res: Response) => {
-    const restaurantId = req.user?.restaurantId || req.user?.id;
-    if (!restaurantId) {
-        throw new BadRequest("Restaurant context is missing or unauthorized");
-    }
-
+    const restaurantId = getRestaurantId(req);
     const lang = extractLang(req);
 
-    // Concurrent fetch for active branches and restaurant foods
-    const [myBranches] = await Promise.all([
-        db
-            .select({
-                id: branches.id,
-                name: branches.name,
-                nameAr: branches.nameAr,
-                nameFr: branches.nameFr,
-            })
-            .from(branches)
-            .where(
-                and(
-                    eq(branches.restaurantId, restaurantId),
-                    eq(branches.status, "active")
-                )
-            ),
-    ]);
-
-    const localizedBranches = myBranches.map((b) => ({
-        id: b.id,
-        name: getLocalizedName(b, lang),
-        nameAr: b.nameAr,
-        nameFr: b.nameFr,
-    }));
+    const myBranches = await db
+        .select({ id: branches.id, name: branches.name, nameAr: branches.nameAr, nameFr: branches.nameFr })
+        .from(branches)
+        .where(and(eq(branches.restaurantId, restaurantId), eq(branches.status, "active")));
 
     return SuccessResponse(res, {
         message: "Tax options fetched successfully",
         data: {
-            branches: localizedBranches,
-            modules: TAX_MODULES,
-            types: TAX_TYPES,
+            branches: myBranches.map((b) => ({ id: b.id, name: getLocalizedName(b, lang), nameAr: b.nameAr, nameFr: b.nameFr })),
+            taxTypes: TAX_TYPES,
+            sources: TAX_SOURCES,
+            modules: TAX_MODULE_TYPES,
+            moduleTypes: TAX_PLATFORM_TYPES,
             amountTypes: AMOUNT_TYPES,
-            moduleTypes: TAX_MODULE_TYPES,
         },
     });
 };
 
 // ==========================================
-// 4. Get Tax By ID
+// 4. Get Tax By ID (restaurant or keeto)
 // ==========================================
 export const getTaxById = async (req: Request, res: Response) => {
-    const restaurantId = req.user?.restaurantId || req.user?.id;
-    if (!restaurantId) {
-        throw new BadRequest("Restaurant context is missing or unauthorized");
-    }
-
+    const restaurantId = getRestaurantId(req);
     const lang = extractLang(req);
-    const { id } = req.params;
-
-    const [item] = await db
-        .select()
-        .from(taxes)
-        .where(and(eq(taxes.id, id), eq(taxes.restaurantId, restaurantId)))
-        .limit(1);
-
-    if (!item) {
-        throw new NotFound("Tax not found");
-    }
-
-    const [enriched] = await enrichTaxesWithBranchesAndFoods([item], restaurantId, lang);
-
-    return SuccessResponse(res, {
-        message: "Tax fetched successfully",
-        data: enriched || item,
-    });
+    const [enriched] = await enrichTaxes([await findTax(req.params.id, restaurantId)], restaurantId, lang);
+    return SuccessResponse(res, { message: "Tax fetched successfully", data: enriched });
 };
 
 // ==========================================
-// 5. Update Tax
+// 5. Update Tax (own restaurant taxes only)
 // ==========================================
 export const updateTax = async (req: Request, res: Response) => {
-    const restaurantId = req.user?.restaurantId || req.user?.id;
-    if (!restaurantId) {
-        throw new BadRequest("Restaurant context is missing or unauthorized");
-    }
-
+    const restaurantId = getRestaurantId(req);
     const lang = extractLang(req);
     const { id } = req.params;
+    await findOwnTax(id, restaurantId);
 
-    const [existingItem] = await db
-        .select()
-        .from(taxes)
-        .where(and(eq(taxes.id, id), eq(taxes.restaurantId, restaurantId)))
-        .limit(1);
-
-    if (!existingItem) {
-        throw new NotFound("Tax not found");
-    }
-
-    const { name, nameAr, nameFr, amount, amountType, amount_type, type, moduleType, module_type, branchIds, foodIds, modules, status } = req.body;
-
+    const { name, nameAr, nameFr, amount, amountType, taxType, modules, moduleType, branchIds, foodIds, status } = req.body;
     const updateData: Partial<typeof taxes.$inferInsert> = {};
     if (name !== undefined) updateData.name = name;
     if (nameAr !== undefined) updateData.nameAr = nameAr;
     if (nameFr !== undefined) updateData.nameFr = nameFr;
     if (amount !== undefined) updateData.amount = String(amount);
-    const finalAmountType = amountType || amount_type;
-    if (finalAmountType !== undefined) updateData.amountType = finalAmountType;
-    if (type !== undefined) updateData.type = type;
-    const finalModuleType = moduleType || module_type;
-    if (finalModuleType !== undefined) updateData.moduleType = finalModuleType;
+    if (amountType !== undefined) updateData.amountType = amountType;
+    if (taxType !== undefined) updateData.taxType = taxType;
+    if (modules !== undefined) updateData.modules = modules;
+    if (moduleType !== undefined) updateData.moduleType = moduleType;
     if (branchIds !== undefined) updateData.branchIds = parseJsonArray(branchIds);
     if (foodIds !== undefined) updateData.foodIds = parseJsonArray(foodIds);
-    if (modules !== undefined) updateData.modules = parseJsonArray(modules) as any;
     if (status !== undefined) updateData.status = status;
 
     if (Object.keys(updateData).length > 0) {
-        await db
-            .update(taxes)
-            .set(updateData)
-            .where(and(eq(taxes.id, id), eq(taxes.restaurantId, restaurantId)));
+        await db.update(taxes).set(updateData).where(ownTax(id, restaurantId));
     }
 
-    const [updatedItem] = await db
-        .select()
-        .from(taxes)
-        .where(and(eq(taxes.id, id), eq(taxes.restaurantId, restaurantId)))
-        .limit(1);
-
-    const [enriched] = await enrichTaxesWithBranchesAndFoods([updatedItem], restaurantId, lang);
-
-    return SuccessResponse(res, {
-        message: "Tax updated successfully",
-        data: enriched || updatedItem,
-    });
+    const [enriched] = await enrichTaxes([await findTax(id, restaurantId)], restaurantId, lang);
+    return SuccessResponse(res, { message: "Tax updated successfully", data: enriched });
 };
 
 // ==========================================
-// 6. Delete Tax
+// 6. Delete Tax (own restaurant taxes only)
 // ==========================================
 export const deleteTax = async (req: Request, res: Response) => {
-    const restaurantId = req.user?.restaurantId || req.user?.id;
-    if (!restaurantId) {
-        throw new BadRequest("Restaurant context is missing or unauthorized");
-    }
-
+    const restaurantId = getRestaurantId(req);
     const { id } = req.params;
-
-    const [existingItem] = await db
-        .select()
-        .from(taxes)
-        .where(and(eq(taxes.id, id), eq(taxes.restaurantId, restaurantId)))
-        .limit(1);
-
-    if (!existingItem) {
-        throw new NotFound("Tax not found");
-    }
-
-    await db
-        .delete(taxes)
-        .where(and(eq(taxes.id, id), eq(taxes.restaurantId, restaurantId)));
-
-    return SuccessResponse(res, {
-        message: "Tax deleted successfully",
-    });
+    await findOwnTax(id, restaurantId);
+    await db.delete(taxes).where(ownTax(id, restaurantId));
+    return SuccessResponse(res, { message: "Tax deleted successfully" });
 };
 
 // ==========================================
-// 7. Toggle Tax Status (Active / Inactive)
+// 7. Toggle Tax Status (own restaurant taxes only)
 // ==========================================
 export const toggleTaxStatus = async (req: Request, res: Response) => {
-    const restaurantId = req.user?.restaurantId || req.user?.id;
-    if (!restaurantId) {
-        throw new BadRequest("Restaurant context is missing or unauthorized");
-    }
-
+    const restaurantId = getRestaurantId(req);
     const { id } = req.params;
-
-    const [existingItem] = await db
-        .select()
-        .from(taxes)
-        .where(and(eq(taxes.id, id), eq(taxes.restaurantId, restaurantId)))
-        .limit(1);
-
-    if (!existingItem) {
-        throw new NotFound("Tax not found");
-    }
-
-    const newStatus = existingItem.status === "active" ? "inactive" : "active";
-
-    await db
-        .update(taxes)
-        .set({ status: newStatus })
-        .where(and(eq(taxes.id, id), eq(taxes.restaurantId, restaurantId)));
-
-    return SuccessResponse(res, {
-        message: `Tax status changed to ${newStatus}`,
-        data: { id, status: newStatus },
-    });
+    const existing = await findOwnTax(id, restaurantId);
+    const newStatus = existing.status === "active" ? "inactive" : "active";
+    await db.update(taxes).set({ status: newStatus }).where(ownTax(id, restaurantId));
+    return SuccessResponse(res, { message: `Tax status changed to ${newStatus}`, data: { id, status: newStatus } });
 };
 
 // ==========================================
-// 8. Get Subcategories (Localized by lang in body/query/headers)
+// 8. Get Subcategories (localized)
 // ==========================================
 export const getSubcategories = async (req: Request, res: Response) => {
-    const restaurantId = req.user?.restaurantId || req.user?.id;
-    if (!restaurantId) {
-        throw new BadRequest("Restaurant context is missing or unauthorized");
-    }
-
+    const restaurantId = getRestaurantId(req);
     const lang = extractLang(req);
 
     const subList = await db
-        .select({
-            id: subcategories.id,
-            name: subcategories.name,
-            nameAr: subcategories.nameAr,
-            nameFr: subcategories.nameFr,
-        })
+        .select({ id: subcategories.id, name: subcategories.name, nameAr: subcategories.nameAr, nameFr: subcategories.nameFr })
         .from(subcategories)
         .where(
             and(
@@ -516,71 +295,32 @@ export const getSubcategories = async (req: Request, res: Response) => {
             )
         );
 
-    const formatted = subList.map((sub) => ({
-        id: sub.id,
-        name: getLocalizedName(sub, lang),
-    }));
-
     return SuccessResponse(res, {
         message: "Subcategories fetched successfully",
-        data: formatted,
+        data: subList.map((sub) => ({ id: sub.id, name: getLocalizedName(sub, lang) })),
     });
 };
 
 // ==========================================
-// 9. Get Foods (Localized by lang & filtered by tax or subcategory_id)
+// 9. Get Foods — query: ?taxId=&subcategoryId=
 // ==========================================
 export const getFoods = async (req: Request, res: Response) => {
-    const restaurantId = req.user?.restaurantId || req.user?.id;
-    if (!restaurantId) {
-        throw new BadRequest("Restaurant context is missing or unauthorized");
-    }
-
+    const restaurantId = getRestaurantId(req);
     const lang = extractLang(req);
-
-    const taxId =
-        (req.params?.id && !req.params?.subcategoryId ? req.params.id : undefined) ||
-        req.query?.taxId ||
-        req.body?.taxId ||
-        req.query?.tax_id ||
-        req.body?.tax_id;
-
-    const subcategoryId =
-        req.params?.subcategoryId ||
-        req.params?.subCategoryId ||
-        req.query?.subcategory_id ||
-        req.query?.subcategoryId ||
-        req.query?.subCategory ||
-        req.query?.sub_category ||
-        req.body?.subcategory_id ||
-        req.body?.subcategoryId ||
-        req.body?.subCategory ||
-        req.body?.sub_category;
+    const taxId = req.query.taxId as string | undefined;
+    const subcategoryId = req.query.subcategoryId as string | undefined;
 
     const conditions: any[] = [eq(food.restaurantid, restaurantId)];
 
     if (taxId) {
-        const [taxItem] = await db
-            .select({ foodIds: taxes.foodIds })
-            .from(taxes)
-            .where(and(eq(taxes.id, String(taxId)), eq(taxes.restaurantId, restaurantId)))
-            .limit(1);
-
-        if (!taxItem) {
-            throw new NotFound("Tax not found");
-        }
-
-        const foodIds = parseJsonArray(taxItem.foodIds);
+        const tax = await findTax(taxId, restaurantId);
+        const foodIds = parseJsonArray(tax.foodIds);
         if (foodIds.length === 0) {
-            return SuccessResponse(res, {
-                message: "Foods fetched successfully",
-                data: [],
-            });
+            return SuccessResponse(res, { message: "Foods fetched successfully", data: [] });
         }
         conditions.push(inArray(food.id, foodIds));
     }
-
-    if (subcategoryId && typeof subcategoryId === "string" && subcategoryId.trim() !== "") {
+    if (subcategoryId && subcategoryId.trim()) {
         conditions.push(eq(food.subcategoryid, subcategoryId.trim()));
     }
 
@@ -597,118 +337,45 @@ export const getFoods = async (req: Request, res: Response) => {
         .from(food)
         .where(and(...conditions));
 
-    const formatted = foodList.map((f) => ({
-        id: f.id,
-        name: getLocalizedName(f, lang),
-        price: f.price,
-        image: f.image,
-        subcategoryId: f.subcategoryId,
-    }));
-
     return SuccessResponse(res, {
         message: "Foods fetched successfully",
-        data: formatted,
+        data: foodList.map((f) => ({
+            id: f.id,
+            name: getLocalizedName(f, lang),
+            price: f.price,
+            image: f.image,
+            subcategoryId: f.subcategoryId,
+        })),
     });
 };
 
 // ==========================================
-// 10. Get Branches (Localized by lang en, ar, fr with optional taxId filter)
+// 10. Get Branches — query: ?taxId=
 // ==========================================
 export const getBranches = async (req: Request, res: Response) => {
-    const restaurantId = req.user?.restaurantId || req.user?.id;
-    if (!restaurantId) {
-        throw new BadRequest("Restaurant context is missing or unauthorized");
-    }
-
+    const restaurantId = getRestaurantId(req);
     const lang = extractLang(req);
-    const taxId =
-        req.params?.id ||
-        req.query?.taxId ||
-        req.body?.taxId ||
-        req.query?.tax_id ||
-        req.body?.tax_id;
+    const taxId = req.query.taxId as string | undefined;
 
+    const conditions: any[] = [eq(branches.restaurantId, restaurantId)];
     if (taxId) {
-        const [taxItem] = await db
-            .select({ branchIds: taxes.branchIds })
-            .from(taxes)
-            .where(and(eq(taxes.id, String(taxId)), eq(taxes.restaurantId, restaurantId)))
-            .limit(1);
-
-        if (!taxItem) {
-            throw new NotFound("Tax not found");
-        }
-
-        const branchIds = parseJsonArray(taxItem.branchIds);
+        const tax = await findTax(taxId, restaurantId);
+        const branchIds = parseJsonArray(tax.branchIds);
         if (branchIds.length === 0) {
-            return SuccessResponse(res, {
-                message: "Branches fetched successfully",
-                data: [],
-            });
+            return SuccessResponse(res, { message: "Branches fetched successfully", data: [] });
         }
-
-        const myBranches = await db
-            .select({
-                id: branches.id,
-                name: branches.name,
-                nameAr: branches.nameAr,
-                nameFr: branches.nameFr,
-            })
-            .from(branches)
-            .where(
-                and(
-                    eq(branches.restaurantId, restaurantId),
-                    inArray(branches.id, branchIds)
-                )
-            );
-
-        const formatted = myBranches.map((b) => ({
-            id: b.id,
-            name: getLocalizedName(b, lang),
-        }));
-
-        return SuccessResponse(res, {
-            message: "Branches fetched successfully",
-            data: formatted,
-        });
+        conditions.push(inArray(branches.id, branchIds));
+    } else {
+        conditions.push(eq(branches.status, "active"));
     }
 
     const myBranches = await db
-        .select({
-            id: branches.id,
-            name: branches.name,
-            nameAr: branches.nameAr,
-            nameFr: branches.nameFr,
-        })
+        .select({ id: branches.id, name: branches.name, nameAr: branches.nameAr, nameFr: branches.nameFr })
         .from(branches)
-        .where(
-            and(
-                eq(branches.restaurantId, restaurantId),
-                eq(branches.status, "active")
-            )
-        );
-
-    const formatted = myBranches.map((b) => ({
-        id: b.id,
-        name: getLocalizedName(b, lang),
-    }));
+        .where(and(...conditions));
 
     return SuccessResponse(res, {
         message: "Branches fetched successfully",
-        data: formatted,
+        data: myBranches.map((b) => ({ id: b.id, name: getLocalizedName(b, lang) })),
     });
-};
-
-// ==========================================
-// 11. Get Branches of a Specific Tax
-// ==========================================
-export const getTaxBranches = async (req: Request, res: Response) => {
-    return getBranches(req, res);
-};
-
-// ==========================================
-// 12. Get Foods of a Specific Tax
-// ==========================================
-export const getTaxFoods = async (req: Request, res: Response) => {
-    return getFoods(req, res);
 };

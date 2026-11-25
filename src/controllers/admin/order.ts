@@ -2499,29 +2499,28 @@ export const getSelectData = async (req: Request, res: Response) => {
             .where(and(inArray(cities.id, cityIds as string[]), eq(cities.status, "active")));
     }
 
-    // 5. تصفية المصادر: إرجاع الكل، وإخفاء my_keeto و food_aggregator فقط لو كانت inactive
+    // 5. تصفية المصادر: إرجاع الكل، وإخفاء my_keeto / mykeeto_web / food_aggregator / food_aggregator_web لو خطتها inactive
     const planMap = new Map(businessPlans.map((p) => [p.platformType, p]));
 
     const allSources = [
         { id: "online_order_web", name: "Online Order Web", nameAr: "طلب أونلاين ويب", value: "online_order_web" },
         { id: "online_order_app", name: "Online Order App", nameAr: "طلب أونلاين تطبيق", value: "online_order_app" },
-        { id: "food_aggregator", name: "Food Aggregator", nameAr: "تطبيقات التوصيل", value: "food_aggregator" },
+        { id: "food_aggregator", name: "Food Aggregator App", nameAr: "تطبيقات التوصيل", value: "food_aggregator" },
+        { id: "food_aggregator_web", name: "Food Aggregator Web", nameAr: "تطبيقات التوصيل ويب", value: "food_aggregator_web" },
         { id: "my_keeto", name: "My Keeto", nameAr: "ماي كيتو", value: "my_keeto" },
+        { id: "mykeeto_web", name: "My Keeto Web", nameAr: "ماي كيتو ويب", value: "mykeeto_web" },
     ];
 
     const sources = allSources.filter((source) => {
-        // إذا كان المصدر هو food_aggregator
-        if (source.value === "food_aggregator") {
-            const plan = planMap.get("food_aggregator");
-            // ترجع فقط إذا كانت الخطة موجودة وحالتها active
-            return plan?.aggregatorStatus === "active";
+        // كل مصدر له خطة منفصلة — يرجع فقط إذا كانت خطته موجودة وحالتها active
+        if (source.value === "food_aggregator" || source.value === "food_aggregator_web") {
+            return planMap.get(source.value)?.aggregatorStatus === "active";
         }
-
-        // إذا كان المصدر هو my_keeto
         if (source.value === "my_keeto") {
-            const plan = planMap.get("mykeeto");
-            // ترجع فقط إذا كانت الخطة موجودة وحالتها active
-            return plan?.mykeetoStatus === "active";
+            return planMap.get("mykeeto")?.mykeetoStatus === "active";
+        }
+        if (source.value === "mykeeto_web") {
+            return planMap.get("mykeeto_web")?.mykeetoStatus === "active";
         }
 
         // باقي المصادر ترجع دائماً

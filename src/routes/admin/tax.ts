@@ -1,10 +1,7 @@
 import { Router } from "express";
 import { catchAsync } from "../../utils/catchAsync";
 import { validate } from "../../middlewares/validation";
-import {
-    createTaxSchema,
-    updateTaxSchema,
-} from "../../validation/admin/tax";
+import { createTaxSchema, updateTaxSchema } from "../../validation/admin/tax";
 import {
     createTax,
     getAllTaxes,
@@ -16,32 +13,18 @@ import {
     getSubcategories,
     getFoods,
     getBranches,
-    getTaxBranches,
-    getTaxFoods,
 } from "../../controllers/admin/tax";
 
 const router = Router();
 
-router.post("/", validate(createTaxSchema), catchAsync(createTax));
-router.get("/", catchAsync(getAllTaxes));
-router.post("/list-taxes", catchAsync(getAllTaxes));
+// One route per controller (filters go in the query string)
 router.get("/options", catchAsync(getTaxListOptions));
-router.get("/select-data", catchAsync(getTaxListOptions));
-router.get("/list", catchAsync(getTaxListOptions));
-router.get("/branches", catchAsync(getBranches));
-router.post("/branches", catchAsync(getBranches));
-router.get("/:id/branches", catchAsync(getTaxBranches));
-router.post("/:id/branches", catchAsync(getTaxBranches));
+router.get("/branches", catchAsync(getBranches));           // ?taxId=
 router.get("/subcategories", catchAsync(getSubcategories));
-router.post("/subcategories", catchAsync(getSubcategories));
-router.get("/subcategories/:subcategoryId/foods", catchAsync(getFoods));
-router.post("/subcategories/:subcategoryId/foods", catchAsync(getFoods));
-router.get("/foods", catchAsync(getFoods));
-router.post("/foods", catchAsync(getFoods));
-router.get("/foods/subcategory/:subcategoryId", catchAsync(getFoods));
-router.post("/foods/subcategory/:subcategoryId", catchAsync(getFoods));
-router.get("/:id/foods", catchAsync(getTaxFoods));
-router.post("/:id/foods", catchAsync(getTaxFoods));
+router.get("/foods", catchAsync(getFoods));                 // ?taxId=&subcategoryId=
+
+router.post("/", validate(createTaxSchema), catchAsync(createTax));
+router.get("/", catchAsync(getAllTaxes));                   // ?status=&source=&taxType=&modules=&moduleType=&search=&page=&limit=&all=
 router.get("/:id", catchAsync(getTaxById));
 router.put("/:id", validate(updateTaxSchema), catchAsync(updateTax));
 router.patch("/:id/toggle-status", catchAsync(toggleTaxStatus));

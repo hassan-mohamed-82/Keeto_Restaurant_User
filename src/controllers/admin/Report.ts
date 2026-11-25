@@ -736,10 +736,12 @@ export const getDashboardReports = async (req: Request | any, res: Response) => 
             // مصادر الطلب (Order Source)
             const source = o.orderSource || "unknown";
             const platformName = source === "my_keeto" ? "my_keeto"
-                : source === "online_order_web" ? "Website"
-                    : source === "online_order_app" ? "App"
-                        : source === "food_aggregator" ? "Aggregator"
-                            : source;
+                : source === "mykeeto_web" ? "mykeeto_web"
+                    : source === "online_order_web" ? "Website"
+                        : source === "online_order_app" ? "App"
+                            : source === "food_aggregator" ? "Aggregator"
+                                : source === "food_aggregator_web" ? "Aggregator Web"
+                                    : source;
             orderSourcesObj[platformName] = (orderSourcesObj[platformName] || 0) + 1;
 
             // الخريطة الجغرافية

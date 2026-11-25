@@ -105,7 +105,9 @@ export const ORDER_SOURCE_LABELS: Record<string, { en: string; ar: string }> = {
     online_order_web: { en: "Website", ar: "الموقع الإلكتروني" },
     online_order_app: { en: "Mobile App", ar: "تطبيق الموبايل" },
     food_aggregator: { en: "Aggregator", ar: "تطبيق توصيل" },
+    food_aggregator_web: { en: "Aggregator Web", ar: "تطبيق توصيل ويب" },
     my_keeto: { en: "My Keeto", ar: "ماي كيتو" },
+    mykeeto_web: { en: "My Keeto Web", ar: "ماي كيتو ويب" },
     pos: { en: "POS Cashier", ar: "كاشير" },
 };
 
