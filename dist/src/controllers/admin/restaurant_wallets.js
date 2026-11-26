@@ -9,6 +9,7 @@ const BadRequest_1 = require("../../Errors/BadRequest");
 const NotFound_1 = require("../../Errors/NotFound");
 const uuid_1 = require("uuid");
 const order_helper_1 = require("../../helpers/order.helper");
+const orderSources_1 = require("../../types/orderSources");
 /**
  * دالة مساعدة لجلب حركات المحفظة مربوطة ببيانات الأوردر (dailyOrderNumber, orderNumber, ...)
  * إذا كان نوع الحركة order_payment
@@ -84,13 +85,7 @@ async function getWalletTransactionsWithOrderDetails(restaurantId, limit) {
 // 1. جلب تفاصيل محفظة المطعم الشاملة (الأرصدة + الرسوم + العمولات + الاشتراكات)
 // ==========================================
 // مصادر الأوردرات (زي orders.orderSource)
-const ORDER_SOURCES = [
-    "online_order_web",
-    "online_order_app",
-    "food_aggregator",
-    "my_keeto",
-    "pos",
-];
+const ORDER_SOURCES = orderSources_1.ORDER_SOURCES;
 const getMyWallet = async (req, res) => {
     const restaurantId = req.user?.restaurantId || req.user?.id;
     const branchId = req.user?.branchId; // لو موجود يبقى مدير فرع

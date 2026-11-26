@@ -25,10 +25,10 @@ const getRestaurantUsers = async (req, res) => {
     if (status) {
         conditions.push((0, drizzle_orm_1.eq)(schema_1.restaurant_users.status, status));
     }
-    // 2. Search by Phone, Name, Email
+    // 2. Search by Phone, Name, Email, AlternatePhone
     if (search) {
         const searchPattern = `%${search}%`;
-        conditions.push((0, drizzle_orm_1.or)((0, drizzle_orm_1.like)(schema_1.users.name, searchPattern), (0, drizzle_orm_1.like)(schema_1.users.phone, searchPattern), (0, drizzle_orm_1.like)(schema_1.users.email, searchPattern)));
+        conditions.push((0, drizzle_orm_1.or)((0, drizzle_orm_1.like)(schema_1.users.name, searchPattern), (0, drizzle_orm_1.like)(schema_1.users.phone, searchPattern), (0, drizzle_orm_1.like)(schema_1.users.email, searchPattern), (0, drizzle_orm_1.like)(schema_1.users.alternatePhone, searchPattern)));
     }
     if (phone) {
         conditions.push((0, drizzle_orm_1.like)(schema_1.users.phone, `%${phone}%`));
@@ -73,6 +73,7 @@ const getRestaurantUsers = async (req, res) => {
         userId: schema_1.users.id,
         name: schema_1.users.name,
         phone: schema_1.users.phone,
+        alternatePhone: schema_1.users.alternatePhone,
         email: schema_1.users.email,
         photo: schema_1.users.photo,
         points: (0, drizzle_orm_1.sql) `COALESCE(${schema_1.userRestaurantPoints.points}, 0)`,
@@ -93,7 +94,7 @@ const getRestaurantUsers = async (req, res) => {
         .leftJoin(schema_1.userRestaurantPoints, (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.userRestaurantPoints.userId, schema_1.users.id), (0, drizzle_orm_1.eq)(schema_1.userRestaurantPoints.restaurantId, schema_1.restaurant_users.restaurantId)))
         .leftJoin(schema_1.orders, (0, drizzle_orm_1.and)(...orderConditions))
         .where((0, drizzle_orm_1.and)(...conditions))
-        .groupBy(schema_1.restaurant_users.id, schema_1.users.id, schema_1.users.name, schema_1.users.phone, schema_1.users.email, schema_1.users.photo, schema_1.users.status, schema_1.userRestaurantPoints.points, schema_1.userRestaurantPoints.totalOrders, schema_1.restaurant_users.status, schema_1.restaurant_users.createdAt, schema_1.restaurant_users.updatedAt, schema_1.restaurants.id, schema_1.restaurants.name)
+        .groupBy(schema_1.restaurant_users.id, schema_1.users.id, schema_1.users.name, schema_1.users.phone, schema_1.users.alternatePhone, schema_1.users.email, schema_1.users.photo, schema_1.users.status, schema_1.userRestaurantPoints.points, schema_1.userRestaurantPoints.totalOrders, schema_1.restaurant_users.status, schema_1.restaurant_users.createdAt, schema_1.restaurant_users.updatedAt, schema_1.restaurants.id, schema_1.restaurants.name)
         .$dynamic();
     if (havingConditions.length > 0) {
         query = query.having((0, drizzle_orm_1.and)(...havingConditions));
@@ -169,6 +170,7 @@ const getBlockedRestaurantUsers = async (req, res) => {
         userId: schema_1.users.id,
         name: schema_1.users.name,
         phone: schema_1.users.phone,
+        alternatePhone: schema_1.users.alternatePhone,
         email: schema_1.users.email,
         photo: schema_1.users.photo,
         points: (0, drizzle_orm_1.sql) `COALESCE(${schema_1.userRestaurantPoints.points}, 0)`,
@@ -290,6 +292,7 @@ const getRestaurantUserById = async (req, res) => {
         userId: schema_1.users.id,
         name: schema_1.users.name,
         phone: schema_1.users.phone,
+        alternatePhone: schema_1.users.alternatePhone,
         email: schema_1.users.email,
         photo: schema_1.users.photo,
         points: (0, drizzle_orm_1.sql) `COALESCE(${schema_1.userRestaurantPoints.points}, 0)`,
@@ -333,6 +336,7 @@ const getRestaurantUserStats = async (req, res) => {
         name: schema_1.users.name,
         email: schema_1.users.email,
         phone: schema_1.users.phone,
+        alternatePhone: schema_1.users.alternatePhone,
         photo: schema_1.users.photo,
         status: schema_1.users.status,
         isVerified: schema_1.users.isVerified,
@@ -432,7 +436,7 @@ const getRestaurantUserPointsTransactions = async (req, res) => {
     const offset = (pageNum - 1) * limitNum;
     // التحقق أن المستخدم فعلاً عميل لهذا المطعم
     const [userRecord] = await connection_1.db
-        .select({ id: schema_1.users.id, name: schema_1.users.name, phone: schema_1.users.phone })
+        .select({ id: schema_1.users.id, name: schema_1.users.name, phone: schema_1.users.phone, alternatePhone: schema_1.users.alternatePhone })
         .from(schema_1.users)
         .where((0, drizzle_orm_1.eq)(schema_1.users.id, userId))
         .limit(1);

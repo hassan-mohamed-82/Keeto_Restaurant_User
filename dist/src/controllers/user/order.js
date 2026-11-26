@@ -17,6 +17,7 @@ const userBlockCheck_1 = require("../../utils/userBlockCheck");
 const restaurantFeatures_1 = require("./restaurantFeatures");
 const restaurantWalletService_1 = require("../../services/restaurantWalletService");
 const dispatchEngine_1 = require("../../services/shipping/dispatchEngine");
+const orderSources_1 = require("../../types/orderSources");
 // 👇 1. دالة تظبيط الوقت لتوقيت مصر عشان نص الإشعار
 const formatToEgyptTime = (date) => {
     return new Intl.DateTimeFormat("ar-EG", {
@@ -104,8 +105,7 @@ const checkout = async (req, res) => {
     // ==========================================
     // 🛡️ 1. Validation
     // ==========================================
-    const validOrderSources = ["online_order_app", "online_order_web", "food_aggregator", "mykeeto", "pos"];
-    if (!validOrderSources.includes(orderSource)) {
+    if (!orderSources_1.CHECKOUT_ORDER_SOURCES.includes(orderSource)) {
         throw new BadRequest_1.BadRequest("Invalid order source");
     }
     const [selectedPayment] = await connection_1.db.select().from(schema_1.paymentMethods).where((0, drizzle_orm_1.eq)(schema_1.paymentMethods.id, paymentMethod)).limit(1);
@@ -587,7 +587,7 @@ const checkout = async (req, res) => {
             branchId: resolvedBranchId,
             zoneId: resolvedZoneId,
             addressId: addressId || null,
-            orderSource: orderSource === "mykeeto" ? "my_keeto" : orderSource,
+            orderSource: (0, orderSources_1.toStoredOrderSource)(orderSource),
             paymentMethod,
             orderType: resolvedOrderType,
             subtotal: subtotal.toFixed(2),

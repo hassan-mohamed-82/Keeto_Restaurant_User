@@ -1865,7 +1865,9 @@
                                             "online_order_app",
                                             "food_aggregator",
                                             "my_keeto",
-                                            "pos"
+                                            "pos",
+                                            "food_aggregator_web",
+                                            "mykeeto_web"
                                         ]
                                     },
                                     "paymentMethod": {
@@ -1928,6 +1930,15 @@
                                     },
                                     "firstOrderDiscountId": {
                                         "type": "string"
+                                    },
+                                    "taxAmount": {
+                                        "type": "string"
+                                    },
+                                    "includedTaxAmount": {
+                                        "type": "string"
+                                    },
+                                    "taxDetails": {
+                                        "type": "object"
                                     },
                                     "totalAmount": {
                                         "type": "string"
@@ -2170,7 +2181,9 @@
                                             "online_order_app",
                                             "food_aggregator",
                                             "my_keeto",
-                                            "pos"
+                                            "pos",
+                                            "food_aggregator_web",
+                                            "mykeeto_web"
                                         ]
                                     },
                                     "paymentMethod": {
@@ -2233,6 +2246,15 @@
                                     },
                                     "firstOrderDiscountId": {
                                         "type": "string"
+                                    },
+                                    "taxAmount": {
+                                        "type": "string"
+                                    },
+                                    "includedTaxAmount": {
+                                        "type": "string"
+                                    },
+                                    "taxDetails": {
+                                        "type": "object"
                                     },
                                     "totalAmount": {
                                         "type": "string"
@@ -2475,7 +2497,9 @@
                                             "online_order_app",
                                             "food_aggregator",
                                             "my_keeto",
-                                            "pos"
+                                            "pos",
+                                            "food_aggregator_web",
+                                            "mykeeto_web"
                                         ]
                                     },
                                     "paymentMethod": {
@@ -2538,6 +2562,15 @@
                                     },
                                     "firstOrderDiscountId": {
                                         "type": "string"
+                                    },
+                                    "taxAmount": {
+                                        "type": "string"
+                                    },
+                                    "includedTaxAmount": {
+                                        "type": "string"
+                                    },
+                                    "taxDetails": {
+                                        "type": "object"
                                     },
                                     "totalAmount": {
                                         "type": "string"
@@ -2780,7 +2813,9 @@
                                             "online_order_app",
                                             "food_aggregator",
                                             "my_keeto",
-                                            "pos"
+                                            "pos",
+                                            "food_aggregator_web",
+                                            "mykeeto_web"
                                         ]
                                     },
                                     "paymentMethod": {
@@ -2843,6 +2878,15 @@
                                     },
                                     "firstOrderDiscountId": {
                                         "type": "string"
+                                    },
+                                    "taxAmount": {
+                                        "type": "string"
+                                    },
+                                    "includedTaxAmount": {
+                                        "type": "string"
+                                    },
+                                    "taxDetails": {
+                                        "type": "object"
                                     },
                                     "totalAmount": {
                                         "type": "string"
@@ -15897,6 +15941,106 @@
                 }
             }
         },
+        "/api/restaurant/tax/options": {
+            "get": {
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "authorization",
+                        "in": "header",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "503": {
+                        "description": "Service Unavailable"
+                    }
+                },
+                "tags": [
+                    "Restaurant / Tax"
+                ]
+            }
+        },
+        "/api/restaurant/tax/branches": {
+            "get": {
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "authorization",
+                        "in": "header",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "503": {
+                        "description": "Service Unavailable"
+                    }
+                },
+                "tags": [
+                    "Restaurant / Tax"
+                ]
+            }
+        },
+        "/api/restaurant/tax/subcategories": {
+            "get": {
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "authorization",
+                        "in": "header",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "503": {
+                        "description": "Service Unavailable"
+                    }
+                },
+                "tags": [
+                    "Restaurant / Tax"
+                ]
+            }
+        },
+        "/api/restaurant/tax/foods": {
+            "get": {
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "authorization",
+                        "in": "header",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "503": {
+                        "description": "Service Unavailable"
+                    }
+                },
+                "tags": [
+                    "Restaurant / Tax"
+                ]
+            }
+        },
         "/api/restaurant/tax/": {
             "post": {
                 "description": "",
@@ -15958,602 +16102,6 @@
                 "tags": [
                     "Restaurant / Tax"
                 ]
-            }
-        },
-        "/api/restaurant/tax/list-taxes": {
-            "post": {
-                "description": "",
-                "parameters": [
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
-                "responses": {
-                    "401": {
-                        "description": "Unauthorized"
-                    },
-                    "503": {
-                        "description": "Service Unavailable"
-                    }
-                },
-                "tags": [
-                    "Restaurant / Tax"
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "type": "object",
-                                "additionalProperties": true
-                            },
-                            "example": {}
-                        }
-                    }
-                }
-            }
-        },
-        "/api/restaurant/tax/options": {
-            "get": {
-                "description": "",
-                "parameters": [
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
-                "responses": {
-                    "401": {
-                        "description": "Unauthorized"
-                    },
-                    "503": {
-                        "description": "Service Unavailable"
-                    }
-                },
-                "tags": [
-                    "Restaurant / Tax"
-                ]
-            }
-        },
-        "/api/restaurant/tax/select-data": {
-            "get": {
-                "description": "",
-                "parameters": [
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
-                "responses": {
-                    "401": {
-                        "description": "Unauthorized"
-                    },
-                    "503": {
-                        "description": "Service Unavailable"
-                    }
-                },
-                "tags": [
-                    "Restaurant / Tax"
-                ]
-            }
-        },
-        "/api/restaurant/tax/list": {
-            "get": {
-                "description": "",
-                "parameters": [
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
-                "responses": {
-                    "401": {
-                        "description": "Unauthorized"
-                    },
-                    "503": {
-                        "description": "Service Unavailable"
-                    }
-                },
-                "tags": [
-                    "Restaurant / Tax"
-                ]
-            }
-        },
-        "/api/restaurant/tax/branches": {
-            "get": {
-                "description": "",
-                "parameters": [
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
-                "responses": {
-                    "401": {
-                        "description": "Unauthorized"
-                    },
-                    "503": {
-                        "description": "Service Unavailable"
-                    }
-                },
-                "tags": [
-                    "Restaurant / Tax"
-                ]
-            },
-            "post": {
-                "description": "",
-                "parameters": [
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
-                "responses": {
-                    "401": {
-                        "description": "Unauthorized"
-                    },
-                    "503": {
-                        "description": "Service Unavailable"
-                    }
-                },
-                "tags": [
-                    "Restaurant / Tax"
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "type": "object",
-                                "additionalProperties": true
-                            },
-                            "example": {}
-                        }
-                    }
-                }
-            }
-        },
-        "/api/restaurant/tax/{id}/branches": {
-            "get": {
-                "description": "",
-                "parameters": [
-                    {
-                        "name": "id",
-                        "in": "path",
-                        "required": true,
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
-                "responses": {
-                    "401": {
-                        "description": "Unauthorized"
-                    },
-                    "503": {
-                        "description": "Service Unavailable"
-                    }
-                },
-                "tags": [
-                    "Restaurant / Tax"
-                ]
-            },
-            "post": {
-                "description": "",
-                "parameters": [
-                    {
-                        "name": "id",
-                        "in": "path",
-                        "required": true,
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
-                "responses": {
-                    "401": {
-                        "description": "Unauthorized"
-                    },
-                    "503": {
-                        "description": "Service Unavailable"
-                    }
-                },
-                "tags": [
-                    "Restaurant / Tax"
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "type": "object",
-                                "additionalProperties": true
-                            },
-                            "example": {}
-                        }
-                    }
-                }
-            }
-        },
-        "/api/restaurant/tax/subcategories": {
-            "get": {
-                "description": "",
-                "parameters": [
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
-                "responses": {
-                    "401": {
-                        "description": "Unauthorized"
-                    },
-                    "503": {
-                        "description": "Service Unavailable"
-                    }
-                },
-                "tags": [
-                    "Restaurant / Tax"
-                ]
-            },
-            "post": {
-                "description": "",
-                "parameters": [
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
-                "responses": {
-                    "401": {
-                        "description": "Unauthorized"
-                    },
-                    "503": {
-                        "description": "Service Unavailable"
-                    }
-                },
-                "tags": [
-                    "Restaurant / Tax"
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "type": "object",
-                                "additionalProperties": true
-                            },
-                            "example": {}
-                        }
-                    }
-                }
-            }
-        },
-        "/api/restaurant/tax/subcategories/{subcategoryId}/foods": {
-            "get": {
-                "description": "",
-                "parameters": [
-                    {
-                        "name": "subcategoryId",
-                        "in": "path",
-                        "required": true,
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
-                "responses": {
-                    "401": {
-                        "description": "Unauthorized"
-                    },
-                    "503": {
-                        "description": "Service Unavailable"
-                    }
-                },
-                "tags": [
-                    "Restaurant / Tax"
-                ]
-            },
-            "post": {
-                "description": "",
-                "parameters": [
-                    {
-                        "name": "subcategoryId",
-                        "in": "path",
-                        "required": true,
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
-                "responses": {
-                    "401": {
-                        "description": "Unauthorized"
-                    },
-                    "503": {
-                        "description": "Service Unavailable"
-                    }
-                },
-                "tags": [
-                    "Restaurant / Tax"
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "type": "object",
-                                "additionalProperties": true
-                            },
-                            "example": {}
-                        }
-                    }
-                }
-            }
-        },
-        "/api/restaurant/tax/foods": {
-            "get": {
-                "description": "",
-                "parameters": [
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
-                "responses": {
-                    "401": {
-                        "description": "Unauthorized"
-                    },
-                    "503": {
-                        "description": "Service Unavailable"
-                    }
-                },
-                "tags": [
-                    "Restaurant / Tax"
-                ]
-            },
-            "post": {
-                "description": "",
-                "parameters": [
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
-                "responses": {
-                    "401": {
-                        "description": "Unauthorized"
-                    },
-                    "503": {
-                        "description": "Service Unavailable"
-                    }
-                },
-                "tags": [
-                    "Restaurant / Tax"
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "type": "object",
-                                "additionalProperties": true
-                            },
-                            "example": {}
-                        }
-                    }
-                }
-            }
-        },
-        "/api/restaurant/tax/foods/subcategory/{subcategoryId}": {
-            "get": {
-                "description": "",
-                "parameters": [
-                    {
-                        "name": "subcategoryId",
-                        "in": "path",
-                        "required": true,
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
-                "responses": {
-                    "401": {
-                        "description": "Unauthorized"
-                    },
-                    "503": {
-                        "description": "Service Unavailable"
-                    }
-                },
-                "tags": [
-                    "Restaurant / Tax"
-                ]
-            },
-            "post": {
-                "description": "",
-                "parameters": [
-                    {
-                        "name": "subcategoryId",
-                        "in": "path",
-                        "required": true,
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
-                "responses": {
-                    "401": {
-                        "description": "Unauthorized"
-                    },
-                    "503": {
-                        "description": "Service Unavailable"
-                    }
-                },
-                "tags": [
-                    "Restaurant / Tax"
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "type": "object",
-                                "additionalProperties": true
-                            },
-                            "example": {}
-                        }
-                    }
-                }
-            }
-        },
-        "/api/restaurant/tax/{id}/foods": {
-            "get": {
-                "description": "",
-                "parameters": [
-                    {
-                        "name": "id",
-                        "in": "path",
-                        "required": true,
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
-                "responses": {
-                    "401": {
-                        "description": "Unauthorized"
-                    },
-                    "503": {
-                        "description": "Service Unavailable"
-                    }
-                },
-                "tags": [
-                    "Restaurant / Tax"
-                ]
-            },
-            "post": {
-                "description": "",
-                "parameters": [
-                    {
-                        "name": "id",
-                        "in": "path",
-                        "required": true,
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
-                "responses": {
-                    "401": {
-                        "description": "Unauthorized"
-                    },
-                    "503": {
-                        "description": "Service Unavailable"
-                    }
-                },
-                "tags": [
-                    "Restaurant / Tax"
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "type": "object",
-                                "additionalProperties": true
-                            },
-                            "example": {}
-                        }
-                    }
-                }
             }
         },
         "/api/restaurant/tax/{id}": {
@@ -23814,7 +23362,9 @@
                                             "online_order_app",
                                             "food_aggregator",
                                             "my_keeto",
-                                            "pos"
+                                            "pos",
+                                            "food_aggregator_web",
+                                            "mykeeto_web"
                                         ]
                                     },
                                     "paymentMethod": {
@@ -23877,6 +23427,15 @@
                                     },
                                     "firstOrderDiscountId": {
                                         "type": "string"
+                                    },
+                                    "taxAmount": {
+                                        "type": "string"
+                                    },
+                                    "includedTaxAmount": {
+                                        "type": "string"
+                                    },
+                                    "taxDetails": {
+                                        "type": "object"
                                     },
                                     "totalAmount": {
                                         "type": "string"
@@ -24127,7 +23686,9 @@
                                             "online_order_app",
                                             "food_aggregator",
                                             "my_keeto",
-                                            "pos"
+                                            "pos",
+                                            "food_aggregator_web",
+                                            "mykeeto_web"
                                         ]
                                     },
                                     "paymentMethod": {
@@ -24190,6 +23751,15 @@
                                     },
                                     "firstOrderDiscountId": {
                                         "type": "string"
+                                    },
+                                    "taxAmount": {
+                                        "type": "string"
+                                    },
+                                    "includedTaxAmount": {
+                                        "type": "string"
+                                    },
+                                    "taxDetails": {
+                                        "type": "object"
                                     },
                                     "totalAmount": {
                                         "type": "string"

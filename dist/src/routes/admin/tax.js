@@ -6,26 +6,13 @@ const validation_1 = require("../../middlewares/validation");
 const tax_1 = require("../../validation/admin/tax");
 const tax_2 = require("../../controllers/admin/tax");
 const router = (0, express_1.Router)();
-router.post("/", (0, validation_1.validate)(tax_1.createTaxSchema), (0, catchAsync_1.catchAsync)(tax_2.createTax));
-router.get("/", (0, catchAsync_1.catchAsync)(tax_2.getAllTaxes));
-router.post("/list-taxes", (0, catchAsync_1.catchAsync)(tax_2.getAllTaxes));
+// One route per controller (filters go in the query string)
 router.get("/options", (0, catchAsync_1.catchAsync)(tax_2.getTaxListOptions));
-router.get("/select-data", (0, catchAsync_1.catchAsync)(tax_2.getTaxListOptions));
-router.get("/list", (0, catchAsync_1.catchAsync)(tax_2.getTaxListOptions));
-router.get("/branches", (0, catchAsync_1.catchAsync)(tax_2.getBranches));
-router.post("/branches", (0, catchAsync_1.catchAsync)(tax_2.getBranches));
-router.get("/:id/branches", (0, catchAsync_1.catchAsync)(tax_2.getTaxBranches));
-router.post("/:id/branches", (0, catchAsync_1.catchAsync)(tax_2.getTaxBranches));
+router.get("/branches", (0, catchAsync_1.catchAsync)(tax_2.getBranches)); // ?taxId=
 router.get("/subcategories", (0, catchAsync_1.catchAsync)(tax_2.getSubcategories));
-router.post("/subcategories", (0, catchAsync_1.catchAsync)(tax_2.getSubcategories));
-router.get("/subcategories/:subcategoryId/foods", (0, catchAsync_1.catchAsync)(tax_2.getFoods));
-router.post("/subcategories/:subcategoryId/foods", (0, catchAsync_1.catchAsync)(tax_2.getFoods));
-router.get("/foods", (0, catchAsync_1.catchAsync)(tax_2.getFoods));
-router.post("/foods", (0, catchAsync_1.catchAsync)(tax_2.getFoods));
-router.get("/foods/subcategory/:subcategoryId", (0, catchAsync_1.catchAsync)(tax_2.getFoods));
-router.post("/foods/subcategory/:subcategoryId", (0, catchAsync_1.catchAsync)(tax_2.getFoods));
-router.get("/:id/foods", (0, catchAsync_1.catchAsync)(tax_2.getTaxFoods));
-router.post("/:id/foods", (0, catchAsync_1.catchAsync)(tax_2.getTaxFoods));
+router.get("/foods", (0, catchAsync_1.catchAsync)(tax_2.getFoods)); // ?taxId=&subcategoryId=
+router.post("/", (0, validation_1.validate)(tax_1.createTaxSchema), (0, catchAsync_1.catchAsync)(tax_2.createTax));
+router.get("/", (0, catchAsync_1.catchAsync)(tax_2.getAllTaxes)); // ?status=&source=&taxType=&modules=&moduleType=&search=&page=&limit=&all=
 router.get("/:id", (0, catchAsync_1.catchAsync)(tax_2.getTaxById));
 router.put("/:id", (0, validation_1.validate)(tax_1.updateTaxSchema), (0, catchAsync_1.catchAsync)(tax_2.updateTax));
 router.patch("/:id/toggle-status", (0, catchAsync_1.catchAsync)(tax_2.toggleTaxStatus));

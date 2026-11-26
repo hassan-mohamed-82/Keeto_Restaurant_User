@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getTaxFoods = exports.getTaxBranches = exports.getBranches = exports.getFoods = exports.getSubcategories = exports.toggleTaxStatus = exports.deleteTax = exports.updateTax = exports.getTaxById = exports.getTaxListOptions = exports.getAllTaxes = exports.createTax = void 0;
+exports.getBranches = exports.getFoods = exports.getSubcategories = exports.toggleTaxStatus = exports.deleteTax = exports.updateTax = exports.getTaxById = exports.getTaxListOptions = exports.getAllTaxes = exports.createTax = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -9,305 +9,216 @@ const Errors_1 = require("../../Errors");
 const uuid_1 = require("uuid");
 const tax_1 = require("../../validation/admin/tax");
 const localization_helper_1 = require("../../helpers/localization.helper");
+const tax_helper_1 = require("../../helpers/tax.helper");
 /**
- * Helper to format tax items without heavy nested objects
+ * Restaurant taxes
+ * ─────────────────────────────────────────────────────────────
+ *  source = "restaurant" → created here by the restaurant admin (taxType include | exclude).
+ *  source = "keeto"      → created by the super admin for all restaurants or for selected ones (always exclude).
+ *                          The restaurant can SEE Keeto taxes but cannot edit / delete / toggle them.
+ *
+ *  include → the food price already contains the tax (display only).
+ *  exclude → calculated and added to the order total.
  */
+const getRestaurantId = (req) => {
+    const restaurantId = req.user?.restaurantId || req.user?.id;
+    if (!restaurantId)
+        throw new Errors_1.BadRequest("Restaurant context is missing or unauthorized");
+    return restaurantId;
+};
+const ownTax = (id, restaurantId) => (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.taxes.id, id), (0, drizzle_orm_1.eq)(schema_1.taxes.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.taxes.source, "restaurant"));
 function formatTaxItem(item, lang = "en") {
-    const localizedName = (0, localization_helper_1.getLocalizedName)({
-        name: item.name || "",
-        nameAr: item.nameAr,
-        nameFr: item.nameFr,
-    }, lang);
     return {
         id: item.id,
-        restaurantId: item.restaurantId,
-        name: localizedName,
+        restaurantId: item.source === "keeto" ? null : item.restaurantId,
+        name: (0, localization_helper_1.getLocalizedName)({ name: item.name || "", nameAr: item.nameAr, nameFr: item.nameFr }, lang),
         amount: item.amount,
         amountType: item.amountType,
-        type: item.type,
+        source: item.source,
+        isKeetoTax: item.source === "keeto",
+        taxType: item.source === "keeto" ? "exclude" : item.taxType,
+        modules: item.modules,
         moduleType: item.moduleType,
-        modules: (0, localization_helper_1.parseJsonArray)(item.modules),
         status: item.status,
     };
 }
-/**
- * Helper to enrich tax items with branch and food details
- */
-async function enrichTaxesWithBranchesAndFoods(items, restaurantId, lang = "en") {
+/** Enrich tax items with branch and food details. */
+async function enrichTaxes(items, restaurantId, lang = "en") {
     if (items.length === 0)
         return [];
-    const allBranchIds = Array.from(new Set(items.flatMap((item) => (0, localization_helper_1.parseJsonArray)(item.branchIds))));
-    const allFoodIds = Array.from(new Set(items.flatMap((item) => (0, localization_helper_1.parseJsonArray)(item.foodIds))));
+    const allBranchIds = Array.from(new Set(items.flatMap((i) => (0, localization_helper_1.parseJsonArray)(i.branchIds))));
+    const allFoodIds = Array.from(new Set(items.flatMap((i) => (0, localization_helper_1.parseJsonArray)(i.foodIds))));
     const [branchList, foodList] = await Promise.all([
-        allBranchIds.length > 0
+        allBranchIds.length
             ? connection_1.db
-                .select({
-                id: schema_1.branches.id,
-                name: schema_1.branches.name,
-                nameAr: schema_1.branches.nameAr,
-                nameFr: schema_1.branches.nameFr,
-            })
+                .select({ id: schema_1.branches.id, name: schema_1.branches.name, nameAr: schema_1.branches.nameAr, nameFr: schema_1.branches.nameFr })
                 .from(schema_1.branches)
                 .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branches.restaurantId, restaurantId), (0, drizzle_orm_1.inArray)(schema_1.branches.id, allBranchIds)))
             : Promise.resolve([]),
-        allFoodIds.length > 0
+        allFoodIds.length
             ? connection_1.db
-                .select({
-                id: schema_1.food.id,
-                name: schema_1.food.name,
-                nameAr: schema_1.food.nameAr,
-                nameFr: schema_1.food.nameFr,
-            })
+                .select({ id: schema_1.food.id, name: schema_1.food.name, nameAr: schema_1.food.nameAr, nameFr: schema_1.food.nameFr })
                 .from(schema_1.food)
                 .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId), (0, drizzle_orm_1.inArray)(schema_1.food.id, allFoodIds)))
             : Promise.resolve([]),
     ]);
-    const branchMap = new Map();
-    for (const b of branchList) {
-        branchMap.set(b.id, b);
-    }
-    const foodMap = new Map();
-    for (const f of foodList) {
-        foodMap.set(f.id, f);
-    }
+    const branchMap = new Map(branchList.map((b) => [b.id, b]));
+    const foodMap = new Map(foodList.map((f) => [f.id, f]));
+    const toRef = (x) => ({
+        id: x.id,
+        name: (0, localization_helper_1.getLocalizedName)(x, lang),
+        nameAr: x.nameAr,
+        nameFr: x.nameFr,
+    });
     return items.map((item) => {
-        const itemBranchIds = (0, localization_helper_1.parseJsonArray)(item.branchIds);
-        const itemFoodIds = (0, localization_helper_1.parseJsonArray)(item.foodIds);
-        const itemBranches = itemBranchIds
-            .map((id) => branchMap.get(id))
-            .filter(Boolean)
-            .map((b) => ({
-            id: b.id,
-            name: (0, localization_helper_1.getLocalizedName)(b, lang),
-            nameAr: b.nameAr,
-            nameFr: b.nameFr,
-        }));
-        const itemFoods = itemFoodIds
-            .map((id) => foodMap.get(id))
-            .filter(Boolean)
-            .map((f) => ({
-            id: f.id,
-            name: (0, localization_helper_1.getLocalizedName)(f, lang),
-            nameAr: f.nameAr,
-            nameFr: f.nameFr,
-        }));
-        const localizedName = (0, localization_helper_1.getLocalizedName)({
-            name: item.name || "",
-            nameAr: item.nameAr,
-            nameFr: item.nameFr,
-        }, lang);
+        const branchIds = item.source === "keeto" ? [] : (0, localization_helper_1.parseJsonArray)(item.branchIds);
+        const foodIds = item.source === "keeto" ? [] : (0, localization_helper_1.parseJsonArray)(item.foodIds);
         return {
-            id: item.id,
-            restaurantId: item.restaurantId,
-            name: localizedName,
+            ...formatTaxItem(item, lang),
             nameAr: item.nameAr,
             nameFr: item.nameFr,
-            amount: item.amount,
-            amountType: item.amountType,
-            type: item.type,
-            moduleType: item.moduleType,
-            modules: (0, localization_helper_1.parseJsonArray)(item.modules),
-            branchIds: itemBranchIds,
-            foodIds: itemFoodIds,
-            branches: itemBranches,
-            foods: itemFoods,
-            status: item.status,
+            branchIds,
+            foodIds,
+            branches: branchIds.map((id) => branchMap.get(id)).filter(Boolean).map((b) => toRef(b)),
+            foods: foodIds.map((id) => foodMap.get(id)).filter(Boolean).map((f) => toRef(f)),
             createdAt: item.createdAt,
             updatedAt: item.updatedAt,
         };
     });
 }
+const findTax = async (id, restaurantId) => {
+    const [item] = await connection_1.db
+        .select()
+        .from(schema_1.taxes)
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.taxes.id, id), (0, tax_helper_1.taxesForRestaurantCondition)(restaurantId)))
+        .limit(1);
+    if (!item)
+        throw new Errors_1.NotFound("Tax not found");
+    return item;
+};
+const findOwnTax = async (id, restaurantId) => {
+    const item = await findTax(id, restaurantId);
+    if (item.source === "keeto") {
+        throw new Errors_1.BadRequest("This tax is applied by Keeto and cannot be modified by the restaurant");
+    }
+    return item;
+};
 // ==========================================
-// 1. Create Tax
+// 1. Create Tax (source = restaurant)
 // ==========================================
 const createTax = async (req, res) => {
-    const restaurantId = req.user?.restaurantId || req.user?.id;
-    if (!restaurantId) {
-        throw new Errors_1.BadRequest("Restaurant context is missing or unauthorized");
-    }
+    const restaurantId = getRestaurantId(req);
     const lang = (0, localization_helper_1.extractLang)(req);
-    const { name, nameAr, nameFr, amount, amountType, amount_type, type, moduleType, module_type, branchIds, foodIds, modules, status } = req.body;
-    const finalAmountType = amountType || amount_type || "percentage";
-    const finalModuleType = moduleType || module_type || "all";
-    const finalBranchIds = (0, localization_helper_1.parseJsonArray)(branchIds);
-    const finalFoodIds = (0, localization_helper_1.parseJsonArray)(foodIds);
-    const finalModules = (0, localization_helper_1.parseJsonArray)(modules).length > 0 ? (0, localization_helper_1.parseJsonArray)(modules) : ["all"];
+    const { name, nameAr, nameFr, amount, amountType, taxType, modules, moduleType, branchIds, foodIds, status } = req.body;
     const id = (0, uuid_1.v4)();
     await connection_1.db.insert(schema_1.taxes).values({
         id,
         restaurantId,
+        source: "restaurant",
         name,
         nameAr: nameAr || null,
         nameFr: nameFr || null,
         amount: String(amount),
-        amountType: finalAmountType,
-        type,
-        moduleType: finalModuleType,
-        branchIds: finalBranchIds,
-        foodIds: finalFoodIds,
-        modules: finalModules,
-        status: status || "active",
+        amountType,
+        taxType,
+        modules,
+        moduleType,
+        branchIds: (0, localization_helper_1.parseJsonArray)(branchIds),
+        foodIds: (0, localization_helper_1.parseJsonArray)(foodIds),
+        status,
     });
-    const [createdItem] = await connection_1.db
-        .select()
-        .from(schema_1.taxes)
-        .where((0, drizzle_orm_1.eq)(schema_1.taxes.id, id))
-        .limit(1);
-    const [enriched] = await enrichTaxesWithBranchesAndFoods([createdItem], restaurantId, lang);
-    return (0, response_1.SuccessResponse)(res, {
-        message: "Tax created successfully",
-        data: enriched || createdItem,
-    }, 201);
+    const [enriched] = await enrichTaxes([await findTax(id, restaurantId)], restaurantId, lang);
+    return (0, response_1.SuccessResponse)(res, { message: "Tax created successfully", data: enriched }, 201);
 };
 exports.createTax = createTax;
 // ==========================================
-// 2. Get All Taxes (Paginated & Restaurant Scoped)
+// 2. Get All Taxes (restaurant + keeto taxes of this restaurant)
+//    filters: status, source, taxType, modules, moduleType, search, page, limit, all
 // ==========================================
 const getAllTaxes = async (req, res) => {
-    const restaurantId = req.user?.restaurantId || req.user?.id;
-    if (!restaurantId) {
-        throw new Errors_1.BadRequest("Restaurant context is missing or unauthorized");
-    }
+    const restaurantId = getRestaurantId(req);
     const lang = (0, localization_helper_1.extractLang)(req);
-    const params = { ...req.query, ...req.body };
-    const { status, type, moduleType, module_type, search, all } = params;
-    const page = Math.max(1, parseInt(params.page) || 1);
-    const limit = Math.max(1, Math.min(100, parseInt(params.limit) || 10));
-    const offset = (page - 1) * limit;
-    const conditions = [(0, drizzle_orm_1.eq)(schema_1.taxes.restaurantId, restaurantId)];
-    if (status && (status === "active" || status === "inactive")) {
+    const { status, source, taxType, modules, moduleType, search, all } = req.query;
+    const page = Math.max(1, parseInt(String(req.query.page)) || 1);
+    const limit = Math.max(1, Math.min(100, parseInt(String(req.query.limit)) || 10));
+    // own restaurant taxes + Keeto taxes that apply to this restaurant
+    const conditions = [(0, tax_helper_1.taxesForRestaurantCondition)(restaurantId)];
+    if (status === "active" || status === "inactive")
         conditions.push((0, drizzle_orm_1.eq)(schema_1.taxes.status, status));
-    }
-    if (type && (type === "web" || type === "app" || type === "all")) {
-        conditions.push((0, drizzle_orm_1.eq)(schema_1.taxes.type, type));
-    }
-    const filterModuleType = moduleType || module_type;
-    if (filterModuleType &&
-        (filterModuleType === "pos" || filterModuleType === "online" || filterModuleType === "all")) {
-        conditions.push((0, drizzle_orm_1.eq)(schema_1.taxes.moduleType, filterModuleType));
-    }
-    if (search && typeof search === "string" && search.trim() !== "") {
+    if (source && tax_1.TAX_SOURCES.includes(source))
+        conditions.push((0, drizzle_orm_1.eq)(schema_1.taxes.source, source));
+    if (taxType && tax_1.TAX_TYPES.includes(taxType))
+        conditions.push((0, drizzle_orm_1.eq)(schema_1.taxes.taxType, taxType));
+    if (modules && tax_1.TAX_MODULE_TYPES.includes(modules))
+        conditions.push((0, drizzle_orm_1.eq)(schema_1.taxes.modules, modules));
+    if (moduleType && tax_1.TAX_PLATFORM_TYPES.includes(moduleType))
+        conditions.push((0, drizzle_orm_1.eq)(schema_1.taxes.moduleType, moduleType));
+    if (search && search.trim()) {
         const term = `%${search.trim()}%`;
         conditions.push((0, drizzle_orm_1.or)((0, drizzle_orm_1.like)(schema_1.taxes.name, term), (0, drizzle_orm_1.like)(schema_1.taxes.nameAr, term), (0, drizzle_orm_1.like)(schema_1.taxes.nameFr, term)));
     }
+    const where = (0, drizzle_orm_1.and)(...conditions);
     const isAll = all === "true";
-    const [totalCountResult, rawItems] = await Promise.all([
-        connection_1.db
-            .select({ count: (0, drizzle_orm_1.count)() })
-            .from(schema_1.taxes)
-            .where((0, drizzle_orm_1.and)(...conditions)),
-        isAll
-            ? connection_1.db
-                .select()
-                .from(schema_1.taxes)
-                .where((0, drizzle_orm_1.and)(...conditions))
-                .orderBy((0, drizzle_orm_1.desc)(schema_1.taxes.createdAt))
-            : connection_1.db
-                .select()
-                .from(schema_1.taxes)
-                .where((0, drizzle_orm_1.and)(...conditions))
-                .orderBy((0, drizzle_orm_1.desc)(schema_1.taxes.createdAt))
-                .limit(limit)
-                .offset(offset),
+    const baseQuery = connection_1.db.select().from(schema_1.taxes).where(where).orderBy((0, drizzle_orm_1.desc)(schema_1.taxes.createdAt));
+    const [[{ total }], rawItems] = await Promise.all([
+        connection_1.db.select({ total: (0, drizzle_orm_1.count)() }).from(schema_1.taxes).where(where),
+        isAll ? baseQuery : baseQuery.limit(limit).offset((page - 1) * limit),
     ]);
-    const totalItems = Number(totalCountResult[0]?.count || 0);
-    const totalPages = isAll ? 1 : Math.ceil(totalItems / limit);
-    const formattedList = rawItems.map((item) => formatTaxItem(item, lang));
+    const totalItems = Number(total || 0);
     return (0, response_1.SuccessResponse)(res, {
         message: "Taxes fetched successfully",
-        data: formattedList,
+        data: rawItems.map((item) => formatTaxItem(item, lang)),
         pagination: {
             page: isAll ? 1 : page,
             limit: isAll ? totalItems : limit,
             totalItems,
-            totalPages,
+            totalPages: isAll ? 1 : Math.ceil(totalItems / limit),
         },
     });
 };
 exports.getAllTaxes = getAllTaxes;
 // ==========================================
-// 3. Get Tax Options / List Data (Branches, Foods, Modules, Types)
+// 3. Get Tax Options (branches + enums)
 // ==========================================
 const getTaxListOptions = async (req, res) => {
-    const restaurantId = req.user?.restaurantId || req.user?.id;
-    if (!restaurantId) {
-        throw new Errors_1.BadRequest("Restaurant context is missing or unauthorized");
-    }
+    const restaurantId = getRestaurantId(req);
     const lang = (0, localization_helper_1.extractLang)(req);
-    // Concurrent fetch for active branches and restaurant foods
-    const [myBranches] = await Promise.all([
-        connection_1.db
-            .select({
-            id: schema_1.branches.id,
-            name: schema_1.branches.name,
-            nameAr: schema_1.branches.nameAr,
-            nameFr: schema_1.branches.nameFr,
-        })
-            .from(schema_1.branches)
-            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branches.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.branches.status, "active"))),
-    ]);
-    const localizedBranches = myBranches.map((b) => ({
-        id: b.id,
-        name: (0, localization_helper_1.getLocalizedName)(b, lang),
-        nameAr: b.nameAr,
-        nameFr: b.nameFr,
-    }));
+    const myBranches = await connection_1.db
+        .select({ id: schema_1.branches.id, name: schema_1.branches.name, nameAr: schema_1.branches.nameAr, nameFr: schema_1.branches.nameFr })
+        .from(schema_1.branches)
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branches.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.branches.status, "active")));
     return (0, response_1.SuccessResponse)(res, {
         message: "Tax options fetched successfully",
         data: {
-            branches: localizedBranches,
-            modules: tax_1.TAX_MODULES,
-            types: tax_1.TAX_TYPES,
+            branches: myBranches.map((b) => ({ id: b.id, name: (0, localization_helper_1.getLocalizedName)(b, lang), nameAr: b.nameAr, nameFr: b.nameFr })),
+            taxTypes: tax_1.TAX_TYPES,
+            sources: tax_1.TAX_SOURCES,
+            modules: tax_1.TAX_MODULE_TYPES,
+            moduleTypes: tax_1.TAX_PLATFORM_TYPES,
             amountTypes: tax_1.AMOUNT_TYPES,
-            moduleTypes: tax_1.TAX_MODULE_TYPES,
         },
     });
 };
 exports.getTaxListOptions = getTaxListOptions;
 // ==========================================
-// 4. Get Tax By ID
+// 4. Get Tax By ID (restaurant or keeto)
 // ==========================================
 const getTaxById = async (req, res) => {
-    const restaurantId = req.user?.restaurantId || req.user?.id;
-    if (!restaurantId) {
-        throw new Errors_1.BadRequest("Restaurant context is missing or unauthorized");
-    }
+    const restaurantId = getRestaurantId(req);
     const lang = (0, localization_helper_1.extractLang)(req);
-    const { id } = req.params;
-    const [item] = await connection_1.db
-        .select()
-        .from(schema_1.taxes)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.taxes.id, id), (0, drizzle_orm_1.eq)(schema_1.taxes.restaurantId, restaurantId)))
-        .limit(1);
-    if (!item) {
-        throw new Errors_1.NotFound("Tax not found");
-    }
-    const [enriched] = await enrichTaxesWithBranchesAndFoods([item], restaurantId, lang);
-    return (0, response_1.SuccessResponse)(res, {
-        message: "Tax fetched successfully",
-        data: enriched || item,
-    });
+    const [enriched] = await enrichTaxes([await findTax(req.params.id, restaurantId)], restaurantId, lang);
+    return (0, response_1.SuccessResponse)(res, { message: "Tax fetched successfully", data: enriched });
 };
 exports.getTaxById = getTaxById;
 // ==========================================
-// 5. Update Tax
+// 5. Update Tax (own restaurant taxes only)
 // ==========================================
 const updateTax = async (req, res) => {
-    const restaurantId = req.user?.restaurantId || req.user?.id;
-    if (!restaurantId) {
-        throw new Errors_1.BadRequest("Restaurant context is missing or unauthorized");
-    }
+    const restaurantId = getRestaurantId(req);
     const lang = (0, localization_helper_1.extractLang)(req);
     const { id } = req.params;
-    const [existingItem] = await connection_1.db
-        .select()
-        .from(schema_1.taxes)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.taxes.id, id), (0, drizzle_orm_1.eq)(schema_1.taxes.restaurantId, restaurantId)))
-        .limit(1);
-    if (!existingItem) {
-        throw new Errors_1.NotFound("Tax not found");
-    }
-    const { name, nameAr, nameFr, amount, amountType, amount_type, type, moduleType, module_type, branchIds, foodIds, modules, status } = req.body;
+    await findOwnTax(id, restaurantId);
+    const { name, nameAr, nameFr, amount, amountType, taxType, modules, moduleType, branchIds, foodIds, status } = req.body;
     const updateData = {};
     if (name !== undefined)
         updateData.name = name;
@@ -317,165 +228,84 @@ const updateTax = async (req, res) => {
         updateData.nameFr = nameFr;
     if (amount !== undefined)
         updateData.amount = String(amount);
-    const finalAmountType = amountType || amount_type;
-    if (finalAmountType !== undefined)
-        updateData.amountType = finalAmountType;
-    if (type !== undefined)
-        updateData.type = type;
-    const finalModuleType = moduleType || module_type;
-    if (finalModuleType !== undefined)
-        updateData.moduleType = finalModuleType;
+    if (amountType !== undefined)
+        updateData.amountType = amountType;
+    if (taxType !== undefined)
+        updateData.taxType = taxType;
+    if (modules !== undefined)
+        updateData.modules = modules;
+    if (moduleType !== undefined)
+        updateData.moduleType = moduleType;
     if (branchIds !== undefined)
         updateData.branchIds = (0, localization_helper_1.parseJsonArray)(branchIds);
     if (foodIds !== undefined)
         updateData.foodIds = (0, localization_helper_1.parseJsonArray)(foodIds);
-    if (modules !== undefined)
-        updateData.modules = (0, localization_helper_1.parseJsonArray)(modules);
     if (status !== undefined)
         updateData.status = status;
     if (Object.keys(updateData).length > 0) {
-        await connection_1.db
-            .update(schema_1.taxes)
-            .set(updateData)
-            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.taxes.id, id), (0, drizzle_orm_1.eq)(schema_1.taxes.restaurantId, restaurantId)));
+        await connection_1.db.update(schema_1.taxes).set(updateData).where(ownTax(id, restaurantId));
     }
-    const [updatedItem] = await connection_1.db
-        .select()
-        .from(schema_1.taxes)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.taxes.id, id), (0, drizzle_orm_1.eq)(schema_1.taxes.restaurantId, restaurantId)))
-        .limit(1);
-    const [enriched] = await enrichTaxesWithBranchesAndFoods([updatedItem], restaurantId, lang);
-    return (0, response_1.SuccessResponse)(res, {
-        message: "Tax updated successfully",
-        data: enriched || updatedItem,
-    });
+    const [enriched] = await enrichTaxes([await findTax(id, restaurantId)], restaurantId, lang);
+    return (0, response_1.SuccessResponse)(res, { message: "Tax updated successfully", data: enriched });
 };
 exports.updateTax = updateTax;
 // ==========================================
-// 6. Delete Tax
+// 6. Delete Tax (own restaurant taxes only)
 // ==========================================
 const deleteTax = async (req, res) => {
-    const restaurantId = req.user?.restaurantId || req.user?.id;
-    if (!restaurantId) {
-        throw new Errors_1.BadRequest("Restaurant context is missing or unauthorized");
-    }
+    const restaurantId = getRestaurantId(req);
     const { id } = req.params;
-    const [existingItem] = await connection_1.db
-        .select()
-        .from(schema_1.taxes)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.taxes.id, id), (0, drizzle_orm_1.eq)(schema_1.taxes.restaurantId, restaurantId)))
-        .limit(1);
-    if (!existingItem) {
-        throw new Errors_1.NotFound("Tax not found");
-    }
-    await connection_1.db
-        .delete(schema_1.taxes)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.taxes.id, id), (0, drizzle_orm_1.eq)(schema_1.taxes.restaurantId, restaurantId)));
-    return (0, response_1.SuccessResponse)(res, {
-        message: "Tax deleted successfully",
-    });
+    await findOwnTax(id, restaurantId);
+    await connection_1.db.delete(schema_1.taxes).where(ownTax(id, restaurantId));
+    return (0, response_1.SuccessResponse)(res, { message: "Tax deleted successfully" });
 };
 exports.deleteTax = deleteTax;
 // ==========================================
-// 7. Toggle Tax Status (Active / Inactive)
+// 7. Toggle Tax Status (own restaurant taxes only)
 // ==========================================
 const toggleTaxStatus = async (req, res) => {
-    const restaurantId = req.user?.restaurantId || req.user?.id;
-    if (!restaurantId) {
-        throw new Errors_1.BadRequest("Restaurant context is missing or unauthorized");
-    }
+    const restaurantId = getRestaurantId(req);
     const { id } = req.params;
-    const [existingItem] = await connection_1.db
-        .select()
-        .from(schema_1.taxes)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.taxes.id, id), (0, drizzle_orm_1.eq)(schema_1.taxes.restaurantId, restaurantId)))
-        .limit(1);
-    if (!existingItem) {
-        throw new Errors_1.NotFound("Tax not found");
-    }
-    const newStatus = existingItem.status === "active" ? "inactive" : "active";
-    await connection_1.db
-        .update(schema_1.taxes)
-        .set({ status: newStatus })
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.taxes.id, id), (0, drizzle_orm_1.eq)(schema_1.taxes.restaurantId, restaurantId)));
-    return (0, response_1.SuccessResponse)(res, {
-        message: `Tax status changed to ${newStatus}`,
-        data: { id, status: newStatus },
-    });
+    const existing = await findOwnTax(id, restaurantId);
+    const newStatus = existing.status === "active" ? "inactive" : "active";
+    await connection_1.db.update(schema_1.taxes).set({ status: newStatus }).where(ownTax(id, restaurantId));
+    return (0, response_1.SuccessResponse)(res, { message: `Tax status changed to ${newStatus}`, data: { id, status: newStatus } });
 };
 exports.toggleTaxStatus = toggleTaxStatus;
 // ==========================================
-// 8. Get Subcategories (Localized by lang in body/query/headers)
+// 8. Get Subcategories (localized)
 // ==========================================
 const getSubcategories = async (req, res) => {
-    const restaurantId = req.user?.restaurantId || req.user?.id;
-    if (!restaurantId) {
-        throw new Errors_1.BadRequest("Restaurant context is missing or unauthorized");
-    }
+    const restaurantId = getRestaurantId(req);
     const lang = (0, localization_helper_1.extractLang)(req);
     const subList = await connection_1.db
-        .select({
-        id: schema_1.subcategories.id,
-        name: schema_1.subcategories.name,
-        nameAr: schema_1.subcategories.nameAr,
-        nameFr: schema_1.subcategories.nameFr,
-    })
+        .select({ id: schema_1.subcategories.id, name: schema_1.subcategories.name, nameAr: schema_1.subcategories.nameAr, nameFr: schema_1.subcategories.nameFr })
         .from(schema_1.subcategories)
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.subcategories.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.subcategories.isDeleted, false), (0, drizzle_orm_1.eq)(schema_1.subcategories.status, "active")));
-    const formatted = subList.map((sub) => ({
-        id: sub.id,
-        name: (0, localization_helper_1.getLocalizedName)(sub, lang),
-    }));
     return (0, response_1.SuccessResponse)(res, {
         message: "Subcategories fetched successfully",
-        data: formatted,
+        data: subList.map((sub) => ({ id: sub.id, name: (0, localization_helper_1.getLocalizedName)(sub, lang) })),
     });
 };
 exports.getSubcategories = getSubcategories;
 // ==========================================
-// 9. Get Foods (Localized by lang & filtered by tax or subcategory_id)
+// 9. Get Foods — query: ?taxId=&subcategoryId=
 // ==========================================
 const getFoods = async (req, res) => {
-    const restaurantId = req.user?.restaurantId || req.user?.id;
-    if (!restaurantId) {
-        throw new Errors_1.BadRequest("Restaurant context is missing or unauthorized");
-    }
+    const restaurantId = getRestaurantId(req);
     const lang = (0, localization_helper_1.extractLang)(req);
-    const taxId = (req.params?.id && !req.params?.subcategoryId ? req.params.id : undefined) ||
-        req.query?.taxId ||
-        req.body?.taxId ||
-        req.query?.tax_id ||
-        req.body?.tax_id;
-    const subcategoryId = req.params?.subcategoryId ||
-        req.params?.subCategoryId ||
-        req.query?.subcategory_id ||
-        req.query?.subcategoryId ||
-        req.query?.subCategory ||
-        req.query?.sub_category ||
-        req.body?.subcategory_id ||
-        req.body?.subcategoryId ||
-        req.body?.subCategory ||
-        req.body?.sub_category;
+    const taxId = req.query.taxId;
+    const subcategoryId = req.query.subcategoryId;
     const conditions = [(0, drizzle_orm_1.eq)(schema_1.food.restaurantid, restaurantId)];
     if (taxId) {
-        const [taxItem] = await connection_1.db
-            .select({ foodIds: schema_1.taxes.foodIds })
-            .from(schema_1.taxes)
-            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.taxes.id, String(taxId)), (0, drizzle_orm_1.eq)(schema_1.taxes.restaurantId, restaurantId)))
-            .limit(1);
-        if (!taxItem) {
-            throw new Errors_1.NotFound("Tax not found");
-        }
-        const foodIds = (0, localization_helper_1.parseJsonArray)(taxItem.foodIds);
+        const tax = await findTax(taxId, restaurantId);
+        const foodIds = (0, localization_helper_1.parseJsonArray)(tax.foodIds);
         if (foodIds.length === 0) {
-            return (0, response_1.SuccessResponse)(res, {
-                message: "Foods fetched successfully",
-                data: [],
-            });
+            return (0, response_1.SuccessResponse)(res, { message: "Foods fetched successfully", data: [] });
         }
         conditions.push((0, drizzle_orm_1.inArray)(schema_1.food.id, foodIds));
     }
-    if (subcategoryId && typeof subcategoryId === "string" && subcategoryId.trim() !== "") {
+    if (subcategoryId && subcategoryId.trim()) {
         conditions.push((0, drizzle_orm_1.eq)(schema_1.food.subcategoryid, subcategoryId.trim()));
     }
     const foodList = await connection_1.db
@@ -490,97 +320,44 @@ const getFoods = async (req, res) => {
     })
         .from(schema_1.food)
         .where((0, drizzle_orm_1.and)(...conditions));
-    const formatted = foodList.map((f) => ({
-        id: f.id,
-        name: (0, localization_helper_1.getLocalizedName)(f, lang),
-        price: f.price,
-        image: f.image,
-        subcategoryId: f.subcategoryId,
-    }));
     return (0, response_1.SuccessResponse)(res, {
         message: "Foods fetched successfully",
-        data: formatted,
+        data: foodList.map((f) => ({
+            id: f.id,
+            name: (0, localization_helper_1.getLocalizedName)(f, lang),
+            price: f.price,
+            image: f.image,
+            subcategoryId: f.subcategoryId,
+        })),
     });
 };
 exports.getFoods = getFoods;
 // ==========================================
-// 10. Get Branches (Localized by lang en, ar, fr with optional taxId filter)
+// 10. Get Branches — query: ?taxId=
 // ==========================================
 const getBranches = async (req, res) => {
-    const restaurantId = req.user?.restaurantId || req.user?.id;
-    if (!restaurantId) {
-        throw new Errors_1.BadRequest("Restaurant context is missing or unauthorized");
-    }
+    const restaurantId = getRestaurantId(req);
     const lang = (0, localization_helper_1.extractLang)(req);
-    const taxId = req.params?.id ||
-        req.query?.taxId ||
-        req.body?.taxId ||
-        req.query?.tax_id ||
-        req.body?.tax_id;
+    const taxId = req.query.taxId;
+    const conditions = [(0, drizzle_orm_1.eq)(schema_1.branches.restaurantId, restaurantId)];
     if (taxId) {
-        const [taxItem] = await connection_1.db
-            .select({ branchIds: schema_1.taxes.branchIds })
-            .from(schema_1.taxes)
-            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.taxes.id, String(taxId)), (0, drizzle_orm_1.eq)(schema_1.taxes.restaurantId, restaurantId)))
-            .limit(1);
-        if (!taxItem) {
-            throw new Errors_1.NotFound("Tax not found");
-        }
-        const branchIds = (0, localization_helper_1.parseJsonArray)(taxItem.branchIds);
+        const tax = await findTax(taxId, restaurantId);
+        const branchIds = (0, localization_helper_1.parseJsonArray)(tax.branchIds);
         if (branchIds.length === 0) {
-            return (0, response_1.SuccessResponse)(res, {
-                message: "Branches fetched successfully",
-                data: [],
-            });
+            return (0, response_1.SuccessResponse)(res, { message: "Branches fetched successfully", data: [] });
         }
-        const myBranches = await connection_1.db
-            .select({
-            id: schema_1.branches.id,
-            name: schema_1.branches.name,
-            nameAr: schema_1.branches.nameAr,
-            nameFr: schema_1.branches.nameFr,
-        })
-            .from(schema_1.branches)
-            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branches.restaurantId, restaurantId), (0, drizzle_orm_1.inArray)(schema_1.branches.id, branchIds)));
-        const formatted = myBranches.map((b) => ({
-            id: b.id,
-            name: (0, localization_helper_1.getLocalizedName)(b, lang),
-        }));
-        return (0, response_1.SuccessResponse)(res, {
-            message: "Branches fetched successfully",
-            data: formatted,
-        });
+        conditions.push((0, drizzle_orm_1.inArray)(schema_1.branches.id, branchIds));
+    }
+    else {
+        conditions.push((0, drizzle_orm_1.eq)(schema_1.branches.status, "active"));
     }
     const myBranches = await connection_1.db
-        .select({
-        id: schema_1.branches.id,
-        name: schema_1.branches.name,
-        nameAr: schema_1.branches.nameAr,
-        nameFr: schema_1.branches.nameFr,
-    })
+        .select({ id: schema_1.branches.id, name: schema_1.branches.name, nameAr: schema_1.branches.nameAr, nameFr: schema_1.branches.nameFr })
         .from(schema_1.branches)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.branches.restaurantId, restaurantId), (0, drizzle_orm_1.eq)(schema_1.branches.status, "active")));
-    const formatted = myBranches.map((b) => ({
-        id: b.id,
-        name: (0, localization_helper_1.getLocalizedName)(b, lang),
-    }));
+        .where((0, drizzle_orm_1.and)(...conditions));
     return (0, response_1.SuccessResponse)(res, {
         message: "Branches fetched successfully",
-        data: formatted,
+        data: myBranches.map((b) => ({ id: b.id, name: (0, localization_helper_1.getLocalizedName)(b, lang) })),
     });
 };
 exports.getBranches = getBranches;
-// ==========================================
-// 11. Get Branches of a Specific Tax
-// ==========================================
-const getTaxBranches = async (req, res) => {
-    return (0, exports.getBranches)(req, res);
-};
-exports.getTaxBranches = getTaxBranches;
-// ==========================================
-// 12. Get Foods of a Specific Tax
-// ==========================================
-const getTaxFoods = async (req, res) => {
-    return (0, exports.getFoods)(req, res);
-};
-exports.getTaxFoods = getTaxFoods;

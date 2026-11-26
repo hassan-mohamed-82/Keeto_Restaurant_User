@@ -381,7 +381,9 @@ function initOrderDelayAlertCron() {
                     online_order_web: "طلب عبر الويب",
                     online_order_app: "تطبيق الهاتف",
                     food_aggregator: "تطبيق توصيل خارجي",
-                    my_keeto: "نظام كيتو"
+                    food_aggregator_web: "تطبيق توصيل خارجي ويب",
+                    my_keeto: "نظام كيتو",
+                    mykeeto_web: "نظام كيتو ويب"
                 };
                 const orderSourceAr = order.orderSource ? (orderSourcesMap[order.orderSource] || order.orderSource) : "غير محدد";
                 // Date and Time formatting
